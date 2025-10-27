@@ -1,9 +1,10 @@
-import { View, Text, StyleSheet, ScrollView, Image, TouchableOpacity, TextInput, Dimensions } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, Image, TouchableOpacity, TextInput, Dimensions, Alert } from 'react-native';
 import { useFonts, Inter_400Regular, Inter_600SemiBold } from '@expo-google-fonts/inter';
 import { useEffect, useState, useCallback } from 'react';
 import { SplashScreen, useRouter } from 'expo-router';
 import { Search, Filter, ArrowLeft, GraduationCap, MapPin, Globe, ChevronRight, Clock, Award, Wallet, BookOpen, Building2, Users, Plus } from 'lucide-react-native';
 import { useAuth } from '@/hooks/useAuth';
+import { supabase } from '@/lib/supabase';
 
 SplashScreen.preventAutoHideAsync();
 
@@ -82,23 +83,14 @@ export default function EducationScreen() {
   const router = useRouter();
   const { user } = useAuth();
   const [activeFilter, setActiveFilter] = useState('all');
+  const [educationalOpportunities, setEducationalOpportunities] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [searchQuery, setSearchQuery] = useState('');
+  
   const [fontsLoaded] = useFonts({
     'Inter-Regular': Inter_400Regular,
     'Inter-SemiBold': Inter_600SemiBold,
   });
-
-  useEffect(() => {
-    if (fontsLoaded) {
-      SplashScreen.hideAsync();
-    }
-  }, [fontsLoaded]);
-
-  if (!fontsLoaded) {
-    return null;
-  }
-
-  const [educationalOpportunities, setEducationalOpportunities] = useState<any[]>([]);
-  const [loading, setLoading] = useState(true);
 
   const fetchEducationalOpportunities = useCallback(async () => {
     try {
@@ -138,6 +130,16 @@ export default function EducationScreen() {
     fetchEducationalOpportunities();
   }, [fetchEducationalOpportunities]);
 
+  useEffect(() => {
+    if (fontsLoaded) {
+      SplashScreen.hideAsync();
+    }
+  }, [fontsLoaded]);
+
+  if (!fontsLoaded) {
+    return null;
+  }
+
   const filterOpportunities = (opportunities: any[]) => {
     return opportunities.filter(opportunity => {
       if (activeFilter !== 'all' && opportunity.category_name !== EDUCATION_TYPES.find(type => type.id === activeFilter)?.name) {
@@ -170,8 +172,6 @@ export default function EducationScreen() {
     }
     router.push('/create-educational-listing');
   };
-
-  const [searchQuery, setSearchQuery] = useState('');
 
   return (
     <ScrollView style={styles.container} showsVerticalScrollIndicator={false}>

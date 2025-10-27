@@ -3,7 +3,7 @@ import { Search, Plus, MoveVertical as MoreVertical, X, MessageCircle } from 'lu
 import { useFonts, Inter_400Regular, Inter_600SemiBold } from '@expo-google-fonts/inter';
 import { useEffect, useState } from 'react';
 import { SplashScreen, useRouter } from 'expo-router';
-import { supabase } from '@/lib/supabase';
+import { fetchUserChats, getOrCreateDirectChat, searchUsers as searchUsersHelper } from '@/lib/chats';
 import { useAuth } from '@/hooks/useAuth';
 import type { Profile, ChatWithDetails } from '@/lib/supabase';
 
@@ -38,103 +38,10 @@ export default function ChatScreen() {
 
   const fetchChats = async () => {
     if (!user) return;
-
     try {
       setLoading(true);
-      
-      // Fetch chats where user is a participant
-      const { data: chatData, error: chatError } = await supabase
-        .from('chat_participants')
-        .select(`
-          chat_id,
-          chats (
-            id,
-            type,
-            name,
-            avatar_url,
-            created_at
-          )
-        `)
-        .eq('user_id', user.id);
-
-      if (chatError) throw chatError;
-
-      const chatIds = chatData?.map(item => item.chat_id) || [];
-      
-      if (chatIds.length === 0) {
-        setChats([]);
-        setLoading(false);
-        return;
-      }
-
-      // Fetch all participants for these chats
-      const { data: participantsData, error: participantsError } = await supabase
-        .from('chat_participants')
-        .select(`
-          chat_id,
-          user_id,
-          joined_at,
-          profiles (
-            id,
-            username,
-            full_name,
-            avatar_url
-          )
-        `)
-        .in('chat_id', chatIds);
-
-      if (participantsError) throw participantsError;
-
-      // Fetch latest message for each chat
-      const { data: messagesData, error: messagesError } = await supabase
-        .from('messages')
-        .select(`
-          id,
-          chat_id,
-          sender_id,
-          content,
-          created_at,
-          profiles (
-            username,
-            full_name
-          )
-        `)
-        .in('chat_id', chatIds)
-        .order('created_at', { ascending: false });
-
-      if (messagesError) throw messagesError;
-
-      // Organize data
-      const chatsWithDetails: ChatWithDetails[] = chatData?.map(item => {
-        const chat = item.chats;
-        const participants = participantsData?.filter(p => p.chat_id === chat.id) || [];
-        const chatMessages = messagesData?.filter(m => m.chat_id === chat.id) || [];
-        const lastMessage = chatMessages[0];
-
-        // For direct chats, use the other participant's name
-        let displayName = chat.name;
-        let displayAvatar = chat.avatar_url;
-        
-        if (chat.type === 'direct') {
-          const otherParticipant = participants.find(p => p.user_id !== user.id);
-          if (otherParticipant?.profiles) {
-            displayName = otherParticipant.profiles.full_name || otherParticipant.profiles.username;
-            displayAvatar = otherParticipant.profiles.avatar_url;
-          }
-        }
-
-        return {
-          ...chat,
-          name: displayName,
-          avatar_url: displayAvatar,
-          participants,
-          messages: chatMessages,
-          last_message: lastMessage,
-          unread_count: 0, // TODO: Implement unread count logic
-        };
-      }) || [];
-
-      setChats(chatsWithDetails);
+      const userChats = await fetchUserChats(user.id);
+      setChats(userChats);
     } catch (error) {
       console.error('Error fetching chats:', error);
       Alert.alert('Error', 'Failed to load chats');
@@ -145,20 +52,10 @@ export default function ChatScreen() {
 
   const searchUsers = async (query: string) => {
     if (!query.trim() || !user) return;
-
     try {
       setSearchLoading(true);
-      
-      const { data, error } = await supabase
-        .from('profiles')
-        .select('id, username, full_name, avatar_url')
-        .neq('id', user.id) // Exclude current user
-        .or(`username.ilike.%${query}%,full_name.ilike.%${query}%`)
-        .limit(10);
-
-      if (error) throw error;
-      
-      setSearchResults(data || []);
+      const results = await searchUsersHelper(query, user.id);
+      setSearchResults(results);
     } catch (error) {
       console.error('Error searching users:', error);
       Alert.alert('Error', 'Failed to search users');
@@ -169,27 +66,14 @@ export default function ChatScreen() {
 
   const createDirectChat = async (otherUserId: string) => {
     if (!user) return;
-
     try {
-      // Check if direct chat already exists
-      const { data: existingChat, error: checkError } = await supabase
-        .rpc('get_or_create_direct_chat', {
-          user1_id: user.id,
-          user2_id: otherUserId
-        });
-
-      if (checkError) throw checkError;
-
-      if (existingChat) {
-        // Navigate to existing chat
-        router.push(`/chat/${existingChat}`);
+      const chatId = await getOrCreateDirectChat(user.id, otherUserId);
+      if (chatId) {
+        router.push(`/chat/${chatId}`);
       }
-      
       setSearchModalVisible(false);
       setSearchQuery('');
       setSearchResults([]);
-      
-      // Refresh chats list
       fetchChats();
     } catch (error) {
       console.error('Error creating chat:', error);

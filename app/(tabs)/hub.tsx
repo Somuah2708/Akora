@@ -9,7 +9,7 @@ SplashScreen.preventAutoHideAsync();
 const { width } = Dimensions.get('window');
 const CARD_WIDTH = width - 48;
 const GRID_SPACING = 16;
-const GRID_ITEM_WIDTH = (width - (48 + GRID_SPACING)) / 2;
+const GRID_ITEM_WIDTH = (width - 48 - GRID_SPACING) / 2;
 
 const FEATURED_ITEMS = [
   {
@@ -142,52 +142,9 @@ export default function HubScreen() {
     return null;
   }
 
-  const renderGridItems = () => {
-    const rows = [];
-    for (let i = 0; i < HERITAGE_ITEMS.length; i += 2) {
-      const IconComponent1 = HERITAGE_ITEMS[i].icon;
-      const IconComponent2 = i + 1 < HERITAGE_ITEMS.length ? HERITAGE_ITEMS[i + 1].icon : null;
-      
-      const row = (
-        <View key={`row-${i}`} style={styles.gridRow}>
-          <TouchableOpacity 
-            style={styles.gridItem}
-            onPress={() => HERITAGE_ITEMS[i].route && router.push(HERITAGE_ITEMS[i].route)}
-          >
-            <Image source={{ uri: HERITAGE_ITEMS[i].image }} style={styles.itemImage} />
-            <View style={styles.itemContent}>
-              <View style={styles.iconContainer}>
-                <IconComponent1 size={24} color="#FFFFFF" strokeWidth={1.5} />
-              </View>
-              <View style={styles.textContainer}>
-                <Text style={styles.itemTitle} numberOfLines={2}>{HERITAGE_ITEMS[i].title}</Text>
-                <Text style={styles.itemDescription} numberOfLines={2}>{HERITAGE_ITEMS[i].description}</Text>
-              </View>
-            </View>
-          </TouchableOpacity>
-          {i + 1 < HERITAGE_ITEMS.length && (
-            <TouchableOpacity 
-              style={styles.gridItem}
-              onPress={() => HERITAGE_ITEMS[i + 1].route && router.push(HERITAGE_ITEMS[i + 1].route)}
-            >
-              <Image source={{ uri: HERITAGE_ITEMS[i + 1].image }} style={styles.itemImage} />
-              <View style={styles.itemContent}>
-                <View style={styles.iconContainer}>
-                  <IconComponent2 size={24} color="#FFFFFF" strokeWidth={1.5} />
-                </View>
-                <View style={styles.textContainer}>
-                  <Text style={styles.itemTitle} numberOfLines={2}>{HERITAGE_ITEMS[i + 1].title}</Text>
-                  <Text style={styles.itemDescription} numberOfLines={2}>{HERITAGE_ITEMS[i + 1].description}</Text>
-                </View>
-              </View>
-            </TouchableOpacity>
-          )}
-        </View>
-      );
-      rows.push(row);
-    }
-    return rows;
-  };
+  // Split items into two columns
+  const leftColumnItems = HERITAGE_ITEMS.filter((_, index) => index % 2 === 0);
+  const rightColumnItems = HERITAGE_ITEMS.filter((_, index) => index % 2 === 1);
 
   return (
     <ScrollView style={styles.container} showsVerticalScrollIndicator={false}>
@@ -213,8 +170,57 @@ export default function HubScreen() {
         ))}
       </ScrollView>
 
-      <View style={styles.grid}>
-        {renderGridItems()}
+      {/* Two Column Layout */}
+      <View style={styles.columnsContainer}>
+        {/* Left Column */}
+        <View style={styles.column}>
+          {leftColumnItems.map((item) => {
+            const IconComponent = item.icon;
+            return (
+              <TouchableOpacity 
+                key={item.id}
+                style={styles.gridItem}
+                onPress={() => item.route && router.push(item.route)}
+              >
+                <Image source={{ uri: item.image }} style={styles.itemImage} />
+                <View style={styles.itemContent}>
+                  <View style={styles.iconContainer}>
+                    <IconComponent size={24} color="#FFFFFF" strokeWidth={1.5} />
+                  </View>
+                  <View style={styles.textContainer}>
+                    <Text style={styles.itemTitle} numberOfLines={2}>{item.title}</Text>
+                    <Text style={styles.itemDescription} numberOfLines={2}>{item.description}</Text>
+                  </View>
+                </View>
+              </TouchableOpacity>
+            );
+          })}
+        </View>
+
+        {/* Right Column */}
+        <View style={styles.column}>
+          {rightColumnItems.map((item) => {
+            const IconComponent = item.icon;
+            return (
+              <TouchableOpacity 
+                key={item.id}
+                style={styles.gridItem}
+                onPress={() => item.route && router.push(item.route)}
+              >
+                <Image source={{ uri: item.image }} style={styles.itemImage} />
+                <View style={styles.itemContent}>
+                  <View style={styles.iconContainer}>
+                    <IconComponent size={24} color="#FFFFFF" strokeWidth={1.5} />
+                  </View>
+                  <View style={styles.textContainer}>
+                    <Text style={styles.itemTitle} numberOfLines={2}>{item.title}</Text>
+                    <Text style={styles.itemDescription} numberOfLines={2}>{item.description}</Text>
+                  </View>
+                </View>
+              </TouchableOpacity>
+            );
+          })}
+        </View>
       </View>
     </ScrollView>
   );
@@ -242,10 +248,11 @@ const styles = StyleSheet.create({
     color: '#666666',
   },
   featuredScroll: {
-    marginBottom: 24,
+    marginBottom: 0,
   },
   featuredContent: {
     paddingHorizontal: 24,
+    paddingVertical: 0,
     gap: 16,
   },
   featuredItem: {
@@ -278,16 +285,17 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     opacity: 0.8,
   },
-  grid: {
-    padding: 24,
-  },
-  gridRow: {
+  columnsContainer: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
-    marginBottom: GRID_SPACING,
+    paddingHorizontal: 24,
+    paddingTop: 16,
+    gap: GRID_SPACING,
+  },
+  column: {
+    flex: 1,
   },
   gridItem: {
-    width: GRID_ITEM_WIDTH,
+    width: '100%',
     height: 180,
     borderRadius: 16,
     overflow: 'hidden',
@@ -300,6 +308,7 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.1,
     shadowRadius: 4,
     elevation: 3,
+    marginBottom: GRID_SPACING,
   },
   itemImage: {
     width: '100%',

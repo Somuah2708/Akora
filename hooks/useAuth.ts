@@ -8,39 +8,25 @@ interface AuthUser extends User {
 }
 
 export function useAuth() {
-  // Mock user for development - bypassing authentication
-  const [user, setUser] = useState<AuthUser | null>({
-    id: 'mock-user-id',
-    email: 'demo@example.com',
-    is_admin: false,
-    free_listings_count: 3,
-    aud: 'authenticated',
-    role: 'authenticated',
-    created_at: new Date().toISOString(),
-    app_metadata: {},
-    user_metadata: {},
-  } as AuthUser);
-  const [loading, setLoading] = useState(false);
+  const [user, setUser] = useState<AuthUser | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [profile, setProfile] = useState<Profile | null>(null);
 
-  // Commented out for bypassing authentication
-  /*
   useEffect(() => {
     // Get initial session
     supabase.auth.getSession().then(async ({ data: { session } }) => {
       if (session?.user) {
         const { data: profileData } = await supabase
           .from('profiles')
-          .select('is_admin, free_listings_count')
+          .select('*')
           .eq('id', session.user.id)
-          .limit(1);
+          .single();
         
-        setUser({
-          ...session.user,
-          is_admin: profileData?.[0]?.is_admin || false,
-          free_listings_count: profileData?.[0]?.free_listings_count || 3
-        });
+        setUser(session.user as AuthUser);
+        setProfile(profileData);
       } else {
         setUser(null);
+        setProfile(null);
       }
       setLoading(false);
     });
@@ -51,17 +37,15 @@ export function useAuth() {
         if (session?.user) {
           const { data: profileData } = await supabase
             .from('profiles')
-            .select('is_admin, free_listings_count')
+            .select('*')
             .eq('id', session.user.id)
-            .limit(1);
+            .single();
           
-          setUser({
-            ...session.user,
-            is_admin: profileData?.[0]?.is_admin || false,
-            free_listings_count: profileData?.[0]?.free_listings_count || 3
-          });
+          setUser(session.user as AuthUser);
+          setProfile(profileData);
         } else {
           setUser(null);
+          setProfile(null);
         }
         setLoading(false);
       }
@@ -69,8 +53,6 @@ export function useAuth() {
 
     return () => subscription.unsubscribe();
   }, []);
-  */
-
 
   const signIn = async (email: string, password: string) => {
     const { data, error } = await supabase.auth.signInWithPassword({
@@ -91,80 +73,44 @@ export function useAuth() {
     yearGroup?: string,
     house?: string
   ) => {
-    // First, check if the alumni record exists and is not already registered
-    if (firstName && surname && classGroup && yearGroup && house) {
-      const { data: alumniRecords, error: alumniError } = await supabase
-        .from('alumni_records')
-        .select('*')
-        .eq('first_name', firstName)
-        .eq('surname', surname)
-        .eq('class', classGroup)
-        .eq('year_group', yearGroup)
-        .eq('house', house)
-        .eq('is_registered', false);
-      
-      if (alumniError) {
-        return { data: null, error: alumniError };
-      }
-      
-      if (!alumniRecords || alumniRecords.length === 0) {
-        return { 
-          data: null, 
-          error: { message: 'Alumni record not found or already registered. Please check your details or contact support.' } 
-        };
-      }
-    }
+    // TEMPORARILY DISABLED: Alumni validation
+    // This allows sign-up without checking alumni_records table
+    console.log('Sign up attempt:', { email, username, firstName, surname });
+    console.log('Supabase URL:', process.env.EXPO_PUBLIC_SUPABASE_URL);
+    console.log('Supabase Key exists:', !!process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY);
     
-    const { data, error } = await supabase.auth.signUp({
-      email,
-      password,
-      options: {
-        data: {
-          username,
-          full_name: fullName,
-          first_name: firstName,
-          surname: surname,
-          class: classGroup,
-          year_group: yearGroup,
-          house: house,
-          is_admin: false,
+    try {
+      const { data, error } = await supabase.auth.signUp({
+        email,
+        password,
+        options: {
+          data: {
+            username,
+            full_name: fullName,
+            first_name: firstName,
+            surname: surname,
+            class: classGroup,
+            year_group: yearGroup,
+            house: house,
+            is_admin: false,
+          },
         },
-      },
-    });
-    
-    // If signup was successful and we have alumni details, update the alumni record
-    if (!error && data?.user && firstName && surname && classGroup && yearGroup && house) {
-      await supabase
-        .from('alumni_records')
-        .update({ is_registered: true, email: email })
-        .eq('first_name', firstName)
-        .eq('surname', surname)
-        .eq('class', classGroup)
-        .eq('year_group', yearGroup)
-        .eq('house', house);
-    }
-    
-    // Create profile for the new user
-    if (!error && data?.user) {
-      const { error: profileError } = await supabase
-        .from('profiles')
-        .insert({
-          id: data.user.id,
-          username,
-          full_name: fullName,
-          class: classGroup,
-          year_group: yearGroup,
-          house: house,
-          is_admin: false,
-          free_listings_count: 3
-        });
+      });
       
-      if (profileError) {
-        console.error('Error creating profile:', profileError);
+      if (error) {
+        console.error('Sign up error:', error);
+        return { data: null, error };
+      } else {
+        console.log('Sign up successful:', data?.user?.email);
+        return { data, error: null };
       }
+    } catch (err: any) {
+      console.error('Unexpected sign up error:', err);
+      return { 
+        data: null, 
+        error: { message: err?.message || 'Network error. Please check your internet connection.' } 
+      };
     }
-    
-    return { data, error };
   };
 
   const signOut = async () => {
@@ -174,6 +120,7 @@ export function useAuth() {
 
   return {
     user,
+    profile,
     loading,
     signIn,
     signUp,

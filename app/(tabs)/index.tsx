@@ -1,82 +1,155 @@
-import { View, Text, StyleSheet, ScrollView, Image, TouchableOpacity, TextInput, Dimensions } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, Image, TouchableOpacity, FlatList, Dimensions } from 'react-native';
 import { useFonts, Inter_400Regular, Inter_600SemiBold } from '@expo-google-fonts/inter';
 import { useEffect, useState, useCallback } from 'react';
 import { SplashScreen, useRouter } from 'expo-router';
-import { Search, Bell, Calendar, MapPin, Users, MessageCircle, Bookmark, MoveHorizontal as MoreHorizontal, ChevronRight, Newspaper, Building2, Chrome as Home, History, BookOpen, School as School, Heart, Plus, X } from 'lucide-react-native';
-import { Star } from 'lucide-react-native';
-import { supabase, type Post, type Profile, type QuickAction } from '@/lib/supabase';
+import { Heart, MessageCircle, Send, Bookmark, MoreHorizontal, Plus, BookOpen, PartyPopper, Calendar, TrendingUp, Users, Newspaper, Search, User } from 'lucide-react-native';
+import { supabase, type Post, type Profile } from '@/lib/supabase';
 import { useAuth } from '@/hooks/useAuth';
 
 SplashScreen.preventAutoHideAsync();
 
 const { width } = Dimensions.get('window');
-const CARD_WIDTH = width - 48;
 
-const FEATURED_STORIES = [
+// Category tabs data
+const CATEGORY_TABS = [
   {
     id: '1',
-    title: 'Alumni Impact: Transforming Education in Rural Communities',
-    image: 'https://images.unsplash.com/photo-1577896851231-70ef18881754?w=800&auto=format&fit=crop&q=60',
-    author: {
-      name: 'Dr. Sarah Chen',
-      avatar: 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=400&auto=format&fit=crop&q=60',
-      role: 'Education Advocate',
-    },
-    readTime: '5 min read',
-    category: 'Impact Stories',
+    title: 'History',
+    icon: BookOpen,
+    color: '#FF6B6B',
+    image: 'https://images.unsplash.com/photo-1524178232363-1fb2b075b655?w=400&auto=format&fit=crop&q=60',
+    route: '/heritage',
   },
   {
     id: '2',
-    title: 'Innovation Hub Launch: Fostering Next-Gen Tech Leaders',
-    image: 'https://images.unsplash.com/photo-1497366811353-6870744d04b2?w=800&auto=format&fit=crop&q=60',
-    author: {
-      name: 'Michael Thompson',
-      avatar: 'https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?w=400&auto=format&fit=crop&q=60',
-      role: 'Tech Director',
+    title: 'Centenary',
+    icon: PartyPopper,
+    color: '#4ECDC4',
+    image: 'https://images.unsplash.com/photo-1492684223066-81342ee5ff30?w=400&auto=format&fit=crop&q=60',
+    route: '/events',
+  },
+  {
+    id: '3',
+    title: 'Calendar',
+    icon: Calendar,
+    color: '#45B7D1',
+    image: 'https://images.unsplash.com/photo-1506784983877-45594efa4cbe?w=400&auto=format&fit=crop&q=60',
+    route: '/calendar',
+  },
+  {
+    id: '4',
+    title: 'Trending',
+    icon: TrendingUp,
+    color: '#F7B731',
+    image: 'https://images.unsplash.com/photo-1552664730-d307ca884978?w=400&auto=format&fit=crop&q=60',
+    route: '/news',
+  },
+  {
+    id: '5',
+    title: 'Community',
+    icon: Users,
+    color: '#A55EEA',
+    image: 'https://images.unsplash.com/photo-1529156069898-49953e39b3ac?w=400&auto=format&fit=crop&q=60',
+    route: '/circles',
+  },
+  {
+    id: '6',
+    title: 'News',
+    icon: Newspaper,
+    color: '#26DE81',
+    image: 'https://images.unsplash.com/photo-1504711434969-e33886168f5c?w=400&auto=format&fit=crop&q=60',
+    route: '/news',
+  },
+];
+
+// Placeholder posts for when there's no data
+const PLACEHOLDER_POSTS = [
+  {
+    id: 'placeholder-1',
+    user: {
+      id: 'user-1',
+      username: 'akora_alumni',
+      full_name: 'Akora Alumni Association',
+      avatar_url: 'https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?w=400&auto=format&fit=crop&q=60',
+      created_at: new Date().toISOString(),
     },
-    readTime: '4 min read',
-    category: 'Campus News',
-  },
-];
-
-const UPCOMING_EVENTS = [
-  {
-    id: '1',
-    title: 'Annual Alumni Homecoming',
-    date: 'March 25, 2024',
-    time: '10:00 AM',
-    location: 'Main Campus',
-    image: 'https://images.unsplash.com/photo-1523580494863-6f3031224c94?w=800&auto=format&fit=crop&q=60',
-    attendees: 450,
+    content: 'Welcome to the Akora community! Share your journey, connect with fellow alumni, and stay updated with the latest news and events. 🎉',
+    image_url: 'https://images.unsplash.com/photo-1523580494863-6f3031224c94?w=800&auto=format&fit=crop&q=60',
+    created_at: new Date(Date.now() - 3600000).toISOString(), // 1 hour ago
+    user_id: 'user-1',
+    likes: 124,
+    comments: 18,
+    isLiked: false,
   },
   {
-    id: '2',
-    title: 'Career Fair 2024',
-    date: 'April 5, 2024',
-    time: '9:00 AM',
-    location: 'Innovation Center',
-    image: 'https://images.unsplash.com/photo-1511795409834-ef04bbd61622?w=800&auto=format&fit=crop&q=60',
-    attendees: 300,
+    id: 'placeholder-2',
+    user: {
+      id: 'user-2',
+      username: 'sarah_chen',
+      full_name: 'Dr. Sarah Chen',
+      avatar_url: 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=400&auto=format&fit=crop&q=60',
+      created_at: new Date().toISOString(),
+    },
+    content: 'Excited to announce our new scholarship program for underprivileged students! Applications open next month. Together, we can make education accessible to all. 📚✨',
+    image_url: 'https://images.unsplash.com/photo-1524178232363-1fb2b075b655?w=800&auto=format&fit=crop&q=60',
+    created_at: new Date(Date.now() - 7200000).toISOString(), // 2 hours ago
+    user_id: 'user-2',
+    likes: 289,
+    comments: 45,
+    isLiked: false,
+  },
+  {
+    id: 'placeholder-3',
+    user: {
+      id: 'user-3',
+      username: 'michael_thompson',
+      full_name: 'Michael Thompson',
+      avatar_url: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=400&auto=format&fit=crop&q=60',
+      created_at: new Date().toISOString(),
+    },
+    content: 'Great networking session at the Innovation Hub today! Amazing to see so many talented alumni working on groundbreaking projects. The future is bright! 💡🚀',
+    image_url: 'https://images.unsplash.com/photo-1497366811353-6870744d04b2?w=800&auto=format&fit=crop&q=60',
+    created_at: new Date(Date.now() - 10800000).toISOString(), // 3 hours ago
+    user_id: 'user-3',
+    likes: 156,
+    comments: 23,
+    isLiked: false,
+  },
+  {
+    id: 'placeholder-4',
+    user: {
+      id: 'user-4',
+      username: 'emma_wilson',
+      full_name: 'Emma Wilson',
+      avatar_url: 'https://images.unsplash.com/photo-1438761681033-6461ffad8d80?w=400&auto=format&fit=crop&q=60',
+      created_at: new Date().toISOString(),
+    },
+    content: 'Throwback to our annual homecoming event last year! Can\'t wait for this year\'s gathering. Mark your calendars, everyone! 🎊',
+    image_url: 'https://images.unsplash.com/photo-1511795409834-ef04bbd61622?w=800&auto=format&fit=crop&q=60',
+    created_at: new Date(Date.now() - 14400000).toISOString(), // 4 hours ago
+    user_id: 'user-4',
+    likes: 203,
+    comments: 67,
+    isLiked: false,
+  },
+  {
+    id: 'placeholder-5',
+    user: {
+      id: 'user-5',
+      username: 'james_lee',
+      full_name: 'James Lee',
+      avatar_url: 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=400&auto=format&fit=crop&q=60',
+      created_at: new Date().toISOString(),
+    },
+    content: 'Remember, success is not final, failure is not fatal: it is the courage to continue that counts. Keep pushing forward, Akoras! 💪',
+    image_url: 'https://images.unsplash.com/photo-1517486808906-6ca8b3f04846?w=800&auto=format&fit=crop&q=60',
+    created_at: new Date(Date.now() - 18000000).toISOString(), // 5 hours ago
+    user_id: 'user-5',
+    likes: 341,
+    comments: 52,
+    isLiked: false,
   },
 ];
-
-// Icon mapping object
-const IconMap: Record<string, any> = {
-  Building2,
-  Home,
-  Calendar,
-  History,
-  School,
-  Newspaper,
-  Users,
-  BookOpen,
-  Heart,
-  Star,
-  Plus,
-  Bell,
-  MessageCircle,
-  MapPin,
-};
 
 interface PostWithUser extends Post {
   user: Profile;
@@ -87,34 +160,12 @@ export default function HomeScreen() {
   const router = useRouter();
   const { user } = useAuth();
   const [posts, setPosts] = useState<PostWithUser[]>([]);
-  const [filteredPosts, setFilteredPosts] = useState<PostWithUser[]>([]);
   const [loading, setLoading] = useState(true);
-  const [searchQuery, setSearchQuery] = useState('');
-  const [isSearching, setIsSearching] = useState(false);
-  const [quickActions, setQuickActions] = useState<QuickAction[]>([]);
-  const [loadingQuickActions, setLoadingQuickActions] = useState(true);
 
   const [fontsLoaded] = useFonts({
     'Inter-Regular': Inter_400Regular,
     'Inter-SemiBold': Inter_600SemiBold,
   });
-
-  const fetchQuickActions = useCallback(async () => {
-    try {
-      setLoadingQuickActions(true);
-      const { data, error } = await supabase
-        .from('quick_actions')
-        .select('*')
-        .order('order_index', { ascending: true });
-
-      if (error) throw error;
-      setQuickActions(data || []);
-    } catch (error) {
-      console.error('Error fetching quick actions:', error);
-    } finally {
-      setLoadingQuickActions(false);
-    }
-  }, []);
 
   const fetchPosts = useCallback(async () => {
     try {
@@ -152,10 +203,12 @@ export default function HomeScreen() {
         comments: Math.floor(Math.random() * 50) + 5,
       }));
 
-      setPosts(formattedPosts);
-      setFilteredPosts(formattedPosts);
+      // If no posts from database, use placeholder posts
+      setPosts(formattedPosts.length > 0 ? formattedPosts : PLACEHOLDER_POSTS as any);
     } catch (error) {
       console.error('Error fetching posts:', error);
+      // On error, show placeholder posts
+      setPosts(PLACEHOLDER_POSTS as any);
     } finally {
       setLoading(false);
     }
@@ -170,25 +223,8 @@ export default function HomeScreen() {
   useEffect(() => {
     if (user) {
       fetchPosts();
-      fetchQuickActions();
     }
-  }, [fetchPosts, fetchQuickActions, user]);
-  
-  useEffect(() => {
-    if (searchQuery.trim() === '') {
-      setFilteredPosts(posts);
-      return;
-    }
-    
-    const query = searchQuery.toLowerCase().trim();
-    const filtered = posts.filter(post => 
-      post.content.toLowerCase().includes(query) ||
-      post.user.username.toLowerCase().includes(query) ||
-      post.user.full_name.toLowerCase().includes(query)
-    );
-    
-    setFilteredPosts(filtered);
-  }, [searchQuery, posts]);
+  }, [fetchPosts, user]);
 
   const handleLikeToggle = (postId: string) => {
     setPosts(prevPosts =>
@@ -202,11 +238,6 @@ export default function HomeScreen() {
           : post
       )
     );
-  };
-
-  const handleSearchClear = () => {
-    setSearchQuery('');
-    setIsSearching(false);
   };
 
   if (!fontsLoaded) {
@@ -225,241 +256,165 @@ export default function HomeScreen() {
   };
 
   return (
-    <ScrollView style={styles.container} showsVerticalScrollIndicator={false}>
+    <ScrollView 
+      style={styles.container}
+      showsVerticalScrollIndicator={false}
+      stickyHeaderIndices={[]}
+    >
+      {/* Header */}
       <View style={styles.header}>
-        <View style={styles.headerTop}>
-          <Image
-            source={{ uri: 'https://pbs.twimg.com/ext_tw_video_thumb/1718554520555249664/pu/img/xfF3Zh9JEM4sc96I.jpg:large' }}
-            style={styles.logo}
-          />
-          <TouchableOpacity style={styles.notificationButton}>
-            {user?.is_admin && (
-              <TouchableOpacity 
-                style={styles.createPostButton}
-                onPress={() => router.push('/create-post')}
-              >
-                <Plus size={24} color="#FFFFFF" />
-              </TouchableOpacity>
-            )}
-            <TouchableOpacity onPress={() => router.push('/notices')}>
-              <Bell size={24} color="#000000" />
+        <Text style={styles.logoText}>Akora</Text>
+        <View style={styles.headerIcons}>
+          {user?.is_admin && (
+            <TouchableOpacity 
+              style={styles.headerIcon}
+              onPress={() => router.push('/create-post')}
+            >
+              <Plus size={24} color="#000000" strokeWidth={2} />
             </TouchableOpacity>
-            <View style={styles.notificationBadge}>
-              <Text style={styles.notificationText}>3</Text>
-            </View>
+          )}
+          <TouchableOpacity style={styles.headerIcon}>
+            <Heart size={24} color="#000000" strokeWidth={2} />
           </TouchableOpacity>
-        </View>
-
-        <View style={styles.searchContainer}>
-          <View style={[styles.searchInputContainer, isSearching && styles.searchInputFocused]}>
-            <Search size={20} color="#666666" />
-            <TextInput
-              style={styles.searchInput}
-              placeholder="Search news, events, and more..."
-              placeholderTextColor="#666666"
-              value={searchQuery}
-              onChangeText={setSearchQuery}
-              onFocus={() => setIsSearching(true)}
-              returnKeyType="search"
-            />
-            {searchQuery.length > 0 && (
-              <TouchableOpacity onPress={handleSearchClear}>
-                <X size={20} color="#666666" />
-              </TouchableOpacity>
-            )}
-          </View>
+          <TouchableOpacity style={styles.headerIcon}>
+            <Send size={24} color="#000000" strokeWidth={2} />
+          </TouchableOpacity>
+          <TouchableOpacity 
+            style={styles.headerIcon}
+            onPress={() => router.push('/profile/edit')}
+          >
+            <User size={24} color="#000000" strokeWidth={2} />
+          </TouchableOpacity>
         </View>
       </View>
 
-      <View style={styles.section}>
-        <View style={styles.sectionHeader}>
-          <Text style={styles.sectionTitle}>Featured Stories</Text>
-          <TouchableOpacity style={styles.seeAllButton}>
-            <Text style={styles.seeAllText}>See All</Text>
-            <ChevronRight size={16} color="#666666" />
-          </TouchableOpacity>
-        </View>
-
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          contentContainerStyle={styles.featuredContent}
-        >
-          {FEATURED_STORIES.map((story) => (
-            <TouchableOpacity key={story.id} style={styles.featuredCard}>
-              <Image source={{ uri: story.image }} style={styles.featuredImage} />
-              <View style={styles.featuredOverlay}>
-                <View style={styles.categoryTag}>
-                  <Text style={styles.categoryText}>{story.category}</Text>
-                </View>
-                <Text style={styles.storyTitle}>{story.title}</Text>
-                <View style={styles.authorInfo}>
-                  <Image source={{ uri: story.author.avatar }} style={styles.authorAvatar} />
-                  <View style={styles.authorDetails}>
-                    <Text style={styles.authorName}>{story.author.name}</Text>
-                    <Text style={styles.authorRole}>{story.author.role}</Text>
-                  </View>
-                  <Text style={styles.readTime}>{story.readTime}</Text>
-                </View>
+      {/* Category Tabs */}
+      <ScrollView 
+        horizontal 
+        showsHorizontalScrollIndicator={false}
+        style={styles.categoriesContainer}
+        contentContainerStyle={styles.categoriesContent}
+      >
+        {CATEGORY_TABS.map((category) => {
+          const IconComponent = category.icon;
+          return (
+            <TouchableOpacity 
+              key={category.id} 
+              style={styles.categoryTab}
+              onPress={() => category.route && router.push(category.route as any)}
+            >
+              <Image source={{ uri: category.image }} style={styles.categoryImage} />
+              <View style={[styles.categoryOverlay, { backgroundColor: category.color + '95' }]}>
+                <IconComponent size={24} color="#FFFFFF" strokeWidth={2.5} />
+                <Text style={styles.categoryTitle}>{category.title}</Text>
               </View>
             </TouchableOpacity>
-          ))}
-        </ScrollView>
-      </View>
+          );
+        })}
+      </ScrollView>
 
-      <View style={styles.section}>
-        <Text style={styles.sectionTitle}>Quick Actions</Text>
-        {loadingQuickActions ? (
-          <View style={styles.loadingContainer}>
-            <Text style={styles.loadingText}>Loading quick actions...</Text>
-          </View>
-        ) : quickActions.length === 0 ? (
-          <View style={styles.emptyContainer}>
-            <Text style={styles.emptyText}>No quick actions available</Text>
+      {/* Search Bar */}
+      <TouchableOpacity style={styles.searchBar}>
+        <Search size={20} color="#8E8E8E" strokeWidth={2} />
+        <Text style={styles.searchPlaceholder}>Search posts, people, and more...</Text>
+      </TouchableOpacity>
+
+      {/* Posts Feed */}
+      {loading ? (
+        <View style={styles.loadingContainer}>
+          <Text style={styles.loadingText}>Loading posts...</Text>
+        </View>
+      ) : posts.length === 0 ? (
+        <View style={styles.emptyContainer}>
+          <Text style={styles.emptyText}>No posts yet</Text>
+          {user?.is_admin && (
+            <TouchableOpacity 
+              style={styles.createFirstPostButton}
+              onPress={() => router.push('/create-post')}
+            >
+              <Text style={styles.createFirstPostText}>Create First Post</Text>
+            </TouchableOpacity>
+            )}
           </View>
         ) : (
-          <View style={styles.quickActionsGrid}>
-            {quickActions.map((action) => {
-              // Get the icon component from the mapping
-              const IconComponent = IconMap[action.icon_name] || Building2;
-              return (
-                <TouchableOpacity
-                  key={action.id}
-                  style={[styles.actionCard, { backgroundColor: action.color }]}
-                  onPress={() => action.route && router.push(action.route)}
-                >
-                  <IconComponent size={24} color="#000000" />
-                  <Text style={styles.actionTitle}>{action.title}</Text>
-                </TouchableOpacity>
-              );
-            })}
-          </View>
-        )}
-      </View>
-
-      <View style={styles.section}>
-        <View style={styles.sectionHeader}>
-          <Text style={styles.sectionTitle}>Upcoming Events</Text>
-          <TouchableOpacity style={styles.seeAllButton}>
-            <Text style={styles.seeAllText}>See All</Text>
-            <ChevronRight size={16} color="#666666" />
-          </TouchableOpacity>
-        </View>
-
-        {UPCOMING_EVENTS.map((event) => (
-          <TouchableOpacity key={event.id} style={styles.eventCard}>
-            <Image source={{ uri: event.image }} style={styles.eventImage} />
-            <View style={styles.eventInfo}>
-              <Text style={styles.eventTitle}>{event.title}</Text>
-              <View style={styles.eventDetails}>
-                <View style={styles.detailItem}>
-                  <Calendar size={14} color="#666666" />
-                  <Text style={styles.detailText}>{event.date}</Text>
-                </View>
-                <View style={styles.detailItem}>
-                  <MapPin size={14} color="#666666" />
-                  <Text style={styles.detailText}>{event.location}</Text>
-                </View>
-                <View style={styles.detailItem}>
-                  <Users size={14} color="#666666" />
-                  <Text style={styles.detailText}>{event.attendees} attending</Text>
-                </View>
-              </View>
-            </View>
-          </TouchableOpacity>
-        ))}
-      </View>
-
-      <View style={styles.section}>
-        <View style={styles.sectionHeader}>
-          <Text style={styles.sectionTitle}>Community Updates</Text>
-          <TouchableOpacity style={styles.seeAllButton}>
-            <Text style={styles.seeAllText}>See All</Text>
-            <ChevronRight size={16} color="#666666" />
-          </TouchableOpacity>
-        </View>
-        
-        {isSearching && searchQuery.length > 0 && (
-          <View style={styles.searchResultsHeader}>
-            <Text style={styles.searchResultsTitle}>
-              Search results for "{searchQuery}"
-            </Text>
-            <Text style={styles.searchResultsCount}>
-              {filteredPosts.length} {filteredPosts.length === 1 ? 'result' : 'results'} found
-            </Text>
-          </View>
-        )}
-        
-        {loading ? (
-          <View style={styles.loadingContainer}>
-            <Text style={styles.loadingText}>Loading posts...</Text>
-          </View>
-        ) : filteredPosts.length === 0 ? (
-          <View style={styles.emptyContainer}>
-            <Text style={styles.emptyText}>
-              {searchQuery.length > 0 ? 'No results found' : 'No posts yet'}
-            </Text>
-            {user?.is_admin && (
-              <TouchableOpacity 
-                style={styles.createFirstPostButton}
-                onPress={() => router.push('/create-post')}
-              >
-                <Text style={styles.createFirstPostText}>
-                  {searchQuery.length > 0 ? 'Create New Post' : 'Create First Post'}
-                </Text>
-              </TouchableOpacity>
-            )}
-          </View>
-        ) : filteredPosts.map((post) => (
-          <View key={post.id} style={styles.updateCard}>
-            <View style={styles.updateHeader}>
-              <Image 
-                source={{ 
-                  uri: post.user.avatar_url || 'https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?w=400&auto=format&fit=crop&q=60'
-                }} 
-                style={styles.userAvatar} 
-              />
-              <View style={styles.userInfo}>
-                <Text style={styles.userName}>{post.user.full_name}</Text>
-                <Text style={styles.userRole}>@{post.user.username}</Text>
-              </View>
-              <TouchableOpacity>
-                <MoreHorizontal size={20} color="#666666" />
-              </TouchableOpacity>
-            </View>
-
-            <Text style={styles.updateContent}>{post.content}</Text>
-            {post.image_url && (
-              <Image source={{ uri: post.image_url }} style={styles.updateImage} />
-            )}
-
-            <View style={styles.updateActions}>
-              <View style={styles.actionStats}>
-                <TouchableOpacity 
-                  style={styles.actionButton}
-                  onPress={() => handleLikeToggle(post.id)}
-                >
-                  <Heart 
-                    size={20} 
-                    color={post.isLiked ? "#FF4444" : "#666666"}
-                    fill={post.isLiked ? "#FF4444" : "none"}
+          posts.map((post) => (
+            <View key={post.id} style={styles.postCard}>
+              {/* Post Header */}
+              <View style={styles.postHeader}>
+                <View style={styles.postHeaderLeft}>
+                  <Image 
+                    source={{ 
+                      uri: post.user.avatar_url || 'https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?w=400&auto=format&fit=crop&q=60'
+                    }} 
+                    style={styles.postUserAvatar} 
                   />
-                  <Text style={styles.actionText}>{post.likes}</Text>
-                </TouchableOpacity>
-                <TouchableOpacity style={styles.actionButton}>
-                  <MessageCircle size={20} color="#666666" />
-                  <Text style={styles.actionText}>{post.comments}</Text>
+                  <View>
+                    <Text style={styles.postUsername}>{post.user.username}</Text>
+                    <Text style={styles.postTime}>{getTimeAgo(post.created_at)}</Text>
+                  </View>
+                </View>
+                <TouchableOpacity>
+                  <MoreHorizontal size={20} color="#000000" />
                 </TouchableOpacity>
               </View>
-              <TouchableOpacity>
-                <Bookmark size={20} color="#666666" />
-              </TouchableOpacity>
-            </View>
 
-            <Text style={styles.timeAgo}>{getTimeAgo(post.created_at)}</Text>
-          </View>
-        ))}
-      </View>
+              {/* Post Image */}
+              {post.image_url && (
+                <Image 
+                  source={{ uri: post.image_url }} 
+                  style={styles.postImage}
+                  resizeMode="cover"
+                />
+              )}
+
+              {/* Post Actions */}
+              <View style={styles.postActions}>
+                <View style={styles.postActionsLeft}>
+                  <TouchableOpacity 
+                    style={styles.actionButton}
+                    onPress={() => handleLikeToggle(post.id)}
+                  >
+                    <Heart 
+                      size={26} 
+                      color={post.isLiked ? "#FF3B30" : "#000000"}
+                      fill={post.isLiked ? "#FF3B30" : "none"}
+                      strokeWidth={2}
+                    />
+                  </TouchableOpacity>
+                  <TouchableOpacity style={styles.actionButton}>
+                    <MessageCircle size={26} color="#000000" strokeWidth={2} />
+                  </TouchableOpacity>
+                  <TouchableOpacity style={styles.actionButton}>
+                    <Send size={24} color="#000000" strokeWidth={2} />
+                  </TouchableOpacity>
+                </View>
+                <TouchableOpacity>
+                  <Bookmark size={24} color="#000000" strokeWidth={2} />
+                </TouchableOpacity>
+              </View>
+
+              {/* Post Likes */}
+              <Text style={styles.postLikes}>{post.likes} likes</Text>
+
+              {/* Post Caption */}
+              <View style={styles.postCaption}>
+                <Text style={styles.postCaptionText}>
+                  <Text style={styles.postCaptionUsername}>{post.user.username}</Text>
+                  {' '}{post.content}
+                </Text>
+              </View>
+
+              {/* Post Comments */}
+              {post.comments > 0 && (
+                <TouchableOpacity>
+                  <Text style={styles.viewComments}>
+                    View all {post.comments} comments
+                  </Text>
+                </TouchableOpacity>
+              )}
+            </View>
+          ))
+        )}
     </ScrollView>
   );
 }
@@ -470,357 +425,191 @@ const styles = StyleSheet.create({
     backgroundColor: '#FFFFFF',
   },
   header: {
-    backgroundColor: '#FFFFFF',
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: 16,
     paddingTop: 60,
-    paddingBottom: 16,
-  },
-  headerTop: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 16,
-    marginBottom: 16,
-  },
-  logo: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-  },
-  notificationButton: {
-    position: 'relative',
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: '#F8F9FA',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  notificationBadge: {
-    position: 'absolute',
-    top: -4,
-    right: -4,
-    backgroundColor: '#FF4444',
-    width: 20,
-    height: 20,
-    borderRadius: 10,
-    justifyContent: 'center',
-    alignItems: 'center',
-    borderWidth: 2,
-    borderColor: '#FFFFFF',
-  },
-  notificationText: {
-    color: '#FFFFFF',
-    fontSize: 10,
-    fontFamily: 'Inter-SemiBold',
-  },
-  createPostButton: {
-    position: 'absolute',
-    right: 50,
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: '#4169E1',
-    justifyContent: 'center',
-    alignItems: 'center',
-    zIndex: 1,
-  },
-  searchContainer: {
-    paddingHorizontal: 16,
-  },
-  searchInputContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    backgroundColor: '#F8F9FA',
-    borderRadius: 12,
-    paddingHorizontal: 16,
-    height: 48,
-  },
-  searchInputFocused: {
-    backgroundColor: '#EBF0FF',
-    borderColor: '#4169E1',
-    borderWidth: 1,
-  },
-  searchInput: {
-    flex: 1,
-    marginLeft: 12,
-    fontSize: 16,
-    fontFamily: 'Inter-Regular',
-    color: '#000000',
-  },
-  section: {
-    marginBottom: 24,
-  },
-  sectionHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingHorizontal: 16,
-    marginBottom: 16,
-  },
-  sectionTitle: {
-    fontSize: 20,
-    fontFamily: 'Inter-SemiBold',
-    color: '#000000',
-  },
-  seeAllButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-  },
-  seeAllText: {
-    fontSize: 14,
-    fontFamily: 'Inter-Regular',
-    color: '#666666',
-  },
-  featuredContent: {
-    paddingHorizontal: 16,
-    gap: 16,
-  },
-  featuredCard: {
-    width: CARD_WIDTH,
-    height: 320,
-    borderRadius: 16,
-    overflow: 'hidden',
+    paddingBottom: 10,
     backgroundColor: '#FFFFFF',
-    shadowColor: '#000000',
-    shadowOffset: {
-      width: 0,
-      height: 2,
-    },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
-    marginRight: 16,
+    borderBottomWidth: 0.5,
+    borderBottomColor: '#DBDBDB',
   },
-  featuredImage: {
+  logoText: {
+    fontSize: 28,
+    fontFamily: 'Inter-SemiBold',
+    color: '#000000',
+  },
+  headerIcons: {
+    flexDirection: 'row',
+    gap: 20,
+  },
+  headerIcon: {
+    padding: 4,
+  },
+  categoriesContainer: {
+    borderBottomWidth: 0,
+    borderBottomColor: '#DBDBDB',
+    backgroundColor: '#FFFFFF',
+  },
+  categoriesContent: {
+    paddingHorizontal: 12,
+    paddingTop: 8,
+    paddingBottom: 8,
+    gap: 12,
+  },
+  categoryTab: {
+    width: 140,
+    height: 100,
+    borderRadius: 12,
+    overflow: 'hidden',
+    position: 'relative',
+  },
+  categoryImage: {
     width: '100%',
     height: '100%',
   },
-  featuredOverlay: {
+  categoryOverlay: {
     position: 'absolute',
-    bottom: 0,
+    top: 0,
     left: 0,
     right: 0,
-    padding: 20,
-    backgroundColor: 'rgba(0, 0, 0, 0.6)',
-  },
-  categoryTag: {
-    backgroundColor: '#FFFFFF',
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 20,
-    alignSelf: 'flex-start',
-    marginBottom: 12,
-  },
-  categoryText: {
-    fontSize: 12,
-    fontFamily: 'Inter-SemiBold',
-    color: '#000000',
-  },
-  storyTitle: {
-    fontSize: 20,
-    fontFamily: 'Inter-SemiBold',
-    color: '#FFFFFF',
-    marginBottom: 12,
-  },
-  authorInfo: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  authorAvatar: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    marginRight: 12,
-  },
-  authorDetails: {
-    flex: 1,
-  },
-  authorName: {
-    fontSize: 14,
-    fontFamily: 'Inter-SemiBold',
-    color: '#FFFFFF',
-  },
-  authorRole: {
-    fontSize: 12,
-    fontFamily: 'Inter-Regular',
-    color: '#FFFFFF',
-    opacity: 0.8,
-  },
-  readTime: {
-    fontSize: 12,
-    fontFamily: 'Inter-Regular',
-    color: '#FFFFFF',
-    opacity: 0.8,
-  },
-  quickActionsGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 16,
-    paddingHorizontal: 16,
-  },
-  actionCard: {
-    width: (width - 64) / 3,
-    aspectRatio: 1,
-    borderRadius: 16,
-    padding: 16,
-    alignItems: 'center',
+    bottom: 0,
     justifyContent: 'center',
+    alignItems: 'center',
     gap: 8,
   },
-  actionTitle: {
+  categoryTitle: {
     fontSize: 14,
     fontFamily: 'Inter-SemiBold',
-    color: '#000000',
+    color: '#FFFFFF',
     textAlign: 'center',
   },
-  eventCard: {
+  searchBar: {
     flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    backgroundColor: '#F3F4F6',
     marginHorizontal: 16,
-    marginBottom: 16,
-    backgroundColor: '#FFFFFF',
-    borderRadius: 12,
-    overflow: 'hidden',
-    shadowColor: '#000000',
-    shadowOffset: {
-      width: 0,
-      height: 2,
-    },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
-  },
-  eventImage: {
-    width: 100,
-    height: 100,
-  },
-  eventInfo: {
-    flex: 1,
-    padding: 12,
-  },
-  eventTitle: {
-    fontSize: 16,
-    fontFamily: 'Inter-SemiBold',
-    color: '#000000',
-    marginBottom: 8,
-  },
-  eventDetails: {
-    gap: 4,
-  },
-  detailItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-  },
-  detailText: {
-    fontSize: 14,
-    fontFamily: 'Inter-Regular',
-    color: '#666666',
-  },
-  updateCard: {
-    marginBottom: 16,
-    backgroundColor: '#FFFFFF',
-    borderRadius: 12,
-    padding: 0,
-    shadowColor: '#000000',
-    shadowOffset: {
-      width: 0,
-      height: 2,
-    },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
-  },
-  updateHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    padding: 16,
-    paddingBottom: 12,
-    marginBottom: 12,
-  },
-  userAvatar: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    marginRight: 12,
-  },
-  userInfo: {
-    flex: 1,
-  },
-  userName: {
-    fontSize: 16,
-    fontFamily: 'Inter-SemiBold',
-    color: '#000000',
-  },
-  userRole: {
-    fontSize: 14,
-    fontFamily: 'Inter-Regular',
-    color: '#666666',
-  },
-  updateContent: {
-    fontSize: 16,
-    fontFamily: 'Inter-Regular',
-    color: '#000000',
+    marginTop: 0,
+    marginBottom: 0,
     paddingHorizontal: 16,
-    marginBottom: 12,
-    lineHeight: 24,
+    paddingVertical: 12,
+    borderRadius: 10,
   },
-  updateImage: {
-    width: '100%',
-    height: 200,
-    marginBottom: 12,
+  searchPlaceholder: {
+    fontSize: 15,
+    fontFamily: 'Inter-Regular',
+    color: '#8E8E8E',
+    flex: 1,
   },
-  updateActions: {
+  feedContainer: {
+    flex: 1,
+    paddingTop: 0,
+  },
+  postCard: {
+    marginBottom: 16,
+    marginTop: 0,
+    backgroundColor: '#FFFFFF',
+  },
+  postHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
     paddingHorizontal: 16,
-    paddingBottom: 8,
-    marginBottom: 8,
+    paddingVertical: 12,
   },
-  actionStats: {
+  postHeaderLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  postUserAvatar: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+  },
+  postUsername: {
+    fontSize: 14,
+    fontFamily: 'Inter-SemiBold',
+    color: '#000000',
+  },
+  postTime: {
+    fontSize: 11,
+    fontFamily: 'Inter-Regular',
+    color: '#8E8E8E',
+  },
+  postImage: {
+    width: width,
+    height: width * 0.75,
+    backgroundColor: '#F8F8F8',
+  },
+  postActions: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingTop: 8,
+  },
+  postActionsLeft: {
     flexDirection: 'row',
     gap: 16,
   },
   actionButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
+    padding: 4,
   },
-  actionText: {
+  postLikes: {
+    fontSize: 14,
+    fontFamily: 'Inter-SemiBold',
+    color: '#000000',
+    paddingHorizontal: 16,
+    paddingTop: 8,
+  },
+  postCaption: {
+    paddingHorizontal: 16,
+    paddingTop: 4,
+  },
+  postCaptionText: {
     fontSize: 14,
     fontFamily: 'Inter-Regular',
-    color: '#666666',
+    color: '#000000',
+    lineHeight: 20,
   },
-  timeAgo: {
-    fontSize: 12,
+  postCaptionUsername: {
+    fontFamily: 'Inter-SemiBold',
+  },
+  viewComments: {
+    fontSize: 14,
     fontFamily: 'Inter-Regular',
-    color: '#666666',
+    color: '#8E8E8E',
     paddingHorizontal: 16,
-    paddingBottom: 16,
+    paddingTop: 4,
+    paddingBottom: 8,
   },
   loadingContainer: {
-    padding: 32,
+    padding: 20,
     alignItems: 'center',
+    justifyContent: 'center',
   },
   loadingText: {
     fontSize: 16,
     fontFamily: 'Inter-Regular',
-    color: '#666666',
+    color: '#8E8E8E',
   },
   emptyContainer: {
-    padding: 32,
+    padding: 20,
     alignItems: 'center',
+    justifyContent: 'center',
   },
   emptyText: {
     fontSize: 16,
     fontFamily: 'Inter-Regular',
-    color: '#666666',
+    color: '#8E8E8E',
     marginBottom: 16,
+    textAlign: 'center',
   },
   createFirstPostButton: {
-    backgroundColor: '#4169E1',
+    backgroundColor: '#0095F6',
     paddingVertical: 12,
     paddingHorizontal: 24,
     borderRadius: 8,
@@ -829,20 +618,5 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontFamily: 'Inter-SemiBold',
     color: '#FFFFFF',
-  },
-  searchResultsHeader: {
-    paddingHorizontal: 16,
-    marginBottom: 16,
-  },
-  searchResultsTitle: {
-    fontSize: 16,
-    fontFamily: 'Inter-SemiBold',
-    color: '#000000',
-    marginBottom: 4,
-  },
-  searchResultsCount: {
-    fontSize: 14,
-    fontFamily: 'Inter-Regular',
-    color: '#666666',
   },
 });

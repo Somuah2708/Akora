@@ -1,265 +1,174 @@
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Dimensions } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Dimensions, Image } from 'react-native';
 import { useFonts, Inter_400Regular, Inter_600SemiBold } from '@expo-google-fonts/inter';
-import { useEffect, useState } from 'react';
-import { SplashScreen, useRouter } from 'expo-router';
+import { useState } from 'react';
+import { useRouter } from 'expo-router';
 import { 
-  Target, 
-  Sparkles, 
-  Dumbbell, 
-  Clock, 
-  Wallet, 
-  BookOpen, 
-  PenLine,
-  ChevronRight,
-  TrendingUp,
-  Brain
+  Grid3x3,
+  Bookmark,
+  UserPlus,
+  Menu,
+  Heart,
+  Link as LinkIcon,
 } from 'lucide-react-native';
 import { useAuth } from '@/hooks/useAuth';
 
-const GROWTH_CATEGORIES = [
-  {
-    id: '1',
-    title: 'Goals & Vision Planning',
-    description: 'Track your life vision and SMART goals',
-    icon: Target,
-    color: '#FFE4E4',
-    progress: 75,
-  },
-  {
-    id: '2',
-    title: 'Habits & Daily Routines',
-    description: 'Build and maintain positive habits',
-    icon: Sparkles,
-    color: '#E4EAFF',
-    progress: 60,
-  },
-  {
-    id: '3',
-    title: 'Physical Health & Fitness',
-    description: 'Track workouts and health metrics',
-    icon: Dumbbell,
-    color: '#E4FFF4',
-    progress: 70,
-  },
-  {
-    id: '4',
-    title: 'Mental Well-being',
-    description: 'Journal entries and mood tracking',
-    icon: Brain,
-    color: '#FFF4E4',
-    progress: 65,
-  },
-  {
-    id: '7',
-    title: 'Time Management',
-    description: 'Optimize your daily schedule',
-    icon: Clock,
-    color: '#F4E4FF',
-    progress: 55,
-  },
-  {
-    id: '9',
-    title: 'Financial Planning',
-    description: 'Track savings and investments',
-    icon: Wallet,
-    color: '#FFE4EA',
-    progress: 40,
-  },
-  {
-    id: '10',
-    title: 'Personal Reflection',
-    description: 'Document your journey',
-    icon: PenLine,
-    color: '#E4FFFF',
-    progress: 90,
-  },
+const { width } = Dimensions.get('window');
+const GRID_ITEM_SIZE = (width - 6) / 3;
+
+const USER_POSTS = [
+  { id: '1', image: 'https://images.unsplash.com/photo-1523050854058-8df90110c9f1?w=400', likes: 245 },
+  { id: '2', image: 'https://images.unsplash.com/photo-1523580494863-6f3031224c94?w=400', likes: 189 },
+  { id: '3', image: 'https://images.unsplash.com/photo-1517486808906-6ca8b3f04846?w=400', likes: 312 },
+  { id: '4', image: 'https://images.unsplash.com/photo-1524178232363-1fb2b075b655?w=400', likes: 456 },
+  { id: '5', image: 'https://images.unsplash.com/photo-1541339907198-e08756dedf3f?w=400', likes: 234 },
+  { id: '6', image: 'https://images.unsplash.com/photo-1519389950473-47ba0277781c?w=400', likes: 198 },
+  { id: '7', image: 'https://images.unsplash.com/photo-1522071820081-009f0129c71c?w=400', likes: 567 },
+  { id: '8', image: 'https://images.unsplash.com/photo-1557804506-669a67965ba0?w=400', likes: 289 },
+  { id: '9', image: 'https://images.unsplash.com/photo-1504384308090-c894fdcc538d?w=400', likes: 423 },
+  { id: '10', image: 'https://images.unsplash.com/photo-1552664730-d307ca884978?w=400', likes: 345 },
+  { id: '11', image: 'https://images.unsplash.com/photo-1531482615713-2afd69097998?w=400', likes: 278 },
+  { id: '12', image: 'https://images.unsplash.com/photo-1522202176988-66273c2fd55f?w=400', likes: 512 },
 ];
 
-const QUICK_STATS = [
-  {
-    title: 'Active Goals',
-    value: '12',
-    trend: '+2 this week',
-    isPositive: true,
-  },
-  {
-    title: 'Habits Tracked',
-    value: '8',
-    trend: '85% consistency',
-    isPositive: true,
-  },
-  {
-    title: 'Learning Hours',
-    value: '24',
-    trend: '+5 hrs this week',
-    isPositive: true,
-  },
+const HIGHLIGHTS = [
+  { id: '1', title: 'Events', image: 'https://images.unsplash.com/photo-1511795409834-ef04bbd61622?w=400' },
+  { id: '2', title: 'Travel', image: 'https://images.unsplash.com/photo-1488646953014-85cb44e25828?w=400' },
+  { id: '3', title: 'Sports', image: 'https://images.unsplash.com/photo-1461896836934-ffe607ba8211?w=400' },
+  { id: '4', title: 'Awards', image: 'https://images.unsplash.com/photo-1567427017947-545c5f8d16ad?w=400' },
+  { id: '5', title: 'Friends', image: 'https://images.unsplash.com/photo-1529156069898-49953e39b3ac?w=400' },
 ];
 
-export default function GrowScreen() {
+const USER_STATS = {
+  posts: 127,
+  followers: 2847,
+  following: 892,
+};
+
+export default function ProfileScreen() {
   const router = useRouter();
-  const [selectedCategory, setSelectedCategory] = useState(null);
   const { user } = useAuth();
-  const [stats, setStats] = useState(QUICK_STATS);
+  const [activeTab, setActiveTab] = useState<'grid' | 'saved'>('grid');
+  
   const [fontsLoaded] = useFonts({
     'Inter-Regular': Inter_400Regular,
     'Inter-SemiBold': Inter_600SemiBold,
   });
 
-  // Simulate fetching user stats
-  useEffect(() => {
-    if (user) {
-      // In a real app, this would fetch from an API or database
-      const fetchStats = async () => {
-        try {
-          // Simulate API call delay
-          await new Promise(resolve => setTimeout(resolve, 500));
-          
-          // Update stats with "real" data
-          setStats([
-            {
-              title: 'Active Goals',
-              value: Math.floor(Math.random() * 10 + 5).toString(), // 5-15 goals
-              trend: `+${Math.floor(Math.random() * 5)} this week`,
-              isPositive: true,
-            },
-            {
-              title: 'Habits Tracked',
-              value: Math.floor(Math.random() * 8 + 3).toString(), // 3-10 habits
-              trend: `${Math.floor(Math.random() * 20 + 70)}% consistency`,
-              isPositive: true,
-            },
-            {
-              title: 'Learning Hours',
-              value: Math.floor(Math.random() * 30 + 10).toString(), // 10-40 hours
-              trend: `+${Math.floor(Math.random() * 10)} hrs this week`,
-              isPositive: true,
-            },
-          ]);
-        } catch (error) {
-          console.error('Error fetching stats:', error);
-        }
-      };
-      
-      fetchStats();
-    }
-  }, [user]);
-
-  useEffect(() => {
-    if (fontsLoaded) {
-      SplashScreen.hideAsync();
-    }
-  }, [fontsLoaded]);
-
   if (!fontsLoaded) {
     return null;
   }
 
-  const handleCategoryPress = (categoryId: string) => {
-    setSelectedCategory(categoryId);
-    
-    // Add navigation based on category
-    switch (categoryId) {
-      case '1':
-        router.push('/goals');
-        break;
-      case '2':
-        router.push('/habits');
-        break;
-      case '3':
-        router.push('/physical-fitness');
-        break;
-      case '4':
-        router.push('/mental-wellbeing');
-        break;
-      case '4':
-        router.push('/professional');
-        break;
-      case '5':
-        router.push('/academic');
-        break;
-      case '9':
-        router.push('/financial-planning');
-        break;
-      case '10':
-        router.push('/personal-reflection');
-        break;
-      case '7':
-        router.push('/time-management');
-        break;
-      // Add other category routes as needed
-    }
-  };
-
   return (
     <ScrollView style={styles.container} showsVerticalScrollIndicator={false}>
       <View style={styles.header}>
-        <Text style={styles.title}>Personal Growth</Text>
-        <Text style={styles.subtitle}>Track your journey of continuous improvement</Text>
+        <View style={styles.headerTop}>
+          <Text style={styles.username}>akora_alumni</Text>
+          <View style={styles.headerIcons}>
+            <TouchableOpacity style={styles.headerIcon}>
+              <UserPlus size={24} color="#000000" strokeWidth={2} />
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.headerIcon}>
+              <Menu size={24} color="#000000" strokeWidth={2} />
+            </TouchableOpacity>
+          </View>
+        </View>
+
+        <View style={styles.profileSection}>
+          <TouchableOpacity>
+            <Image
+              source={{ uri: 'https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?w=400' }}
+              style={styles.avatar}
+            />
+          </TouchableOpacity>
+
+          <View style={styles.statsRow}>
+            <TouchableOpacity style={styles.statItem}>
+              <Text style={styles.statNumber}>{USER_STATS.posts}</Text>
+              <Text style={styles.statLabel}>Posts</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.statItem}>
+              <Text style={styles.statNumber}>{USER_STATS.followers.toLocaleString()}</Text>
+              <Text style={styles.statLabel}>Followers</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.statItem}>
+              <Text style={styles.statNumber}>{USER_STATS.following}</Text>
+              <Text style={styles.statLabel}>Following</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+
+        <View style={styles.bioSection}>
+          <Text style={styles.displayName}>Akora Alumni</Text>
+          <Text style={styles.bio}>
+            🎓 Proud Akora Alumni{'\n'}
+            📍 Accra, Ghana{'\n'}
+            🌟 Building the future, one day at a time
+          </Text>
+          <TouchableOpacity style={styles.linkContainer}>
+            <LinkIcon size={14} color="#003569" strokeWidth={2} />
+            <Text style={styles.link}>akora.edu/alumni</Text>
+          </TouchableOpacity>
+        </View>
+
+        <View style={styles.actionButtons}>
+          <TouchableOpacity 
+            style={styles.editButton}
+            onPress={() => router.push('/profile/edit')}
+          >
+            <Text style={styles.editButtonText}>Edit Profile</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.shareButton}>
+            <Text style={styles.shareButtonText}>Share Profile</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.moreButton}>
+            <UserPlus size={16} color="#000000" strokeWidth={2} />
+          </TouchableOpacity>
+        </View>
+
+        <ScrollView 
+          horizontal 
+          showsHorizontalScrollIndicator={false}
+          style={styles.highlightsContainer}
+          contentContainerStyle={styles.highlightsContent}
+        >
+          {HIGHLIGHTS.map((highlight) => (
+            <TouchableOpacity key={highlight.id} style={styles.highlightItem}>
+              <View style={styles.highlightImageContainer}>
+                <Image source={{ uri: highlight.image }} style={styles.highlightImage} />
+              </View>
+              <Text style={styles.highlightTitle}>{highlight.title}</Text>
+            </TouchableOpacity>
+          ))}
+        </ScrollView>
       </View>
 
-      <View style={styles.statsContainer}>
-        {stats.map((stat, index) => (
-          <TouchableOpacity 
-            key={index} 
-            style={styles.statCard}
-            onPress={() => {
-              // Show more details about the stat
-              Alert.alert(
-                stat.title,
-                `Current value: ${stat.value}\nTrend: ${stat.trend}\n\nTap on any growth area below to explore more details and track your progress.`,
-                [{ text: 'OK' }]
-              );
-            }}
-          >
-            <Text style={styles.statValue}>{stat.value}</Text>
-            <Text style={styles.statTitle}>{stat.title}</Text>
-            <View style={styles.trendContainer}>
-              <TrendingUp size={14} color={stat.isPositive ? '#10B981' : '#EF4444'} />
-              <Text style={[styles.trendText, { color: stat.isPositive ? '#10B981' : '#EF4444' }]}>
-                {stat.trend}
-              </Text>
+      <View style={styles.tabs}>
+        <TouchableOpacity
+          style={[styles.tab, activeTab === 'grid' && styles.activeTab]}
+          onPress={() => setActiveTab('grid')}
+        >
+          <Grid3x3 size={24} color={activeTab === 'grid' ? '#000000' : '#8E8E8E'} />
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={[styles.tab, activeTab === 'saved' && styles.activeTab]}
+          onPress={() => setActiveTab('saved')}
+        >
+          <Bookmark size={24} color={activeTab === 'saved' ? '#000000' : '#8E8E8E'} />
+        </TouchableOpacity>
+      </View>
+
+      <View style={styles.postsGrid}>
+        {USER_POSTS.map((post) => (
+          <TouchableOpacity key={post.id} style={styles.gridItem}>
+            <Image source={{ uri: post.image }} style={styles.gridImage} />
+            <View style={styles.gridOverlay}>
+              <View style={styles.gridStats}>
+                <Heart size={18} color="#FFFFFF" fill="#FFFFFF" />
+                <Text style={styles.gridStatsText}>{post.likes}</Text>
+              </View>
             </View>
           </TouchableOpacity>
         ))}
-      </View>
-
-      <View style={styles.categoriesContainer}>
-        <View style={styles.sectionHeader}>
-          <Text style={styles.sectionTitle}>Growth Areas</Text>
-          <TouchableOpacity style={styles.seeAllButton}>
-            <Text style={styles.seeAllText}>See All</Text>
-            <ChevronRight size={16} color="#666666" />
-          </TouchableOpacity>
-        </View>
-
-        <View style={styles.grid}>
-          {GROWTH_CATEGORIES.map((category) => {
-            const IconComponent = category.icon;
-            return (
-              <TouchableOpacity
-                key={category.id}
-                style={[styles.categoryCard, { backgroundColor: category.color }]}
-                onPress={() => handleCategoryPress(category.id)}
-              >
-                <View style={styles.cardHeader}>
-                  <View style={styles.iconContainer}>
-                    <IconComponent size={24} color="#000000" strokeWidth={1.5} />
-                  </View>
-                  <View style={[styles.progressBar, { width: `${category.progress}%` }]} />
-                </View>
-                <View style={styles.cardContent}>
-                  <Text style={styles.cardTitle} numberOfLines={1}>
-                    {category.title}
-                  </Text>
-                  <Text style={styles.cardDescription} numberOfLines={2}>
-                    {category.description}
-                  </Text>
-                </View>
-              </TouchableOpacity>
-            );
-          })}
-        </View>
       </View>
     </ScrollView>
   );
@@ -271,120 +180,203 @@ const styles = StyleSheet.create({
     backgroundColor: '#FFFFFF',
   },
   header: {
-    padding: 24,
     paddingTop: 60,
     backgroundColor: '#FFFFFF',
   },
-  title: {
-    fontSize: 28,
-    fontFamily: 'Inter-SemiBold',
-    color: '#000000',
-    marginBottom: 8,
-  },
-  subtitle: {
-    fontSize: 16,
-    fontFamily: 'Inter-Regular',
-    color: '#666666',
-  },
-  statsContainer: {
-    flexDirection: 'row',
-    padding: 16,
-    gap: 12,
-  },
-  statCard: {
-    flex: 1,
-    backgroundColor: '#F8F9FA',
-    borderRadius: 16,
-    padding: 16,
-    alignItems: 'center',
-  },
-  statValue: {
-    fontSize: 24,
-    fontFamily: 'Inter-SemiBold',
-    color: '#000000',
-    marginBottom: 4,
-  },
-  statTitle: {
-    fontSize: 12,
-    fontFamily: 'Inter-Regular',
-    color: '#666666',
-    marginBottom: 8,
-    textAlign: 'center',
-  },
-  trendContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-  },
-  trendText: {
-    fontSize: 12,
-    fontFamily: 'Inter-Regular',
-  },
-  categoriesContainer: {
-    padding: 24,
-  },
-  sectionHeader: {
+  headerTop: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingBottom: 16,
+  },
+  username: {
+    fontSize: 22,
+    fontFamily: 'Inter-SemiBold',
+    color: '#000000',
+  },
+  headerIcons: {
+    flexDirection: 'row',
+    gap: 16,
+  },
+  headerIcon: {
+    padding: 4,
+  },
+  profileSection: {
+    paddingHorizontal: 16,
+    marginBottom: 12,
+  },
+  avatar: {
+    width: 86,
+    height: 86,
+    borderRadius: 43,
     marginBottom: 16,
   },
-  sectionTitle: {
+  statsRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-around',
+    marginTop: -60,
+    marginLeft: 100,
+  },
+  statItem: {
+    alignItems: 'center',
+    minWidth: 70,
+  },
+  statNumber: {
     fontSize: 18,
     fontFamily: 'Inter-SemiBold',
     color: '#000000',
   },
-  seeAllButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-  },
-  seeAllText: {
+  statLabel: {
     fontSize: 14,
     fontFamily: 'Inter-Regular',
-    color: '#666666',
+    color: '#000000',
+    marginTop: 2,
   },
-  grid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 16,
+  bioSection: {
+    paddingHorizontal: 16,
+    marginBottom: 12,
   },
-  categoryCard: {
-    width: (Dimensions.get('window').width - 64) / 2,
-    borderRadius: 16,
-    padding: 16,
-    marginBottom: 16,
+  displayName: {
+    fontSize: 14,
+    fontFamily: 'Inter-SemiBold',
+    color: '#000000',
+    marginBottom: 4,
   },
-  cardHeader: {
-    marginBottom: 16,
-  },
-  iconContainer: {
-    width: 40,
-    height: 40,
-    borderRadius: 12,
-    backgroundColor: '#FFFFFF',
-    justifyContent: 'center',
-    alignItems: 'center',
+  bio: {
+    fontSize: 14,
+    fontFamily: 'Inter-Regular',
+    color: '#000000',
+    lineHeight: 20,
     marginBottom: 8,
   },
-  progressBar: {
-    height: 4,
-    backgroundColor: '#000000',
-    borderRadius: 2,
-    opacity: 0.1,
-  },
-  cardContent: {
+  linkContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
     gap: 4,
   },
-  cardTitle: {
-    fontSize: 16,
+  link: {
+    fontSize: 14,
+    fontFamily: 'Inter-Regular',
+    color: '#003569',
+  },
+  actionButtons: {
+    flexDirection: 'row',
+    paddingHorizontal: 16,
+    gap: 8,
+    marginBottom: 16,
+  },
+  editButton: {
+    flex: 1,
+    backgroundColor: '#EFEFEF',
+    paddingVertical: 8,
+    borderRadius: 8,
+    alignItems: 'center',
+  },
+  editButtonText: {
+    fontSize: 14,
     fontFamily: 'Inter-SemiBold',
     color: '#000000',
   },
-  cardDescription: {
+  shareButton: {
+    flex: 1,
+    backgroundColor: '#EFEFEF',
+    paddingVertical: 8,
+    borderRadius: 8,
+    alignItems: 'center',
+  },
+  shareButtonText: {
+    fontSize: 14,
+    fontFamily: 'Inter-SemiBold',
+    color: '#000000',
+  },
+  moreButton: {
+    backgroundColor: '#EFEFEF',
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    borderRadius: 8,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  highlightsContainer: {
+    marginBottom: 8,
+  },
+  highlightsContent: {
+    paddingHorizontal: 16,
+    gap: 16,
+  },
+  highlightItem: {
+    alignItems: 'center',
+    width: 70,
+  },
+  highlightImageContainer: {
+    width: 64,
+    height: 64,
+    borderRadius: 12,
+    overflow: 'hidden',
+    marginBottom: 6,
+    borderWidth: 1,
+    borderColor: '#DBDBDB',
+  },
+  highlightImage: {
+    width: '100%',
+    height: '100%',
+  },
+  highlightTitle: {
     fontSize: 12,
     fontFamily: 'Inter-Regular',
-    color: '#666666',
-    lineHeight: 16,
+    color: '#000000',
+    textAlign: 'center',
+  },
+  tabs: {
+    flexDirection: 'row',
+    borderTopWidth: 1,
+    borderTopColor: '#DBDBDB',
+    marginTop: 8,
+  },
+  tab: {
+    flex: 1,
+    paddingVertical: 12,
+    alignItems: 'center',
+    borderBottomWidth: 1,
+    borderBottomColor: 'transparent',
+  },
+  activeTab: {
+    borderBottomColor: '#000000',
+  },
+  postsGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 2,
+  },
+  gridItem: {
+    width: GRID_ITEM_SIZE,
+    height: GRID_ITEM_SIZE,
+    position: 'relative',
+  },
+  gridImage: {
+    width: '100%',
+    height: '100%',
+  },
+  gridOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: 'rgba(0, 0, 0, 0)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  gridStats: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    opacity: 0,
+  },
+  gridStatsText: {
+    fontSize: 14,
+    fontFamily: 'Inter-SemiBold',
+    color: '#FFFFFF',
   },
 });

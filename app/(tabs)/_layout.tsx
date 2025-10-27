@@ -1,5 +1,5 @@
 import { Tabs } from 'expo-router';
-import { Home, Globe, LineChart, MessageSquare, UserCircle } from 'lucide-react-native';
+import { Home, LayoutGrid, MessageSquare, Sparkles } from 'lucide-react-native';
 
 export default function TabLayout() {
   return (
@@ -44,14 +44,14 @@ export default function TabLayout() {
         name="hub"
         options={{
           title: 'Hub',
-          tabBarIcon: ({ color, size }) => <Globe size={24} color={color} strokeWidth={2.5} />,
+          tabBarIcon: ({ color, size }) => <LayoutGrid size={24} color={color} strokeWidth={2.5} />,
         }}
       />
       <Tabs.Screen
-        name="grow"
+        name="discover"
         options={{
-          title: 'Grow',
-          tabBarIcon: ({ color, size }) => <LineChart size={24} color={color} strokeWidth={2.5} />,
+          title: 'Discover',
+          tabBarIcon: ({ color, size }) => <Sparkles size={24} color={color} strokeWidth={2.5} />,
         }}
       />
       <Tabs.Screen
@@ -59,13 +59,6 @@ export default function TabLayout() {
         options={{
           title: 'Chat',
           tabBarIcon: ({ color, size }) => <MessageSquare size={24} color={color} strokeWidth={2.5} />,
-        }}
-      />
-      <Tabs.Screen
-        name="profile"
-        options={{
-          title: 'Profile',
-          tabBarIcon: ({ color, size }) => <UserCircle size={24} color={color} strokeWidth={2.5} />,
         }}
       />
     </Tabs>

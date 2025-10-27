@@ -193,7 +193,7 @@ export default function EditProfileScreen() {
       if (error) throw error;
       
       Alert.alert('Success', 'Profile updated successfully', [
-        { text: 'OK', onPress: () => router.back() }
+        { text: 'OK', onPress: () => router.push('/grow') }
       ]);
     } catch (error) {
       console.error('Error updating profile:', error);
@@ -220,7 +220,7 @@ export default function EditProfileScreen() {
       <View style={styles.header}>
         <TouchableOpacity 
           style={styles.backButton}
-          onPress={() => router.back()}
+          onPress={() => router.push('/grow')}
         >
           <ArrowLeft size={24} color="#000000" />
         </TouchableOpacity>

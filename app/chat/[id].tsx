@@ -3,7 +3,7 @@ import { ArrowLeft, Send } from 'lucide-react-native';
 import { useFonts, Inter_400Regular, Inter_600SemiBold } from '@expo-google-fonts/inter';
 import { useEffect, useState, useRef } from 'react';
 import { SplashScreen, useRouter, useLocalSearchParams } from 'expo-router';
-import { supabase } from '@/lib/supabase';
+import { fetchChatMessages, sendMessage as sendMessageHelper, subscribeToMessages as subscribeToMessagesHelper, getChatInfo, markChatAsRead } from '@/lib/chats';
 import { useAuth } from '@/hooks/useAuth';
 import type { Message, Profile } from '@/lib/supabase';
 
@@ -40,55 +40,24 @@ export default function ChatDetailScreen() {
     if (chatId && user) {
       fetchChatInfo();
       fetchMessages();
-      subscribeToMessages();
+      const unsub = subscribeToMessages();
+      return () => {
+        if (unsub && typeof unsub === 'function') unsub();
+        if (unsub && unsub.unsubscribe) unsub.unsubscribe();
+      };
     }
   }, [chatId, user]);
 
   const fetchChatInfo = async () => {
     if (!chatId || !user) return;
-
     try {
-      // Get chat details
-      const { data: chatData, error: chatError } = await supabase
-        .from('chats')
-        .select('id, type, name, avatar_url')
-        .eq('id', chatId)
-        .single();
-
-      if (chatError) throw chatError;
-
-      // For direct chats, get the other participant's info
-      if (chatData.type === 'direct') {
-        const { data: participantsData, error: participantsError } = await supabase
-          .from('chat_participants')
-          .select(`
-            user_id,
-            profiles (
-              username,
-              full_name,
-              avatar_url
-            )
-          `)
-          .eq('chat_id', chatId)
-          .neq('user_id', user.id);
-
-        if (participantsError) throw participantsError;
-
-        const otherParticipant = participantsData[0];
-        if (otherParticipant?.profiles) {
-          setChatInfo({
-            name: otherParticipant.profiles.full_name || otherParticipant.profiles.username,
-            avatar_url: otherParticipant.profiles.avatar_url,
-            type: 'direct',
-          });
-        }
-      } else {
-        setChatInfo({
-          name: chatData.name || 'Group Chat',
-          avatar_url: chatData.avatar_url,
-          type: 'group',
-        });
-      }
+      const info = await getChatInfo(chatId, user.id);
+      if (!info) return;
+      setChatInfo({
+        name: info.name || (info.type === 'direct' ? 'Chat' : 'Group Chat'),
+        avatar_url: info.avatar_url,
+        type: info.type,
+      });
     } catch (error) {
       console.error('Error fetching chat info:', error);
     }
@@ -96,31 +65,14 @@ export default function ChatDetailScreen() {
 
   const fetchMessages = async () => {
     if (!chatId) return;
-
     try {
       setLoading(true);
-      
-      const { data, error } = await supabase
-        .from('messages')
-        .select(`
-          id,
-          chat_id,
-          sender_id,
-          content,
-          created_at,
-          profiles (
-            username,
-            full_name,
-            avatar_url
-          )
-        `)
-        .eq('chat_id', chatId)
-        .order('created_at', { ascending: true });
+      const msgs = await fetchChatMessages(chatId);
+      setMessages(msgs || []);
 
-      if (error) throw error;
+      // Mark as read
+      if (user) await markChatAsRead(chatId, user.id);
 
-      setMessages(data || []);
-      
       // Scroll to bottom after loading messages
       setTimeout(() => {
         scrollViewRef.current?.scrollToEnd({ animated: false });
@@ -134,52 +86,23 @@ export default function ChatDetailScreen() {
   };
 
   const subscribeToMessages = () => {
-    if (!chatId) return;
+    if (!chatId) return null;
 
-    const subscription = supabase
-      .channel(`messages:${chatId}`)
-      .on(
-        'postgres_changes',
-        {
-          event: 'INSERT',
-          schema: 'public',
-          table: 'messages',
-          filter: `chat_id=eq.${chatId}`,
-        },
-        async (payload) => {
-          // Fetch the complete message with sender info
-          const { data, error } = await supabase
-            .from('messages')
-            .select(`
-              id,
-              chat_id,
-              sender_id,
-              content,
-              created_at,
-              profiles (
-                username,
-                full_name,
-                avatar_url
-              )
-            `)
-            .eq('id', payload.new.id)
-            .single();
+    const subscription = subscribeToMessagesHelper(chatId, (message) => {
+      setMessages(prev => [...prev, message]);
 
-          if (!error && data) {
-            setMessages(prev => [...prev, data]);
-            
-            // Scroll to bottom when new message arrives
-            setTimeout(() => {
-              scrollViewRef.current?.scrollToEnd({ animated: true });
-            }, 100);
-          }
-        }
-      )
-      .subscribe();
+      // Scroll to bottom when new message arrives
+      setTimeout(() => {
+        scrollViewRef.current?.scrollToEnd({ animated: true });
+      }, 100);
 
-    return () => {
-      subscription.unsubscribe();
-    };
+      // Mark as read if message is from someone else
+      if (user && message.sender_id !== user.id) {
+        markChatAsRead(chatId, user.id);
+      }
+    });
+
+    return subscription;
   };
 
   const sendMessage = async () => {
@@ -187,17 +110,8 @@ export default function ChatDetailScreen() {
 
     try {
       setSending(true);
-      
-      const { error } = await supabase
-        .from('messages')
-        .insert({
-          chat_id: chatId,
-          sender_id: user.id,
-          content: newMessage.trim(),
-        });
-
-      if (error) throw error;
-
+      const message = await sendMessageHelper(chatId, user.id, newMessage.trim());
+      if (!message) throw new Error('Failed to send message');
       setNewMessage('');
     } catch (error) {
       console.error('Error sending message:', error);
