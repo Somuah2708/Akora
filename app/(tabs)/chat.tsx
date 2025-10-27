@@ -1,5 +1,5 @@
 import { View, Text, StyleSheet, ScrollView, Image, TouchableOpacity, TextInput, Modal, FlatList, Alert } from 'react-native';
-import { Search, Plus, MoveVertical as MoreVertical, X, MessageCircle } from 'lucide-react-native';
+import { Search, Plus, MoveVertical as MoreVertical, X, MessageCircle, UserPlus } from 'lucide-react-native';
 import { useFonts, Inter_400Regular, Inter_600SemiBold } from '@expo-google-fonts/inter';
 import { useEffect, useState } from 'react';
 import { SplashScreen, useRouter } from 'expo-router';
@@ -123,9 +123,9 @@ export default function ChatScreen() {
         <View style={styles.headerActions}>
           <TouchableOpacity 
             style={styles.iconButton}
-            onPress={() => setSearchModalVisible(true)}
+            onPress={() => router.push('/friends')}
           >
-            <Plus size={24} color="#1A1A1A" />
+            <UserPlus size={24} color="#1A1A1A" />
           </TouchableOpacity>
           <TouchableOpacity style={styles.iconButton}>
             <MoreVertical size={24} color="#1A1A1A" />

@@ -33,6 +33,9 @@ export type Profile = {
   id: string;
   username: string;
   full_name: string;
+  first_name?: string;
+  surname?: string;
+  email?: string;
   avatar_url?: string;
   bio?: string;
   class?: string;

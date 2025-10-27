@@ -6,11 +6,11 @@ if (typeof window !== 'undefined') {
   global.WebSocket = window.WebSocket;
 }
 
+import { useEffect } from 'react';
 import { Stack, useRouter, useSegments } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { useFrameworkReady } from '@/hooks/useFrameworkReady';
 import { useAuth } from '@/hooks/useAuth';
-import { useEffect } from 'react';
 
 export default function RootLayout() {
   useFrameworkReady();
@@ -27,20 +27,20 @@ export default function RootLayout() {
       // Redirect to sign-in if not authenticated
       router.replace('/auth/sign-in');
     } else if (user && inAuthGroup) {
-      // Redirect to main app if authenticated
+      // Redirect to app if authenticated
       router.replace('/(tabs)');
     }
   }, [user, loading, segments]);
 
   if (loading) {
-    return null; // Or a loading screen
+    return null; // Or show a loading screen
   }
   
   return (
     <>
       <Stack>
-        <Stack.Screen name="auth" options={{ headerShown: false }} />
         <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
+        <Stack.Screen name="auth" options={{ headerShown: false }} />
         <Stack.Screen name="+not-found" />
       </Stack>
       <StatusBar style="auto" />

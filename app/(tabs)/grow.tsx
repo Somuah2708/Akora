@@ -1,6 +1,6 @@
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Dimensions, Image } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Dimensions, Image, ActivityIndicator } from 'react-native';
 import { useFonts, Inter_400Regular, Inter_600SemiBold } from '@expo-google-fonts/inter';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useRouter } from 'expo-router';
 import { 
   Grid3x3,
@@ -9,8 +9,10 @@ import {
   Menu,
   Heart,
   Link as LinkIcon,
+  LogOut,
 } from 'lucide-react-native';
 import { useAuth } from '@/hooks/useAuth';
+import { supabase } from '@/lib/supabase';
 
 const { width } = Dimensions.get('window');
 const GRID_ITEM_SIZE = (width - 6) / 3;
@@ -46,26 +48,101 @@ const USER_STATS = {
 
 export default function ProfileScreen() {
   const router = useRouter();
-  const { user } = useAuth();
+  const { user, profile, signOut } = useAuth();
   const [activeTab, setActiveTab] = useState<'grid' | 'saved'>('grid');
+  const [userPosts, setUserPosts] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [stats, setStats] = useState({
+    posts: 0,
+    followers: 0,
+    following: 0,
+  });
   
   const [fontsLoaded] = useFonts({
     'Inter-Regular': Inter_400Regular,
     'Inter-SemiBold': Inter_600SemiBold,
   });
 
-  if (!fontsLoaded) {
-    return null;
+  useEffect(() => {
+    if (user) {
+      fetchUserData();
+    }
+  }, [user]);
+
+  const fetchUserData = async () => {
+    if (!user) return;
+
+    try {
+      setLoading(true);
+
+      // Fetch user's posts
+      const { data: posts, error: postsError } = await supabase
+        .from('posts')
+        .select('*')
+        .eq('user_id', user.id)
+        .order('created_at', { ascending: false });
+
+      if (postsError) throw postsError;
+
+      setUserPosts(posts || []);
+      setStats(prev => ({ ...prev, posts: posts?.length || 0 }));
+
+      // Fetch followers count (from friends table where friend_id = user.id)
+      const { count: followersCount, error: followersError } = await supabase
+        .from('friends')
+        .select('*', { count: 'exact', head: true })
+        .eq('friend_id', user.id);
+
+      if (!followersError) {
+        setStats(prev => ({ ...prev, followers: followersCount || 0 }));
+      }
+
+      // Fetch following count (from friends table where user_id = user.id)
+      const { count: followingCount, error: followingError } = await supabase
+        .from('friends')
+        .select('*', { count: 'exact', head: true })
+        .eq('user_id', user.id);
+
+      if (!followingError) {
+        setStats(prev => ({ ...prev, following: followingCount || 0 }));
+      }
+
+    } catch (error) {
+      console.error('Error fetching user data:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleSignOut = async () => {
+    await signOut();
+    router.replace('/auth/sign-in');
+  };
+
+  if (!fontsLoaded || loading) {
+    return (
+      <View style={styles.loadingContainer}>
+        <ActivityIndicator size="large" color="#4169E1" />
+      </View>
+    );
+  }
+
+  if (!user || !profile) {
+    return (
+      <View style={styles.loadingContainer}>
+        <Text style={styles.errorText}>Please sign in to view your profile</Text>
+      </View>
+    );
   }
 
   return (
     <ScrollView style={styles.container} showsVerticalScrollIndicator={false}>
       <View style={styles.header}>
         <View style={styles.headerTop}>
-          <Text style={styles.username}>akora_alumni</Text>
+          <Text style={styles.username}>@{profile.username || 'user'}</Text>
           <View style={styles.headerIcons}>
-            <TouchableOpacity style={styles.headerIcon}>
-              <UserPlus size={24} color="#000000" strokeWidth={2} />
+            <TouchableOpacity style={styles.headerIcon} onPress={handleSignOut}>
+              <LogOut size={24} color="#000000" strokeWidth={2} />
             </TouchableOpacity>
             <TouchableOpacity style={styles.headerIcon}>
               <Menu size={24} color="#000000" strokeWidth={2} />
@@ -75,39 +152,81 @@ export default function ProfileScreen() {
 
         <View style={styles.profileSection}>
           <TouchableOpacity>
-            <Image
-              source={{ uri: 'https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?w=400' }}
-              style={styles.avatar}
-            />
+            {profile.avatar_url ? (
+              <Image
+                source={{ uri: profile.avatar_url }}
+                style={styles.avatar}
+              />
+            ) : (
+              <View style={[styles.avatar, styles.avatarPlaceholder]}>
+                <Text style={styles.avatarText}>
+                  {profile.full_name?.[0]?.toUpperCase() || 'U'}
+                </Text>
+              </View>
+            )}
           </TouchableOpacity>
 
           <View style={styles.statsRow}>
             <TouchableOpacity style={styles.statItem}>
-              <Text style={styles.statNumber}>{USER_STATS.posts}</Text>
+              <Text style={styles.statNumber}>{stats.posts}</Text>
               <Text style={styles.statLabel}>Posts</Text>
             </TouchableOpacity>
             <TouchableOpacity style={styles.statItem}>
-              <Text style={styles.statNumber}>{USER_STATS.followers.toLocaleString()}</Text>
+              <Text style={styles.statNumber}>{stats.followers}</Text>
               <Text style={styles.statLabel}>Followers</Text>
             </TouchableOpacity>
             <TouchableOpacity style={styles.statItem}>
-              <Text style={styles.statNumber}>{USER_STATS.following}</Text>
+              <Text style={styles.statNumber}>{stats.following}</Text>
               <Text style={styles.statLabel}>Following</Text>
             </TouchableOpacity>
           </View>
         </View>
 
         <View style={styles.bioSection}>
-          <Text style={styles.displayName}>Akora Alumni</Text>
-          <Text style={styles.bio}>
-            🎓 Proud Akora Alumni{'\n'}
-            📍 Accra, Ghana{'\n'}
-            🌟 Building the future, one day at a time
-          </Text>
-          <TouchableOpacity style={styles.linkContainer}>
-            <LinkIcon size={14} color="#003569" strokeWidth={2} />
-            <Text style={styles.link}>akora.edu/alumni</Text>
-          </TouchableOpacity>
+          <Text style={styles.displayName}>{profile.full_name || 'User'}</Text>
+          
+          {/* User Details */}
+          <View style={styles.detailsContainer}>
+            {profile.year_group && (
+              <View style={styles.detailItem}>
+                <Text style={styles.detailLabel}>📚 Year Group:</Text>
+                <Text style={styles.detailValue}>{profile.year_group}</Text>
+              </View>
+            )}
+            
+            {profile.house && (
+              <View style={styles.detailItem}>
+                <Text style={styles.detailLabel}>🏠 House:</Text>
+                <Text style={styles.detailValue}>{profile.house}</Text>
+              </View>
+            )}
+            
+            {profile.class && (
+              <View style={styles.detailItem}>
+                <Text style={styles.detailLabel}>🎓 Class:</Text>
+                <Text style={styles.detailValue}>{profile.class}</Text>
+              </View>
+            )}
+
+            {profile.first_name && profile.surname && (
+              <View style={styles.detailItem}>
+                <Text style={styles.detailLabel}>👤 Name:</Text>
+                <Text style={styles.detailValue}>{profile.first_name} {profile.surname}</Text>
+              </View>
+            )}
+
+            {profile.email && (
+              <View style={styles.detailItem}>
+                <Text style={styles.detailLabel}>📧 Email:</Text>
+                <Text style={styles.detailValue}>{profile.email}</Text>
+              </View>
+            )}
+          </View>
+
+          {/* Bio */}
+          {profile.bio && (
+            <Text style={styles.bio}>{profile.bio}</Text>
+          )}
         </View>
 
         <View style={styles.actionButtons}>
@@ -158,17 +277,29 @@ export default function ProfileScreen() {
       </View>
 
       <View style={styles.postsGrid}>
-        {USER_POSTS.map((post) => (
-          <TouchableOpacity key={post.id} style={styles.gridItem}>
-            <Image source={{ uri: post.image }} style={styles.gridImage} />
-            <View style={styles.gridOverlay}>
-              <View style={styles.gridStats}>
-                <Heart size={18} color="#FFFFFF" fill="#FFFFFF" />
-                <Text style={styles.gridStatsText}>{post.likes}</Text>
+        {userPosts.length > 0 ? (
+          userPosts.map((post) => (
+            <TouchableOpacity key={post.id} style={styles.gridItem}>
+              {post.image_url ? (
+                <Image source={{ uri: post.image_url }} style={styles.gridImage} />
+              ) : (
+                <View style={styles.gridImagePlaceholder}>
+                  <Text style={styles.gridPlaceholderText}>No Image</Text>
+                </View>
+              )}
+              <View style={styles.gridOverlay}>
+                <View style={styles.gridStats}>
+                  <Heart size={18} color="#FFFFFF" fill="#FFFFFF" />
+                  <Text style={styles.gridStatsText}>{post.likes_count || 0}</Text>
+                </View>
               </View>
-            </View>
-          </TouchableOpacity>
-        ))}
+            </TouchableOpacity>
+          ))
+        ) : (
+          <View style={styles.emptyState}>
+            <Text style={styles.emptyStateText}>No posts yet</Text>
+          </View>
+        )}
       </View>
     </ScrollView>
   );
@@ -242,6 +373,28 @@ const styles = StyleSheet.create({
     fontFamily: 'Inter-SemiBold',
     color: '#000000',
     marginBottom: 4,
+  },
+  detailsContainer: {
+    marginTop: 8,
+    marginBottom: 8,
+    gap: 6,
+  },
+  detailItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  detailLabel: {
+    fontSize: 13,
+    fontFamily: 'Inter-SemiBold',
+    color: '#666666',
+    minWidth: 100,
+  },
+  detailValue: {
+    fontSize: 13,
+    fontFamily: 'Inter-Regular',
+    color: '#000000',
+    flex: 1,
   },
   bio: {
     fontSize: 14,
@@ -378,5 +531,49 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontFamily: 'Inter-SemiBold',
     color: '#FFFFFF',
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: '#FFFFFF',
+  },
+  errorText: {
+    fontSize: 16,
+    fontFamily: 'Inter-Regular',
+    color: '#6B7280',
+  },
+  avatarPlaceholder: {
+    backgroundColor: '#4169E1',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  avatarText: {
+    fontSize: 32,
+    fontWeight: '600',
+    color: '#FFFFFF',
+  },
+  gridImagePlaceholder: {
+    width: '100%',
+    height: '100%',
+    backgroundColor: '#F3F4F6',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  gridPlaceholderText: {
+    fontSize: 12,
+    color: '#9CA3AF',
+  },
+  emptyState: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingVertical: 60,
+    width: '100%',
+  },
+  emptyStateText: {
+    fontSize: 16,
+    fontFamily: 'Inter-Regular',
+    color: '#6B7280',
   },
 });
