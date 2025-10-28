@@ -3,16 +3,30 @@ import { Search, Plus, MoveVertical as MoreVertical, X, MessageCircle, UserPlus 
 import { useFonts, Inter_400Regular, Inter_600SemiBold } from '@expo-google-fonts/inter';
 import { useEffect, useState } from 'react';
 import { SplashScreen, useRouter } from 'expo-router';
-import { fetchUserChats, getOrCreateDirectChat, searchUsers as searchUsersHelper } from '@/lib/chats';
+import { getConversationList, searchUsers as searchUsersHelper } from '@/lib/friends';
 import { useAuth } from '@/hooks/useAuth';
-import type { Profile, ChatWithDetails } from '@/lib/supabase';
+import { supabase } from '@/lib/supabase';
+import type { Profile } from '@/lib/supabase';
 
 SplashScreen.preventAutoHideAsync();
+
+interface Conversation {
+  friend: any; // Friend object from Supabase join
+  latestMessage: {
+    id: string;
+    content: string;
+    created_at: string;
+    sender_id: string;
+    receiver_id: string;
+    is_read: boolean;
+  } | null;
+  unreadCount: number;
+}
 
 export default function ChatScreen() {
   const router = useRouter();
   const { user } = useAuth();
-  const [chats, setChats] = useState<ChatWithDetails[]>([]);
+  const [conversations, setConversations] = useState<Conversation[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchModalVisible, setSearchModalVisible] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
@@ -32,19 +46,40 @@ export default function ChatScreen() {
 
   useEffect(() => {
     if (user) {
-      fetchChats();
+      fetchConversations();
+      
+      // Subscribe to real-time updates for direct messages
+      const subscription = supabase
+        .channel('direct_messages_changes')
+        .on('postgres_changes', 
+          { 
+            event: '*', 
+            schema: 'public', 
+            table: 'direct_messages',
+            filter: `or(sender_id.eq.${user.id},receiver_id.eq.${user.id})`
+          }, 
+          () => {
+            // Refresh conversations when messages are added/updated
+            fetchConversations();
+          }
+        )
+        .subscribe();
+
+      return () => {
+        subscription.unsubscribe();
+      };
     }
   }, [user]);
 
-  const fetchChats = async () => {
+  const fetchConversations = async () => {
     if (!user) return;
     try {
       setLoading(true);
-      const userChats = await fetchUserChats(user.id);
-      setChats(userChats);
+      const convos = await getConversationList(user.id);
+      setConversations(convos);
     } catch (error) {
-      console.error('Error fetching chats:', error);
-      Alert.alert('Error', 'Failed to load chats');
+      console.error('Error fetching conversations:', error);
+      Alert.alert('Error', 'Failed to load conversations');
     } finally {
       setLoading(false);
     }
@@ -54,7 +89,7 @@ export default function ChatScreen() {
     if (!query.trim() || !user) return;
     try {
       setSearchLoading(true);
-      const results = await searchUsersHelper(query, user.id);
+      const results = await searchUsersHelper(query);
       setSearchResults(results);
     } catch (error) {
       console.error('Error searching users:', error);
@@ -67,17 +102,15 @@ export default function ChatScreen() {
   const createDirectChat = async (otherUserId: string) => {
     if (!user) return;
     try {
-      const chatId = await getOrCreateDirectChat(user.id, otherUserId);
-      if (chatId) {
-        router.push(`/chat/${chatId}`);
-      }
+      // Navigate directly to the direct message screen with the friend's ID
+      router.push(`/chat/direct/${otherUserId}`);
       setSearchModalVisible(false);
       setSearchQuery('');
       setSearchResults([]);
-      fetchChats();
+      fetchConversations();
     } catch (error) {
-      console.error('Error creating chat:', error);
-      Alert.alert('Error', 'Failed to create chat');
+      console.error('Error opening chat:', error);
+      Alert.alert('Error', 'Failed to open chat');
     }
   };
 
@@ -150,38 +183,40 @@ export default function ChatScreen() {
         </View>
       ) : (
         <ScrollView style={styles.chatList}>
-          {chats.length === 0 ? (
+          {conversations.length === 0 ? (
             <View style={styles.emptyState}>
               <MessageCircle size={64} color="#666666" />
               <Text style={styles.emptyStateTitle}>No chats yet</Text>
               <Text style={styles.emptyStateText}>
-                Tap the + button to start a new conversation
+                Add friends to start chatting with them
               </Text>
             </View>
           ) : (
-            chats.map((chat) => (
+            conversations.map((conversation) => (
               <TouchableOpacity 
-                key={chat.id} 
+                key={conversation.friend.id} 
                 style={styles.chatItem}
-                onPress={() => router.push(`/chat/${chat.id}`)}
+                onPress={() => router.push(`/chat/direct/${conversation.friend.id}`)}
               >
-                <View style={styles.avatarContainer}>
-                  <Image 
-                    source={{ 
-                      uri: chat.avatar_url || 'https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?w=400&auto=format&fit=crop&q=60' 
-                    }} 
-                    style={styles.avatar} 
-                  />
-                  {chat.type === 'direct' && (
+                <TouchableOpacity onPress={() => router.push(`/user-profile/${conversation.friend.id}`)}>
+                  <View style={styles.avatarContainer}>
+                    <Image 
+                      source={{ 
+                        uri: conversation.friend.avatar_url || 'https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?w=400&auto=format&fit=crop&q=60' 
+                      }} 
+                      style={styles.avatar} 
+                    />
                     <View style={styles.onlineIndicator} />
-                  )}
-                </View>
+                  </View>
+                </TouchableOpacity>
                 <View style={styles.chatInfo}>
                   <View style={styles.chatHeader}>
-                    <Text style={styles.chatName}>{chat.name || 'Unknown'}</Text>
-                    {chat.last_message && (
+                    <Text style={styles.chatName}>
+                      {conversation.friend.full_name || conversation.friend.username || 'Unknown'}
+                    </Text>
+                    {conversation.latestMessage && (
                       <Text style={styles.chatTime}>
-                        {formatTime(chat.last_message.created_at)}
+                        {formatTime(conversation.latestMessage.created_at)}
                       </Text>
                     )}
                   </View>
@@ -189,15 +224,15 @@ export default function ChatScreen() {
                     <Text 
                       style={[
                         styles.lastMessage,
-                        chat.unread_count && chat.unread_count > 0 && styles.unreadMessage
+                        conversation.unreadCount > 0 && styles.unreadMessage
                       ]} 
                       numberOfLines={1}
                     >
-                      {chat.last_message?.content || 'No messages yet'}
+                      {conversation.latestMessage?.content || 'No messages yet'}
                     </Text>
-                    {chat.unread_count && chat.unread_count > 0 && (
+                    {conversation.unreadCount > 0 && (
                       <View style={styles.unreadBadge}>
-                        <Text style={styles.unreadCount}>{chat.unread_count}</Text>
+                        <Text style={styles.unreadCount}>{conversation.unreadCount}</Text>
                       </View>
                     )}
                   </View>

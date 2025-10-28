@@ -124,7 +124,7 @@ export default function FriendsScreen() {
     <View style={styles.listItem}>
       <TouchableOpacity
         style={styles.userInfo}
-        onPress={() => router.push(`/chat/direct/${item.friend_id}`)}
+        onPress={() => router.push(`/user-profile/${item.friend_id}`)}
       >
         {item.friend?.avatar_url ? (
           <Image source={{ uri: item.friend.avatar_url }} style={styles.avatar} />
@@ -151,7 +151,10 @@ export default function FriendsScreen() {
 
   const renderRequest = ({ item }: { item: FriendRequest }) => (
     <View style={styles.listItem}>
-      <View style={styles.userInfo}>
+      <TouchableOpacity 
+        style={styles.userInfo}
+        onPress={() => router.push(`/user-profile/${item.sender_id}`)}
+      >
         {item.sender?.avatar_url ? (
           <Image source={{ uri: item.sender.avatar_url }} style={styles.avatar} />
         ) : (
@@ -165,7 +168,7 @@ export default function FriendsScreen() {
           <Text style={styles.userName}>{item.sender?.full_name}</Text>
           <Text style={styles.userHandle}>@{item.sender?.username}</Text>
         </View>
-      </View>
+      </TouchableOpacity>
       <View style={styles.requestActions}>
         <TouchableOpacity
           style={[styles.actionButton, styles.acceptButton]}
@@ -201,7 +204,10 @@ export default function FriendsScreen() {
 
     return (
       <View style={styles.listItem}>
-        <View style={styles.userInfo}>
+        <TouchableOpacity 
+          style={styles.userInfo}
+          onPress={() => router.push(`/user-profile/${item.id}`)}
+        >
           {item.avatar_url ? (
             <Image source={{ uri: item.avatar_url }} style={styles.avatar} />
           ) : (
@@ -215,7 +221,7 @@ export default function FriendsScreen() {
             <Text style={styles.userName}>{item.full_name}</Text>
             <Text style={styles.userHandle}>@{item.username}</Text>
           </View>
-        </View>
+        </TouchableOpacity>
         <TouchableOpacity
           style={[
             styles.addButton,

@@ -193,7 +193,10 @@ export default function DirectMessageScreen() {
           <ArrowLeft size={24} color="#1F2937" />
         </TouchableOpacity>
 
-        <View style={styles.headerInfo}>
+        <TouchableOpacity 
+          style={styles.headerInfo}
+          onPress={() => router.push(`/user-profile/${friendId}`)}
+        >
           {friendProfile?.avatar_url ? (
             <Image source={{ uri: friendProfile.avatar_url }} style={styles.headerAvatar} />
           ) : (
@@ -207,7 +210,7 @@ export default function DirectMessageScreen() {
             <Text style={styles.headerName}>{friendProfile?.full_name || 'Friend'}</Text>
             <Text style={styles.headerHandle}>@{friendProfile?.username || 'user'}</Text>
           </View>
-        </View>
+        </TouchableOpacity>
       </View>
 
       {/* Messages */}

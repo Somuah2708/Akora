@@ -558,3 +558,35 @@ export async function getConversationList(userId: string) {
     return new Date(b.latestMessage.created_at).getTime() - new Date(a.latestMessage.created_at).getTime();
   });
 }
+
+// Get mutual friends count between two users
+export async function getMutualFriendsCount(userId1: string, userId2: string): Promise<number> {
+  try {
+    // Get user1's friends
+    const { data: user1Friends, error: error1 } = await supabase
+      .from('friends')
+      .select('friend_id')
+      .eq('user_id', userId1);
+
+    if (error1) throw error1;
+
+    // Get user2's friends
+    const { data: user2Friends, error: error2 } = await supabase
+      .from('friends')
+      .select('friend_id')
+      .eq('user_id', userId2);
+
+    if (error2) throw error2;
+
+    if (!user1Friends || !user2Friends) return 0;
+
+    // Find intersection
+    const user1FriendIds = new Set(user1Friends.map(f => f.friend_id));
+    const mutualCount = user2Friends.filter(f => user1FriendIds.has(f.friend_id)).length;
+
+    return mutualCount;
+  } catch (error) {
+    console.error('Error getting mutual friends count:', error);
+    return 0;
+  }
+}
