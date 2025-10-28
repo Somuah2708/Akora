@@ -41,6 +41,8 @@ export type DirectMessage = {
   sender_id: string;
   receiver_id: string;
   message: string;
+  message_type?: 'text' | 'image' | 'video' | 'voice';
+  media_url?: string;
   created_at: string;
   is_read: boolean;
   sender?: {
@@ -247,13 +249,21 @@ export async function getDirectMessages(userId: string, friendId: string) {
   return data as DirectMessage[];
 }
 
-export async function sendDirectMessage(senderId: string, receiverId: string, message: string) {
+export async function sendDirectMessage(
+  senderId: string,
+  receiverId: string,
+  message: string,
+  messageType: 'text' | 'image' | 'video' | 'voice' = 'text',
+  mediaUrl?: string
+) {
   const { data, error } = await supabase
     .from('direct_messages')
     .insert({
       sender_id: senderId,
       receiver_id: receiverId,
       message,
+      message_type: messageType,
+      media_url: mediaUrl,
     })
     .select(`
       *,

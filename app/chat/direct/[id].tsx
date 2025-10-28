@@ -9,10 +9,13 @@ import {
   Platform,
   Image,
   ActivityIndicator,
+  Modal,
+  Alert,
+  Pressable,
 } from 'react-native';
 import { useState, useEffect, useRef } from 'react';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { ArrowLeft, Send } from 'lucide-react-native';
+import { ArrowLeft, Send, Smile, Image as ImageIcon, Mic, Camera, X, Play, Pause } from 'lucide-react-native';
 import { useAuth } from '@/hooks/useAuth';
 import {
   getDirectMessages,
@@ -22,17 +25,26 @@ import {
   getFriends,
   type DirectMessage,
 } from '@/lib/friends';
+import { pickMedia, takeMedia, uploadMedia, startRecording, stopRecording, cancelRecording } from '@/lib/media';
+import EmojiSelector from 'react-native-emoji-selector';
+import { Audio } from 'expo-av';
 
 export default function DirectMessageScreen() {
   const router = useRouter();
-  const { id: friendId } = useLocalSearchParams<{ id: string }>();
+  const { id: friendId} = useLocalSearchParams<{ id: string }>();
   const { user } = useAuth();
   const [messages, setMessages] = useState<DirectMessage[]>([]);
   const [messageText, setMessageText] = useState('');
   const [loading, setLoading] = useState(true);
   const [sending, setSending] = useState(false);
   const [friendProfile, setFriendProfile] = useState<any>(null);
+  const [showEmojiPicker, setShowEmojiPicker] = useState(false);
+  const [recording, setRecording] = useState(false);
+  const [uploadingMedia, setUploadingMedia] = useState(false);
+  const [showMediaOptions, setShowMediaOptions] = useState(false);
+  const [playingSound, setPlayingSound] = useState<{ [key: string]: boolean }>({});
   const flatListRef = useRef<FlatList>(null);
+  const soundObjects = useRef<{ [key: string]: Audio.Sound }>({});
 
   useEffect(() => {
     if (user && friendId) {
@@ -108,6 +120,7 @@ export default function DirectMessageScreen() {
       const newMessage = await sendDirectMessage(user.id, friendId, messageText.trim());
       setMessages((prev) => [...prev, newMessage]);
       setMessageText('');
+      setShowEmojiPicker(false);
 
       // Scroll to bottom
       setTimeout(() => {
@@ -117,6 +130,146 @@ export default function DirectMessageScreen() {
       console.error('Error sending message:', error);
     } finally {
       setSending(false);
+    }
+  };
+
+  const handleMediaPick = async () => {
+    setShowMediaOptions(false);
+    const media = await pickMedia();
+    if (media && user && friendId) {
+      try {
+        setUploadingMedia(true);
+        const mediaType = media.type === 'video' ? 'video' : 'image';
+        const mediaUrl = await uploadMedia(media.uri, user.id, mediaType);
+        
+        if (mediaUrl) {
+          const newMessage = await sendDirectMessage(
+            user.id,
+            friendId,
+            mediaType === 'image' ? '📷 Photo' : '🎥 Video',
+            mediaType,
+            mediaUrl
+          );
+          setMessages((prev) => [...prev, newMessage]);
+          
+          setTimeout(() => {
+            flatListRef.current?.scrollToEnd({ animated: true });
+          }, 100);
+        }
+      } catch (error) {
+        console.error('Error sending media:', error);
+        Alert.alert('Error', 'Failed to send media');
+      } finally {
+        setUploadingMedia(false);
+      }
+    }
+  };
+
+  const handleCameraCapture = async () => {
+    setShowMediaOptions(false);
+    const media = await takeMedia();
+    if (media && user && friendId) {
+      try {
+        setUploadingMedia(true);
+        const mediaType = media.type === 'video' ? 'video' : 'image';
+        const mediaUrl = await uploadMedia(media.uri, user.id, mediaType);
+        
+        if (mediaUrl) {
+          const newMessage = await sendDirectMessage(
+            user.id,
+            friendId,
+            mediaType === 'image' ? '📷 Photo' : '🎥 Video',
+            mediaType,
+            mediaUrl
+          );
+          setMessages((prev) => [...prev, newMessage]);
+          
+          setTimeout(() => {
+            flatListRef.current?.scrollToEnd({ animated: true });
+          }, 100);
+        }
+      } catch (error) {
+        console.error('Error sending media:', error);
+        Alert.alert('Error', 'Failed to send media');
+      } finally {
+        setUploadingMedia(false);
+      }
+    }
+  };
+
+  const handleStartRecording = async () => {
+    const success = await startRecording();
+    if (success) {
+      setRecording(true);
+    }
+  };
+
+  const handleStopRecording = async () => {
+    if (!user || !friendId) return;
+    
+    setRecording(false);
+    try {
+      setUploadingMedia(true);
+      const voiceUrl = await stopRecording(user.id);
+      
+      if (voiceUrl) {
+        const newMessage = await sendDirectMessage(
+          user.id,
+          friendId,
+          '🎤 Voice message',
+          'voice',
+          voiceUrl
+        );
+        setMessages((prev) => [...prev, newMessage]);
+        
+        setTimeout(() => {
+          flatListRef.current?.scrollToEnd({ animated: true });
+        }, 100);
+      }
+    } catch (error) {
+      console.error('Error sending voice message:', error);
+      Alert.alert('Error', 'Failed to send voice message');
+    } finally {
+      setUploadingMedia(false);
+    }
+  };
+
+  const handleCancelRecording = async () => {
+    await cancelRecording();
+    setRecording(false);
+  };
+
+  const toggleVoicePlayback = async (messageId: string, voiceUrl: string) => {
+    try {
+      if (playingSound[messageId]) {
+        // Stop playing
+        const sound = soundObjects.current[messageId];
+        if (sound) {
+          await sound.stopAsync();
+          await sound.unloadAsync();
+          delete soundObjects.current[messageId];
+        }
+        setPlayingSound(prev => ({ ...prev, [messageId]: false }));
+      } else {
+        // Start playing
+        const { sound } = await Audio.Sound.createAsync(
+          { uri: voiceUrl },
+          { shouldPlay: true }
+        );
+        soundObjects.current[messageId] = sound;
+        setPlayingSound(prev => ({ ...prev, [messageId]: true }));
+        
+        sound.setOnPlaybackStatusUpdate((status) => {
+          if (status.isLoaded && status.didJustFinish) {
+            setPlayingSound(prev => ({ ...prev, [messageId]: false }));
+            sound.unloadAsync();
+            delete soundObjects.current[messageId];
+          }
+        });
+      }
+    } catch (error) {
+      console.error('Error playing voice message:', error);
+      Alert.alert('Error', 'Failed to play voice message');
     }
   };
 
@@ -149,6 +302,58 @@ export default function DirectMessageScreen() {
             isMyMessage ? styles.myMessageBubble : styles.theirMessageBubble,
           ]}
         >
+          {/* Image Message */}
+          {item.message_type === 'image' && item.media_url && (
+            <Image 
+              source={{ uri: item.media_url }} 
+              style={styles.messageImage}
+              resizeMode="cover"
+            />
+          )}
+
+          {/* Video Message */}
+          {item.message_type === 'video' && item.media_url && (
+            <View style={styles.videoContainer}>
+              <Image 
+                source={{ uri: item.media_url }} 
+                style={styles.messageImage}
+                resizeMode="cover"
+              />
+              <View style={styles.playOverlay}>
+                <Play size={32} color="#FFFFFF" fill="#FFFFFF" />
+              </View>
+            </View>
+          )}
+
+          {/* Voice Message */}
+          {item.message_type === 'voice' && item.media_url && (
+            <TouchableOpacity 
+              style={styles.voiceContainer}
+              onPress={() => toggleVoicePlayback(item.id, item.media_url!)}
+            >
+              {playingSound[item.id] ? (
+                <Pause size={24} color={isMyMessage ? '#FFFFFF' : '#4169E1'} />
+              ) : (
+                <Play size={24} color={isMyMessage ? '#FFFFFF' : '#4169E1'} fill={isMyMessage ? '#FFFFFF' : '#4169E1'} />
+              )}
+              <View style={styles.waveform}>
+                {[...Array(20)].map((_, i) => (
+                  <View 
+                    key={i} 
+                    style={[
+                      styles.waveformBar,
+                      { 
+                        height: Math.random() * 20 + 10,
+                        backgroundColor: isMyMessage ? '#FFFFFF' : '#4169E1'
+                      }
+                    ]} 
+                  />
+                ))}
+              </View>
+            </TouchableOpacity>
+          )}
+
+          {/* Text Message */}
           <Text
             style={[
               styles.messageText,
@@ -232,6 +437,15 @@ export default function DirectMessageScreen() {
 
       {/* Input */}
       <View style={styles.inputContainer}>
+        {/* Emoji Button */}
+        <TouchableOpacity
+          style={styles.iconButton}
+          onPress={() => setShowEmojiPicker(!showEmojiPicker)}
+        >
+          <Smile size={24} color="#4169E1" />
+        </TouchableOpacity>
+
+        {/* Text Input */}
         <TextInput
           style={styles.input}
           placeholder="Type a message..."
@@ -241,18 +455,112 @@ export default function DirectMessageScreen() {
           multiline
           maxLength={1000}
         />
+
+        {/* Media Button */}
         <TouchableOpacity
-          style={[styles.sendButton, (!messageText.trim() || sending) && styles.sendButtonDisabled]}
-          onPress={handleSend}
-          disabled={!messageText.trim() || sending}
+          style={styles.iconButton}
+          onPress={() => setShowMediaOptions(true)}
         >
-          {sending ? (
-            <ActivityIndicator size="small" color="#FFFFFF" />
-          ) : (
-            <Send size={20} color="#FFFFFF" />
-          )}
+          <ImageIcon size={24} color="#4169E1" />
         </TouchableOpacity>
+
+        {/* Voice Recording Button */}
+        {!messageText.trim() && (
+          <TouchableOpacity
+            style={[styles.iconButton, recording && styles.recordingButton]}
+            onPressIn={handleStartRecording}
+            onPressOut={handleStopRecording}
+            onLongPress={handleStartRecording}
+            delayLongPress={100}
+          >
+            <Mic size={24} color={recording ? '#FFFFFF' : '#4169E1'} />
+          </TouchableOpacity>
+        )}
+
+        {/* Send Button */}
+        {messageText.trim() && (
+          <TouchableOpacity
+            style={[styles.sendButton, sending && styles.sendButtonDisabled]}
+            onPress={handleSend}
+            disabled={!messageText.trim() || sending}
+          >
+            {sending ? (
+              <ActivityIndicator size="small" color="#FFFFFF" />
+            ) : (
+              <Send size={20} color="#FFFFFF" />
+            )}
+          </TouchableOpacity>
+        )}
       </View>
+
+      {/* Emoji Picker Modal */}
+      <Modal
+        visible={showEmojiPicker}
+        animationType="slide"
+        transparent={true}
+        onRequestClose={() => setShowEmojiPicker(false)}
+      >
+        <View style={styles.modalContainer}>
+          <View style={styles.emojiPickerContainer}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Choose Emoji</Text>
+              <TouchableOpacity onPress={() => setShowEmojiPicker(false)}>
+                <X size={24} color="#000000" />
+              </TouchableOpacity>
+            </View>
+            <EmojiSelector
+              onEmojiSelected={(emoji) => {
+                setMessageText(prev => prev + emoji);
+                setShowEmojiPicker(false);
+              }}
+              showSearchBar={false}
+              columns={8}
+            />
+          </View>
+        </View>
+      </Modal>
+
+      {/* Media Options Modal */}
+      <Modal
+        visible={showMediaOptions}
+        animationType="fade"
+        transparent={true}
+        onRequestClose={() => setShowMediaOptions(false)}
+      >
+        <Pressable 
+          style={styles.modalOverlay}
+          onPress={() => setShowMediaOptions(false)}
+        >
+          <View style={styles.mediaOptionsContainer}>
+            <TouchableOpacity
+              style={styles.mediaOption}
+              onPress={handleMediaPick}
+            >
+              <ImageIcon size={28} color="#4169E1" />
+              <Text style={styles.mediaOptionText}>Gallery</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.mediaOption}
+              onPress={handleCameraCapture}
+            >
+              <Camera size={28} color="#4169E1" />
+              <Text style={styles.mediaOptionText}>Camera</Text>
+            </TouchableOpacity>
+          </View>
+        </Pressable>
+      </Modal>
+
+      {/* Uploading Media Indicator */}
+      {uploadingMedia && (
+        <View style={styles.uploadingOverlay}>
+          <View style={styles.uploadingContainer}>
+            <ActivityIndicator size="large" color="#4169E1" />
+            <Text style={styles.uploadingText}>
+              {recording ? 'Sending voice message...' : 'Uploading media...'}
+            </Text>
+          </View>
+        </View>
+      )}
     </KeyboardAvoidingView>
   );
 }
@@ -394,6 +702,17 @@ const styles = StyleSheet.create({
     backgroundColor: '#FFFFFF',
     borderTopWidth: 1,
     borderTopColor: '#E5E7EB',
+    gap: 8,
+  },
+  iconButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  recordingButton: {
+    backgroundColor: '#FF3B30',
   },
   input: {
     flex: 1,
@@ -405,7 +724,6 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
     fontSize: 15,
     color: '#1F2937',
-    marginRight: 12,
   },
   sendButton: {
     width: 40,
@@ -417,5 +735,116 @@ const styles = StyleSheet.create({
   },
   sendButtonDisabled: {
     opacity: 0.5,
+  },
+  messageImage: {
+    width: 200,
+    height: 200,
+    borderRadius: 12,
+    marginBottom: 4,
+  },
+  videoContainer: {
+    position: 'relative',
+  },
+  playOverlay: {
+    position: 'absolute',
+    top: '50%',
+    left: '50%',
+    marginLeft: -20,
+    marginTop: -20,
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: 'rgba(0, 0, 0, 0.6)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  voiceContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    paddingVertical: 8,
+  },
+  waveform: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 2,
+    flex: 1,
+  },
+  waveformBar: {
+    width: 3,
+    borderRadius: 2,
+  },
+  modalContainer: {
+    flex: 1,
+    justifyContent: 'flex-end',
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+  },
+  emojiPickerContainer: {
+    height: '60%',
+    backgroundColor: '#FFFFFF',
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    padding: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: '#E5E7EB',
+  },
+  modalTitle: {
+    fontSize: 18,
+    fontWeight: '600',
+    color: '#000000',
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  mediaOptionsContainer: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 16,
+    padding: 16,
+    gap: 12,
+    width: '80%',
+    maxWidth: 300,
+  },
+  mediaOption: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 16,
+    backgroundColor: '#F9FAFB',
+    borderRadius: 12,
+    gap: 12,
+  },
+  mediaOptionText: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#1F2937',
+  },
+  uploadingOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: 'rgba(0, 0, 0, 0.7)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  uploadingContainer: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 16,
+    padding: 24,
+    alignItems: 'center',
+    gap: 16,
+  },
+  uploadingText: {
+    fontSize: 16,
+    color: '#1F2937',
+    fontWeight: '600',
   },
 });
