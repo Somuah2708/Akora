@@ -1,6 +1,6 @@
-import { View, Text, StyleSheet, ScrollView, Image, TouchableOpacity, TextInput, Dimensions } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, Image, TouchableOpacity, TextInput, Dimensions, Animated } from 'react-native';
 import { useFonts, Inter_400Regular, Inter_600SemiBold } from '@expo-google-fonts/inter';
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useRef } from 'react';
 import { SplashScreen, useRouter } from 'expo-router';
 import { Search, Filter, ShoppingBag, Star, MessageCircle, Share2, ArrowLeft, ChevronRight, Briefcase, GraduationCap, Wrench, Palette, Coffee, Stethoscope, Book, Camera, Plus, CircleAlert as AlertCircle } from 'lucide-react-native';
 import { supabase, type ProductService, type Profile } from '@/lib/supabase';
@@ -37,6 +37,10 @@ export default function ServicesScreen() {
   const [featuredBusinesses, setFeaturedBusinesses] = useState<ProductServiceWithUser[]>([]);
   const [loading, setLoading] = useState(true);
   const [userProfile, setUserProfile] = useState<Profile | null>(null);
+  
+  // Animation ref for shopping bag
+  const bagScale = useRef(new Animated.Value(1)).current;
+  const bagRotation = useRef(new Animated.Value(0)).current;
   
   const [fontsLoaded] = useFonts({
     'Inter-Regular': Inter_400Regular,
@@ -146,29 +150,55 @@ export default function ServicesScreen() {
       return;
     }
     
-    if (userProfile && userProfile.free_listings_count <= 0) {
-      Alert.alert(
-        'Listing Limit Reached',
-        'You have used all your free listings. Would you like to upgrade to add more?',
-        [
-          {
-            text: 'Not Now',
-            style: 'cancel',
-          },
-          {
-            text: 'Upgrade',
-            onPress: () => {
-              // In a real app, this would navigate to a payment screen
-              Alert.alert('Coming Soon', 'Payment integration will be available soon.');
-            },
-          },
-        ]
-      );
-      return;
-    }
-    
     router.push('/create-listing');
   };
+
+  // Animate shopping bag with bounce and swing effect
+  useEffect(() => {
+    // Create a looping animation
+    const animateBag = () => {
+      // Bounce animation
+      Animated.sequence([
+        Animated.timing(bagScale, {
+          toValue: 1.15,
+          duration: 400,
+          useNativeDriver: true,
+        }),
+        Animated.timing(bagScale, {
+          toValue: 1,
+          duration: 400,
+          useNativeDriver: true,
+        }),
+      ]).start();
+
+      // Swing animation
+      Animated.sequence([
+        Animated.timing(bagRotation, {
+          toValue: 1,
+          duration: 200,
+          useNativeDriver: true,
+        }),
+        Animated.timing(bagRotation, {
+          toValue: -1,
+          duration: 400,
+          useNativeDriver: true,
+        }),
+        Animated.timing(bagRotation, {
+          toValue: 0,
+          duration: 200,
+          useNativeDriver: true,
+        }),
+      ]).start();
+    };
+
+    // Animate on mount
+    animateBag();
+
+    // Repeat animation every 3 seconds
+    const interval = setInterval(animateBag, 3000);
+
+    return () => clearInterval(interval);
+  }, [bagScale, bagRotation]);
 
   // Filter products based on selected category
   const filteredProducts = selectedCategory 
@@ -193,8 +223,25 @@ export default function ServicesScreen() {
           <ArrowLeft size={24} color="#000000" />
         </TouchableOpacity>
         <Text style={styles.title}>Akora Marketplace</Text>
-        <TouchableOpacity style={styles.cartButton}>
-          <ShoppingBag size={24} color="#000000" />
+        <TouchableOpacity 
+          style={styles.cartButton}
+          onPress={() => router.push('/cart')}
+        >
+          <Animated.View
+            style={{
+              transform: [
+                { scale: bagScale },
+                {
+                  rotate: bagRotation.interpolate({
+                    inputRange: [-1, 1],
+                    outputRange: ['-10deg', '10deg'],
+                  }),
+                },
+              ],
+            }}
+          >
+            <ShoppingBag size={24} color="#000000" />
+          </Animated.View>
           <View style={styles.cartBadge}>
             <Text style={styles.cartBadgeText}>2</Text>
           </View>
@@ -334,7 +381,7 @@ export default function ServicesScreen() {
                   <Text style={styles.businessName} numberOfLines={1}>
                     {product.user?.full_name || product.user?.username}
                   </Text>
-                  <Text style={styles.price}>{formatPrice(product.price)}</Text>
+                  <Text style={styles.price}>{formatPrice(product.price || 0)}</Text>
                   <View style={styles.productFooter}>
                     <View style={styles.ratingContainer}>
                       <Star size={12} color="#FFB800" fill="#FFB800" />
@@ -363,17 +410,6 @@ export default function ServicesScreen() {
         </TouchableOpacity>
       )}
       
-      {/* Free Listings Counter */}
-      {user && userProfile && (
-        <View style={styles.listingsCounter}>
-          <AlertCircle size={16} color="#4169E1" />
-          <Text style={styles.listingsCounterText}>
-            {userProfile.free_listings_count > 0 
-              ? `You have ${userProfile.free_listings_count} free listings remaining` 
-              : 'You have used all your free listings'}
-          </Text>
-        </View>
-      )}
     </ScrollView>
   );
 }

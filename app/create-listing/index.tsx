@@ -28,7 +28,6 @@ export default function CreateListingScreen() {
   const [imageUrl, setImageUrl] = useState('');
   const [category, setCategory] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [freeListingsCount, setFreeListingsCount] = useState(0);
   
   const [fontsLoaded] = useFonts({
     'Inter-Regular': Inter_400Regular,
@@ -47,47 +46,6 @@ export default function CreateListingScreen() {
       router.replace('/');
       return;
     }
-
-    // Fetch user's free listings count
-    const fetchUserProfile = async () => {
-      try {
-        const { data, error } = await supabase
-          .from('profiles')
-          .select('free_listings_count')
-          .eq('id', user.id)
-          .single();
-        
-        if (error) throw error;
-        
-        setFreeListingsCount(data.free_listings_count || 0);
-        
-        if (data.free_listings_count <= 0) {
-          Alert.alert(
-            'Listing Limit Reached',
-            'You have used all your free listings. Would you like to upgrade to add more?',
-            [
-              {
-                text: 'Not Now',
-                onPress: () => router.back(),
-                style: 'cancel',
-              },
-              {
-                text: 'Upgrade',
-                onPress: () => {
-                  // In a real app, this would navigate to a payment screen
-                  Alert.alert('Coming Soon', 'Payment integration will be available soon.');
-                },
-              },
-            ]
-          );
-        }
-      } catch (error) {
-        console.error('Error fetching user profile:', error);
-        Alert.alert('Error', 'Failed to fetch your account information.');
-      }
-    };
-
-    fetchUserProfile();
   }, [user, router]);
 
   const handleSubmit = async () => {
@@ -115,14 +73,8 @@ export default function CreateListingScreen() {
     try {
       setIsSubmitting(true);
       
-      // Check if user has free listings available
-      if (freeListingsCount <= 0) {
-        Alert.alert('Listing Limit Reached', 'You have used all your free listings.');
-        return;
-      }
-      
-      // Start a transaction to create listing and update free_listings_count
-      const { data: newListing, error: listingError } = await supabase
+      // Create the listing - users have unlimited listings
+      const { data: newListing, error: listingError} = await supabase
         .from('products_services')
         .insert({
           user_id: user?.id,
@@ -138,14 +90,6 @@ export default function CreateListingScreen() {
         .single();
 
       if (listingError) throw listingError;
-      
-      // Update user's free_listings_count
-      const { error: updateError } = await supabase
-        .from('profiles')
-        .update({ free_listings_count: freeListingsCount - 1 })
-        .eq('id', user?.id);
-      
-      if (updateError) throw updateError;
 
       Alert.alert(
         'Success', 
@@ -188,14 +132,6 @@ export default function CreateListingScreen() {
       </View>
 
       <ScrollView style={styles.formContainer}>
-        {freeListingsCount > 0 && (
-          <View style={styles.listingsCounter}>
-            <Info size={20} color="#4169E1" />
-            <Text style={styles.listingsCounterText}>
-              You have {freeListingsCount} free listing{freeListingsCount !== 1 ? 's' : ''} remaining
-            </Text>
-          </View>
-        )}
         
         <View style={styles.formGroup}>
           <Text style={styles.label}>Title</Text>

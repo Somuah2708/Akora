@@ -143,18 +143,7 @@ export async function createListing(
   }
 ) {
   try {
-    // Check free listings count
-    const { data: profile } = await supabase
-      .from('profiles')
-      .select('free_listings_count')
-      .eq('id', userId)
-      .single();
-
-    if (!profile || profile.free_listings_count <= 0) {
-      throw new Error('No free listings available');
-    }
-
-    // Create listing
+    // Create listing - users have unlimited listings
     const { data: listing, error } = await supabase
       .from('products_services')
       .insert({
