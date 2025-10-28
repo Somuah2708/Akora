@@ -1,8 +1,8 @@
-import { View, Text, StyleSheet, ScrollView, Image, TouchableOpacity, TextInput, Dimensions } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, Image, TouchableOpacity, TextInput, Dimensions, Modal, Alert } from 'react-native';
 import { useFonts, Inter_400Regular, Inter_600SemiBold } from '@expo-google-fonts/inter';
 import { useEffect, useState } from 'react';
 import { SplashScreen, useRouter } from 'expo-router';
-import { ArrowLeft, FileText, Download, Clock, Mail, Search, Filter, ChevronRight, Bell, CircleCheck as CheckCircle, CircleAlert as AlertCircle, CircleHelp as HelpCircle, Star, Send } from 'lucide-react-native';
+import { ArrowLeft, FileText, Download, Clock, Mail, Search, Filter, ChevronRight, Bell, CircleCheck as CheckCircle, CircleAlert as AlertCircle, CircleHelp as HelpCircle, Star, Send, X, User, MapPin, Phone } from 'lucide-react-native';
 
 SplashScreen.preventAutoHideAsync();
 
@@ -14,21 +14,21 @@ const TRANSCRIPT_TYPES = [
     id: '1',
     title: 'Official Transcript',
     description: 'Sealed and certified academic record',
-    price: '$25',
+    price: '₵80.00',
     processingTime: '3-5 business days',
   },
   {
     id: '2',
     title: 'Digital Transcript',
     description: 'Secure electronic delivery',
-    price: '$15',
+    price: '₵15.00',
     processingTime: '1-2 business days',
   },
   {
     id: '3',
     title: 'Express Service',
     description: 'Expedited processing and delivery',
-    price: '$40',
+    price: '₵40.00',
     processingTime: '24 hours',
   },
 ];
@@ -72,6 +72,18 @@ const RECOMMENDATIONS = [
 export default function TranscriptsScreen() {
   const router = useRouter();
   const [activeTab, setActiveTab] = useState('transcripts');
+  const [showRequestModal, setShowRequestModal] = useState(false);
+  const [selectedTranscript, setSelectedTranscript] = useState<any>(null);
+  const [formData, setFormData] = useState({
+    fullName: '',
+    studentId: '',
+    graduationYear: '',
+    deliveryAddress: '',
+    phoneNumber: '',
+    email: '',
+    additionalNotes: '',
+  });
+  
   const [fontsLoaded] = useFonts({
     'Inter-Regular': Inter_400Regular,
     'Inter-SemiBold': Inter_600SemiBold,
@@ -86,6 +98,42 @@ export default function TranscriptsScreen() {
   if (!fontsLoaded) {
     return null;
   }
+
+  const handleRequestClick = (transcript: any) => {
+    setSelectedTranscript(transcript);
+    setShowRequestModal(true);
+  };
+
+  const handleSubmitRequest = () => {
+    // Validate form
+    if (!formData.fullName || !formData.studentId || !formData.email) {
+      Alert.alert('Missing Information', 'Please fill in all required fields');
+      return;
+    }
+
+    // Submit logic here
+    Alert.alert(
+      'Request Submitted', 
+      `Your ${selectedTranscript?.title} request has been submitted successfully. You will receive a confirmation email shortly.`,
+      [
+        {
+          text: 'OK',
+          onPress: () => {
+            setShowRequestModal(false);
+            setFormData({
+              fullName: '',
+              studentId: '',
+              graduationYear: '',
+              deliveryAddress: '',
+              phoneNumber: '',
+              email: '',
+              additionalNotes: '',
+            });
+          }
+        }
+      ]
+    );
+  };
 
   return (
     <ScrollView style={styles.container} showsVerticalScrollIndicator={false}>
@@ -135,7 +183,10 @@ export default function TranscriptsScreen() {
                       <Text style={styles.processingTimeText}>{type.processingTime}</Text>
                     </View>
                   </View>
-                  <TouchableOpacity style={styles.requestButton}>
+                  <TouchableOpacity 
+                    style={styles.requestButton}
+                    onPress={() => handleRequestClick(type)}
+                  >
                     <Text style={styles.requestButtonText}>Request</Text>
                   </TouchableOpacity>
                 </TouchableOpacity>
@@ -249,6 +300,151 @@ export default function TranscriptsScreen() {
           ))}
         </View>
       )}
+
+      {/* Request Form Modal */}
+      <Modal
+        visible={showRequestModal}
+        animationType="slide"
+        transparent={true}
+        onRequestClose={() => setShowRequestModal(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>
+                Request {selectedTranscript?.title}
+              </Text>
+              <TouchableOpacity 
+                onPress={() => setShowRequestModal(false)}
+                style={styles.closeButton}
+              >
+                <X size={24} color="#666666" />
+              </TouchableOpacity>
+            </View>
+
+            <ScrollView 
+              style={styles.formScroll}
+              showsVerticalScrollIndicator={false}
+            >
+              <View style={styles.priceInfo}>
+                <Text style={styles.priceLabel}>Total Cost:</Text>
+                <Text style={styles.priceValue}>{selectedTranscript?.price}</Text>
+              </View>
+
+              <View style={styles.formGroup}>
+                <Text style={styles.label}>Full Name <Text style={styles.required}>*</Text></Text>
+                <View style={styles.inputContainer}>
+                  <User size={20} color="#666666" />
+                  <TextInput
+                    style={styles.input}
+                    placeholder="Enter your full name"
+                    value={formData.fullName}
+                    onChangeText={(text) => setFormData({...formData, fullName: text})}
+                  />
+                </View>
+              </View>
+
+              <View style={styles.formGroup}>
+                <Text style={styles.label}>Student ID <Text style={styles.required}>*</Text></Text>
+                <View style={styles.inputContainer}>
+                  <FileText size={20} color="#666666" />
+                  <TextInput
+                    style={styles.input}
+                    placeholder="Enter your student ID"
+                    value={formData.studentId}
+                    onChangeText={(text) => setFormData({...formData, studentId: text})}
+                  />
+                </View>
+              </View>
+
+              <View style={styles.formGroup}>
+                <Text style={styles.label}>Graduation Year</Text>
+                <View style={styles.inputContainer}>
+                  <Clock size={20} color="#666666" />
+                  <TextInput
+                    style={styles.input}
+                    placeholder="e.g., 2024"
+                    value={formData.graduationYear}
+                    onChangeText={(text) => setFormData({...formData, graduationYear: text})}
+                    keyboardType="numeric"
+                  />
+                </View>
+              </View>
+
+              <View style={styles.formGroup}>
+                <Text style={styles.label}>Email Address <Text style={styles.required}>*</Text></Text>
+                <View style={styles.inputContainer}>
+                  <Mail size={20} color="#666666" />
+                  <TextInput
+                    style={styles.input}
+                    placeholder="your.email@example.com"
+                    value={formData.email}
+                    onChangeText={(text) => setFormData({...formData, email: text})}
+                    keyboardType="email-address"
+                    autoCapitalize="none"
+                  />
+                </View>
+              </View>
+
+              <View style={styles.formGroup}>
+                <Text style={styles.label}>Phone Number</Text>
+                <View style={styles.inputContainer}>
+                  <Phone size={20} color="#666666" />
+                  <TextInput
+                    style={styles.input}
+                    placeholder="+233 XX XXX XXXX"
+                    value={formData.phoneNumber}
+                    onChangeText={(text) => setFormData({...formData, phoneNumber: text})}
+                    keyboardType="phone-pad"
+                  />
+                </View>
+              </View>
+
+              <View style={styles.formGroup}>
+                <Text style={styles.label}>Delivery Address</Text>
+                <View style={styles.inputContainer}>
+                  <MapPin size={20} color="#666666" />
+                  <TextInput
+                    style={styles.input}
+                    placeholder="Street address, City"
+                    value={formData.deliveryAddress}
+                    onChangeText={(text) => setFormData({...formData, deliveryAddress: text})}
+                    multiline
+                  />
+                </View>
+              </View>
+
+              <View style={styles.formGroup}>
+                <Text style={styles.label}>Additional Notes</Text>
+                <TextInput
+                  style={[styles.input, styles.textArea]}
+                  placeholder="Any special instructions or requests..."
+                  value={formData.additionalNotes}
+                  onChangeText={(text) => setFormData({...formData, additionalNotes: text})}
+                  multiline
+                  numberOfLines={4}
+                  textAlignVertical="top"
+                />
+              </View>
+
+              <View style={styles.processingInfo}>
+                <Clock size={16} color="#4169E1" />
+                <Text style={styles.processingInfoText}>
+                  Processing Time: {selectedTranscript?.processingTime}
+                </Text>
+              </View>
+
+              <TouchableOpacity 
+                style={styles.submitButton}
+                onPress={handleSubmitRequest}
+              >
+                <Send size={20} color="#FFFFFF" />
+                <Text style={styles.submitButtonText}>Submit Request</Text>
+              </TouchableOpacity>
+            </ScrollView>
+          </View>
+        </View>
+      </Modal>
     </ScrollView>
   );
 }
@@ -533,6 +729,131 @@ const styles = StyleSheet.create({
   },
   downloadButtonText: {
     fontSize: 14,
+    fontFamily: 'Inter-SemiBold',
+    color: '#FFFFFF',
+  },
+  // Modal styles
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'flex-end',
+  },
+  modalContent: {
+    backgroundColor: '#FFFFFF',
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    maxHeight: '90%',
+    paddingBottom: 20,
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    padding: 20,
+    borderBottomWidth: 1,
+    borderBottomColor: '#F3F4F6',
+  },
+  modalTitle: {
+    fontSize: 20,
+    fontFamily: 'Inter-SemiBold',
+    color: '#000000',
+    flex: 1,
+  },
+  closeButton: {
+    padding: 4,
+  },
+  formScroll: {
+    paddingHorizontal: 20,
+  },
+  priceInfo: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    backgroundColor: '#F0F4FF',
+    padding: 16,
+    borderRadius: 12,
+    marginTop: 16,
+    marginBottom: 20,
+  },
+  priceLabel: {
+    fontSize: 16,
+    fontFamily: 'Inter-SemiBold',
+    color: '#666666',
+  },
+  priceValue: {
+    fontSize: 24,
+    fontFamily: 'Inter-SemiBold',
+    color: '#4169E1',
+  },
+  formGroup: {
+    marginBottom: 20,
+  },
+  label: {
+    fontSize: 14,
+    fontFamily: 'Inter-SemiBold',
+    color: '#1A1A1A',
+    marginBottom: 8,
+  },
+  required: {
+    color: '#EF4444',
+  },
+  inputContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    backgroundColor: '#F9FAFB',
+    borderRadius: 12,
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+  },
+  input: {
+    flex: 1,
+    fontSize: 16,
+    fontFamily: 'Inter-Regular',
+    color: '#000000',
+  },
+  textArea: {
+    backgroundColor: '#F9FAFB',
+    borderRadius: 12,
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+    minHeight: 100,
+  },
+  processingInfo: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    backgroundColor: '#F0F4FF',
+    padding: 12,
+    borderRadius: 12,
+    marginBottom: 20,
+  },
+  processingInfoText: {
+    fontSize: 14,
+    fontFamily: 'Inter-Regular',
+    color: '#4169E1',
+  },
+  submitButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 10,
+    backgroundColor: '#4169E1',
+    paddingVertical: 16,
+    borderRadius: 12,
+    marginBottom: 20,
+    shadowColor: '#4169E1',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 4,
+  },
+  submitButtonText: {
+    fontSize: 16,
     fontFamily: 'Inter-SemiBold',
     color: '#FFFFFF',
   },

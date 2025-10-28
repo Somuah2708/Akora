@@ -1,11 +1,10 @@
-import { View, Text, StyleSheet, ScrollView, Image, TouchableOpacity, TextInput, Dimensions, Animated } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, Image, TouchableOpacity, TextInput, Dimensions, Animated, Alert, Modal, ActivityIndicator } from 'react-native';
 import { useFonts, Inter_400Regular, Inter_600SemiBold } from '@expo-google-fonts/inter';
 import { useEffect, useState, useCallback, useRef } from 'react';
 import { SplashScreen, useRouter } from 'expo-router';
-import { Search, Filter, ShoppingBag, Star, MessageCircle, Share2, ArrowLeft, ChevronRight, Briefcase, GraduationCap, Wrench, Palette, Coffee, Stethoscope, Book, Camera, Plus, CircleAlert as AlertCircle } from 'lucide-react-native';
+import { Search, Filter, ShoppingBag, Star, MessageCircle, Share2, ArrowLeft, ChevronRight, Briefcase, GraduationCap, Wrench, Palette, Coffee, Stethoscope, Book, Camera, Plus, CircleAlert as AlertCircle, Heart, X, Send, Tag, CheckCircle, Image as ImageIcon } from 'lucide-react-native';
 import { supabase, type ProductService, type Profile } from '@/lib/supabase';
 import { useAuth } from '@/hooks/useAuth';
-import { Alert } from 'react-native';
 
 SplashScreen.preventAutoHideAsync();
 
@@ -37,6 +36,16 @@ export default function ServicesScreen() {
   const [featuredBusinesses, setFeaturedBusinesses] = useState<ProductServiceWithUser[]>([]);
   const [loading, setLoading] = useState(true);
   const [userProfile, setUserProfile] = useState<Profile | null>(null);
+  const [bookmarkedItems, setBookmarkedItems] = useState<Set<string>>(new Set());
+  const [showAddListingModal, setShowAddListingModal] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [listingForm, setListingForm] = useState({
+    title: '',
+    description: '',
+    price: '',
+    imageUrl: '',
+    category: '',
+  });
   
   // Animation ref for shopping bag
   const bagScale = useRef(new Animated.Value(1)).current;
@@ -146,12 +155,155 @@ export default function ServicesScreen() {
 
   const handleAddListing = () => {
     if (!user) {
-      Alert.alert('Authentication Required', 'Please sign in to add a listing');
+      Alert.alert('Authentication Required', 'Please sign in to add a listing', [
+        { text: 'Cancel', style: 'cancel' },
+        { text: 'Sign In', onPress: () => router.push('/auth/sign-in' as any) }
+      ]);
       return;
     }
     
-    router.push('/create-listing');
+    // Show the modal
+    setShowAddListingModal(true);
   };
+
+  const handleSubmitListing = async () => {
+    // Validate inputs
+    if (!listingForm.title.trim()) {
+      Alert.alert('Error', 'Please enter a title for your listing');
+      return;
+    }
+    
+    if (!listingForm.description.trim()) {
+      Alert.alert('Error', 'Please enter a description for your listing');
+      return;
+    }
+    
+    if (!listingForm.price.trim() || isNaN(Number(listingForm.price)) || Number(listingForm.price) <= 0) {
+      Alert.alert('Error', 'Please enter a valid price');
+      return;
+    }
+    
+    if (!listingForm.category) {
+      Alert.alert('Error', 'Please select a category');
+      return;
+    }
+
+    try {
+      setIsSubmitting(true);
+      
+      const { data: newListing, error: listingError } = await supabase
+        .from('products_services')
+        .insert({
+          user_id: user!.id,
+          title: listingForm.title.trim(),
+          description: listingForm.description.trim(),
+          price: Number(listingForm.price),
+          image_url: listingForm.imageUrl.trim() || null,
+          category_name: listingForm.category,
+          is_featured: false,
+          is_premium_listing: false,
+        })
+        .select()
+        .single();
+
+      if (listingError) throw listingError;
+
+      Alert.alert(
+        '✅ Success!', 
+        'Your listing has been created and is now live on the marketplace!',
+        [
+          { 
+            text: 'OK',
+            onPress: () => {
+              setShowAddListingModal(false);
+              setListingForm({
+                title: '',
+                description: '',
+                price: '',
+                imageUrl: '',
+                category: '',
+              });
+              fetchProducts(); // Refresh the list
+            }
+          }
+        ]
+      );
+    } catch (error: any) {
+      console.error('Error creating listing:', error);
+      Alert.alert('Error', error.message || 'Failed to create listing. Please try again.');
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const fetchBookmarks = useCallback(async () => {
+    if (!user) return;
+
+    try {
+      const { data, error } = await supabase
+        .from('service_bookmarks')
+        .select('product_service_id')
+        .eq('user_id', user.id);
+
+      if (error) throw error;
+
+      const bookmarkedIds = new Set(data?.map(b => b.product_service_id) || []);
+      setBookmarkedItems(bookmarkedIds);
+    } catch (error) {
+      console.error('Error fetching bookmarks:', error);
+    }
+  }, [user]);
+
+  const toggleBookmark = async (productId: string) => {
+    if (!user) {
+      Alert.alert('Authentication Required', 'Please sign in to save favorites', [
+        { text: 'Cancel', style: 'cancel' },
+        { text: 'Sign In', onPress: () => router.push('/auth/sign-in' as any) }
+      ]);
+      return;
+    }
+
+    try {
+      const isBookmarked = bookmarkedItems.has(productId);
+
+      if (isBookmarked) {
+        // Remove bookmark
+        const { error } = await supabase
+          .from('service_bookmarks')
+          .delete()
+          .eq('product_service_id', productId)
+          .eq('user_id', user.id);
+
+        if (error) throw error;
+
+        setBookmarkedItems(prev => {
+          const newSet = new Set(prev);
+          newSet.delete(productId);
+          return newSet;
+        });
+      } else {
+        // Add bookmark
+        const { error } = await supabase
+          .from('service_bookmarks')
+          .insert({
+            product_service_id: productId,
+            user_id: user.id,
+          });
+
+        if (error) throw error;
+
+        setBookmarkedItems(prev => new Set([...prev, productId]));
+        Alert.alert('Success', 'Added to favorites!');
+      }
+    } catch (error) {
+      console.error('Error toggling bookmark:', error);
+      Alert.alert('Error', 'Failed to update favorites');
+    }
+  };
+
+  useEffect(() => {
+    fetchBookmarks();
+  }, [fetchBookmarks]);
 
   // Animate shopping bag with bounce and swing effect
   useEffect(() => {
@@ -217,15 +369,16 @@ export default function ServicesScreen() {
   };
 
   return (
-    <ScrollView style={styles.container} showsVerticalScrollIndicator={false}>
-      <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
+    <View style={styles.container}>
+      <ScrollView showsVerticalScrollIndicator={false}>
+        <View style={styles.header}>
+        <TouchableOpacity onPress={() => router.push('/(tabs)' as any)} style={styles.backButton}>
           <ArrowLeft size={24} color="#000000" />
         </TouchableOpacity>
         <Text style={styles.title}>Akora Marketplace</Text>
         <TouchableOpacity 
           style={styles.cartButton}
-          onPress={() => router.push('/cart')}
+          onPress={() => router.push('/cart' as any)}
         >
           <Animated.View
             style={{
@@ -376,6 +529,18 @@ export default function ServicesScreen() {
                   source={{ uri: product.image_url || 'https://images.unsplash.com/photo-1460925895917-afdab827c52f?w=800&auto=format&fit=crop&q=60' }} 
                   style={styles.productImage} 
                 />
+                <TouchableOpacity
+                  style={styles.favoriteIcon}
+                  onPress={() => toggleBookmark(product.id)}
+                  activeOpacity={0.7}
+                >
+                  <Heart 
+                    size={20} 
+                    color={bookmarkedItems.has(product.id) ? '#EF4444' : '#FFFFFF'} 
+                    fill={bookmarkedItems.has(product.id) ? '#EF4444' : 'none'}
+                    strokeWidth={2.5}
+                  />
+                </TouchableOpacity>
                 <View style={styles.productContent}>
                   <Text style={styles.productName} numberOfLines={2}>{product.title}</Text>
                   <Text style={styles.businessName} numberOfLines={1}>
@@ -399,18 +564,169 @@ export default function ServicesScreen() {
         </View>
       </View>
       
-      {/* Add Listing Button */}
-      {user && (
+      {/* Add Listing Button - Always visible */}
+      <View style={styles.floatingButtonContainer}>
         <TouchableOpacity 
           style={styles.floatingButton}
           onPress={handleAddListing}
+          activeOpacity={0.9}
         >
           <Plus size={24} color="#FFFFFF" />
           <Text style={styles.floatingButtonText}>Add Listing</Text>
         </TouchableOpacity>
-      )}
+      </View>
       
-    </ScrollView>
+      </ScrollView>
+
+      {/* Add Listing Modal */}
+      <Modal
+        visible={showAddListingModal}
+        animationType="slide"
+        transparent={true}
+        onRequestClose={() => setShowAddListingModal(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Add New Listing</Text>
+              <TouchableOpacity 
+                onPress={() => setShowAddListingModal(false)}
+                style={styles.closeButton}
+              >
+                <X size={24} color="#666666" />
+              </TouchableOpacity>
+            </View>
+
+            <ScrollView 
+              style={styles.formScroll}
+              showsVerticalScrollIndicator={false}
+            >
+              {/* Title */}
+              <View style={styles.formGroup}>
+                <Text style={styles.label}>Title <Text style={styles.required}>*</Text></Text>
+                <TextInput
+                  style={styles.inputField}
+                  placeholder="e.g., Professional Web Development"
+                  value={listingForm.title}
+                  onChangeText={(text) => setListingForm({...listingForm, title: text})}
+                  maxLength={100}
+                />
+                <Text style={styles.charCount}>{listingForm.title.length}/100</Text>
+              </View>
+
+              {/* Description */}
+              <View style={styles.formGroup}>
+                <Text style={styles.label}>Description <Text style={styles.required}>*</Text></Text>
+                <TextInput
+                  style={[styles.inputField, styles.textArea]}
+                  placeholder="Describe your product or service..."
+                  value={listingForm.description}
+                  onChangeText={(text) => setListingForm({...listingForm, description: text})}
+                  multiline
+                  numberOfLines={4}
+                  textAlignVertical="top"
+                  maxLength={500}
+                />
+                <Text style={styles.charCount}>{listingForm.description.length}/500</Text>
+              </View>
+
+              {/* Price */}
+              <View style={styles.formGroup}>
+                <Text style={styles.label}>Price (₵) <Text style={styles.required}>*</Text></Text>
+                <View style={styles.priceInputContainer}>
+                  <Text style={{ fontSize: 18, fontFamily: 'Inter-SemiBold', color: '#4169E1' }}>₵</Text>
+                  <TextInput
+                    style={styles.priceInput}
+                    placeholder="0.00"
+                    value={listingForm.price}
+                    onChangeText={(text) => setListingForm({...listingForm, price: text})}
+                    keyboardType="decimal-pad"
+                  />
+                  <Text style={styles.priceUnit}>/hour</Text>
+                </View>
+              </View>
+
+              {/* Category */}
+              <View style={styles.formGroup}>
+                <Text style={styles.label}>Category <Text style={styles.required}>*</Text></Text>
+                <ScrollView 
+                  horizontal 
+                  showsHorizontalScrollIndicator={false}
+                  style={styles.categoryScroll}
+                >
+                  {CATEGORIES.map((cat) => {
+                    const IconComponent = cat.icon;
+                    const isSelected = listingForm.category === cat.name;
+                    return (
+                      <TouchableOpacity
+                        key={cat.id}
+                        style={[
+                          styles.categoryChip,
+                          isSelected && styles.categoryChipSelected
+                        ]}
+                        onPress={() => setListingForm({...listingForm, category: cat.name})}
+                      >
+                        <IconComponent 
+                          size={16} 
+                          color={isSelected ? '#FFFFFF' : '#666666'} 
+                        />
+                        {isSelected && <CheckCircle size={14} color="#FFFFFF" />}
+                        <Text style={[
+                          styles.categoryChipText,
+                          isSelected && styles.categoryChipTextSelected
+                        ]}>
+                          {cat.name}
+                        </Text>
+                      </TouchableOpacity>
+                    );
+                  })}
+                </ScrollView>
+              </View>
+
+              {/* Image URL */}
+              <View style={styles.formGroup}>
+                <Text style={styles.label}>Image URL (Optional)</Text>
+                <View style={styles.imageInputContainer}>
+                  <ImageIcon size={20} color="#666666" />
+                  <TextInput
+                    style={styles.imageInput}
+                    placeholder="https://example.com/image.jpg"
+                    value={listingForm.imageUrl}
+                    onChangeText={(text) => setListingForm({...listingForm, imageUrl: text})}
+                    autoCapitalize="none"
+                  />
+                </View>
+                {listingForm.imageUrl ? (
+                  <Image 
+                    source={{ uri: listingForm.imageUrl }} 
+                    style={styles.imagePreview}
+                    resizeMode="cover"
+                  />
+                ) : null}
+              </View>
+
+              {/* Submit Button */}
+              <TouchableOpacity 
+                style={[styles.submitButton, isSubmitting && { backgroundColor: '#9CA3AF' }]}
+                onPress={handleSubmitListing}
+                disabled={isSubmitting}
+              >
+                {isSubmitting ? (
+                  <ActivityIndicator size="small" color="#FFFFFF" />
+                ) : (
+                  <>
+                    <Send size={20} color="#FFFFFF" />
+                    <Text style={styles.submitButtonText}>Create Listing</Text>
+                  </>
+                )}
+              </TouchableOpacity>
+
+              <View style={{ height: 40 }} />
+            </ScrollView>
+          </View>
+        </View>
+      </Modal>
+    </View>
   );
 }
 
@@ -644,6 +960,24 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.1,
     shadowRadius: 4,
     elevation: 3,
+    position: 'relative',
+  },
+  favoriteIcon: {
+    position: 'absolute',
+    top: 12,
+    right: 12,
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    zIndex: 10,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.3,
+    shadowRadius: 4,
+    elevation: 5,
   },
   productImage: {
     width: '100%',
@@ -703,24 +1037,32 @@ const styles = StyleSheet.create({
     color: '#666666',
     textAlign: 'center',
   },
-  floatingButton: {
+  floatingButtonContainer: {
     position: 'absolute',
-    bottom: 24,
-    right: 24,
+    bottom: 0,
+    left: 0,
+    right: 0,
+    padding: 20,
+    paddingBottom: 32,
+    backgroundColor: 'transparent',
+    pointerEvents: 'box-none',
+    alignItems: 'flex-end',
+  },
+  floatingButton: {
     backgroundColor: '#4169E1',
     flexDirection: 'row',
     alignItems: 'center',
-    paddingVertical: 12,
-    paddingHorizontal: 20,
+    paddingVertical: 16,
+    paddingHorizontal: 24,
     borderRadius: 30,
-    elevation: 4,
-    shadowColor: '#000000',
+    elevation: 8,
+    shadowColor: '#4169E1',
     shadowOffset: {
       width: 0,
-      height: 2,
+      height: 4,
     },
-    shadowOpacity: 0.25,
-    shadowRadius: 4,
+    shadowOpacity: 0.4,
+    shadowRadius: 8,
   },
   floatingButtonText: {
     color: '#FFFFFF',
@@ -742,5 +1084,171 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontFamily: 'Inter-Regular',
     color: '#666666',
+  },
+  // Modal styles
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'flex-end',
+  },
+  modalContent: {
+    backgroundColor: '#FFFFFF',
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    maxHeight: '90%',
+    paddingBottom: 20,
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    padding: 20,
+    borderBottomWidth: 1,
+    borderBottomColor: '#F3F4F6',
+  },
+  modalTitle: {
+    fontSize: 20,
+    fontFamily: 'Inter-SemiBold',
+    color: '#000000',
+    flex: 1,
+  },
+  closeButton: {
+    padding: 4,
+  },
+  formScroll: {
+    paddingHorizontal: 20,
+  },
+  formGroup: {
+    marginTop: 20,
+    marginBottom: 12,
+  },
+  label: {
+    fontSize: 14,
+    fontFamily: 'Inter-SemiBold',
+    color: '#1A1A1A',
+    marginBottom: 8,
+  },
+  required: {
+    color: '#EF4444',
+  },
+  inputField: {
+    backgroundColor: '#F9FAFB',
+    borderRadius: 12,
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+    fontSize: 16,
+    fontFamily: 'Inter-Regular',
+    color: '#000000',
+  },
+  textArea: {
+    minHeight: 120,
+    textAlignVertical: 'top',
+  },
+  charCount: {
+    fontSize: 12,
+    fontFamily: 'Inter-Regular',
+    color: '#9CA3AF',
+    textAlign: 'right',
+    marginTop: 4,
+  },
+  priceInputContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#F9FAFB',
+    borderRadius: 12,
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+    gap: 8,
+  },
+  priceInput: {
+    flex: 1,
+    fontSize: 16,
+    fontFamily: 'Inter-Regular',
+    color: '#000000',
+  },
+  priceUnit: {
+    fontSize: 14,
+    fontFamily: 'Inter-Regular',
+    color: '#666666',
+  },
+  categoryScroll: {
+    marginTop: 8,
+  },
+  categoryChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    backgroundColor: '#F3F4F6',
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderRadius: 20,
+    marginRight: 12,
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+  },
+  categoryChipSelected: {
+    backgroundColor: '#4169E1',
+    borderColor: '#4169E1',
+  },
+  categoryChipText: {
+    fontSize: 14,
+    fontFamily: 'Inter-SemiBold',
+    color: '#666666',
+  },
+  categoryChipTextSelected: {
+    color: '#FFFFFF',
+  },
+  imageInputContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    backgroundColor: '#F9FAFB',
+    borderRadius: 12,
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+  },
+  imageInput: {
+    flex: 1,
+    fontSize: 16,
+    fontFamily: 'Inter-Regular',
+    color: '#000000',
+  },
+  imagePreview: {
+    width: '100%',
+    height: 200,
+    borderRadius: 12,
+    marginTop: 12,
+    backgroundColor: '#F3F4F6',
+  },
+  submitButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 10,
+    backgroundColor: '#4169E1',
+    paddingVertical: 16,
+    borderRadius: 12,
+    marginTop: 20,
+    marginBottom: 20,
+    shadowColor: '#4169E1',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 4,
+  },
+  submitButtonDisabled: {
+    backgroundColor: '#9CA3AF',
+    shadowColor: '#9CA3AF',
+  },
+  submitButtonText: {
+    fontSize: 16,
+    fontFamily: 'Inter-SemiBold',
+    color: '#FFFFFF',
   },
 });
