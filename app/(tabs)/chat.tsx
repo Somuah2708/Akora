@@ -40,6 +40,20 @@ export default function ChatScreen() {
     'Inter-SemiBold': Inter_600SemiBold,
   });
 
+  // Upsert conversation by friend id to prevent duplicates
+  const upsertConversation = (list: Conversation[], conv: Conversation) => {
+    const friendId = Array.isArray(conv.friend) ? conv.friend[0]?.id : conv.friend?.id;
+    if (!friendId) return list;
+    
+    const map = new Map<string, Conversation>();
+    for (const c of list) {
+      const fid = Array.isArray(c.friend) ? c.friend[0]?.id : c.friend?.id;
+      if (fid) map.set(fid, c);
+    }
+    map.set(friendId, conv);
+    return Array.from(map.values());
+  };
+
   useEffect(() => {
     if (fontsLoaded) {
       SplashScreen.hideAsync();
@@ -48,21 +62,115 @@ export default function ChatScreen() {
 
   useEffect(() => {
     if (user) {
-      fetchConversations();
+      // Initial fetch shows loading once
+      fetchConversations(true);
       
       // Subscribe to real-time updates for direct messages
       const messageSubscription = supabase
         .channel('direct_messages_changes')
-        .on('postgres_changes', 
-          { 
-            event: '*', 
-            schema: 'public', 
+        .on(
+          'postgres_changes',
+          {
+            event: '*',
+            schema: 'public',
             table: 'direct_messages',
-            filter: `or(sender_id.eq.${user.id},receiver_id.eq.${user.id})`
-          }, 
-          () => {
-            // Refresh conversations when messages are added/updated
-            fetchConversations();
+          },
+          async (payload) => {
+            if (!user) return;
+            const msg: any = payload.new;
+            if (!msg) return;
+            // Only react to conversations that involve the current user
+            if (!(msg.sender_id === user.id || msg.receiver_id === user.id)) return;
+
+            const otherUserId = msg.sender_id === user.id ? msg.receiver_id : msg.sender_id;
+
+            setConversations((prev) => {
+              const list = [...prev];
+              // Find conversation index by friend id
+              let idx = list.findIndex((c) => {
+                const f = Array.isArray(c.friend) ? c.friend[0] : c.friend;
+                return f?.id === otherUserId;
+              });
+
+              const latestMessage = {
+                id: msg.id,
+                content: msg.content || msg.message || '',
+                created_at: msg.created_at,
+                sender_id: msg.sender_id,
+                receiver_id: msg.receiver_id,
+                is_read: !!msg.is_read,
+              };
+
+              if (idx === -1) {
+                // Not in list yet; we'll handle async profile fetch below
+                return list;
+              }
+
+              const existing = list[idx];
+              const isIncoming = msg.sender_id === otherUserId;
+              const nextUnread = isIncoming
+                ? (existing.unreadCount || 0) + (msg.is_read ? 0 : 1)
+                : existing.unreadCount || 0;
+
+              list[idx] = {
+                ...existing,
+                latestMessage,
+                unreadCount: nextUnread,
+              };
+
+              // Reorder by latest message time (descending)
+              list.sort((a, b) => {
+                const at = new Date(a.latestMessage?.created_at || 0).getTime();
+                const bt = new Date(b.latestMessage?.created_at || 0).getTime();
+                return bt - at;
+              });
+              return list;
+            });
+
+            // If conversation wasn't present, fetch the friend's profile once and insert it
+            const hasConversation = (list: any[]) =>
+              list.some((c) => {
+                const f = Array.isArray(c.friend) ? c.friend[0] : c.friend;
+                return f?.id === otherUserId;
+              });
+
+            // Double-check current state before fetching
+            let alreadyThere = false;
+            setConversations((prev) => {
+              alreadyThere = hasConversation(prev as any);
+              return prev;
+            });
+
+            if (!alreadyThere) {
+              const { data: friend, error } = await supabase
+                .from('profiles')
+                .select('id, username, full_name, avatar_url')
+                .eq('id', otherUserId)
+                .single();
+              if (!error && friend) {
+                const conv = {
+                  friend,
+                  latestMessage: {
+                    id: msg.id,
+                    content: msg.content || msg.message || '',
+                    created_at: msg.created_at,
+                    sender_id: msg.sender_id,
+                    receiver_id: msg.receiver_id,
+                    is_read: !!msg.is_read,
+                  },
+                  unreadCount: msg.sender_id === otherUserId && !msg.is_read ? 1 : 0,
+                } as Conversation;
+                setConversations((prev) => {
+                  const next = upsertConversation(prev, conv);
+                  next.sort((a, b) => {
+                    const at = new Date(a.latestMessage?.created_at || 0).getTime();
+                    const bt = new Date(b.latestMessage?.created_at || 0).getTime();
+                    return bt - at;
+                  });
+                  return next;
+                });
+              }
+            }
           }
         )
         .subscribe();
@@ -98,10 +206,10 @@ export default function ChatScreen() {
     }
   }, [user]);
 
-  const fetchConversations = async () => {
+  const fetchConversations = async (showLoading = false) => {
     if (!user) return;
     try {
-      setLoading(true);
+      if (showLoading) setLoading(true);
       const convos = await getConversationList(user.id);
       setConversations(convos);
       
@@ -127,7 +235,7 @@ export default function ChatScreen() {
       console.error('Error fetching conversations:', error);
       Alert.alert('Error', 'Failed to load conversations');
     } finally {
-      setLoading(false);
+      if (showLoading) setLoading(false);
     }
   };
 

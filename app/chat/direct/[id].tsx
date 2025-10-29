@@ -35,6 +35,7 @@ import { formatMessageTime, formatLastSeen, groupMessagesByDay } from '@/lib/tim
 import { supabase } from '@/lib/supabase';
 import EmojiSelector from 'react-native-emoji-selector';
 import { Audio } from 'expo-av';
+import { getCachedThread, setCachedThread, upsertMessageList } from '@/lib/chatCache';
 
 export default function DirectMessageScreen() {
   const router = useRouter();
@@ -58,9 +59,28 @@ export default function DirectMessageScreen() {
   const typingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const typingChannelRef = useRef<any>(null);
 
+  // Upsert a message into the array by id and keep it unique
+  const upsertMessage = useCallback((list: DirectMessage[], msg: DirectMessage) => {
+    const map = new Map<string, DirectMessage>();
+    for (const m of list) {
+      map.set(m.id, m);
+    }
+    const existing = map.get(msg.id);
+    map.set(msg.id, existing ? { ...existing, ...msg } : msg);
+    return Array.from(map.values());
+  }, []);
+
   useEffect(() => {
     if (user && friendId) {
-      loadMessages();
+      // Show cached thread immediately (no spinner), then background sync
+      (async () => {
+        const cached = await getCachedThread(user.id, friendId);
+        if (cached?.messages?.length) {
+          setMessages(cached.messages);
+          setLoading(false);
+        }
+        loadMessages(!!cached?.messages?.length);
+      })();
       loadFriendProfile();
       loadFriendOnlineStatus();
 
@@ -77,15 +97,17 @@ export default function DirectMessageScreen() {
             event: 'INSERT',
             schema: 'public',
             table: 'direct_messages',
-            filter: `sender_id=eq.${friendId},receiver_id=eq.${user.id}`,
           },
           (payload) => {
             const newMessage = payload.new as DirectMessage;
+            // Only handle INCOMING messages to avoid duplicating our own optimistic sends
+            if (!(newMessage.sender_id === friendId && newMessage.receiver_id === user.id)) {
+              return;
+            }
             setMessages((prev) => {
-              if (prev.some((m) => m.id === newMessage.id)) {
-                return prev;
-              }
-              return [...prev, newMessage];
+              const next = upsertMessage(prev, newMessage);
+              setCachedThread(user.id, friendId, next, friendProfile);
+              return next;
             });
 
             // Mark as delivered
@@ -109,6 +131,7 @@ export default function DirectMessageScreen() {
           },
           (payload) => {
             const updatedMessage = payload.new as DirectMessage;
+            // Accept updates for either direction (read/delivered changes)
             setMessages((prev) =>
               prev.map((m) => (m.id === updatedMessage.id ? { ...m, ...updatedMessage } : m))
             );
@@ -140,13 +163,15 @@ export default function DirectMessageScreen() {
     }
   }, [user, friendId]);
 
-  const loadMessages = async () => {
+  const loadMessages = async (skipSpinner = false) => {
     if (!user || !friendId) return;
 
     try {
-      setLoading(true);
+      if (!skipSpinner) setLoading(true);
       const msgs = await getDirectMessages(user.id, friendId);
       setMessages(msgs);
+      // Persist to cache
+      setCachedThread(user.id, friendId, msgs, friendProfile);
 
       // Mark unread messages as read
       const unreadMessages = msgs.filter(
@@ -162,7 +187,7 @@ export default function DirectMessageScreen() {
     } catch (error) {
       console.error('Error loading messages:', error);
     } finally {
-      setLoading(false);
+      if (!skipSpinner) setLoading(false);
     }
   };
 
@@ -254,7 +279,11 @@ export default function DirectMessageScreen() {
         },
       };
 
-      setMessages((prev) => [...prev, optimisticMessage]);
+  setMessages((prev) => {
+        const next = upsertMessage(prev, optimisticMessage);
+        setCachedThread(user.id, friendId, next, friendProfile);
+        return next;
+      });
       setMessageText('');
       setShowEmojiPicker(false);
       setSending(true);
@@ -276,9 +305,12 @@ export default function DirectMessageScreen() {
       const newMessage = await sendDirectMessage(user.id, friendId, messageToSend);
 
       // Replace optimistic message with real one
-      setMessages((prev) =>
-        prev.map((m) => (m.id === tempId ? newMessage : m))
-      );
+      setMessages((prev) => {
+        const replaced = prev.map((m) => (m.id === tempId ? newMessage : m));
+        const next = upsertMessageList(replaced, newMessage);
+        setCachedThread(user.id, friendId, next, friendProfile);
+        return next;
+      });
     } catch (error) {
       console.error('Error sending message:', error);
       Alert.alert('Error', 'Failed to send message');
@@ -306,7 +338,11 @@ export default function DirectMessageScreen() {
             mediaType,
             mediaUrl
           );
-          setMessages((prev) => [...prev, newMessage]);
+          setMessages((prev) => {
+            const next = upsertMessage(prev, newMessage);
+            setCachedThread(user.id, friendId, next, friendProfile);
+            return next;
+          });
           
           setTimeout(() => {
             flatListRef.current?.scrollToEnd({ animated: true });
@@ -338,7 +374,11 @@ export default function DirectMessageScreen() {
             mediaType,
             mediaUrl
           );
-          setMessages((prev) => [...prev, newMessage]);
+          setMessages((prev) => {
+            const next = upsertMessage(prev, newMessage);
+            setCachedThread(user.id, friendId, next, friendProfile);
+            return next;
+          });
           
           setTimeout(() => {
             flatListRef.current?.scrollToEnd({ animated: true });
@@ -376,7 +416,11 @@ export default function DirectMessageScreen() {
           'voice',
           voiceUrl
         );
-        setMessages((prev) => [...prev, newMessage]);
+        setMessages((prev) => {
+          const next = upsertMessage(prev, newMessage);
+          setCachedThread(user.id, friendId, next, friendProfile);
+          return next;
+        });
         
         setTimeout(() => {
           flatListRef.current?.scrollToEnd({ animated: true });
