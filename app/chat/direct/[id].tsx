@@ -12,20 +12,27 @@ import {
   Modal,
   Alert,
   Pressable,
+  Animated,
 } from 'react-native';
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { ArrowLeft, Send, Smile, Image as ImageIcon, Mic, Camera, X, Play, Pause } from 'lucide-react-native';
+import { ArrowLeft, Send, Smile, Image as ImageIcon, Mic, Camera, X, Play, Pause, Check, CheckCheck } from 'lucide-react-native';
 import { useAuth } from '@/hooks/useAuth';
 import {
   getDirectMessages,
   sendDirectMessage,
   markMessageAsRead,
+  markMessageAsDelivered,
   subscribeToDirectMessages,
   getFriends,
+  updateOnlineStatus,
+  getUserOnlineStatus,
+  subscribeToUserPresence,
   type DirectMessage,
 } from '@/lib/friends';
 import { pickMedia, takeMedia, uploadMedia, startRecording, stopRecording, cancelRecording } from '@/lib/media';
+import { formatMessageTime, formatLastSeen, groupMessagesByDay } from '@/lib/timeUtils';
+import { supabase } from '@/lib/supabase';
 import EmojiSelector from 'react-native-emoji-selector';
 import { Audio } from 'expo-av';
 
@@ -43,37 +50,92 @@ export default function DirectMessageScreen() {
   const [uploadingMedia, setUploadingMedia] = useState(false);
   const [showMediaOptions, setShowMediaOptions] = useState(false);
   const [playingSound, setPlayingSound] = useState<{ [key: string]: boolean }>({});
+  const [isTyping, setIsTyping] = useState(false);
+  const [friendIsOnline, setFriendIsOnline] = useState(false);
+  const [friendLastSeen, setFriendLastSeen] = useState<string | null>(null);
   const flatListRef = useRef<FlatList>(null);
   const soundObjects = useRef<{ [key: string]: Audio.Sound }>({});
+  const typingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const typingChannelRef = useRef<any>(null);
 
   useEffect(() => {
     if (user && friendId) {
       loadMessages();
       loadFriendProfile();
+      loadFriendOnlineStatus();
 
-      // Subscribe to real-time messages
-      const unsubscribe = subscribeToDirectMessages(user.id, friendId, (newMessage) => {
-        setMessages((prev) => {
-          // Check if message already exists
-          if (prev.some((m) => m.id === newMessage.id)) {
-            return prev;
+      // Update own online status
+      updateOnlineStatus(user.id, true);
+
+      // Subscribe to real-time messages with optimistic updates
+      const conversationId = [user.id, friendId].sort().join('-');
+      const messageChannel = supabase
+        .channel(`chat:${conversationId}`)
+        .on(
+          'postgres_changes',
+          {
+            event: 'INSERT',
+            schema: 'public',
+            table: 'direct_messages',
+            filter: `sender_id=eq.${friendId},receiver_id=eq.${user.id}`,
+          },
+          (payload) => {
+            const newMessage = payload.new as DirectMessage;
+            setMessages((prev) => {
+              if (prev.some((m) => m.id === newMessage.id)) {
+                return prev;
+              }
+              return [...prev, newMessage];
+            });
+
+            // Mark as delivered
+            markMessageAsDelivered(newMessage.id);
+
+            // Mark as read immediately
+            markMessageAsRead(newMessage.id);
+
+            // Scroll to bottom
+            setTimeout(() => {
+              flatListRef.current?.scrollToEnd({ animated: true });
+            }, 100);
           }
-          return [...prev, newMessage];
-        });
+        )
+        .on(
+          'postgres_changes',
+          {
+            event: 'UPDATE',
+            schema: 'public',
+            table: 'direct_messages',
+          },
+          (payload) => {
+            const updatedMessage = payload.new as DirectMessage;
+            setMessages((prev) =>
+              prev.map((m) => (m.id === updatedMessage.id ? { ...m, ...updatedMessage } : m))
+            );
+          }
+        )
+        .subscribe();
 
-        // Mark as read if message is from friend
-        if (newMessage.sender_id === friendId) {
-          markMessageAsRead(newMessage.id);
+      // Subscribe to friend's online status
+      const unsubscribePresence = subscribeToUserPresence(
+        friendId,
+        (isOnline, lastSeen) => {
+          setFriendIsOnline(isOnline);
+          setFriendLastSeen(lastSeen);
         }
+      );
 
-        // Scroll to bottom
-        setTimeout(() => {
-          flatListRef.current?.scrollToEnd({ animated: true });
-        }, 100);
-      });
+      // Setup typing indicator channel
+      setupTypingIndicator();
 
       return () => {
-        unsubscribe();
+        supabase.removeChannel(messageChannel);
+        unsubscribePresence();
+        if (typingChannelRef.current) {
+          supabase.removeChannel(typingChannelRef.current);
+        }
+        // Mark as offline when leaving
+        updateOnlineStatus(user.id, false);
       };
     }
   }, [user, friendId]);
@@ -91,6 +153,12 @@ export default function DirectMessageScreen() {
         (m) => m.receiver_id === user.id && !m.is_read
       );
       await Promise.all(unreadMessages.map((m) => markMessageAsRead(m.id)));
+      
+      // Mark all as delivered
+      const undeliveredMessages = msgs.filter(
+        (m) => m.receiver_id === user.id && !m.delivered_at
+      );
+      await Promise.all(undeliveredMessages.map((m) => markMessageAsDelivered(m.id)));
     } catch (error) {
       console.error('Error loading messages:', error);
     } finally {
@@ -112,22 +180,110 @@ export default function DirectMessageScreen() {
     }
   };
 
+  const loadFriendOnlineStatus = async () => {
+    if (!friendId) return;
+    const status = await getUserOnlineStatus(friendId);
+    setFriendIsOnline(status.isOnline);
+    setFriendLastSeen(status.lastSeen);
+  };
+
+  const setupTypingIndicator = useCallback(() => {
+    if (!user || !friendId) return;
+
+    const conversationId = [user.id, friendId].sort().join('-');
+    const channel = supabase.channel(`typing:${conversationId}`, {
+      config: { presence: { key: user.id } },
+    });
+
+    channel
+      .on('presence', { event: 'sync' }, () => {
+        const state = channel.presenceState();
+        // Check if friend is typing
+        const friendPresence = state[friendId];
+        if (friendPresence && friendPresence[0]) {
+          setIsTyping((friendPresence[0] as any).typing || false);
+        } else {
+          setIsTyping(false);
+        }
+      })
+      .subscribe();
+
+    typingChannelRef.current = channel;
+  }, [user, friendId]);
+
+  const handleTyping = useCallback(() => {
+    if (!typingChannelRef.current || !user) return;
+
+    // Send typing indicator
+    typingChannelRef.current.track({ typing: true, userId: user.id });
+
+    // Clear existing timeout
+    if (typingTimeoutRef.current) {
+      clearTimeout(typingTimeoutRef.current);
+    }
+
+    // Set timeout to stop typing after 2 seconds
+    typingTimeoutRef.current = setTimeout(() => {
+      if (typingChannelRef.current) {
+        typingChannelRef.current.track({ typing: false, userId: user.id });
+      }
+    }, 2000);
+  }, [user]);
+
   const handleSend = async () => {
     if (!user || !friendId || !messageText.trim()) return;
 
+    const messageToSend = messageText.trim();
+    const tempId = `temp-${Date.now()}`;
+
     try {
-      setSending(true);
-      const newMessage = await sendDirectMessage(user.id, friendId, messageText.trim());
-      setMessages((prev) => [...prev, newMessage]);
+      // Optimistically add message to UI
+      const optimisticMessage: DirectMessage = {
+        id: tempId,
+        sender_id: user.id,
+        receiver_id: friendId,
+        message: messageToSend,
+        message_type: 'text',
+        created_at: new Date().toISOString(),
+        is_read: false,
+        sender: {
+          id: user.id,
+          username: user.user_metadata?.username || '',
+          full_name: user.user_metadata?.full_name || '',
+          avatar_url: user.user_metadata?.avatar_url,
+        },
+      };
+
+      setMessages((prev) => [...prev, optimisticMessage]);
       setMessageText('');
       setShowEmojiPicker(false);
+      setSending(true);
+
+      // Stop typing indicator
+      if (typingChannelRef.current) {
+        typingChannelRef.current.track({ typing: false, userId: user.id });
+      }
+      if (typingTimeoutRef.current) {
+        clearTimeout(typingTimeoutRef.current);
+      }
 
       // Scroll to bottom
       setTimeout(() => {
         flatListRef.current?.scrollToEnd({ animated: true });
       }, 100);
+
+      // Send to server
+      const newMessage = await sendDirectMessage(user.id, friendId, messageToSend);
+
+      // Replace optimistic message with real one
+      setMessages((prev) =>
+        prev.map((m) => (m.id === tempId ? newMessage : m))
+      );
     } catch (error) {
       console.error('Error sending message:', error);
+      Alert.alert('Error', 'Failed to send message');
+      // Remove optimistic message on error
+      setMessages((prev) => prev.filter((m) => m.id !== tempId));
     } finally {
       setSending(false);
     }
@@ -273,109 +429,173 @@ export default function DirectMessageScreen() {
     }
   };
 
-  const renderMessage = ({ item }: { item: DirectMessage }) => {
+  const renderMessage = ({ item, index }: { item: DirectMessage; index: number }) => {
     const isMyMessage = item.sender_id === user?.id;
+    const showDateDivider = index === 0 || !isSameDay(item.created_at, messages[index - 1]?.created_at);
 
     return (
-      <View
-        style={[
-          styles.messageContainer,
-          isMyMessage ? styles.myMessageContainer : styles.theirMessageContainer,
-        ]}
-      >
-        {!isMyMessage && (
-          <View style={styles.messageHeader}>
-            {item.sender?.avatar_url ? (
-              <Image source={{ uri: item.sender.avatar_url }} style={styles.messageAvatar} />
-            ) : (
-              <View style={[styles.messageAvatar, styles.avatarPlaceholder]}>
-                <Text style={styles.avatarText}>
-                  {item.sender?.full_name?.[0]?.toUpperCase() || 'U'}
-                </Text>
-              </View>
-            )}
+      <>
+        {/* Date Divider */}
+        {showDateDivider && (
+          <View style={styles.dateDivider}>
+            <View style={styles.dateDividerLine} />
+            <Text style={styles.dateDividerText}>
+              {formatDateDivider(item.created_at)}
+            </Text>
+            <View style={styles.dateDividerLine} />
           </View>
         )}
+
         <View
           style={[
-            styles.messageBubble,
-            isMyMessage ? styles.myMessageBubble : styles.theirMessageBubble,
+            styles.messageContainer,
+            isMyMessage ? styles.myMessageContainer : styles.theirMessageContainer,
           ]}
         >
-          {/* Image Message */}
-          {item.message_type === 'image' && item.media_url && (
-            <Image 
-              source={{ uri: item.media_url }} 
-              style={styles.messageImage}
-              resizeMode="cover"
-            />
-          )}
-
-          {/* Video Message */}
-          {item.message_type === 'video' && item.media_url && (
-            <View style={styles.videoContainer}>
-              <Image 
-                source={{ uri: item.media_url }} 
-                style={styles.messageImage}
-                resizeMode="cover"
-              />
-              <View style={styles.playOverlay}>
-                <Play size={32} color="#FFFFFF" fill="#FFFFFF" />
-              </View>
+          {!isMyMessage && (
+            <View style={styles.messageHeader}>
+              {item.sender?.avatar_url ? (
+                <Image source={{ uri: item.sender.avatar_url }} style={styles.messageAvatar} />
+              ) : (
+                <View style={[styles.messageAvatar, styles.avatarPlaceholder]}>
+                  <Text style={styles.avatarText}>
+                    {item.sender?.full_name?.[0]?.toUpperCase() || 'U'}
+                  </Text>
+                </View>
+              )}
             </View>
           )}
+          <View
+            style={[
+              styles.messageBubble,
+              isMyMessage ? styles.myMessageBubble : styles.theirMessageBubble,
+            ]}
+          >
+            {/* Image Message */}
+            {item.message_type === 'image' && item.media_url && (
+              <TouchableOpacity activeOpacity={0.9}>
+                <Image 
+                  source={{ uri: item.media_url }} 
+                  style={styles.messageImage}
+                  resizeMode="cover"
+                />
+              </TouchableOpacity>
+            )}
 
-          {/* Voice Message */}
-          {item.message_type === 'voice' && item.media_url && (
-            <TouchableOpacity 
-              style={styles.voiceContainer}
-              onPress={() => toggleVoicePlayback(item.id, item.media_url!)}
-            >
-              {playingSound[item.id] ? (
-                <Pause size={24} color={isMyMessage ? '#FFFFFF' : '#4169E1'} />
-              ) : (
-                <Play size={24} color={isMyMessage ? '#FFFFFF' : '#4169E1'} fill={isMyMessage ? '#FFFFFF' : '#4169E1'} />
+            {/* Video Message */}
+            {item.message_type === 'video' && item.media_url && (
+              <TouchableOpacity style={styles.videoContainer} activeOpacity={0.9}>
+                <Image 
+                  source={{ uri: item.media_url }} 
+                  style={styles.messageImage}
+                  resizeMode="cover"
+                />
+                <View style={styles.playOverlay}>
+                  <Play size={28} color="#FFFFFF" fill="#FFFFFF" />
+                </View>
+              </TouchableOpacity>
+            )}
+
+            {/* Voice Message */}
+            {item.message_type === 'voice' && item.media_url && (
+              <TouchableOpacity 
+                style={styles.voiceContainer}
+                onPress={() => toggleVoicePlayback(item.id, item.media_url!)}
+                activeOpacity={0.7}
+              >
+                {playingSound[item.id] ? (
+                  <Pause size={26} color={isMyMessage ? '#FFFFFF' : '#4169E1'} fill={isMyMessage ? '#FFFFFF' : '#4169E1'} />
+                ) : (
+                  <Play size={26} color={isMyMessage ? '#FFFFFF' : '#4169E1'} fill={isMyMessage ? '#FFFFFF' : '#4169E1'} />
+                )}
+                <View style={styles.waveform}>
+                  {[...Array(20)].map((_, i) => (
+                    <View 
+                      key={i} 
+                      style={[
+                        styles.waveformBar,
+                        { 
+                          height: Math.random() * 18 + 8,
+                          backgroundColor: isMyMessage ? 'rgba(255, 255, 255, 0.8)' : '#4169E1',
+                          opacity: playingSound[item.id] ? 1 : 0.6,
+                        }
+                      ]} 
+                    />
+                  ))}
+                </View>
+              </TouchableOpacity>
+            )}
+
+            {/* Text Message */}
+            {item.message_type !== 'voice' && (
+              <Text
+                style={[
+                  styles.messageText,
+                  isMyMessage ? styles.myMessageText : styles.theirMessageText,
+                ]}
+              >
+                {item.message}
+              </Text>
+            )}
+            
+            {/* Time and Status */}
+            <View style={styles.messageFooter}>
+              <Text
+                style={[
+                  styles.messageTime,
+                  isMyMessage ? styles.myMessageTime : styles.theirMessageTime,
+                ]}
+              >
+                {formatMessageTime(item.created_at)}
+              </Text>
+              
+              {/* Read/Delivered indicators for sent messages */}
+              {isMyMessage && (
+                <View style={styles.messageStatus}>
+                  {item.read_at ? (
+                    <CheckCheck size={14} color="rgba(255, 255, 255, 0.75)" />
+                  ) : item.delivered_at ? (
+                    <CheckCheck size={14} color="rgba(255, 255, 255, 0.5)" />
+                  ) : (
+                    <Check size={14} color="rgba(255, 255, 255, 0.5)" />
+                  )}
+                </View>
               )}
-              <View style={styles.waveform}>
-                {[...Array(20)].map((_, i) => (
-                  <View 
-                    key={i} 
-                    style={[
-                      styles.waveformBar,
-                      { 
-                        height: Math.random() * 20 + 10,
-                        backgroundColor: isMyMessage ? '#FFFFFF' : '#4169E1'
-                      }
-                    ]} 
-                  />
-                ))}
-              </View>
-            </TouchableOpacity>
-          )}
-
-          {/* Text Message */}
-          <Text
-            style={[
-              styles.messageText,
-              isMyMessage ? styles.myMessageText : styles.theirMessageText,
-            ]}
-          >
-            {item.message}
-          </Text>
-          <Text
-            style={[
-              styles.messageTime,
-              isMyMessage ? styles.myMessageTime : styles.theirMessageTime,
-            ]}
-          >
-            {new Date(item.created_at).toLocaleTimeString([], {
-              hour: '2-digit',
-              minute: '2-digit',
-            })}
-          </Text>
+            </View>
+          </View>
         </View>
-      </View>
+      </>
     );
+  };
+
+  // Helper function to check if two dates are the same day
+  const isSameDay = (date1: string, date2: string): boolean => {
+    const d1 = new Date(date1);
+    const d2 = new Date(date2);
+    return (
+      d1.getFullYear() === d2.getFullYear() &&
+      d1.getMonth() === d2.getMonth() &&
+      d1.getDate() === d2.getDate()
+    );
+  };
+
+  const formatDateDivider = (timestamp: string): string => {
+    const date = new Date(timestamp);
+    const today = new Date();
+    const yesterday = new Date(today);
+    yesterday.setDate(yesterday.getDate() - 1);
+
+    if (isSameDay(timestamp, today.toISOString())) {
+      return 'Today';
+    } else if (isSameDay(timestamp, yesterday.toISOString())) {
+      return 'Yesterday';
+    } else {
+      return date.toLocaleDateString('en-US', { 
+        weekday: 'long', 
+        month: 'long', 
+        day: 'numeric' 
+      });
+    }
   };
 
   if (loading) {
@@ -401,19 +621,38 @@ export default function DirectMessageScreen() {
         <TouchableOpacity 
           style={styles.headerInfo}
           onPress={() => router.push(`/user-profile/${friendId}`)}
+          activeOpacity={0.7}
         >
-          {friendProfile?.avatar_url ? (
-            <Image source={{ uri: friendProfile.avatar_url }} style={styles.headerAvatar} />
-          ) : (
-            <View style={[styles.headerAvatar, styles.avatarPlaceholder]}>
-              <Text style={styles.avatarText}>
-                {friendProfile?.full_name?.[0]?.toUpperCase() || 'U'}
-              </Text>
-            </View>
-          )}
-          <View>
+          <View style={styles.headerAvatarContainer}>
+            {friendProfile?.avatar_url ? (
+              <Image source={{ uri: friendProfile.avatar_url }} style={styles.headerAvatar} />
+            ) : (
+              <View style={[styles.headerAvatar, styles.avatarPlaceholder]}>
+                <Text style={styles.avatarText}>
+                  {friendProfile?.full_name?.[0]?.toUpperCase() || 'U'}
+                </Text>
+              </View>
+            )}
+            {/* Online indicator */}
+            {friendIsOnline && <View style={styles.onlineIndicator} />}
+          </View>
+          <View style={styles.headerTextContainer}>
             <Text style={styles.headerName}>{friendProfile?.full_name || 'Friend'}</Text>
-            <Text style={styles.headerHandle}>@{friendProfile?.username || 'user'}</Text>
+            {/* Typing indicator or online status */}
+            {isTyping ? (
+              <View style={styles.typingContainer}>
+                <Text style={styles.typingText}>typing</Text>
+                <View style={styles.typingDots}>
+                  <View style={[styles.typingDot, styles.typingDot1]} />
+                  <View style={[styles.typingDot, styles.typingDot2]} />
+                  <View style={[styles.typingDot, styles.typingDot3]} />
+                </View>
+              </View>
+            ) : (
+              <Text style={styles.headerHandle}>
+                {formatLastSeen(friendLastSeen, friendIsOnline)}
+              </Text>
+            )}
           </View>
         </TouchableOpacity>
       </View>
@@ -441,8 +680,9 @@ export default function DirectMessageScreen() {
         <TouchableOpacity
           style={styles.iconButton}
           onPress={() => setShowEmojiPicker(!showEmojiPicker)}
+          activeOpacity={0.7}
         >
-          <Smile size={24} color="#4169E1" />
+          <Smile size={22} color="#4169E1" />
         </TouchableOpacity>
 
         {/* Text Input */}
@@ -451,7 +691,10 @@ export default function DirectMessageScreen() {
           placeholder="Type a message..."
           placeholderTextColor="#94A3B8"
           value={messageText}
-          onChangeText={setMessageText}
+          onChangeText={(text) => {
+            setMessageText(text);
+            handleTyping();
+          }}
           multiline
           maxLength={1000}
         />
@@ -460,8 +703,9 @@ export default function DirectMessageScreen() {
         <TouchableOpacity
           style={styles.iconButton}
           onPress={() => setShowMediaOptions(true)}
+          activeOpacity={0.7}
         >
-          <ImageIcon size={24} color="#4169E1" />
+          <ImageIcon size={22} color="#4169E1" />
         </TouchableOpacity>
 
         {/* Voice Recording Button */}
@@ -472,8 +716,9 @@ export default function DirectMessageScreen() {
             onPressOut={handleStopRecording}
             onLongPress={handleStartRecording}
             delayLongPress={100}
+            activeOpacity={0.7}
           >
-            <Mic size={24} color={recording ? '#FFFFFF' : '#4169E1'} />
+            <Mic size={22} color={recording ? '#EF4444' : '#4169E1'} fill={recording ? '#EF4444' : 'none'} />
           </TouchableOpacity>
         )}
 
@@ -568,59 +813,136 @@ export default function DirectMessageScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#F9FAFB',
+    backgroundColor: '#F0F2F5',
   },
   loadingContainer: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: '#F9FAFB',
+    backgroundColor: '#F0F2F5',
   },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 16,
+    paddingHorizontal: 20,
     paddingTop: 60,
     paddingBottom: 16,
     backgroundColor: '#FFFFFF',
-    borderBottomWidth: 1,
-    borderBottomColor: '#E5E7EB',
+    borderBottomWidth: 0,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.08,
+    shadowRadius: 12,
+    elevation: 4,
   },
   backButton: {
     width: 40,
     height: 40,
     justifyContent: 'center',
     alignItems: 'center',
-    marginRight: 8,
+    marginRight: 12,
+    borderRadius: 20,
+    backgroundColor: '#F3F4F6',
   },
   headerInfo: {
     flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
   },
-  headerAvatar: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
+  headerAvatarContainer: {
+    position: 'relative',
     marginRight: 12,
   },
+  headerAvatar: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    borderWidth: 2,
+    borderColor: '#4169E1',
+  },
+  onlineIndicator: {
+    position: 'absolute',
+    bottom: 0,
+    right: 0,
+    width: 14,
+    height: 14,
+    borderRadius: 7,
+    backgroundColor: '#10B981',
+    borderWidth: 2,
+    borderColor: '#FFFFFF',
+  },
+  headerTextContainer: {
+    flex: 1,
+  },
   headerName: {
-    fontSize: 16,
+    fontSize: 17,
     fontWeight: '700',
     color: '#1F2937',
+    letterSpacing: -0.2,
   },
   headerHandle: {
-    fontSize: 13,
+    fontSize: 12,
     color: '#6B7280',
     marginTop: 2,
   },
+  typingContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 2,
+  },
+  typingText: {
+    fontSize: 12,
+    color: '#10B981',
+    fontWeight: '500',
+    marginRight: 6,
+  },
+  typingDots: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 3,
+  },
+  typingDot: {
+    width: 4,
+    height: 4,
+    borderRadius: 2,
+    backgroundColor: '#10B981',
+  },
+  typingDot1: {
+    opacity: 0.4,
+  },
+  typingDot2: {
+    opacity: 0.7,
+  },
+  typingDot3: {
+    opacity: 1,
+  },
   messagesContent: {
-    paddingVertical: 16,
+    paddingVertical: 20,
     paddingHorizontal: 16,
+  },
+  dateDivider: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginVertical: 20,
+    paddingHorizontal: 4,
+  },
+  dateDividerLine: {
+    flex: 1,
+    height: 1,
+    backgroundColor: '#E5E7EB',
+  },
+  dateDividerText: {
+    paddingHorizontal: 16,
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#9CA3AF',
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
   },
   messageContainer: {
     flexDirection: 'row',
-    marginBottom: 16,
+    marginBottom: 12,
+    paddingHorizontal: 4,
   },
   myMessageContainer: {
     justifyContent: 'flex-end',
@@ -630,41 +952,48 @@ const styles = StyleSheet.create({
   },
   messageHeader: {
     marginRight: 8,
+    marginTop: 'auto',
   },
   messageAvatar: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    borderWidth: 1.5,
+    borderColor: '#E5E7EB',
   },
   avatarPlaceholder: {
-    backgroundColor: '#4169E1',
+    backgroundColor: '#6366F1',
     justifyContent: 'center',
     alignItems: 'center',
   },
   avatarText: {
-    fontSize: 14,
-    fontWeight: '600',
+    fontSize: 12,
+    fontWeight: '700',
     color: '#FFFFFF',
   },
   messageBubble: {
     maxWidth: '75%',
-    paddingHorizontal: 16,
+    paddingHorizontal: 14,
     paddingVertical: 10,
-    borderRadius: 16,
+    borderRadius: 20,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.08,
+    shadowRadius: 4,
+    elevation: 2,
   },
   myMessageBubble: {
     backgroundColor: '#4169E1',
-    borderBottomRightRadius: 4,
+    borderBottomRightRadius: 6,
   },
   theirMessageBubble: {
     backgroundColor: '#FFFFFF',
-    borderBottomLeftRadius: 4,
-    borderWidth: 1,
-    borderColor: '#E5E7EB',
+    borderBottomLeftRadius: 6,
   },
   messageText: {
-    fontSize: 15,
-    lineHeight: 20,
+    fontSize: 15.5,
+    lineHeight: 21,
+    letterSpacing: -0.1,
   },
   myMessageText: {
     color: '#FFFFFF',
@@ -672,75 +1001,99 @@ const styles = StyleSheet.create({
   theirMessageText: {
     color: '#1F2937',
   },
+  messageFooter: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'flex-end',
+    marginTop: 6,
+    gap: 6,
+  },
   messageTime: {
-    fontSize: 11,
-    marginTop: 4,
+    fontSize: 10.5,
+    fontWeight: '500',
   },
   myMessageTime: {
-    color: '#E0E7FF',
-    textAlign: 'right',
+    color: 'rgba(255, 255, 255, 0.75)',
   },
   theirMessageTime: {
     color: '#9CA3AF',
+  },
+  messageStatus: {
+    marginLeft: 4,
   },
   emptyContainer: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    paddingVertical: 60,
+    paddingVertical: 80,
+    paddingHorizontal: 40,
   },
   emptyText: {
     fontSize: 15,
     color: '#6B7280',
     textAlign: 'center',
+    lineHeight: 22,
   },
   inputContainer: {
     flexDirection: 'row',
     alignItems: 'flex-end',
     paddingHorizontal: 16,
-    paddingVertical: 12,
+    paddingVertical: 14,
     backgroundColor: '#FFFFFF',
-    borderTopWidth: 1,
-    borderTopColor: '#E5E7EB',
-    gap: 8,
+    borderTopWidth: 0,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: -2 },
+    shadowOpacity: 0.06,
+    shadowRadius: 8,
+    elevation: 8,
+    gap: 10,
   },
   iconButton: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
+    width: 38,
+    height: 38,
+    borderRadius: 19,
     justifyContent: 'center',
     alignItems: 'center',
+    backgroundColor: '#F3F4F6',
   },
   recordingButton: {
-    backgroundColor: '#FF3B30',
+    backgroundColor: '#FEE2E2',
   },
   input: {
     flex: 1,
-    minHeight: 40,
+    minHeight: 38,
     maxHeight: 100,
     backgroundColor: '#F9FAFB',
     borderRadius: 20,
     paddingHorizontal: 16,
     paddingVertical: 10,
-    fontSize: 15,
+    fontSize: 15.5,
     color: '#1F2937',
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
   },
   sendButton: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
+    width: 38,
+    height: 38,
+    borderRadius: 19,
     backgroundColor: '#4169E1',
     justifyContent: 'center',
     alignItems: 'center',
+    shadowColor: '#4169E1',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.3,
+    shadowRadius: 4,
+    elevation: 3,
   },
   sendButtonDisabled: {
-    opacity: 0.5,
+    opacity: 0.4,
+    shadowOpacity: 0,
   },
   messageImage: {
-    width: 200,
-    height: 200,
-    borderRadius: 12,
-    marginBottom: 4,
+    width: 220,
+    height: 220,
+    borderRadius: 16,
+    marginBottom: 6,
   },
   videoContainer: {
     position: 'relative',
@@ -749,25 +1102,31 @@ const styles = StyleSheet.create({
     position: 'absolute',
     top: '50%',
     left: '50%',
-    marginLeft: -20,
-    marginTop: -20,
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: 'rgba(0, 0, 0, 0.6)',
+    marginLeft: -24,
+    marginTop: -24,
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    backgroundColor: 'rgba(0, 0, 0, 0.7)',
     justifyContent: 'center',
     alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.25,
+    shadowRadius: 6,
+    elevation: 5,
   },
   voiceContainer: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 12,
     paddingVertical: 8,
+    minWidth: 180,
   },
   waveform: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 2,
+    gap: 2.5,
     flex: 1,
   },
   waveformBar: {
@@ -777,53 +1136,67 @@ const styles = StyleSheet.create({
   modalContainer: {
     flex: 1,
     justifyContent: 'flex-end',
-    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    backgroundColor: 'rgba(0, 0, 0, 0.6)',
   },
   emojiPickerContainer: {
     height: '60%',
     backgroundColor: '#FFFFFF',
-    borderTopLeftRadius: 20,
-    borderTopRightRadius: 20,
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: -4 },
+    shadowOpacity: 0.15,
+    shadowRadius: 12,
+    elevation: 10,
   },
   modalHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    padding: 16,
+    padding: 20,
     borderBottomWidth: 1,
-    borderBottomColor: '#E5E7EB',
+    borderBottomColor: '#F3F4F6',
   },
   modalTitle: {
     fontSize: 18,
-    fontWeight: '600',
-    color: '#000000',
+    fontWeight: '700',
+    color: '#1F2937',
+    letterSpacing: -0.3,
   },
   modalOverlay: {
     flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    backgroundColor: 'rgba(0, 0, 0, 0.6)',
     justifyContent: 'center',
     alignItems: 'center',
   },
   mediaOptionsContainer: {
     backgroundColor: '#FFFFFF',
-    borderRadius: 16,
-    padding: 16,
-    gap: 12,
+    borderRadius: 20,
+    padding: 20,
+    gap: 14,
     width: '80%',
-    maxWidth: 300,
+    maxWidth: 320,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.2,
+    shadowRadius: 16,
+    elevation: 8,
   },
   mediaOption: {
     flexDirection: 'row',
     alignItems: 'center',
-    padding: 16,
+    padding: 18,
     backgroundColor: '#F9FAFB',
-    borderRadius: 12,
-    gap: 12,
+    borderRadius: 14,
+    gap: 14,
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
   },
   mediaOptionText: {
     fontSize: 16,
     fontWeight: '600',
     color: '#1F2937',
+    letterSpacing: -0.2,
   },
   uploadingOverlay: {
     position: 'absolute',
@@ -831,20 +1204,27 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
     bottom: 0,
-    backgroundColor: 'rgba(0, 0, 0, 0.7)',
+    backgroundColor: 'rgba(0, 0, 0, 0.8)',
     justifyContent: 'center',
     alignItems: 'center',
   },
   uploadingContainer: {
     backgroundColor: '#FFFFFF',
-    borderRadius: 16,
-    padding: 24,
+    borderRadius: 20,
+    padding: 32,
     alignItems: 'center',
-    gap: 16,
+    gap: 20,
+    minWidth: 200,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 16,
+    elevation: 10,
   },
   uploadingText: {
     fontSize: 16,
     color: '#1F2937',
     fontWeight: '600',
+    letterSpacing: -0.2,
   },
 });

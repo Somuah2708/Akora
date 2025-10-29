@@ -45,11 +45,23 @@ export type DirectMessage = {
   media_url?: string;
   created_at: string;
   is_read: boolean;
+  read_at?: string;
+  delivered_at?: string;
   sender?: {
     id: string;
     username: string;
     full_name: string;
     avatar_url?: string;
+    is_online?: boolean;
+    last_seen?: string;
+  };
+  receiver?: {
+    id: string;
+    username: string;
+    full_name: string;
+    avatar_url?: string;
+    is_online?: boolean;
+    last_seen?: string;
   };
 };
 
@@ -599,4 +611,106 @@ export async function getMutualFriendsCount(userId1: string, userId2: string): P
     console.error('Error getting mutual friends count:', error);
     return 0;
   }
+}
+
+// Mark message as delivered
+export async function markMessageAsDelivered(messageId: string): Promise<void> {
+  try {
+    const { error } = await supabase
+      .from('direct_messages')
+      .update({ delivered_at: new Date().toISOString() })
+      .eq('id', messageId)
+      .is('delivered_at', null);
+    
+    if (error) {
+      // If column doesn't exist yet, silently fail
+      if (error.message?.includes('column') || error.code === '42703') {
+        return;
+      }
+      throw error;
+    }
+  } catch (error) {
+    console.error('Error marking message as delivered:', error);
+  }
+}
+
+// Update user online status
+export async function updateOnlineStatus(userId: string, isOnline: boolean): Promise<void> {
+  try {
+    const { error } = await supabase
+      .from('profiles')
+      .update({ 
+        is_online: isOnline,
+        last_seen: new Date().toISOString()
+      })
+      .eq('id', userId);
+    
+    if (error) {
+      // If columns don't exist yet, silently fail
+      if (error.message?.includes('column') || error.code === '42703') {
+        console.warn('Online status columns not found. Please run the database migration.');
+        return;
+      }
+      throw error;
+    }
+  } catch (error) {
+    console.error('Error updating online status:', error);
+  }
+}
+
+// Get user's online status
+export async function getUserOnlineStatus(userId: string): Promise<{ isOnline: boolean; lastSeen: string | null }> {
+  try {
+    const { data, error } = await supabase
+      .from('profiles')
+      .select('is_online, last_seen')
+      .eq('id', userId)
+      .single();
+
+    if (error) {
+      // If columns don't exist yet, return default values
+      if (error.message?.includes('column') || error.code === '42703') {
+        console.warn('Online status columns not found. Please run the database migration.');
+        return { isOnline: false, lastSeen: null };
+      }
+      throw error;
+    }
+
+    return {
+      isOnline: data?.is_online || false,
+      lastSeen: data?.last_seen || null
+    };
+  } catch (error) {
+    console.error('Error getting online status:', error);
+    return { isOnline: false, lastSeen: null };
+  }
+}
+
+// Subscribe to user online status changes
+export function subscribeToUserPresence(
+  userId: string,
+  callback: (isOnline: boolean, lastSeen: string | null) => void
+) {
+  const channel = supabase
+    .channel(`user-presence:${userId}`)
+    .on(
+      'postgres_changes',
+      {
+        event: 'UPDATE',
+        schema: 'public',
+        table: 'profiles',
+        filter: `id=eq.${userId}`,
+      },
+      (payload) => {
+        callback(
+          payload.new.is_online,
+          payload.new.last_seen
+        );
+      }
+    )
+    .subscribe();
+
+  return () => {
+    supabase.removeChannel(channel);
+  };
 }

@@ -1,11 +1,12 @@
 import { View, Text, StyleSheet, ScrollView, Image, TouchableOpacity, TextInput, Modal, FlatList, Alert } from 'react-native';
-import { Search, Plus, MoveVertical as MoreVertical, X, MessageCircle, UserPlus } from 'lucide-react-native';
+import { Search, Plus, MoveVertical as MoreVertical, X, MessageCircle, UserPlus, Check, CheckCheck } from 'lucide-react-native';
 import { useFonts, Inter_400Regular, Inter_600SemiBold } from '@expo-google-fonts/inter';
 import { useEffect, useState } from 'react';
 import { SplashScreen, useRouter } from 'expo-router';
-import { getConversationList, searchUsers as searchUsersHelper } from '@/lib/friends';
+import { getConversationList, searchUsers as searchUsersHelper, getUserOnlineStatus, subscribeToUserPresence } from '@/lib/friends';
 import { useAuth } from '@/hooks/useAuth';
 import { supabase } from '@/lib/supabase';
+import { formatChatListTime } from '@/lib/timeUtils';
 import type { Profile } from '@/lib/supabase';
 
 SplashScreen.preventAutoHideAsync();
@@ -32,6 +33,7 @@ export default function ChatScreen() {
   const [searchQuery, setSearchQuery] = useState('');
   const [searchResults, setSearchResults] = useState<Profile[]>([]);
   const [searchLoading, setSearchLoading] = useState(false);
+  const [onlineUsers, setOnlineUsers] = useState<Set<string>>(new Set());
 
   const [fontsLoaded] = useFonts({
     'Inter-Regular': Inter_400Regular,
@@ -49,7 +51,7 @@ export default function ChatScreen() {
       fetchConversations();
       
       // Subscribe to real-time updates for direct messages
-      const subscription = supabase
+      const messageSubscription = supabase
         .channel('direct_messages_changes')
         .on('postgres_changes', 
           { 
@@ -65,8 +67,33 @@ export default function ChatScreen() {
         )
         .subscribe();
 
+      // Subscribe to profile updates for online status
+      const profileSubscription = supabase
+        .channel('profile_status_changes')
+        .on('postgres_changes',
+          {
+            event: 'UPDATE',
+            schema: 'public',
+            table: 'profiles',
+          },
+          (payload) => {
+            const updatedProfile = payload.new as any;
+            setOnlineUsers(prev => {
+              const newSet = new Set(prev);
+              if (updatedProfile.is_online) {
+                newSet.add(updatedProfile.id);
+              } else {
+                newSet.delete(updatedProfile.id);
+              }
+              return newSet;
+            });
+          }
+        )
+        .subscribe();
+
       return () => {
-        subscription.unsubscribe();
+        messageSubscription.unsubscribe();
+        profileSubscription.unsubscribe();
       };
     }
   }, [user]);
@@ -77,6 +104,25 @@ export default function ChatScreen() {
       setLoading(true);
       const convos = await getConversationList(user.id);
       setConversations(convos);
+      
+      // Load online status for all friends
+      const friendIds = convos.map(c => {
+        // Handle friend being an array or object
+        const friend = Array.isArray(c.friend) ? c.friend[0] : c.friend;
+        return friend?.id;
+      }).filter(Boolean) as string[];
+      
+      const statuses = await Promise.all(
+        friendIds.map(id => getUserOnlineStatus(id))
+      );
+      
+      const online = new Set<string>();
+      statuses.forEach((status, index) => {
+        if (status.isOnline) {
+          online.add(friendIds[index]);
+        }
+      });
+      setOnlineUsers(online);
     } catch (error) {
       console.error('Error fetching conversations:', error);
       Alert.alert('Error', 'Failed to load conversations');
@@ -115,16 +161,25 @@ export default function ChatScreen() {
   };
 
   const formatTime = (timestamp: string) => {
-    const date = new Date(timestamp);
-    const now = new Date();
-    const diffInHours = (now.getTime() - date.getTime()) / (1000 * 60 * 60);
+    return formatChatListTime(timestamp);
+  };
 
-    if (diffInHours < 24) {
-      return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-    } else if (diffInHours < 168) { // 7 days
-      return date.toLocaleDateString([], { weekday: 'short' });
-    } else {
-      return date.toLocaleDateString([], { month: 'short', day: 'numeric' });
+  const getMessagePreview = (message: any): string => {
+    if (!message) return 'No messages yet';
+    
+    // Handle different message types with proper icons
+    switch (message.message_type || 'text') {
+      case 'image':
+        return '📷 Photo';
+      case 'video':
+        return '🎥 Video';
+      case 'voice':
+        return '🎤 Voice message';
+      case 'text':
+      default:
+        // Show first 40 characters of text message
+        const content = message.content || message.message || '';
+        return content.length > 40 ? `${content.substring(0, 40)}...` : content;
     }
   };
 
@@ -206,7 +261,9 @@ export default function ChatScreen() {
                       }} 
                       style={styles.avatar} 
                     />
-                    <View style={styles.onlineIndicator} />
+                    {onlineUsers.has(conversation.friend.id) && (
+                      <View style={styles.onlineIndicator} />
+                    )}
                   </View>
                 </TouchableOpacity>
                 <View style={styles.chatInfo}>
@@ -228,7 +285,9 @@ export default function ChatScreen() {
                       ]} 
                       numberOfLines={1}
                     >
-                      {conversation.latestMessage?.content || 'No messages yet'}
+                      {conversation.latestMessage 
+                        ? getMessagePreview(conversation.latestMessage)
+                        : 'No messages yet'}
                     </Text>
                     {conversation.unreadCount > 0 && (
                       <View style={styles.unreadBadge}>
