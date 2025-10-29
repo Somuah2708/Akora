@@ -9,7 +9,12 @@
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
     "ios": {
-      "supportsTablet": true
+        "supportsTablet": true,
+        "infoPlist": {
+          "NSPhotoLibraryUsageDescription": "We need access to your photos to let you share images and videos in chat.",
+          "NSCameraUsageDescription": "We need access to your camera to let you capture photos and videos in chat.",
+          "NSMicrophoneUsageDescription": "We need access to your microphone to let you send voice notes."
+        }
     },
     "web": {
       "bundler": "metro",

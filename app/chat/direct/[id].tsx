@@ -49,6 +49,7 @@ export default function DirectMessageScreen() {
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
   const [recording, setRecording] = useState(false);
   const [uploadingMedia, setUploadingMedia] = useState(false);
+  const [uploadingProgress, setUploadingProgress] = useState<number>(0);
   const [showMediaOptions, setShowMediaOptions] = useState(false);
   const [playingSound, setPlayingSound] = useState<{ [key: string]: boolean }>({});
   const [isTyping, setIsTyping] = useState(false);
@@ -327,14 +328,27 @@ export default function DirectMessageScreen() {
     if (media && user && friendId) {
       try {
         setUploadingMedia(true);
+        setUploadingProgress(5);
+        // Simulate progress while uploading (no real progress API from Supabase)
+        let p = 5;
+        const timer = setInterval(() => {
+          p = Math.min(p + Math.floor(Math.random() * 8) + 3, 90);
+          setUploadingProgress(p);
+        }, 300);
         const mediaType = media.type === 'video' ? 'video' : 'image';
-        const mediaUrl = await uploadMedia(media.uri, user.id, mediaType);
+        const mediaUrl = await uploadMedia(
+          media.uri,
+          user.id,
+          mediaType,
+          (media as any).fileName ?? null,
+          (media as any).mimeType ?? null
+        );
         
         if (mediaUrl) {
           const newMessage = await sendDirectMessage(
             user.id,
             friendId,
-            mediaType === 'image' ? '📷 Photo' : '🎥 Video',
+            '',
             mediaType,
             mediaUrl
           );
@@ -347,12 +361,14 @@ export default function DirectMessageScreen() {
           setTimeout(() => {
             flatListRef.current?.scrollToEnd({ animated: true });
           }, 100);
+          setUploadingProgress(100);
         }
       } catch (error) {
         console.error('Error sending media:', error);
         Alert.alert('Error', 'Failed to send media');
       } finally {
         setUploadingMedia(false);
+        setTimeout(() => setUploadingProgress(0), 600);
       }
     }
   };
@@ -363,14 +379,26 @@ export default function DirectMessageScreen() {
     if (media && user && friendId) {
       try {
         setUploadingMedia(true);
+        setUploadingProgress(5);
+        let p = 5;
+        const timer = setInterval(() => {
+          p = Math.min(p + Math.floor(Math.random() * 8) + 3, 90);
+          setUploadingProgress(p);
+        }, 300);
         const mediaType = media.type === 'video' ? 'video' : 'image';
-        const mediaUrl = await uploadMedia(media.uri, user.id, mediaType);
-        
+        const mediaUrl = await uploadMedia(
+          media.uri,
+          user.id,
+          mediaType,
+          (media as any).fileName ?? null,
+          (media as any).mimeType ?? null
+        );
+
         if (mediaUrl) {
           const newMessage = await sendDirectMessage(
             user.id,
             friendId,
-            mediaType === 'image' ? '📷 Photo' : '🎥 Video',
+            '',
             mediaType,
             mediaUrl
           );
@@ -383,12 +411,14 @@ export default function DirectMessageScreen() {
           setTimeout(() => {
             flatListRef.current?.scrollToEnd({ animated: true });
           }, 100);
+          setUploadingProgress(100);
         }
       } catch (error) {
         console.error('Error sending media:', error);
         Alert.alert('Error', 'Failed to send media');
       } finally {
         setUploadingMedia(false);
+        setTimeout(() => setUploadingProgress(0), 600);
       }
     }
   };
@@ -570,8 +600,8 @@ export default function DirectMessageScreen() {
               </TouchableOpacity>
             )}
 
-            {/* Text Message */}
-            {item.message_type !== 'voice' && (
+            {/* Text / Caption (only for text messages or non-empty captions) */}
+            {(item.message_type === 'text' || (item.message_type !== 'voice' && item.message)) && (
               <Text
                 style={[
                   styles.messageText,
@@ -845,7 +875,11 @@ export default function DirectMessageScreen() {
           <View style={styles.uploadingContainer}>
             <ActivityIndicator size="large" color="#4169E1" />
             <Text style={styles.uploadingText}>
-              {recording ? 'Sending voice message...' : 'Uploading media...'}
+              {recording
+                ? 'Sending voice message...'
+                : uploadingProgress > 0
+                  ? `Uploading media... ${uploadingProgress}%`
+                  : 'Uploading media...'}
             </Text>
           </View>
         </View>
