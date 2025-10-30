@@ -1,5 +1,5 @@
 import { View, Text, StyleSheet, ScrollView, Image, TouchableOpacity, TextInput, Modal, FlatList, Alert } from 'react-native';
-import { Search, Plus, MoveVertical as MoreVertical, X, MessageCircle, UserPlus, Check, CheckCheck } from 'lucide-react-native';
+import { Search, Plus, MoveVertical as MoreVertical, X, MessageCircle, UserPlus, Check, CheckCheck, Users } from 'lucide-react-native';
 import { useFonts, Inter_400Regular, Inter_600SemiBold } from '@expo-google-fonts/inter';
 import { useEffect, useState } from 'react';
 import { SplashScreen, useRouter } from 'expo-router';
@@ -29,6 +29,10 @@ export default function ChatScreen() {
   const { user } = useAuth();
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [loading, setLoading] = useState(true);
+  // Groups state
+  type GroupItem = { group: { id: string; name: string; avatar_url?: string | null }, lastMessage: any | null, unreadCount: number };
+  const [groups, setGroups] = useState<GroupItem[]>([]);
+  const [groupsLoading, setGroupsLoading] = useState(true);
   const [searchModalVisible, setSearchModalVisible] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [searchResults, setSearchResults] = useState<Profile[]>([]);
@@ -64,6 +68,7 @@ export default function ChatScreen() {
     if (user) {
       // Initial fetch shows loading once
       fetchConversations(true);
+      fetchGroups(true);
       
       // Subscribe to real-time updates for direct messages
       const messageSubscription = supabase
@@ -199,9 +204,36 @@ export default function ChatScreen() {
         )
         .subscribe();
 
+      // Subscribe to real-time updates for group messages
+      const groupMessageSub = supabase
+        .channel('group_messages_changes')
+        .on(
+          'postgres_changes',
+          { event: '*', schema: 'public', table: 'group_messages' },
+          (payload) => {
+            const msg: any = payload.new;
+            if (!msg || !user) return;
+            setGroups((prev) => {
+              const idx = prev.findIndex((g) => g.group.id === msg.group_id);
+              if (idx === -1) return prev; // not a group I belong to (or not loaded yet)
+              const list = [...prev];
+              const existing = list[idx];
+              const isIncoming = msg.sender_id !== user.id;
+              const alreadyRead = Array.isArray(msg.read_by) && msg.read_by.includes(user.id);
+              const nextUnread = isIncoming && !alreadyRead ? (existing.unreadCount || 0) + 1 : existing.unreadCount || 0;
+              list[idx] = { ...existing, lastMessage: msg, unreadCount: nextUnread };
+              // Reorder by time desc
+              list.sort((a, b) => new Date(b.lastMessage?.created_at || 0).getTime() - new Date(a.lastMessage?.created_at || 0).getTime());
+              return list;
+            });
+          }
+        )
+        .subscribe();
+
       return () => {
         messageSubscription.unsubscribe();
         profileSubscription.unsubscribe();
+        groupMessageSub.unsubscribe();
       };
     }
   }, [user]);
@@ -250,6 +282,47 @@ export default function ChatScreen() {
       Alert.alert('Error', 'Failed to search users');
     } finally {
       setSearchLoading(false);
+    }
+  };
+
+  const fetchGroups = async (showLoading = false) => {
+    if (!user) return;
+    try {
+      if (showLoading) setGroupsLoading(true);
+      const { data: memberships, error } = await supabase
+        .from('group_members')
+        .select('group_id, groups(id, name, avatar_url)')
+        .eq('user_id', user.id);
+      if (error) throw error;
+      const groupList = (memberships || []).map((m: any) => m.groups).filter(Boolean);
+      // Compose base items
+      const base: GroupItem[] = groupList.map((g: any) => ({ group: { id: g.id, name: g.name, avatar_url: g.avatar_url }, lastMessage: null, unreadCount: 0 }));
+      // Fetch last message per group (N calls; OK for small N)
+      await Promise.all(
+        base.map(async (item) => {
+          const { data: last } = await supabase
+            .from('group_messages')
+            .select('*')
+            .eq('group_id', item.group.id)
+            .order('created_at', { ascending: false })
+            .limit(1)
+            .maybeSingle();
+          item.lastMessage = last || null;
+          // Unread count
+          const { count } = await supabase
+            .from('group_messages')
+            .select('*', { count: 'exact', head: true })
+            .eq('group_id', item.group.id)
+            .not('read_by', 'cs', `["${user.id}"]` as any);
+          item.unreadCount = count || 0;
+        })
+      );
+      base.sort((a, b) => new Date(b.lastMessage?.created_at || 0).getTime() - new Date(a.lastMessage?.created_at || 0).getTime());
+      setGroups(base);
+    } catch (e) {
+      console.error('Error fetching groups', e);
+    } finally {
+      if (showLoading) setGroupsLoading(false);
     }
   };
 
@@ -322,6 +395,9 @@ export default function ChatScreen() {
             onPress={() => router.push('/friends')}
           >
             <UserPlus size={24} color="#1A1A1A" />
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.iconButton} onPress={() => router.push('/create-group' as any)}>
+            <Users size={24} color="#1A1A1A" />
           </TouchableOpacity>
           <TouchableOpacity style={styles.iconButton}>
             <MoreVertical size={24} color="#1A1A1A" />
@@ -407,6 +483,44 @@ export default function ChatScreen() {
               </TouchableOpacity>
             ))
           )}
+
+          {/* Groups Section */}
+          <View style={{ height: 10 }} />
+          <Text style={{ paddingHorizontal: 16, paddingVertical: 8, color: '#64748B', fontFamily: 'Inter-SemiBold' }}>Groups</Text>
+          {groupsLoading && (
+            <View style={styles.loadingContainer}><Text style={styles.loadingText}>Loading groups...</Text></View>
+          )}
+          {groups.map((g) => (
+            <TouchableOpacity key={g.group.id} style={styles.chatItem} onPress={() => router.push(`/chat/group/${g.group.id}`)}>
+              <View style={styles.avatarContainer}>
+                <Image 
+                  source={{ uri: g.group.avatar_url || 'https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?w=400&auto=format&fit=crop&q=60' }} 
+                  style={styles.avatar} 
+                />
+              </View>
+              <View style={styles.chatInfo}>
+                <View style={styles.chatHeader}>
+                  <Text style={styles.chatName}>{g.group.name}</Text>
+                  {!!g.lastMessage && (
+                    <Text style={styles.chatTime}>{formatTime(g.lastMessage.created_at)}</Text>
+                  )}
+                </View>
+                <View style={styles.chatFooter}>
+                  <Text 
+                    style={[styles.lastMessage, g.unreadCount > 0 && styles.unreadMessage]} 
+                    numberOfLines={1}
+                  >
+                    {g.lastMessage ? getMessagePreview(g.lastMessage) : 'No messages yet'}
+                  </Text>
+                  {g.unreadCount > 0 && (
+                    <View style={styles.unreadBadge}>
+                      <Text style={styles.unreadCount}>{g.unreadCount}</Text>
+                    </View>
+                  )}
+                </View>
+              </View>
+            </TouchableOpacity>
+          ))}
         </ScrollView>
       )}
 
