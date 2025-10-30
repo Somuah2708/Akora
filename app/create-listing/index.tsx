@@ -5,6 +5,7 @@ import { SplashScreen, useRouter } from 'expo-router';
 import { ArrowLeft, Image as ImageIcon, Send, DollarSign, Tag, Info } from 'lucide-react-native';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/hooks/useAuth';
+import { useRequireAuth } from '@/hooks/useRequireAuth';
 
 SplashScreen.preventAutoHideAsync();
 
@@ -22,6 +23,7 @@ const CATEGORIES = [
 export default function CreateListingScreen() {
   const router = useRouter();
   const { user } = useAuth();
+  const { isVerified, isChecking } = useRequireAuth();
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
   const [price, setPrice] = useState('');
@@ -39,14 +41,6 @@ export default function CreateListingScreen() {
       SplashScreen.hideAsync();
     }
   }, [fontsLoaded]);
-
-  useEffect(() => {
-    if (!user) {
-      Alert.alert('Authentication Required', 'Please sign in to create a listing.');
-      router.replace('/');
-      return;
-    }
-  }, [user, router]);
 
   const handleSubmit = async () => {
     // Validate inputs
@@ -104,8 +98,12 @@ export default function CreateListingScreen() {
     }
   };
 
-  if (!fontsLoaded || !user) {
-    return null;
+  if (!fontsLoaded || isChecking || !isVerified) {
+    return (
+      <View style={[{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#FFFFFF' }]}>
+        <ActivityIndicator size="large" color="#4169E1" />
+      </View>
+    );
   }
 
   return (

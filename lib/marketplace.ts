@@ -26,6 +26,7 @@ export async function fetchAllProducts(): Promise<ProductServiceWithUser[]> {
     const { data: productsData, error: productsError } = await supabase
       .from('products_services')
       .select('*')
+      .neq('listing_type', 'job') // Exclude job listings
       .eq('is_approved', true)
       .order('created_at', { ascending: false });
 
@@ -67,6 +68,7 @@ export async function fetchProductsByCategory(category: string): Promise<Product
       .from('products_services')
       .select('*')
       .eq('category_name', category)
+      .neq('listing_type', 'job') // Exclude job listings
       .eq('is_approved', true)
       .order('created_at', { ascending: false });
 
@@ -102,6 +104,7 @@ export async function fetchFeaturedProducts(): Promise<ProductServiceWithUser[]>
       .from('products_services')
       .select('*')
       .eq('is_featured', true)
+      .neq('listing_type', 'job') // Exclude job listings
       .eq('is_approved', true)
       .order('created_at', { ascending: false })
       .limit(10);

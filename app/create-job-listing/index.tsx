@@ -19,13 +19,14 @@ const JOB_CATEGORIES = [
 
 export default function CreateJobListingScreen() {
   const router = useRouter();
-  const { user } = useAuth();
+  const { user, loading } = useAuth();
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
   const [company, setCompany] = useState('');
   const [location, setLocation] = useState('');
   const [salary, setSalary] = useState('');
   const [imageUrl, setImageUrl] = useState('');
+  const [applicationLink, setApplicationLink] = useState('');
   const [category, setCategory] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   
@@ -40,15 +41,35 @@ export default function CreateJobListingScreen() {
     }
   }, [fontsLoaded]);
 
-  useEffect(() => {
+  const handleSubmit = async () => {
+    console.log('');
+    console.log('>>> handleSubmit START');
+    console.log('[CreateJobListing] User status:', { 
+      hasUser: !!user, 
+      userId: user?.id,
+      email: user?.email
+    });
+    console.log('[CreateJobListing] Form values:', {
+      title: title.trim(),
+      company: company.trim(),
+      location: location.trim(),
+      applicationLink: applicationLink.trim(),
+      description: description.trim(),
+      category,
+      salary: salary.trim()
+    });
+    
+    // Check if user is authenticated before submitting
     if (!user) {
-      Alert.alert('Authentication Required', 'Please sign in to submit job listings.');
-      router.replace('/');
+      console.log('[CreateJobListing] No user found - this should not happen as form should only show when authenticated');
+      Alert.alert(
+        'Session Error', 
+        'Your session seems to have expired. Please try closing and reopening the app.',
+        [{ text: 'OK' }]
+      );
       return;
     }
-  }, [user, router]);
-
-  const handleSubmit = async () => {
+    
     // Validate inputs
     if (!title.trim()) {
       Alert.alert('Error', 'Please enter a job title');
@@ -74,45 +95,93 @@ export default function CreateJobListingScreen() {
       Alert.alert('Error', 'Please select a job category');
       return;
     }
+    
+    if (!applicationLink.trim()) {
+      Alert.alert('Error', 'Please provide an application link');
+      return;
+    }
 
     try {
       setIsSubmitting(true);
       
-      // Insert the job listing
+      console.log('[CreateJobListing] Submitting job listing for user:', user.id);
+      
+      // Insert the job listing into the jobs table
       const { data: newListing, error: listingError } = await supabase
-        .from('products_services')
+        .from('jobs')
         .insert({
-          user_id: user?.id,
+          user_id: user.id,
           title: title.trim(),
-          description: `${company.trim()} | ${location.trim()} | ${description.trim()}`,
-          price: salary.trim() ? Number(salary) : null,
+          company: company.trim(),
+          location: location.trim(),
+          job_type: category,
+          salary: salary.trim() || null,
+          description: description.trim(),
+          application_link: applicationLink.trim(),
           image_url: imageUrl.trim() || null,
-          category_name: category,
           is_featured: false,
-          is_premium_listing: false,
-          is_approved: false,
+          is_approved: true,
         })
         .select()
         .single();
 
-      if (listingError) throw listingError;
+      if (listingError) {
+        console.error('[CreateJobListing] ❌ Database error:', listingError);
+        throw listingError;
+      }
 
-      Alert.alert(
-        'Submission Successful', 
-        'Your job listing has been submitted for review. An administrator will review and approve it shortly.',
-        [{ text: 'OK', onPress: () => router.back() }]
-      );
-    } catch (error: any) {
-      console.error('Error creating job listing:', error);
-      Alert.alert('Error', error.message || 'Failed to submit job listing');
-    } finally {
+      console.log('[CreateJobListing] ✅ SUCCESS! Job created:', newListing);
+      
+      // Navigate immediately
+      console.log('[CreateJobListing] 🚀 Navigating to workplace...');
+      router.replace('/workplace');
+      
+      // Reset form after navigation starts
       setIsSubmitting(false);
+      
+    } catch (error: any) {
+      console.error('[CreateJobListing] Error creating job listing:', error);
+      setIsSubmitting(false);
+      
+      // Provide user-friendly error messages
+      let errorTitle = 'Submission Failed';
+      let errorMessage = 'An unexpected error occurred. Please try again.';
+      
+      if (error.message?.includes('JWT') || error.message?.includes('auth')) {
+        errorTitle = 'Session Expired';
+        errorMessage = 'Your session has expired. Please restart the app and sign in again.';
+      } else if (error.message?.includes('network')) {
+        errorTitle = 'Network Error';
+        errorMessage = 'Unable to connect to the server. Please check your internet connection and try again.';
+      } else if (error.message?.includes('permission') || error.message?.includes('denied')) {
+        errorTitle = 'Permission Denied';
+        errorMessage = 'You do not have permission to post job listings. Please contact support.';
+      } else if (error.code === '23505') {
+        errorTitle = 'Duplicate Entry';
+        errorMessage = 'This job listing already exists. Please modify your entry.';
+      } else if (error.message) {
+        errorMessage = `Error: ${error.message}\n\nPlease check your entries and try again.`;
+      }
+      
+      Alert.alert(errorTitle, errorMessage, [
+        { text: 'OK' }
+      ]);
     }
+    console.log('>>> handleSubmit END');
+    console.log('');
   };
 
-  if (!fontsLoaded || !user) {
-    return null;
+  // Show loading only while fonts are loading
+  if (!fontsLoaded) {
+    return (
+      <View style={[styles.container, { justifyContent: 'center', alignItems: 'center' }]}>
+        <ActivityIndicator size="large" color="#4169E1" />
+      </View>
+    );
   }
+
+  // Always show the form - authentication will be checked on submit
+  console.log('[CreateJobListing] Rendering form, user:', user?.email || 'no user yet');
 
   return (
     <View style={styles.container}>
@@ -124,10 +193,45 @@ export default function CreateJobListingScreen() {
         <TouchableOpacity 
           style={[
             styles.submitButton, 
-            (!title.trim() || !description.trim() || !company.trim() || !location.trim() || !category || isSubmitting) && styles.submitButtonDisabled
+            (title.trim() && description.trim() && company.trim() && location.trim() && applicationLink.trim() && category && !isSubmitting) && styles.submitButtonEnabled
           ]}
-          onPress={handleSubmit}
-          disabled={!title.trim() || !description.trim() || !company.trim() || !location.trim() || !category || isSubmitting}
+          onPress={async () => {
+            console.log('==========================================');
+            console.log('[CreateJobListing] 🔵 SUBMIT BUTTON CLICKED');
+            console.log('[CreateJobListing] User:', { hasUser: !!user, userId: user?.id, email: user?.email });
+            console.log('[CreateJobListing] Form:', { 
+              title: !!title.trim(), 
+              company: !!company.trim(), 
+              location: !!location.trim(),
+              applicationLink: !!applicationLink.trim(),
+              description: !!description.trim(),
+              category: !!category
+            });
+            
+            // Check which fields are missing
+            const missingFields = [];
+            if (!title.trim()) missingFields.push('Job Title');
+            if (!company.trim()) missingFields.push('Company');
+            if (!location.trim()) missingFields.push('Location');
+            if (!applicationLink.trim()) missingFields.push('Application Link');
+            if (!description.trim()) missingFields.push('Description');
+            if (!category) missingFields.push('Job Type');
+            
+            if (missingFields.length > 0) {
+              console.log('[CreateJobListing] ❌ Missing:', missingFields);
+              Alert.alert(
+                'Missing Fields',
+                `Please fill:\n\n• ${missingFields.join('\n• ')}`,
+                [{ text: 'OK' }]
+              );
+              return;
+            }
+            
+            console.log('[CreateJobListing] ✅ All fields filled, submitting...');
+            await handleSubmit();
+            console.log('[CreateJobListing] handleSubmit completed');
+            console.log('==========================================');
+          }}
         >
           {isSubmitting ? (
             <ActivityIndicator color="#FFFFFF" size="small" />
@@ -142,7 +246,7 @@ export default function CreateJobListingScreen() {
           <Briefcase size={24} color="#4169E1" />
           <Text style={styles.infoTitle}>Submit Job Opportunity</Text>
           <Text style={styles.infoText}>
-            Your submission will be reviewed by administrators before being published.
+            Fill in all required fields below. The submit button (top-right) will turn blue when ready.
           </Text>
         </View>
         
@@ -179,6 +283,19 @@ export default function CreateJobListingScreen() {
             value={location}
             onChangeText={setLocation}
             maxLength={100}
+          />
+        </View>
+        
+        <View style={styles.formGroup}>
+          <Text style={styles.label}>Application Link</Text>
+          <TextInput
+            style={styles.input}
+            placeholder="Enter application URL (e.g., https://company.com/apply)"
+            placeholderTextColor="#666666"
+            value={applicationLink}
+            onChangeText={setApplicationLink}
+            keyboardType="url"
+            autoCapitalize="none"
           />
         </View>
         
@@ -266,7 +383,7 @@ export default function CreateJobListingScreen() {
         
         <View style={styles.infoContainer}>
           <Info size={20} color="#666666" />
-          <Text style={styles.infoText}>
+          <Text style={styles.infoContainerText}>
             Your submission will be reviewed by administrators before being published. This helps ensure all job listings are legitimate and valuable to our community.
           </Text>
         </View>
@@ -303,12 +420,15 @@ const styles = StyleSheet.create({
     width: 40,
     height: 40,
     borderRadius: 20,
-    backgroundColor: '#4169E1',
+    backgroundColor: '#CBD5E1',
     justifyContent: 'center',
     alignItems: 'center',
   },
   submitButtonDisabled: {
     backgroundColor: '#CBD5E1',
+  },
+  submitButtonEnabled: {
+    backgroundColor: '#4169E1',
   },
   formContainer: {
     flex: 1,
@@ -430,7 +550,7 @@ const styles = StyleSheet.create({
     marginBottom: 24,
     gap: 12,
   },
-  infoText: {
+  infoContainerText: {
     flex: 1,
     fontSize: 14,
     fontFamily: 'Inter-Regular',

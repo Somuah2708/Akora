@@ -68,10 +68,11 @@ export default function ServicesScreen() {
     try {
       setLoading(true);
       
-      // Step 1: Fetch all products
+      // Step 1: Fetch all products (exclude job listings - only show items where listing_type is null)
       const { data: productsData, error: productsError } = await supabase
         .from('products_services')
         .select('*')
+        .is('listing_type', null) // Only products/services (not jobs)
         .order('created_at', { ascending: false });
       
       if (productsError) throw productsError;

@@ -42,13 +42,22 @@ export default function SignInScreen() {
       setIsSubmitting(true);
       setError('');
       
-      const { error } = await signIn(email.trim(), password);
+      console.log('[SignIn] Attempting to sign in...');
+      const { data, error } = await signIn(email.trim(), password);
       
-      if (error) throw error;
+      if (error) {
+        console.error('[SignIn] Sign in error:', error);
+        throw error;
+      }
+      
+      console.log('[SignIn] Sign in successful:', data);
+      
+      // Wait a bit for the auth state to update
+      await new Promise(resolve => setTimeout(resolve, 500));
       
       // Navigation is handled by the protected route logic in _layout.tsx
-    } catch (err) {
-      console.error('Sign in error:', err);
+    } catch (err: any) {
+      console.error('[SignIn] Sign in error:', err);
       setError(err.message || 'Failed to sign in. Please check your credentials.');
     } finally {
       setIsSubmitting(false);

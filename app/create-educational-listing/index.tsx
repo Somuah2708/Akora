@@ -5,6 +5,7 @@ import { SplashScreen, useRouter } from 'expo-router';
 import { ArrowLeft, Image as ImageIcon, Send, DollarSign, Tag, Info, GraduationCap } from 'lucide-react-native';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/hooks/useAuth';
+import { useRequireAuth } from '@/hooks/useRequireAuth';
 
 SplashScreen.preventAutoHideAsync();
 
@@ -19,6 +20,7 @@ const CATEGORIES = [
 export default function CreateEducationalListingScreen() {
   const router = useRouter();
   const { user } = useAuth();
+  const { isVerified, isChecking } = useRequireAuth();
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
   const [price, setPrice] = useState('');
@@ -36,14 +38,6 @@ export default function CreateEducationalListingScreen() {
       SplashScreen.hideAsync();
     }
   }, [fontsLoaded]);
-
-  useEffect(() => {
-    if (!user) {
-      Alert.alert('Authentication Required', 'Please sign in to submit educational opportunities.');
-      router.replace('/');
-      return;
-    }
-  }, [user, router]);
 
   const handleSubmit = async () => {
     // Validate inputs
@@ -102,8 +96,12 @@ export default function CreateEducationalListingScreen() {
     }
   };
 
-  if (!fontsLoaded || !user) {
-    return null;
+  if (!fontsLoaded || isChecking || !isVerified) {
+    return (
+      <View style={[{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#FFFFFF' }]}>
+        <ActivityIndicator size="large" color="#4169E1" />
+      </View>
+    );
   }
 
   return (
@@ -234,7 +232,7 @@ export default function CreateEducationalListingScreen() {
         
         <View style={styles.infoContainer}>
           <Info size={20} color="#666666" />
-          <Text style={styles.infoText}>
+          <Text style={styles.infoTextFlex}>
             Your submission will be reviewed by administrators before being published. This helps ensure all educational opportunities are legitimate and valuable to our community.
           </Text>
         </View>
@@ -398,7 +396,7 @@ const styles = StyleSheet.create({
     marginBottom: 24,
     gap: 12,
   },
-  infoText: {
+  infoTextFlex: {
     flex: 1,
     fontSize: 14,
     fontFamily: 'Inter-Regular',
