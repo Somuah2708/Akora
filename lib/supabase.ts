@@ -268,3 +268,30 @@ export type Donor = {
   created_at: string;
   updated_at: string;
 };
+
+export type Livestream = {
+  id: string;
+  title: string;
+  description: string;
+  short_description?: string;
+  thumbnail_url?: string;
+  stream_url: string;
+  host_name: string;
+  host_avatar_url?: string;
+  category?: string;
+  is_live: boolean;
+  start_time: string;
+  end_time?: string;
+  viewer_count: number;
+  replay_url?: string;
+  created_at: string;
+  updated_at: string;
+};
+
+export type StreamReminder = {
+  id: string;
+  user_id: string;
+  stream_id: string;
+  reminder_sent: boolean;
+  created_at: string;
+};

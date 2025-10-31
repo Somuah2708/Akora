@@ -9,204 +9,556 @@ import {
   Modal,
   Alert,
   ActivityIndicator,
+  Image,
+  Linking,
+  RefreshControl,
+  Platform,
 } from 'react-native';
-import { Search, Plus, ArrowLeft, Settings, Play, Users, Clock } from 'lucide-react-native';
+import { Search, Plus, ArrowLeft, Settings, Play, Users, Clock, Bell, BellOff, ExternalLink, RefreshCw } from 'lucide-react-native';
 import { useRouter } from 'expo-router';
 import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../hooks/useAuth';
 
-interface StreamData {
+interface Livestream {
   id: string;
   title: string;
-  host: string;
-  scheduledFor: string;
-  streamUrl: string;
-  thumbnailUrl?: string;
-  user: {
-    username: string;
-    full_name: string;
-  };
+  description: string;
+  short_description: string;
+  thumbnail_url: string;
+  stream_url: string;
+  host_name: string;
+  host_avatar_url: string;
+  category: string;
+  is_live: boolean;
+  start_time: string;
+  end_time: string | null;
+  viewer_count: number;
+  replay_url: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+interface StreamReminder {
+  id: string;
+  user_id: string;
+  stream_id: string;
+  reminder_sent: boolean;
+  created_at: string;
 }
 
 export default function LiveStreamScreen() {
   const { user } = useAuth();
   const router = useRouter();
   const [searchQuery, setSearchQuery] = useState('');
-  const [liveStreams, setLiveStreams] = useState<StreamData[]>([]);
-  const [upcomingStreams, setUpcomingStreams] = useState<StreamData[]>([]);
-  const [pastStreams, setPastStreams] = useState<StreamData[]>([]);
+  const [liveStreams, setLiveStreams] = useState<Livestream[]>([]);
+  const [upcomingStreams, setUpcomingStreams] = useState<Livestream[]>([]);
+  const [pastStreams, setPastStreams] = useState<Livestream[]>([]);
+  const [userReminders, setUserReminders] = useState<Set<string>>(new Set());
   const [loading, setLoading] = useState(true);
-  const [showModal, setShowModal] = useState(false);
   const [activeTab, setActiveTab] = useState<'live' | 'past'>('live');
+  const [refreshing, setRefreshing] = useState(false);
+  
+  // Start Live Stream Modal State
+  const [showStartStreamModal, setShowStartStreamModal] = useState(false);
+  const [streamForm, setStreamForm] = useState({
+    title: '',
+    description: '',
+    short_description: '',
+    thumbnail_url: '',
+    stream_url: '',
+    category: '',
+    start_now: true,
+    scheduled_time: '',
+  });
+  const [submitting, setSubmitting] = useState(false);
 
-  // Form states
-  const [streamTitle, setStreamTitle] = useState('');
-  const [streamHost, setStreamHost] = useState('');
-  const [streamUrl, setStreamUrl] = useState('');
-  const [scheduledDate, setScheduledDate] = useState('');
-  const [scheduledTime, setScheduledTime] = useState('');
-  const [thumbnailUrl, setThumbnailUrl] = useState('');
-  const [isSubmitting, setIsSubmitting] = useState(false);
+  // Debug: Log modal state changes
+  useEffect(() => {
+    console.log('Modal state changed:', showStartStreamModal);
+  }, [showStartStreamModal]);
 
   useEffect(() => {
     fetchStreams();
-  }, []);
+    if (user) {
+      fetchUserReminders();
+    }
 
-  const fetchStreams = async () => {
+    // Auto-refresh every 30 seconds for live stream status updates
+    const interval = setInterval(() => {
+      fetchStreams();
+    }, 30000);
+
+    // Set up real-time subscription for new streams and updates
+    const subscription = supabase
+      .channel('livestreams_changes')
+      .on('postgres_changes', 
+        { event: '*', schema: 'public', table: 'livestreams' },
+        (payload) => {
+          console.log('Stream updated:', payload);
+          fetchStreams();
+        }
+      )
+      .subscribe();
+
+    return () => {
+      clearInterval(interval);
+      subscription.unsubscribe();
+    };
+  }, [user]);
+
+  const fetchStreams = async (showRefreshIndicator = false) => {
     try {
-      setLoading(true);
+      if (showRefreshIndicator) {
+        setRefreshing(true);
+      } else {
+        setLoading(true);
+      }
+
       const { data, error } = await supabase
-        .from('products_services')
-        .select(`
-          id,
-          title,
-          description,
-          created_at,
-          profiles:user_id (
-            username,
-            full_name
-          )
-        `)
-        .eq('is_approved', true)
-        .like('category_name', 'Livestream%')
-        .order('created_at', { ascending: false });
+        .from('livestreams')
+        .select('*')
+        .order('start_time', { ascending: true });
 
       if (error) throw error;
 
       const now = new Date();
-      const live: StreamData[] = [];
-      const upcoming: StreamData[] = [];
-      const past: StreamData[] = [];
+      const live: Livestream[] = [];
+      const upcoming: Livestream[] = [];
+      const past: Livestream[] = [];
 
-      data?.forEach((item) => {
-        try {
-          const streamData = JSON.parse(item.description);
-          const scheduledDate = new Date(streamData.scheduledFor);
-          const endTime = new Date(scheduledDate.getTime() + (streamData.duration || 60) * 60000);
+      data?.forEach((stream) => {
+        const startTime = new Date(stream.start_time);
+        const endTime = stream.end_time ? new Date(stream.end_time) : null;
 
-          const stream: StreamData = {
-            id: item.id,
-            title: item.title,
-            host: streamData.host,
-            scheduledFor: streamData.scheduledFor,
-            streamUrl: streamData.streamUrl,
-            thumbnailUrl: streamData.thumbnailUrl,
-            user: item.profiles,
-          };
-
-          if (scheduledDate <= now && now <= endTime) {
-            live.push(stream);
-          } else if (scheduledDate > now) {
-            upcoming.push(stream);
-          } else {
-            past.push(stream);
-          }
-        } catch (parseError) {
-          console.error('Error parsing stream data:', parseError);
+        // Check if stream is currently live
+        if (stream.is_live && (!endTime || now <= endTime)) {
+          live.push(stream);
+        } 
+        // Check if stream is upcoming (starts in the future)
+        else if (startTime > now) {
+          upcoming.push(stream);
+        } 
+        // Otherwise it's a past stream
+        else {
+          past.push(stream);
         }
       });
 
       setLiveStreams(live);
       setUpcomingStreams(upcoming);
       setPastStreams(past);
-    } catch (error) {
+
+      console.log('Streams loaded:', {
+        live: live.length,
+        upcoming: upcoming.length,
+        past: past.length,
+      });
+    } catch (error: any) {
       console.error('Error fetching streams:', error);
-      Alert.alert('Error', 'Failed to load streams');
+      
+      // Check if it's a table not found error
+      if (error?.message?.includes('relation "public.livestreams" does not exist')) {
+        Alert.alert(
+          'Setup Required',
+          'The livestreams table has not been created yet. Please run the database migrations from the LIVESTREAMS_SETUP_GUIDE.md file.',
+          [{ text: 'OK' }]
+        );
+      } else {
+        Alert.alert('Error', 'Failed to load streams. Please check your connection.');
+      }
     } finally {
       setLoading(false);
+      setRefreshing(false);
     }
   };
 
-  const handleSubmitStream = async () => {
+  const fetchUserReminders = async () => {
     if (!user) {
-      Alert.alert('Error', 'Please log in to submit a stream');
-      return;
-    }
-
-    if (!streamTitle || !streamHost || !streamUrl || !scheduledDate || !scheduledTime) {
-      Alert.alert('Error', 'Please fill in all required fields');
+      setUserReminders(new Set());
       return;
     }
 
     try {
-      setIsSubmitting(true);
-      const scheduledFor = new Date(`${scheduledDate}T${scheduledTime}`).toISOString();
-      
-      const streamData = {
-        host: streamHost,
-        streamUrl: streamUrl,
-        scheduledFor: scheduledFor,
-        duration: 60,
-        thumbnailUrl: thumbnailUrl || null,
-      };
-
-      const { error } = await supabase
-        .from('products_services')
-        .insert({
-          user_id: user.id,
-          title: streamTitle,
-          description: JSON.stringify(streamData),
-          category_name: 'Livestream',
-          is_approved: false,
-        });
+      const { data, error } = await supabase
+        .from('stream_reminders')
+        .select('stream_id')
+        .eq('user_id', user.id);
 
       if (error) throw error;
 
-      Alert.alert('Success', 'Stream submitted for approval!');
-      setShowModal(false);
-      resetForm();
-      fetchStreams();
+      const reminderSet = new Set(data?.map(r => r.stream_id) || []);
+      setUserReminders(reminderSet);
+      console.log('User reminders loaded:', reminderSet.size);
     } catch (error) {
-      console.error('Error submitting stream:', error);
-      Alert.alert('Error', 'Failed to submit stream');
-    } finally {
-      setIsSubmitting(false);
+      console.error('Error fetching reminders:', error);
     }
   };
 
-  const resetForm = () => {
-    setStreamTitle('');
-    setStreamHost('');
-    setStreamUrl('');
-    setScheduledDate('');
-    setScheduledTime('');
-    setThumbnailUrl('');
+  const handleToggleReminder = async (streamId: string, streamTitle: string) => {
+    if (!user) {
+      Alert.alert(
+        'Login Required', 
+        'Please log in to set reminders for upcoming streams.',
+        [{ text: 'OK' }]
+      );
+      return;
+    }
+
+    try {
+      if (userReminders.has(streamId)) {
+        // Remove reminder
+        const { error } = await supabase
+          .from('stream_reminders')
+          .delete()
+          .eq('user_id', user.id)
+          .eq('stream_id', streamId);
+
+        if (error) throw error;
+
+        const newReminders = new Set(userReminders);
+        newReminders.delete(streamId);
+        setUserReminders(newReminders);
+        
+        Alert.alert(
+          'Reminder Removed', 
+          `You will no longer be notified about "${streamTitle}"`,
+          [{ text: 'OK' }]
+        );
+      } else {
+        // Add reminder
+        const { error } = await supabase
+          .from('stream_reminders')
+          .insert({
+            user_id: user.id,
+            stream_id: streamId,
+          });
+
+        if (error) throw error;
+
+        const newReminders = new Set(userReminders);
+        newReminders.add(streamId);
+        setUserReminders(newReminders);
+        
+        Alert.alert(
+          'Reminder Set!', 
+          `You will be notified 15 minutes before "${streamTitle}" starts. Make sure to enable notifications in your device settings.`,
+          [{ text: 'Got it' }]
+        );
+      }
+    } catch (error: any) {
+      console.error('Error toggling reminder:', error);
+      
+      // Check if it's a table not found error
+      if (error?.message?.includes('relation "public.stream_reminders" does not exist')) {
+        Alert.alert(
+          'Setup Required',
+          'The reminders feature is not set up yet. Please run the database migrations from the LIVESTREAMS_SETUP_GUIDE.md file.',
+          [{ text: 'OK' }]
+        );
+      } else {
+        Alert.alert('Error', 'Failed to update reminder. Please try again.');
+      }
+    }
   };
 
-  const filterStreams = (streams: StreamData[]) => {
+  const handleJoinStream = async (stream: Livestream) => {
+    try {
+      // Increment viewer count if stream is live
+      if (stream.is_live) {
+        await incrementViewerCount(stream.id);
+        // Refresh streams to show updated count
+        fetchStreams(true);
+      }
+      await Linking.openURL(stream.stream_url);
+    } catch (error) {
+      Alert.alert('Error', 'Could not open stream URL');
+    }
+  };
+
+  const handleOpenReplay = async (replayUrl: string) => {
+    try {
+      await Linking.openURL(replayUrl);
+    } catch (error) {
+      Alert.alert('Error', 'Could not open replay URL');
+    }
+  };
+
+  const incrementViewerCount = async (streamId: string) => {
+    try {
+      // Get current viewer count
+      const { data: currentStream } = await supabase
+        .from('livestreams')
+        .select('viewer_count')
+        .eq('id', streamId)
+        .single();
+
+      if (currentStream) {
+        // Increment viewer count
+        await supabase
+          .from('livestreams')
+          .update({ viewer_count: currentStream.viewer_count + 1 })
+          .eq('id', streamId);
+      }
+    } catch (error) {
+      console.error('Error updating viewer count:', error);
+    }
+  };
+
+  const handleStartStream = () => {
+    console.log('FAB button clicked!');
+    console.log('User:', user);
+    
+    if (!user) {
+      console.log('No user found, showing login alert');
+      Alert.alert(
+        'Login Required',
+        'Please log in to start a live stream.',
+        [{ text: 'OK' }]
+      );
+      return;
+    }
+    
+    console.log('Opening start stream modal');
+    setShowStartStreamModal(true);
+  };
+
+  const resetStreamForm = () => {
+    setStreamForm({
+      title: '',
+      description: '',
+      short_description: '',
+      thumbnail_url: '',
+      stream_url: '',
+      category: '',
+      start_now: true,
+      scheduled_time: '',
+    });
+  };
+
+  const handleSubmitStream = async () => {
+    // Validate required fields
+    if (!streamForm.title.trim()) {
+      Alert.alert('Error', 'Please enter a stream title');
+      return;
+    }
+    if (!streamForm.description.trim()) {
+      Alert.alert('Error', 'Please enter a stream description');
+      return;
+    }
+    if (!streamForm.stream_url.trim()) {
+      Alert.alert('Error', 'Please enter your stream URL (e.g., YouTube, Twitch link)');
+      return;
+    }
+
+    setSubmitting(true);
+
+    try {
+      // Get user profile data
+      const { data: profile } = await supabase
+        .from('profiles')
+        .select('full_name, avatar_url')
+        .eq('id', user!.id)
+        .single();
+
+      const now = new Date();
+      const startTime = streamForm.start_now 
+        ? now.toISOString() 
+        : streamForm.scheduled_time || now.toISOString();
+
+      // Create new livestream
+      const { data, error } = await supabase
+        .from('livestreams')
+        .insert({
+          title: streamForm.title.trim(),
+          description: streamForm.description.trim(),
+          short_description: streamForm.short_description.trim() || streamForm.description.trim().substring(0, 100),
+          thumbnail_url: streamForm.thumbnail_url.trim() || null,
+          stream_url: streamForm.stream_url.trim(),
+          host_name: profile?.full_name || user!.email?.split('@')[0] || 'Anonymous',
+          host_avatar_url: profile?.avatar_url || null,
+          category: streamForm.category.trim() || 'General',
+          is_live: streamForm.start_now,
+          start_time: startTime,
+          viewer_count: 0,
+        })
+        .select()
+        .single();
+
+      if (error) throw error;
+
+      console.log('Stream created:', data);
+
+      Alert.alert(
+        streamForm.start_now ? 'Stream Started!' : 'Stream Scheduled!',
+        streamForm.start_now 
+          ? `Your live stream "${streamForm.title}" is now live! Share your stream link with viewers.`
+          : `Your stream "${streamForm.title}" has been scheduled. It will go live at the scheduled time.`,
+        [
+          {
+            text: 'View Stream',
+            onPress: () => {
+              setShowStartStreamModal(false);
+              resetStreamForm();
+              fetchStreams(true);
+            }
+          }
+        ]
+      );
+
+      setShowStartStreamModal(false);
+      resetStreamForm();
+      fetchStreams(true);
+
+    } catch (error: any) {
+      console.error('Error creating stream:', error);
+      Alert.alert('Error', error.message || 'Failed to create stream. Please try again.');
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const filterStreams = (streams: Livestream[]) => {
     if (!searchQuery) return streams;
     return streams.filter(stream =>
       stream.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      stream.host.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      stream.user?.username?.toLowerCase().includes(searchQuery.toLowerCase())
+      stream.host_name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      stream.category?.toLowerCase().includes(searchQuery.toLowerCase())
     );
   };
 
-  const renderStreamCard = (stream: StreamData, isLive = false) => (
-    <TouchableOpacity
-      key={stream.id}
-      style={[styles.streamCard, isLive && styles.liveStreamCard]}
-      onPress={() => {
-        // Open stream URL
-        console.log('Opening stream:', stream.streamUrl);
-      }}
-    >
-      <View style={styles.streamInfo}>
-        <Text style={styles.streamTitle}>{stream.title}</Text>
-        <Text style={styles.streamHost}>by {stream.host}</Text>
-        <View style={styles.streamMeta}>
-          <Clock size={16} color="#666" />
-          <Text style={styles.streamTime}>
-            {new Date(stream.scheduledFor).toLocaleString()}
-          </Text>
-        </View>
-      </View>
-      {isLive && (
+  const formatStreamTime = (dateString: string) => {
+    const date = new Date(dateString);
+    const now = new Date();
+    const diffMs = date.getTime() - now.getTime();
+    const diffMins = Math.floor(diffMs / 60000);
+    const diffHours = Math.floor(diffMins / 60);
+    const diffDays = Math.floor(diffHours / 24);
+
+    if (diffDays > 1) {
+      return `Starts ${date.toLocaleDateString()} at ${date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`;
+    } else if (diffDays === 1) {
+      return `Tomorrow at ${date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`;
+    } else if (diffHours > 0) {
+      return `Starts in ${diffHours} hour${diffHours > 1 ? 's' : ''}`;
+    } else if (diffMins > 0) {
+      return `Starts in ${diffMins} minute${diffMins > 1 ? 's' : ''}`;
+    } else if (diffMins === 0) {
+      return 'Starting now!';
+    }
+    return date.toLocaleString();
+  };
+
+  const renderStreamCard = (stream: Livestream, isPast = false) => (
+    <View key={stream.id} style={[styles.streamCard, stream.is_live && styles.liveStreamCard]}>
+      {/* Thumbnail */}
+      {stream.thumbnail_url && (
+        <Image 
+          source={{ uri: stream.thumbnail_url }} 
+          style={styles.thumbnail}
+          resizeMode="cover"
+        />
+      )}
+
+      {/* Live Indicator */}
+      {stream.is_live && (
         <View style={styles.liveIndicator}>
+          <View style={styles.liveDot} />
           <Text style={styles.liveText}>LIVE</Text>
         </View>
       )}
-    </TouchableOpacity>
+
+      {/* Viewer Count for Live Streams */}
+      {stream.is_live && (
+        <View style={styles.viewerCount}>
+          <Users size={14} color="#fff" />
+          <Text style={styles.viewerCountText}>{stream.viewer_count.toLocaleString()}</Text>
+        </View>
+      )}
+
+      {/* Content */}
+      <View style={styles.streamContent}>
+        <Text style={styles.streamTitle}>{stream.title}</Text>
+        <Text style={styles.streamDescription} numberOfLines={2}>
+          {stream.short_description || stream.description}
+        </Text>
+
+        {/* Host Info */}
+        <View style={styles.hostInfo}>
+          {stream.host_avatar_url && (
+            <Image 
+              source={{ uri: stream.host_avatar_url }} 
+              style={styles.hostAvatar}
+            />
+          )}
+          <View style={styles.hostDetails}>
+            <Text style={styles.hostName}>{stream.host_name}</Text>
+            {stream.category && (
+              <Text style={styles.category}>{stream.category}</Text>
+            )}
+          </View>
+        </View>
+
+        {/* Time Info */}
+        <View style={styles.streamMeta}>
+          <Clock size={16} color="#666" />
+          <Text style={styles.streamTime}>
+            {stream.is_live 
+              ? 'Started ' + new Date(stream.start_time).toLocaleTimeString()
+              : isPast
+              ? new Date(stream.start_time).toLocaleDateString()
+              : formatStreamTime(stream.start_time)
+            }
+          </Text>
+        </View>
+
+        {/* Action Buttons */}
+        <View style={styles.actionButtons}>
+          {isPast && stream.replay_url ? (
+            <TouchableOpacity
+              style={styles.joinButton}
+              onPress={() => handleOpenReplay(stream.replay_url!)}
+            >
+              <Play size={20} color="#fff" />
+              <Text style={styles.joinButtonText}>Watch Replay</Text>
+            </TouchableOpacity>
+          ) : stream.is_live ? (
+            <TouchableOpacity
+              style={[styles.joinButton, styles.liveJoinButton]}
+              onPress={() => handleJoinStream(stream)}
+            >
+              <ExternalLink size={20} color="#fff" />
+              <Text style={styles.joinButtonText}>Join Now</Text>
+            </TouchableOpacity>
+          ) : (
+            <>
+              <TouchableOpacity
+                style={styles.remindButton}
+                onPress={() => handleToggleReminder(stream.id, stream.title)}
+              >
+                {userReminders.has(stream.id) ? (
+                  <>
+                    <BellOff size={20} color="#007AFF" />
+                    <Text style={styles.remindButtonText}>Remove Reminder</Text>
+                  </>
+                ) : (
+                  <>
+                    <Bell size={20} color="#007AFF" />
+                    <Text style={styles.remindButtonText}>Remind Me</Text>
+                  </>
+                )}
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.joinButton}
+                onPress={() => handleJoinStream(stream)}
+              >
+                <ExternalLink size={20} color="#fff" />
+                <Text style={styles.joinButtonText}>Preview</Text>
+              </TouchableOpacity>
+            </>
+          )}
+        </View>
+      </View>
+    </View>
   );
 
   if (loading) {
@@ -221,7 +573,7 @@ export default function LiveStreamScreen() {
   return (
     <View style={styles.container}>
       {/* Header */}
-      <View style={[styles.header, { paddingTop: 60 }]}>
+      <View style={[styles.header, { paddingTop: 60 }]} pointerEvents="box-none">
         <TouchableOpacity 
           style={styles.backButton}
           onPress={() => router.back()}
@@ -229,11 +581,12 @@ export default function LiveStreamScreen() {
           <ArrowLeft size={24} color="#000000" />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Live Streams</Text>
-        <TouchableOpacity
-          style={styles.addButton}
-          onPress={() => setShowModal(true)}
+        <TouchableOpacity 
+          style={styles.refreshButton}
+          onPress={() => fetchStreams(true)}
+          disabled={refreshing}
         >
-          <Plus size={24} color="#007AFF" />
+          <RefreshCw size={24} color={refreshing ? "#ccc" : "#007AFF"} />
         </TouchableOpacity>
       </View>
 
@@ -252,149 +605,315 @@ export default function LiveStreamScreen() {
       <View style={styles.tabContainer}>
         <TouchableOpacity
           style={[styles.tab, activeTab === 'live' && styles.activeTab]}
-          onPress={() => setActiveTab('live')}
+          onPress={() => {
+            setActiveTab('live');
+            setSearchQuery(''); // Clear search when switching tabs
+          }}
         >
           <Text style={[styles.tabText, activeTab === 'live' && styles.activeTabText]}>
-            Live & Upcoming
+            Live & Upcoming ({(liveStreams.length + upcomingStreams.length)})
           </Text>
         </TouchableOpacity>
         <TouchableOpacity
           style={[styles.tab, activeTab === 'past' && styles.activeTab]}
-          onPress={() => setActiveTab('past')}
+          onPress={() => {
+            setActiveTab('past');
+            setSearchQuery(''); // Clear search when switching tabs
+          }}
         >
           <Text style={[styles.tabText, activeTab === 'past' && styles.activeTabText]}>
-            Past Streams
+            Past Streams ({pastStreams.length})
           </Text>
         </TouchableOpacity>
       </View>
 
-      <ScrollView style={styles.content}>
+      <ScrollView 
+        style={styles.content}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={() => fetchStreams(true)}
+            colors={['#007AFF']}
+            tintColor="#007AFF"
+          />
+        }
+      >
         {activeTab === 'live' ? (
           <>
             {/* Live Streams */}
             {filterStreams(liveStreams).length > 0 && (
               <View style={styles.section}>
-                <Text style={styles.sectionTitle}>Live Now</Text>
-                {filterStreams(liveStreams).map(stream => renderStreamCard(stream, true))}
+                <View style={styles.sectionHeader}>
+                  <Text style={styles.sectionTitle}>🔴 Live Now</Text>
+                  <Text style={styles.sectionCount}>{filterStreams(liveStreams).length}</Text>
+                </View>
+                {filterStreams(liveStreams).map(stream => renderStreamCard(stream))}
               </View>
             )}
 
             {/* Upcoming Streams */}
             <View style={styles.section}>
-              <Text style={styles.sectionTitle}>Upcoming</Text>
+              <View style={styles.sectionHeader}>
+                <Text style={styles.sectionTitle}>📅 Upcoming</Text>
+                <Text style={styles.sectionCount}>{filterStreams(upcomingStreams).length}</Text>
+              </View>
               {filterStreams(upcomingStreams).length > 0 ? (
                 filterStreams(upcomingStreams).map(stream => renderStreamCard(stream))
               ) : (
-                <Text style={styles.emptyText}>No upcoming streams</Text>
+                <View style={styles.emptyState}>
+                  <Clock size={48} color="#ccc" />
+                  <Text style={styles.emptyText}>
+                    {searchQuery ? 'No streams match your search' : 'No upcoming streams'}
+                  </Text>
+                  <Text style={styles.emptySubtext}>
+                    {searchQuery ? 'Try a different search term' : 'Check back soon for new events!'}
+                  </Text>
+                </View>
               )}
             </View>
+
+            {/* No live or upcoming streams at all */}
+            {liveStreams.length === 0 && upcomingStreams.length === 0 && !searchQuery && (
+              <View style={styles.emptyState}>
+                <Play size={64} color="#ccc" />
+                <Text style={styles.emptyText}>No streams available</Text>
+                <Text style={styles.emptySubtext}>Pull down to refresh or check back later</Text>
+              </View>
+            )}
           </>
         ) : (
           <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Past Streams</Text>
+            <View style={styles.sectionHeader}>
+              <Text style={styles.sectionTitle}>🎬 Past Streams</Text>
+              <Text style={styles.sectionCount}>{filterStreams(pastStreams).length}</Text>
+            </View>
             {filterStreams(pastStreams).length > 0 ? (
-              filterStreams(pastStreams).map(stream => renderStreamCard(stream))
+              filterStreams(pastStreams).map(stream => renderStreamCard(stream, true))
             ) : (
-              <Text style={styles.emptyText}>No past streams</Text>
+              <View style={styles.emptyState}>
+                <Play size={48} color="#ccc" />
+                <Text style={styles.emptyText}>
+                  {searchQuery ? 'No streams match your search' : 'No past streams'}
+                </Text>
+                <Text style={styles.emptySubtext}>
+                  {searchQuery ? 'Try a different search term' : 'Past streams with replays will appear here'}
+                </Text>
+              </View>
             )}
           </View>
         )}
       </ScrollView>
 
-      {/* Submit Stream Modal */}
-      <Modal visible={showModal} animationType="slide" presentationStyle="pageSheet">
-        <View style={styles.modalContainer}>
-          <View style={styles.modalHeader}>
-            <TouchableOpacity
-              style={styles.closeButton}
-              onPress={() => setShowModal(false)}
-            >
-              <ArrowLeft size={24} color="#000" />
-            </TouchableOpacity>
-            <Text style={styles.modalTitle}>Submit Stream</Text>
-            <View style={styles.placeholder} />
-          </View>
+      {/* Floating Action Button - Start Live Stream */}
+      <View style={styles.fabContainer} pointerEvents="box-none">
+        <TouchableOpacity
+          style={styles.fab}
+          onPress={() => {
+            setShowStartStreamModal(true);
+          }}
+          activeOpacity={0.7}
+          accessible={true}
+          accessibilityLabel="Start Live Stream"
+          accessibilityHint="Opens a form to start your own live stream"
+          hitSlop={{ top: 20, bottom: 20, left: 20, right: 20 }}
+        >
+          <Plus size={28} color="#fff" strokeWidth={3} />
+        </TouchableOpacity>
+      </View>
 
-          <ScrollView style={styles.modalContent}>
-            <View style={styles.formGroup}>
-              <Text style={styles.label}>Stream Title *</Text>
-              <TextInput
-                style={styles.input}
-                value={streamTitle}
-                onChangeText={setStreamTitle}
-                placeholder="Enter stream title"
-              />
-            </View>
+      {/* Start Live Stream Modal */}
+      <Modal
+        visible={showStartStreamModal}
+        animationType="slide"
+        transparent={true}
+        onRequestClose={() => {
+          setShowStartStreamModal(false);
+          resetStreamForm();
+        }}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <ScrollView style={styles.modalScroll}>
+              {/* Modal Header */}
+              <View style={styles.modalHeader}>
+                <Text style={styles.modalTitle}>Start Live Stream</Text>
+                <TouchableOpacity
+                  onPress={() => {
+                    setShowStartStreamModal(false);
+                    resetStreamForm();
+                  }}
+                  style={styles.modalCloseButton}
+                >
+                  <Text style={styles.modalCloseText}>✕</Text>
+                </TouchableOpacity>
+              </View>
 
-            <View style={styles.formGroup}>
-              <Text style={styles.label}>Host/Organizer *</Text>
-              <TextInput
-                style={styles.input}
-                value={streamHost}
-                onChangeText={setStreamHost}
-                placeholder="Enter host name"
-              />
-            </View>
+              {/* Stream Type Selection */}
+              <View style={styles.formGroup}>
+                <Text style={styles.formLabel}>Stream Type</Text>
+                <View style={styles.streamTypeContainer}>
+                  <TouchableOpacity
+                    style={[
+                      styles.streamTypeButton,
+                      streamForm.start_now && styles.streamTypeButtonActive
+                    ]}
+                    onPress={() => setStreamForm({ ...streamForm, start_now: true })}
+                  >
+                    <Play size={20} color={streamForm.start_now ? '#fff' : '#007AFF'} />
+                    <Text style={[
+                      styles.streamTypeText,
+                      streamForm.start_now && styles.streamTypeTextActive
+                    ]}>
+                      Go Live Now
+                    </Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={[
+                      styles.streamTypeButton,
+                      !streamForm.start_now && styles.streamTypeButtonActive
+                    ]}
+                    onPress={() => setStreamForm({ ...streamForm, start_now: false })}
+                  >
+                    <Clock size={20} color={!streamForm.start_now ? '#fff' : '#007AFF'} />
+                    <Text style={[
+                      styles.streamTypeText,
+                      !streamForm.start_now && styles.streamTypeTextActive
+                    ]}>
+                      Schedule
+                    </Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
 
-            <View style={styles.formGroup}>
-              <Text style={styles.label}>Stream URL *</Text>
-              <TextInput
-                style={styles.input}
-                value={streamUrl}
-                onChangeText={setStreamUrl}
-                placeholder="https://youtube.com/watch?v=..."
-                autoCapitalize="none"
-              />
-            </View>
-
-            <View style={styles.formRow}>
-              <View style={styles.formGroupHalf}>
-                <Text style={styles.label}>Date *</Text>
+              {/* Title */}
+              <View style={styles.formGroup}>
+                <Text style={styles.formLabel}>Stream Title *</Text>
                 <TextInput
-                  style={styles.input}
-                  value={scheduledDate}
-                  onChangeText={setScheduledDate}
-                  placeholder="YYYY-MM-DD"
+                  style={styles.formInput}
+                  placeholder="Enter a catchy title for your stream"
+                  value={streamForm.title}
+                  onChangeText={(text) => setStreamForm({ ...streamForm, title: text })}
+                  maxLength={100}
                 />
               </View>
-              <View style={styles.formGroupHalf}>
-                <Text style={styles.label}>Time *</Text>
+
+              {/* Category */}
+              <View style={styles.formGroup}>
+                <Text style={styles.formLabel}>Category</Text>
                 <TextInput
-                  style={styles.input}
-                  value={scheduledTime}
-                  onChangeText={setScheduledTime}
-                  placeholder="HH:MM"
+                  style={styles.formInput}
+                  placeholder="e.g., Music, Gaming, Education, Talk Show"
+                  value={streamForm.category}
+                  onChangeText={(text) => setStreamForm({ ...streamForm, category: text })}
+                  maxLength={50}
                 />
               </View>
-            </View>
 
-            <View style={styles.formGroup}>
-              <Text style={styles.label}>Thumbnail URL (Optional)</Text>
-              <TextInput
-                style={styles.input}
-                value={thumbnailUrl}
-                onChangeText={setThumbnailUrl}
-                placeholder="https://example.com/thumbnail.jpg"
-                autoCapitalize="none"
-              />
-            </View>
+              {/* Description */}
+              <View style={styles.formGroup}>
+                <Text style={styles.formLabel}>Description *</Text>
+                <TextInput
+                  style={[styles.formInput, styles.formTextArea]}
+                  placeholder="Describe what your stream is about..."
+                  value={streamForm.description}
+                  onChangeText={(text) => setStreamForm({ ...streamForm, description: text })}
+                  multiline
+                  numberOfLines={4}
+                  textAlignVertical="top"
+                />
+              </View>
 
-            <Text style={styles.infoText}>
-              Your stream will be reviewed by administrators before going live.
-            </Text>
+              {/* Short Description */}
+              <View style={styles.formGroup}>
+                <Text style={styles.formLabel}>Short Description (Optional)</Text>
+                <TextInput
+                  style={styles.formInput}
+                  placeholder="Brief one-liner for the card preview"
+                  value={streamForm.short_description}
+                  onChangeText={(text) => setStreamForm({ ...streamForm, short_description: text })}
+                  maxLength={100}
+                />
+              </View>
 
-            <TouchableOpacity
-              style={[styles.submitButton, isSubmitting && styles.submitButtonDisabled]}
-              onPress={handleSubmitStream}
-              disabled={isSubmitting}
-            >
-              {isSubmitting ? (
-                <ActivityIndicator color="#fff" />
-              ) : (
-                <Text style={styles.submitButtonText}>Submit for Approval</Text>
+              {/* Stream URL */}
+              <View style={styles.formGroup}>
+                <Text style={styles.formLabel}>Stream URL *</Text>
+                <TextInput
+                  style={styles.formInput}
+                  placeholder="https://youtube.com/live/... or Twitch link"
+                  value={streamForm.stream_url}
+                  onChangeText={(text) => setStreamForm({ ...streamForm, stream_url: text })}
+                  autoCapitalize="none"
+                  keyboardType="url"
+                />
+                <Text style={styles.formHint}>
+                  Your YouTube, Twitch, or other streaming platform link
+                </Text>
+              </View>
+
+              {/* Thumbnail URL */}
+              <View style={styles.formGroup}>
+                <Text style={styles.formLabel}>Thumbnail URL (Optional)</Text>
+                <TextInput
+                  style={styles.formInput}
+                  placeholder="https://example.com/thumbnail.jpg"
+                  value={streamForm.thumbnail_url}
+                  onChangeText={(text) => setStreamForm({ ...streamForm, thumbnail_url: text })}
+                  autoCapitalize="none"
+                  keyboardType="url"
+                />
+                <Text style={styles.formHint}>
+                  A cover image for your stream
+                </Text>
+              </View>
+
+              {/* Scheduled Time (if not starting now) */}
+              {!streamForm.start_now && (
+                <View style={styles.formGroup}>
+                  <Text style={styles.formLabel}>Scheduled Time</Text>
+                  <TextInput
+                    style={styles.formInput}
+                    placeholder="YYYY-MM-DD HH:MM (e.g., 2025-11-01 15:00)"
+                    value={streamForm.scheduled_time}
+                    onChangeText={(text) => setStreamForm({ ...streamForm, scheduled_time: text })}
+                  />
+                  <Text style={styles.formHint}>
+                    When should your stream start? Use format: YYYY-MM-DD HH:MM
+                  </Text>
+                </View>
               )}
-            </TouchableOpacity>
-          </ScrollView>
+
+              {/* Submit Buttons */}
+              <View style={styles.modalActions}>
+                <TouchableOpacity
+                  style={styles.cancelButton}
+                  onPress={() => {
+                    setShowStartStreamModal(false);
+                    resetStreamForm();
+                  }}
+                  disabled={submitting}
+                >
+                  <Text style={styles.cancelButtonText}>Cancel</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[styles.submitButton, submitting && styles.submitButtonDisabled]}
+                  onPress={handleSubmitStream}
+                  disabled={submitting}
+                >
+                  {submitting ? (
+                    <ActivityIndicator color="#fff" />
+                  ) : (
+                    <>
+                      <Play size={20} color="#fff" />
+                      <Text style={styles.submitButtonText}>
+                        {streamForm.start_now ? 'Go Live' : 'Schedule Stream'}
+                      </Text>
+                    </>
+                  )}
+                </TouchableOpacity>
+              </View>
+            </ScrollView>
+          </View>
         </View>
       </Modal>
     </View>
@@ -405,10 +924,15 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#f5f5f5',
+    position: 'relative',
   },
   backButton: {
     padding: 8,
     marginRight: 8,
+  },
+  refreshButton: {
+    padding: 8,
+    marginLeft: 8,
   },
   loadingContainer: {
     flex: 1,
@@ -434,8 +958,8 @@ const styles = StyleSheet.create({
     fontFamily: 'Inter-SemiBold',
     color: '#000',
   },
-  addButton: {
-    padding: 8,
+  placeholder: {
+    width: 40,
   },
   searchContainer: {
     flexDirection: 'row',
@@ -485,17 +1009,31 @@ const styles = StyleSheet.create({
   section: {
     marginBottom: 30,
   },
+  sectionHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 15,
+  },
   sectionTitle: {
     fontSize: 20,
     fontWeight: 'bold',
     color: '#000',
-    marginBottom: 15,
+  },
+  sectionCount: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#007AFF',
+    backgroundColor: '#f0f0f0',
+    paddingHorizontal: 12,
+    paddingVertical: 4,
+    borderRadius: 12,
   },
   streamCard: {
     backgroundColor: '#fff',
     borderRadius: 12,
-    padding: 16,
-    marginBottom: 12,
+    marginBottom: 16,
+    overflow: 'hidden',
     borderWidth: 1,
     borderColor: '#e0e0e0',
   },
@@ -503,123 +1041,318 @@ const styles = StyleSheet.create({
     borderColor: '#ff4444',
     borderWidth: 2,
   },
-  streamInfo: {
-    flex: 1,
-  },
-  streamTitle: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: '#000',
-    marginBottom: 4,
-  },
-  streamHost: {
-    fontSize: 14,
-    color: '#666',
-    marginBottom: 8,
-  },
-  streamMeta: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  streamTime: {
-    fontSize: 14,
-    color: '#666',
-    marginLeft: 6,
+  thumbnail: {
+    width: '100%',
+    height: 200,
+    backgroundColor: '#f0f0f0',
   },
   liveIndicator: {
     position: 'absolute',
     top: 12,
     right: 12,
     backgroundColor: '#ff4444',
-    paddingHorizontal: 8,
-    paddingVertical: 4,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 6,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  liveDot: {
+    width: 8,
+    height: 8,
     borderRadius: 4,
+    backgroundColor: '#fff',
   },
   liveText: {
     color: '#fff',
     fontSize: 12,
     fontWeight: 'bold',
   },
-  emptyText: {
-    fontSize: 16,
-    color: '#666',
-    textAlign: 'center',
-    fontStyle: 'italic',
-    marginTop: 20,
-  },
-  modalContainer: {
-    flex: 1,
-    backgroundColor: '#fff',
-  },
-  modalHeader: {
+  viewerCount: {
+    position: 'absolute',
+    top: 12,
+    left: 12,
+    backgroundColor: 'rgba(0, 0, 0, 0.7)',
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 6,
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
-    padding: 20,
-    borderBottomWidth: 1,
-    borderBottomColor: '#e0e0e0',
+    gap: 6,
   },
-  closeButton: {
-    padding: 8,
+  viewerCountText: {
+    color: '#fff',
+    fontSize: 12,
+    fontWeight: '600',
   },
-  modalTitle: {
+  streamContent: {
+    padding: 16,
+  },
+  streamTitle: {
     fontSize: 18,
     fontWeight: 'bold',
     color: '#000',
+    marginBottom: 8,
   },
-  placeholder: {
-    width: 40,
+  streamDescription: {
+    fontSize: 14,
+    color: '#666',
+    marginBottom: 12,
+    lineHeight: 20,
+  },
+  hostInfo: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 12,
+    gap: 10,
+  },
+  hostAvatar: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: '#e0e0e0',
+  },
+  hostDetails: {
+    flex: 1,
+  },
+  hostName: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#000',
+  },
+  category: {
+    fontSize: 12,
+    color: '#007AFF',
+  },
+  streamMeta: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 16,
+    gap: 6,
+  },
+  streamTime: {
+    fontSize: 14,
+    color: '#666',
+  },
+  actionButtons: {
+    flexDirection: 'row',
+    gap: 10,
+  },
+  joinButton: {
+    flex: 1,
+    backgroundColor: '#007AFF',
+    borderRadius: 8,
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+  },
+  liveJoinButton: {
+    backgroundColor: '#ff4444',
+  },
+  joinButtonText: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  remindButton: {
+    flex: 1,
+    backgroundColor: '#f0f0f0',
+    borderRadius: 8,
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    borderWidth: 1,
+    borderColor: '#007AFF',
+  },
+  remindButtonText: {
+    color: '#007AFF',
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  emptyState: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 60,
+    gap: 12,
+  },
+  emptyText: {
+    fontSize: 18,
+    color: '#666',
+    fontWeight: '600',
+  },
+  emptySubtext: {
+    fontSize: 14,
+    color: '#999',
+  },
+  // Floating Action Button Container
+  fabContainer: {
+    position: 'absolute',
+    bottom: 0,
+    right: 0,
+    left: 0,
+    top: 0,
+    zIndex: 9999,
+    elevation: 9999,
+  },
+  // Floating Action Button
+  fab: {
+    position: 'absolute',
+    bottom: 30,
+    right: 30,
+    width: 64,
+    height: 64,
+    borderRadius: 32,
+    backgroundColor: '#ff4444',
+    justifyContent: 'center',
+    alignItems: 'center',
+    elevation: 10,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    zIndex: 10000,
+  },
+  // Modal Styles
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'flex-end',
   },
   modalContent: {
-    flex: 1,
+    backgroundColor: '#fff',
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    maxHeight: '90%',
+    paddingBottom: 20,
+  },
+  modalScroll: {
     padding: 20,
   },
+  modalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 24,
+  },
+  modalTitle: {
+    fontSize: 24,
+    fontWeight: 'bold',
+    color: '#000',
+  },
+  modalCloseButton: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: '#f0f0f0',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  modalCloseText: {
+    fontSize: 20,
+    color: '#666',
+  },
+  // Stream Type Selection
+  streamTypeContainer: {
+    flexDirection: 'row',
+    gap: 12,
+    marginTop: 8,
+  },
+  streamTypeButton: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    paddingVertical: 14,
+    borderRadius: 10,
+    borderWidth: 2,
+    borderColor: '#007AFF',
+    backgroundColor: '#fff',
+  },
+  streamTypeButtonActive: {
+    backgroundColor: '#007AFF',
+    borderColor: '#007AFF',
+  },
+  streamTypeText: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#007AFF',
+  },
+  streamTypeTextActive: {
+    color: '#fff',
+  },
+  // Form Styles
   formGroup: {
     marginBottom: 20,
   },
-  formRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-  },
-  formGroupHalf: {
-    flex: 0.48,
-    marginBottom: 20,
-  },
-  label: {
+  formLabel: {
     fontSize: 16,
     fontWeight: '600',
     color: '#000',
     marginBottom: 8,
   },
-  input: {
-    borderWidth: 1,
-    borderColor: '#e0e0e0',
-    borderRadius: 8,
-    padding: 12,
+  formInput: {
+    backgroundColor: '#f5f5f5',
+    borderRadius: 10,
+    paddingHorizontal: 16,
+    paddingVertical: 14,
     fontSize: 16,
     color: '#000',
-    backgroundColor: '#f9f9f9',
+    borderWidth: 1,
+    borderColor: '#e0e0e0',
   },
-  infoText: {
-    fontSize: 14,
+  formTextArea: {
+    minHeight: 100,
+    paddingTop: 14,
+  },
+  formHint: {
+    fontSize: 12,
     color: '#666',
-    textAlign: 'center',
-    marginBottom: 20,
+    marginTop: 6,
     fontStyle: 'italic',
   },
-  submitButton: {
-    backgroundColor: '#007AFF',
-    borderRadius: 8,
-    padding: 16,
+  // Modal Actions
+  modalActions: {
+    flexDirection: 'row',
+    gap: 12,
+    marginTop: 24,
+  },
+  cancelButton: {
+    flex: 1,
+    paddingVertical: 16,
+    borderRadius: 10,
+    backgroundColor: '#f0f0f0',
     alignItems: 'center',
-    marginBottom: 20,
+    justifyContent: 'center',
+  },
+  cancelButtonText: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#666',
+  },
+  submitButton: {
+    flex: 1,
+    paddingVertical: 16,
+    borderRadius: 10,
+    backgroundColor: '#ff4444',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
   },
   submitButtonDisabled: {
-    backgroundColor: '#ccc',
+    opacity: 0.6,
   },
   submitButtonText: {
-    color: '#fff',
     fontSize: 16,
-    fontWeight: 'bold',
+    fontWeight: '600',
+    color: '#fff',
   },
 });

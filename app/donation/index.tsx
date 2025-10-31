@@ -309,6 +309,7 @@ export default function DonationScreen() {
   const fetchCampaigns = async () => {
     try {
       setLoadingCampaigns(true);
+      console.log('🔍 Fetching campaigns from database...');
       const { data, error } = await supabase
         .from('campaigns')
         .select('*')
@@ -318,6 +319,11 @@ export default function DonationScreen() {
       if (error) {
         console.error('Error fetching campaigns:', error);
         return;
+      }
+
+      console.log('📦 Campaigns fetched:', data?.length);
+      if (data && data.length > 0) {
+        console.log('💵 First campaign raised_amount:', data[0].raised_amount);
       }
 
       // Transform data to match the expected format
@@ -335,6 +341,7 @@ export default function DonationScreen() {
         raisedAmount: campaign.raised_amount,
       })) || [];
 
+      console.log('✅ Setting campaigns state with', transformedCampaigns.length, 'campaigns');
       setCampaigns(transformedCampaigns);
       setDonationStats(prev => ({
         ...prev,
@@ -384,21 +391,39 @@ export default function DonationScreen() {
 
   const fetchDonationStats = async () => {
     try {
-      // Get total amount raised
-      const { data: donations, error: donationsError } = await supabase
-        .from('donations')
-        .select('amount, user_id');
+      // Get total amount raised from campaigns
+      const { data: campaignsData, error: campaignsError } = await supabase
+        .from('campaigns')
+        .select('raised_amount');
 
-      if (donationsError) {
-        console.error('Error fetching donations:', donationsError);
-        return;
+      if (campaignsError) {
+        console.error('Error fetching campaigns:', campaignsError);
       }
 
-      const totalRaised = donations?.reduce((sum, d) => sum + Number(d.amount), 0) || 0;
+      const totalRaised = campaignsData?.reduce((sum, c) => sum + Number(c.raised_amount), 0) || 0;
       
-      // Get unique donors count
-      const uniqueDonors = new Set(donations?.map(d => d.user_id).filter(id => id !== null));
-      const totalDonors = uniqueDonors.size;
+      // Get total donors count from donors table
+      const { count: donorsCount, error: donorsError } = await supabase
+        .from('donors')
+        .select('*', { count: 'exact', head: true });
+
+      if (donorsError) {
+        console.error('Error fetching donors count:', donorsError);
+      }
+
+      const totalDonors = donorsCount || 0;
+      
+      // Get active campaigns count
+      const { count: activeCampaignsCount, error: activeCampaignsError } = await supabase
+        .from('campaigns')
+        .select('*', { count: 'exact', head: true })
+        .eq('status', 'active');
+
+      if (activeCampaignsError) {
+        console.error('Error fetching active campaigns:', activeCampaignsError);
+      }
+
+      const activeCampaigns = activeCampaignsCount || 0;
       
       // Calculate impact score (total raised / 100)
       const impactScore = Math.floor(totalRaised / 100);
@@ -406,7 +431,7 @@ export default function DonationScreen() {
       setDonationStats({
         totalRaised,
         totalDonors,
-        activeCampaigns: 3, // Can be made dynamic later
+        activeCampaigns,
         impactScore,
       });
     } catch (error) {
@@ -582,6 +607,30 @@ export default function DonationScreen() {
       // Get current user
       const { data: { user } } = await supabase.auth.getUser();
 
+      // Get donor name and email
+      let donorName = 'Anonymous';
+      let donorEmail = null;
+      
+      if (user) {
+        // Try to get user profile data
+        const { data: profile } = await supabase
+          .from('profiles')
+          .select('full_name, email')
+          .eq('id', user.id)
+          .single();
+        
+        if (profile) {
+          donorName = profile.full_name || user.email?.split('@')[0] || 'Anonymous';
+          donorEmail = profile.email || user.email;
+        } else {
+          donorName = user.email?.split('@')[0] || 'Anonymous';
+          donorEmail = user.email;
+        }
+      } else if (paymentMethod === 'mobile-money' && momoName) {
+        donorName = momoName;
+        donorEmail = momoPhone ? `${momoPhone}@mobile.donor` : null;
+      }
+
       // Insert donation into database
       const { data, error } = await supabase
         .from('donations')
@@ -592,6 +641,8 @@ export default function DonationScreen() {
           amount: finalAmount,
           payment_method: paymentMethod,
           status: 'completed',
+          donor_name: donorName,
+          donor_email: donorEmail,
         })
         .select()
         .single();
@@ -602,12 +653,47 @@ export default function DonationScreen() {
         return;
       }
 
-      console.log('Donation saved:', data);
+      console.log('✅ Donation saved:', data);
+      console.log('💰 Donation amount:', finalAmount);
+      console.log('🎯 Campaign ID:', selectedCampaign.id);
+      console.log('📊 Current raised amount (before):', selectedCampaign.raisedAmount);
+      
+      // Update campaign raised_amount in database using RPC to increment
+      const { data: currentCampaign, error: fetchError } = await supabase
+        .from('campaigns')
+        .select('raised_amount')
+        .eq('id', selectedCampaign.id)
+        .single();
+
+      if (fetchError) {
+        console.error('❌ Error fetching current campaign:', fetchError);
+      } else {
+        console.log('📈 Database current raised_amount:', currentCampaign.raised_amount);
+        const newRaisedAmount = Number(currentCampaign.raised_amount) + finalAmount;
+        console.log('🎯 New raised_amount will be:', newRaisedAmount);
+        
+        const { error: updateError } = await supabase
+          .from('campaigns')
+          .update({
+            raised_amount: newRaisedAmount
+          })
+          .eq('id', selectedCampaign.id);
+
+        if (updateError) {
+          console.error('❌ Error updating campaign:', updateError);
+        } else {
+          console.log('✅ Campaign raised_amount updated successfully to:', newRaisedAmount);
+        }
+      }
       
       // Refresh donation stats, campaign data, and donors after successful donation
+      console.log('🔄 Refreshing stats...');
       await fetchDonationStats();
+      console.log('🔄 Refreshing campaigns...');
       await fetchCampaigns();
+      console.log('🔄 Refreshing donors...');
       await fetchRecentDonors();
+      console.log('✅ All data refreshed!');
       
       setDonateModalVisible(false);
       
@@ -1751,6 +1837,10 @@ export default function DonationScreen() {
 }
 
 const styles = StyleSheet.create({
+  loadingText: { textAlign: 'center', marginTop: 40 },
+  emptyContainer: { alignItems: 'center', marginTop: 40 },
+  emptyText: { textAlign: 'center', marginTop: 16, color: '#666', fontSize: 16 },
+  emptySubtext: { textAlign: 'center', marginTop: 8, color: '#999', fontSize: 14 },
   container: {
     flex: 1,
     backgroundColor: '#FFFFFF',

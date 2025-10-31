@@ -17,6 +17,13 @@ const EDUCATION_TYPES = [
   { id: '3', name: 'Research Grants', icon: BookOpen },
   { id: '4', name: 'Exchange Programs', icon: Globe },
   { id: '5', name: 'Summer Schools', icon: Users },
+  { id: '6', name: 'Alumni Lecturers & Mentors', icon: Users },
+  { id: '7', name: 'Online Courses', icon: BookOpen },
+  { id: '8', name: 'Vocational Training', icon: GraduationCap },
+  { id: '9', name: 'Student Competitions', icon: Award },
+  { id: '10', name: 'Internships', icon: Wallet },
+  { id: '11', name: 'Study Abroad', icon: Globe },
+  { id: '12', name: 'Educational Events', icon: Clock },
 ];
 
 const FEATURED_UNIVERSITIES = [

@@ -241,26 +241,65 @@ export default function CategoryCampaignsScreen() {
     setIsSubmitting(true);
 
     try {
+      // Get current user
+      const { data: { user } } = await supabase.auth.getUser();
+
+      // Get donor name and email
+      let donorName = 'Anonymous';
+      let donorEmail = null;
+      
+      if (user) {
+        const { data: profile } = await supabase
+          .from('profiles')
+          .select('full_name, email')
+          .eq('id', user.id)
+          .single();
+        
+        if (profile) {
+          donorName = profile.full_name || user.email?.split('@')[0] || 'Anonymous';
+          donorEmail = profile.email || user.email;
+        } else {
+          donorName = user.email?.split('@')[0] || 'Anonymous';
+          donorEmail = user.email;
+        }
+      } else if (paymentMethod === 'mobile-money' && momoName) {
+        donorName = momoName;
+        donorEmail = momoPhone ? `${momoPhone}@mobile.donor` : null;
+      }
+
       const { data, error } = await supabase
         .from('donations')
         .insert({
+          user_id: user?.id || null,
           campaign_id: selectedCampaign.id,
+          campaign_title: selectedCampaign.title,
           amount: amount,
           payment_method: paymentMethod,
           status: 'completed',
+          donor_name: donorName,
+          donor_email: donorEmail,
         })
         .select()
         .single();
 
       if (error) throw error;
 
-      // Update campaign raised amount
-      await supabase
+      // Update campaign raised amount - fetch current amount first
+      const { data: currentCampaign } = await supabase
         .from('campaigns')
-        .update({ 
-          raised_amount: selectedCampaign.raisedAmount + amount 
-        })
-        .eq('id', selectedCampaign.id);
+        .select('raised_amount')
+        .eq('id', selectedCampaign.id)
+        .single();
+
+      if (currentCampaign) {
+        const newRaisedAmount = Number(currentCampaign.raised_amount) + amount;
+        await supabase
+          .from('campaigns')
+          .update({ 
+            raised_amount: newRaisedAmount 
+          })
+          .eq('id', selectedCampaign.id);
+      }
 
       setDonateModalVisible(false);
       Alert.alert(

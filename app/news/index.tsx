@@ -13,11 +13,26 @@ const CARD_WIDTH = width - 48;
 
 const NEWS_CATEGORIES = [
   { id: 'all', name: 'All News' },
-  { id: 'alumni', name: 'Alumni Updates' },
+  { id: 'akora', name: 'Akora Updates' },
   { id: 'school', name: 'School News' },
   { id: 'world', name: 'World News' },
   { id: 'tech', name: 'Technology' },
   { id: 'business', name: 'Business' },
+  { id: 'health', name: 'Health' },
+  { id: 'sports', name: 'Sports' },
+  { id: 'lifestyle', name: 'Lifestyle' },
+  { id: 'culture', name: 'Culture' },
+  { id: 'science', name: 'Science' },
+  { id: 'weather', name: 'Weather' },
+  { id: 'politics', name: 'Politics' },
+  { id: 'entertainment', name: 'Entertainment' },
+  { id: 'travel', name: 'Travel' },
+  { id: 'food', name: 'Food' },
+  { id: 'opinion', name: 'Opinion' },
+  { id: 'education', name: 'Education' },
+  { id: 'finance', name: 'Finance' },
+  { id: 'environment', name: 'Environment' },
+  { id: 'art', name: 'Art' },
 ];
 
 interface NewsItem {
@@ -31,6 +46,7 @@ interface NewsItem {
   comments: number;
   excerpt?: string;
   content?: string;
+  link?: string;
   author?: {
     name: string;
     avatar: string;
@@ -88,9 +104,9 @@ export default function NewsScreen() {
     try {
       setLoading(true);
       
-      // Fetch news articles from products_services table
+      // Fetch news articles from the dedicated news table
       const { data: newsData, error: newsError } = await supabase
-        .from('products_services')
+        .from('news')
         .select(`
           *,
           profiles (
@@ -100,17 +116,18 @@ export default function NewsScreen() {
             avatar_url
           )
         `)
-        .like('category_name', 'News - %')
         .eq('is_approved', true)
-        .order('created_at', { ascending: false });
+        .order('published_at', { ascending: false });
       
       if (newsError) throw newsError;
       
       // Process the news data
       const processedNews = (newsData || []).map((item, index) => {
-        // Parse the category from category_name (format: "News - Category")
-        const categoryParts = item.category_name.split(' - ');
-        const category = categoryParts.length > 1 ? categoryParts[1] : 'General';
+  // Parse the category from category_name (format: "News - Category")
+  const categoryParts = item.category_name.split(' - ');
+  let category = categoryParts.length > 1 ? categoryParts[1] : 'General';
+  // Rename Alumni Updates to Akora Updates for consistency
+  if (category.toLowerCase() === 'alumni updates') category = 'Akora Updates';
         
         // Parse the description to extract content and excerpt
         let content = item.description;
@@ -138,6 +155,7 @@ export default function NewsScreen() {
           comments,
           excerpt,
           content,
+          link: item.external_link || '',
           user: item.profiles,
           author: {
             name: item.profiles?.full_name || item.profiles?.username || 'Anonymous',
@@ -187,6 +205,9 @@ export default function NewsScreen() {
           excerpt: 'Distinguished alumni share insights on AI and future of technology...',
           timeAgo: '1 hour ago',
           readTime: '4 min read',
+          link: 'https://example.com/tech-summit-2024',
+          likes: 1200,
+          comments: 85,
         },
         {
           id: '2',
@@ -196,6 +217,9 @@ export default function NewsScreen() {
           excerpt: 'Scientists discover new method for efficient solar energy storage...',
           timeAgo: '3 hours ago',
           readTime: '6 min read',
+          link: 'https://example.com/renewable-energy-breakthrough',
+          likes: 856,
+          comments: 42,
         },
         {
           id: '3',
@@ -205,6 +229,9 @@ export default function NewsScreen() {
           excerpt: 'Community raises over $10 million for scholarship fund...',
           timeAgo: '5 hours ago',
           readTime: '3 min read',
+          link: 'https://example.com/alumni-giving-day-record',
+          likes: 500,
+          comments: 20,
         },
       ]);
     } finally {
@@ -232,12 +259,40 @@ export default function NewsScreen() {
   
   // Filter news based on search query and selected category
   const filterNews = useCallback((news: NewsItem[]) => {
+    // Map category names to their corresponding IDs for filtering
+    const categoryNameToId = {
+      'All News': 'all',
+      'Akora Updates': 'akora',
+      'School News': 'school',
+      'World News': 'world',
+      'Technology': 'tech',
+      'Business': 'business',
+      'Health': 'health',
+      'Sports': 'sports',
+      'Lifestyle': 'lifestyle',
+      'Culture': 'culture',
+      'Science': 'science',
+      'Weather': 'weather',
+      'Politics': 'politics',
+      'Entertainment': 'entertainment',
+      'Travel': 'travel',
+      'Food': 'food',
+      'Opinion': 'opinion',
+      'Education': 'education',
+      'Finance': 'finance',
+      'Environment': 'environment',
+      'Art': 'art',
+    };
     return news.filter(item => {
       // Filter by category
-      if (activeCategory !== 'all' && item.category.toLowerCase() !== activeCategory) {
-        return false;
+      if (activeCategory !== 'all') {
+        const itemCategoryId = (Object.prototype.hasOwnProperty.call(categoryNameToId, item.category)
+          ? categoryNameToId[item.category as keyof typeof categoryNameToId]
+          : item.category.toLowerCase());
+        if (itemCategoryId !== activeCategory) {
+          return false;
+        }
       }
-      
       // Filter by search query
       if (searchQuery) {
         const query = searchQuery.toLowerCase();
@@ -247,7 +302,6 @@ export default function NewsScreen() {
           (item.author?.name.toLowerCase().includes(query) || false)
         );
       }
-      
       return true;
     });
   }, [activeCategory, searchQuery]);
@@ -362,8 +416,7 @@ export default function NewsScreen() {
             <TouchableOpacity 
               style={styles.seeAllButton}
               onPress={() => {
-                Alert.alert('Featured News', 'View all featured news articles');
-                // In a real app, this would navigate to a dedicated featured news screen
+                router.push({ pathname: '/news/see-all', params: { type: 'featured' } });
               }}
             >
               <Text style={styles.seeAllText}>See All</Text>
@@ -430,8 +483,7 @@ export default function NewsScreen() {
             <TouchableOpacity 
               style={styles.seeAllButton}
               onPress={() => {
-                Alert.alert('Latest News', 'View all latest news articles');
-                // In a real app, this would navigate to a dedicated latest news screen
+                router.push({ pathname: '/news/see-all', params: { type: 'latest' } });
               }}
             >
               <Text style={styles.seeAllText}>See All</Text>
@@ -451,7 +503,17 @@ export default function NewsScreen() {
                   <View style={styles.latestContent}>
                     <Text style={styles.latestCategory}>{item.category}</Text>
                     <Text style={styles.latestTitle}>{item.title}</Text>
-                    <Text style={styles.latestExcerpt}>{item.excerpt}</Text>
+                    {/* Brief summary with clickable link */}
+                    <Text style={styles.latestExcerpt}>
+                      {item.excerpt}
+                      {item.link && typeof item.link === 'string' && (
+                        <Text style={{ color: '#007AFF', textDecorationLine: 'underline' }} onPress={() => {
+                          import('react-native').then(RN => RN.Linking.openURL(item.link as string));
+                        }}>
+                          {' '}Read more
+                        </Text>
+                      )}
+                    </Text>
                     <View style={styles.latestMeta}>
                       <View style={styles.metaItem}>
                         <Clock size={14} color="#666" />
