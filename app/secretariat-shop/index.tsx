@@ -1,8 +1,11 @@
-import { View, Text, StyleSheet, ScrollView, Image, TouchableOpacity, TextInput, Dimensions } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, Image, TouchableOpacity, TextInput, Dimensions, Alert, Modal } from 'react-native';
 import { useFonts, Inter_400Regular, Inter_600SemiBold } from '@expo-google-fonts/inter';
-import { useEffect, useState } from 'react';
-import { SplashScreen, useRouter } from 'expo-router';
-import { ArrowLeft, ShoppingBag, Search, Filter, DollarSign, Truck, Package, Heart, Plus, Minus, ShoppingCart } from 'lucide-react-native';
+import { useEffect, useState, useCallback } from 'react';
+import { SplashScreen, useRouter, useFocusEffect, Link } from 'expo-router';
+import { ArrowLeft, ShoppingBag, Search, Filter, DollarSign, Truck, Package, Heart, Plus, Minus, ShoppingCart, X, PlusCircle } from 'lucide-react-native';
+import { addToCart, getCartCount, hasCartBeenViewed, resetCartViewedStatus, getFavorites, toggleFavorite } from '@/lib/secretariatCart';
+import { LinearGradient } from 'expo-linear-gradient';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 SplashScreen.preventAutoHideAsync();
 
@@ -14,49 +17,61 @@ const SOUVENIR_PRODUCTS = [
     id: '1',
     name: 'Alumni Branded Polo Shirt',
     description: 'High-quality cotton polo with embroidered school logo',
-    price: 35.99,
+    priceUSD: 35.99,
+    priceGHS: 430.00,
     image: 'https://images.unsplash.com/photo-1586363104862-3a5e2ab60d99?w=800&auto=format&fit=crop&q=60',
     category: 'Clothing',
+    sizes: ['S', 'M', 'L', 'XL', 'XXL'],
   },
   {
     id: '2',
     name: 'Commemorative Mug',
     description: 'Ceramic mug featuring the school crest and motto',
-    price: 15.99,
+    priceUSD: 15.99,
+    priceGHS: 190.00,
     image: 'https://images.unsplash.com/photo-1514228742587-6b1558fcca3d?w=800&auto=format&fit=crop&q=60',
     category: 'Homeware',
+    sizes: ['One Size'],
   },
   {
     id: '3',
     name: 'Leather Notebook',
     description: 'Premium leather-bound notebook with embossed logo',
-    price: 24.99,
+    priceUSD: 24.99,
+    priceGHS: 300.00,
     image: 'https://images.unsplash.com/photo-1544816155-12df9643f363?w=800&auto=format&fit=crop&q=60',
     category: 'Stationery',
+    sizes: ['A5', 'A4'],
   },
   {
     id: '4',
     name: 'Anniversary Yearbook',
     description: 'Special edition commemorating school milestones',
-    price: 49.99,
+    priceUSD: 49.99,
+    priceGHS: 600.00,
     image: 'https://images.unsplash.com/photo-1532012197267-da84d127e765?w=800&auto=format&fit=crop&q=60',
     category: 'Books',
+    sizes: ['Standard'],
   },
   {
     id: '5',
     name: 'School Crest Lapel Pin',
     description: 'Elegant metal pin featuring the school crest',
-    price: 12.99,
+    priceUSD: 12.99,
+    priceGHS: 155.00,
     image: 'https://images.unsplash.com/photo-1601591219083-d9d11b6a8852?w=800&auto=format&fit=crop&q=60',
     category: 'Accessories',
+    sizes: ['One Size'],
   },
   {
     id: '6',
     name: 'Alumni Hoodie',
     description: 'Comfortable hoodie with school colors and logo',
-    price: 45.99,
+    priceUSD: 45.99,
+    priceGHS: 550.00,
     image: 'https://images.unsplash.com/photo-1620799140408-edc6dcb6d633?w=800&auto=format&fit=crop&q=60',
     category: 'Clothing',
+    sizes: ['S', 'M', 'L', 'XL', 'XXL'],
   },
 ];
 
@@ -93,11 +108,51 @@ export default function SecretariatShopScreen() {
   const [activeCategory, setActiveCategory] = useState('all');
   const [cartCount, setCartCount] = useState(0);
   const [searchQuery, setSearchQuery] = useState('');
+  const [currency, setCurrency] = useState<'USD' | 'GHS'>('USD');
+  const [showCartBadge, setShowCartBadge] = useState(false);
+  const [filterModalVisible, setFilterModalVisible] = useState(false);
+  const [favorites, setFavorites] = useState<string[]>([]);
+  const [postedItems, setPostedItems] = useState<any[]>([]);
+  
+  // Filter states
+  const [selectedCategories, setSelectedCategories] = useState<string[]>([]);
+  const [selectedSizes, setSelectedSizes] = useState<string[]>([]);
+  const [priceRange, setPriceRange] = useState({ min: '', max: '' });
+  const [filterCurrency, setFilterCurrency] = useState<'USD' | 'GHS'>('USD');
   
   const [fontsLoaded] = useFonts({
     'Inter-Regular': Inter_400Regular,
     'Inter-SemiBold': Inter_600SemiBold,
   });
+
+  const loadCartCount = async () => {
+    const count = await getCartCount();
+    setCartCount(count);
+    
+    // Check if cart has been viewed
+    const viewed = await hasCartBeenViewed();
+    setShowCartBadge(!viewed && count > 0);
+    
+    // Load favorites
+    const favoriteIds = await getFavorites();
+    setFavorites(favoriteIds);
+    
+    // Load posted items
+    const storedItems = await AsyncStorage.getItem('secretariat_posted_items');
+    if (storedItems) {
+      setPostedItems(JSON.parse(storedItems));
+    }
+  };
+
+  useEffect(() => {
+    loadCartCount();
+  }, []);
+
+  useFocusEffect(
+    useCallback(() => {
+      loadCartCount();
+    }, [])
+  );
 
   useEffect(() => {
     if (fontsLoaded) {
@@ -109,27 +164,122 @@ export default function SecretariatShopScreen() {
     return null;
   }
 
-  const filteredProducts = SOUVENIR_PRODUCTS.filter(product => {
+  // Get all unique sizes from products
+  const allProducts = [...SOUVENIR_PRODUCTS, ...postedItems];
+  const allSizes = Array.from(new Set(allProducts.flatMap(p => p.sizes)));
+
+  const toggleCategory = (categoryId: string) => {
+    setSelectedCategories(prev => 
+      prev.includes(categoryId) 
+        ? prev.filter(c => c !== categoryId)
+        : [...prev, categoryId]
+    );
+  };
+
+  const toggleSize = (size: string) => {
+    setSelectedSizes(prev => 
+      prev.includes(size) 
+        ? prev.filter(s => s !== size)
+        : [...prev, size]
+    );
+  };
+
+  const applyFilters = () => {
+    setFilterModalVisible(false);
+  };
+
+  const clearFilters = () => {
+    setSelectedCategories([]);
+    setSelectedSizes([]);
+    setPriceRange({ min: '', max: '' });
+    setFilterCurrency('USD');
+  };
+
+  const filteredProducts = allProducts.filter(product => {
+    // Filter by search query
+    if (searchQuery) {
+      const query = searchQuery.toLowerCase();
+      const matchesSearch = (
+        product.name.toLowerCase().includes(query) ||
+        product.description.toLowerCase().includes(query) ||
+        product.category.toLowerCase().includes(query) ||
+        product.sizes.some((size: string) => size.toLowerCase().includes(query))
+      );
+      if (!matchesSearch) return false;
+    }
+
     // Filter by category
     if (activeCategory !== 'all' && product.category.toLowerCase() !== activeCategory) {
       return false;
     }
-    
-    // Filter by search query
-    if (searchQuery) {
-      const query = searchQuery.toLowerCase();
-      return (
-        product.name.toLowerCase().includes(query) ||
-        product.description.toLowerCase().includes(query) ||
-        product.category.toLowerCase().includes(query)
-      );
+
+    // Filter by selected categories from filter modal
+    if (selectedCategories.length > 0) {
+      if (!selectedCategories.includes(product.category)) {
+        return false;
+      }
+    }
+
+    // Filter by selected sizes
+    if (selectedSizes.length > 0) {
+      if (!product.sizes.some((size: string) => selectedSizes.includes(size))) {
+        return false;
+      }
+    }
+
+    // Filter by price range
+    if (priceRange.min || priceRange.max) {
+      const price = filterCurrency === 'USD' ? product.priceUSD : product.priceGHS;
+      const min = priceRange.min ? parseFloat(priceRange.min) : 0;
+      const max = priceRange.max ? parseFloat(priceRange.max) : Infinity;
+      
+      if (price < min || price > max) {
+        return false;
+      }
     }
     
     return true;
   });
 
-  const handleAddToCart = () => {
-    setCartCount(prev => prev + 1);
+  const handleAddToCart = async (product: any) => {
+    try {
+      const price = currency === 'USD' ? product.priceUSD : product.priceGHS;
+      
+      await addToCart({
+        id: `cart_${Date.now()}`,
+        productId: product.id,
+        name: product.name,
+        description: product.description,
+        price: price,
+        currency: currency,
+        image: product.images ? product.images[0] : product.image,
+        category: product.category,
+      });
+      
+      // Reset cart viewed status when adding new item
+      await resetCartViewedStatus();
+      
+      const count = await getCartCount();
+      setCartCount(count);
+      setShowCartBadge(true);
+      
+      Alert.alert(
+        'Added to Cart',
+        `${product.name} has been added to your cart.`,
+        [
+          { text: 'Continue Shopping', style: 'cancel' },
+          { text: 'View Cart', onPress: () => router.push('/cart') },
+        ]
+      );
+    } catch (error) {
+      Alert.alert('Error', 'Failed to add item to cart');
+    }
+  };
+
+  const handleToggleFavorite = async (productId: string) => {
+    await toggleFavorite(productId);
+    const updatedFavorites = await getFavorites();
+    setFavorites(updatedFavorites);
   };
 
   return (
@@ -139,14 +289,30 @@ export default function SecretariatShopScreen() {
           <ArrowLeft size={24} color="#000000" />
         </TouchableOpacity>
         <Text style={styles.title}>Secretariat Shop</Text>
-        <TouchableOpacity style={styles.cartButton}>
-          <ShoppingCart size={24} color="#000000" />
-          {cartCount > 0 && (
-            <View style={styles.cartBadge}>
-              <Text style={styles.cartBadgeText}>{cartCount}</Text>
-            </View>
-          )}
-        </TouchableOpacity>
+        <View style={styles.headerIcons}>
+          <TouchableOpacity 
+            style={styles.favoritesButton}
+            onPress={() => router.push('/secretariat-shop/favorites')}
+          >
+            <Heart 
+              size={24} 
+              color="#FF3B30" 
+              fill={favorites.length > 0 ? "#FF3B30" : "transparent"}
+              strokeWidth={2}
+            />
+          </TouchableOpacity>
+          <TouchableOpacity 
+            style={styles.cartButton}
+            onPress={() => router.push('/cart')}
+          >
+            <ShoppingCart size={24} color="#000000" />
+            {showCartBadge && (
+              <View style={styles.cartBadge}>
+                <Text style={styles.cartBadgeText}>{cartCount}</Text>
+              </View>
+            )}
+          </TouchableOpacity>
+        </View>
       </View>
 
       <View style={styles.searchContainer}>
@@ -160,39 +326,94 @@ export default function SecretariatShopScreen() {
             onChangeText={setSearchQuery}
           />
         </View>
-        <TouchableOpacity style={styles.filterButton}>
+        <TouchableOpacity 
+          style={styles.filterIconButton}
+          onPress={() => setFilterModalVisible(true)}
+        >
           <Filter size={20} color="#666666" />
+          {(selectedCategories.length > 0 || selectedSizes.length > 0 || priceRange.min || priceRange.max) && (
+            <View style={styles.filterBadge}>
+              <Text style={styles.filterBadgeText}>
+                {selectedCategories.length + selectedSizes.length + (priceRange.min || priceRange.max ? 1 : 0)}
+              </Text>
+            </View>
+          )}
         </TouchableOpacity>
       </View>
 
-      <ScrollView
-        horizontal
-        showsHorizontalScrollIndicator={false}
-        style={styles.categoriesScroll}
-        contentContainerStyle={styles.categoriesContent}
-      >
-        {PRODUCT_CATEGORIES.map((category) => (
+      {/* Currency Toggle */}
+      <View style={styles.currencyContainer}>
+        <View style={styles.currencyToggle}>
           <TouchableOpacity
-            key={category.id}
-            style={[
-              styles.categoryButton,
-              activeCategory === category.id && styles.activeCategoryButton,
-            ]}
-            onPress={() => setActiveCategory(category.id)}
+            style={[styles.currencyButton, currency === 'USD' && styles.activeCurrencyButton]}
+            onPress={() => setCurrency('USD')}
           >
-            <Text
-              style={[
-                styles.categoryText,
-                activeCategory === category.id && styles.activeCategoryText,
-              ]}
-            >
-              {category.name}
+            <Text style={[styles.currencyButtonText, currency === 'USD' && styles.activeCurrencyButtonText]}>
+              USD ($)
             </Text>
           </TouchableOpacity>
-        ))}
-      </ScrollView>
+          <TouchableOpacity
+            style={[styles.currencyButton, currency === 'GHS' && styles.activeCurrencyButton]}
+            onPress={() => setCurrency('GHS')}
+          >
+            <Text style={[styles.currencyButtonText, currency === 'GHS' && styles.activeCurrencyButtonText]}>
+              GHS (₵)
+            </Text>
+          </TouchableOpacity>
+        </View>
+      </View>
 
       <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
+        {/* Post Item Button */}
+        <View style={styles.postItemContainer}>
+          <TouchableOpacity 
+            style={styles.postItemButton}
+            onPress={() => {
+              console.log('Navigating to post-item');
+              router.push('/secretariat-shop/post-item');
+            }}
+            activeOpacity={0.8}
+          >
+            <LinearGradient
+              colors={['#10B981', '#059669']}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 0 }}
+              style={styles.postItemGradient}
+            >
+              <PlusCircle size={20} color="#FFFFFF" />
+              <Text style={styles.postItemText}>Post Item to Shop</Text>
+            </LinearGradient>
+          </TouchableOpacity>
+        </View>
+
+        {/* Categories as first item in scrollable content */}
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          style={styles.categoriesScroll}
+          contentContainerStyle={styles.categoriesContent}
+        >
+          {PRODUCT_CATEGORIES.map((category) => (
+            <TouchableOpacity
+              key={category.id}
+              style={[
+                styles.categoryButton,
+                activeCategory === category.id && styles.activeCategoryButton,
+              ]}
+              onPress={() => setActiveCategory(category.id)}
+            >
+              <Text
+                style={[
+                  styles.categoryText,
+                  activeCategory === category.id && styles.activeCategoryText,
+                ]}
+              >
+                {category.name}
+              </Text>
+            </TouchableOpacity>
+          ))}
+        </ScrollView>
+
         <View style={styles.productsGrid}>
           {filteredProducts.length === 0 ? (
             <View style={styles.emptyContainer}>
@@ -200,19 +421,45 @@ export default function SecretariatShopScreen() {
             </View>
           ) : (
             filteredProducts.map((product) => (
-              <TouchableOpacity key={product.id} style={styles.productCard}>
-                <Image source={{ uri: product.image }} style={styles.productImage} />
+              <TouchableOpacity 
+                key={product.id} 
+                style={styles.productCard}
+                onPress={() => router.push(`/secretariat-shop/${product.id}` as any)}
+              >
+                <Image 
+                  source={{ uri: product.images ? product.images[0] : product.image }} 
+                  style={styles.productImage} 
+                />
+                <TouchableOpacity 
+                  style={styles.productFavoriteButton}
+                  onPress={(e) => {
+                    e.stopPropagation();
+                    handleToggleFavorite(product.id);
+                  }}
+                  activeOpacity={0.7}
+                >
+                  <Heart 
+                    size={20} 
+                    color={favorites.includes(product.id) ? "#FF3B30" : "#FFFFFF"}
+                    fill={favorites.includes(product.id) ? "#FF3B30" : "transparent"}
+                    strokeWidth={2}
+                  />
+                </TouchableOpacity>
                 <View style={styles.productContent}>
                   <Text style={styles.productName} numberOfLines={2}>{product.name}</Text>
                   <Text style={styles.productDescription} numberOfLines={2}>{product.description}</Text>
                   <View style={styles.productFooter}>
                     <View style={styles.priceContainer}>
-                      <DollarSign size={14} color="#4169E1" />
-                      <Text style={styles.priceText}>{product.price.toFixed(2)}</Text>
+                      <Text style={styles.currencySymbol}>
+                        {currency === 'USD' ? '$' : '₵'}
+                      </Text>
+                      <Text style={styles.priceText}>
+                        {(currency === 'USD' ? product.priceUSD : product.priceGHS).toFixed(2)}
+                      </Text>
                     </View>
                     <TouchableOpacity 
                       style={styles.addButton}
-                      onPress={handleAddToCart}
+                      onPress={() => handleAddToCart(product)}
                     >
                       <Plus size={16} color="#FFFFFF" />
                     </TouchableOpacity>
@@ -228,7 +475,17 @@ export default function SecretariatShopScreen() {
           {DELIVERY_OPTIONS.map((option) => {
             const IconComponent = option.icon;
             return (
-              <TouchableOpacity key={option.id} style={styles.deliveryCard}>
+              <TouchableOpacity 
+                key={option.id} 
+                style={styles.deliveryCard}
+                onPress={() => {
+                  if (option.id === '1') {
+                    router.push('/secretariat-shop/delivery');
+                  } else if (option.id === '2') {
+                    router.push('/secretariat-shop/pickup');
+                  }
+                }}
+              >
                 <View style={styles.deliveryIcon}>
                   <IconComponent size={24} color="#4169E1" />
                 </View>
@@ -255,6 +512,150 @@ export default function SecretariatShopScreen() {
           </View>
         </View>
       </ScrollView>
+
+      {/* Filter Modal */}
+      <Modal
+        visible={filterModalVisible}
+        animationType="slide"
+        transparent={true}
+        onRequestClose={() => setFilterModalVisible(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Filter Products</Text>
+              <TouchableOpacity onPress={() => setFilterModalVisible(false)}>
+                <X size={24} color="#000000" />
+              </TouchableOpacity>
+            </View>
+
+            <ScrollView style={styles.modalBody} showsVerticalScrollIndicator={false}>
+              {/* Category Filter */}
+              <View style={styles.filterSection}>
+                <Text style={styles.filterSectionTitle}>Category</Text>
+                <View style={styles.filterOptions}>
+                  {PRODUCT_CATEGORIES.filter(cat => cat.id !== 'all').map((category) => (
+                    <TouchableOpacity
+                      key={category.id}
+                      style={[
+                        styles.filterChip,
+                        selectedCategories.includes(category.name) && styles.filterChipActive
+                      ]}
+                      onPress={() => toggleCategory(category.name)}
+                    >
+                      <Text style={[
+                        styles.filterChipText,
+                        selectedCategories.includes(category.name) && styles.filterChipTextActive
+                      ]}>
+                        {category.name}
+                      </Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+              </View>
+
+              {/* Size Filter */}
+              <View style={styles.filterSection}>
+                <Text style={styles.filterSectionTitle}>Size</Text>
+                <View style={styles.filterOptions}>
+                  {allSizes.map((size) => (
+                    <TouchableOpacity
+                      key={size}
+                      style={[
+                        styles.filterChip,
+                        selectedSizes.includes(size) && styles.filterChipActive
+                      ]}
+                      onPress={() => toggleSize(size)}
+                    >
+                      <Text style={[
+                        styles.filterChipText,
+                        selectedSizes.includes(size) && styles.filterChipTextActive
+                      ]}>
+                        {size}
+                      </Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+              </View>
+
+              {/* Price Range Filter */}
+              <View style={styles.filterSection}>
+                <Text style={styles.filterSectionTitle}>Price Range</Text>
+                <View style={styles.currencySelector}>
+                  <TouchableOpacity
+                    style={[
+                      styles.currencySelectorButton,
+                      filterCurrency === 'USD' && styles.currencySelectorButtonActive
+                    ]}
+                    onPress={() => setFilterCurrency('USD')}
+                  >
+                    <Text style={[
+                      styles.currencySelectorText,
+                      filterCurrency === 'USD' && styles.currencySelectorTextActive
+                    ]}>
+                      USD ($)
+                    </Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={[
+                      styles.currencySelectorButton,
+                      filterCurrency === 'GHS' && styles.currencySelectorButtonActive
+                    ]}
+                    onPress={() => setFilterCurrency('GHS')}
+                  >
+                    <Text style={[
+                      styles.currencySelectorText,
+                      filterCurrency === 'GHS' && styles.currencySelectorTextActive
+                    ]}>
+                      GHS (₵)
+                    </Text>
+                  </TouchableOpacity>
+                </View>
+                <View style={styles.priceRangeInputs}>
+                  <View style={styles.priceInputContainer}>
+                    <Text style={styles.priceInputLabel}>Min</Text>
+                    <TextInput
+                      style={styles.priceInput}
+                      placeholder="0"
+                      placeholderTextColor="#999"
+                      keyboardType="numeric"
+                      value={priceRange.min}
+                      onChangeText={(text) => setPriceRange(prev => ({ ...prev, min: text }))}
+                    />
+                  </View>
+                  <Text style={styles.priceRangeSeparator}>-</Text>
+                  <View style={styles.priceInputContainer}>
+                    <Text style={styles.priceInputLabel}>Max</Text>
+                    <TextInput
+                      style={styles.priceInput}
+                      placeholder="999"
+                      placeholderTextColor="#999"
+                      keyboardType="numeric"
+                      value={priceRange.max}
+                      onChangeText={(text) => setPriceRange(prev => ({ ...prev, max: text }))}
+                    />
+                  </View>
+                </View>
+              </View>
+            </ScrollView>
+
+            <View style={styles.modalFooter}>
+              <TouchableOpacity 
+                style={styles.clearButton}
+                onPress={clearFilters}
+              >
+                <Text style={styles.clearButtonText}>Clear All</Text>
+              </TouchableOpacity>
+              <TouchableOpacity 
+                style={styles.applyButton}
+                onPress={applyFilters}
+              >
+                <Text style={styles.applyButtonText}>Apply Filters</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }
@@ -283,6 +684,31 @@ const styles = StyleSheet.create({
     fontFamily: 'Inter-SemiBold',
     color: '#000000',
   },
+  headerIcons: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 16,
+  },
+  favoritesButton: {
+    padding: 8,
+    position: 'relative',
+  },
+  favoritesBadge: {
+    position: 'absolute',
+    top: 0,
+    right: 0,
+    backgroundColor: '#FF3B30',
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  favoritesBadgeText: {
+    color: '#FFFFFF',
+    fontSize: 12,
+    fontFamily: 'Inter-SemiBold',
+  },
   cartButton: {
     padding: 8,
     position: 'relative',
@@ -302,6 +728,32 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     fontSize: 12,
     fontFamily: 'Inter-SemiBold',
+  },
+  postItemContainer: {
+    paddingHorizontal: 16,
+    paddingTop: 8,
+    paddingBottom: 8,
+  },
+  postItemButton: {
+    borderRadius: 12,
+    overflow: 'hidden',
+    shadowColor: '#10B981',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 4,
+  },
+  postItemGradient: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 14,
+    gap: 8,
+  },
+  postItemText: {
+    fontSize: 16,
+    fontFamily: 'Inter-SemiBold',
+    color: '#FFFFFF',
   },
   searchContainer: {
     flexDirection: 'row',
@@ -324,6 +776,61 @@ const styles = StyleSheet.create({
     fontFamily: 'Inter-Regular',
     color: '#000000',
   },
+  currencyContainer: {
+    paddingHorizontal: 16,
+    paddingBottom: 12,
+    alignItems: 'center',
+  },
+  currencyToggle: {
+    flexDirection: 'row',
+    backgroundColor: '#F8F9FA',
+    borderRadius: 12,
+    padding: 2,
+  },
+  currencyButton: {
+    paddingHorizontal: 20,
+    paddingVertical: 10,
+    borderRadius: 10,
+    justifyContent: 'center',
+    alignItems: 'center',
+    minWidth: 80,
+  },
+  activeCurrencyButton: {
+    backgroundColor: '#4169E1',
+  },
+  currencyButtonText: {
+    fontSize: 14,
+    fontFamily: 'Inter-SemiBold',
+    color: '#666666',
+  },
+  activeCurrencyButtonText: {
+    color: '#FFFFFF',
+  },
+  filterIconButton: {
+    width: 48,
+    height: 48,
+    backgroundColor: '#F8F9FA',
+    borderRadius: 12,
+    justifyContent: 'center',
+    alignItems: 'center',
+    position: 'relative',
+  },
+  filterBadge: {
+    position: 'absolute',
+    top: 8,
+    right: 8,
+    backgroundColor: '#4169E1',
+    width: 18,
+    height: 18,
+    borderRadius: 9,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  filterBadgeText: {
+    color: '#FFFFFF',
+    fontSize: 10,
+    fontFamily: 'Inter-SemiBold',
+  },
   filterButton: {
     width: 48,
     height: 48,
@@ -334,6 +841,8 @@ const styles = StyleSheet.create({
   },
   categoriesScroll: {
     marginBottom: 16,
+    marginTop: 8,
+    maxHeight: 50,
   },
   categoriesContent: {
     paddingHorizontal: 16,
@@ -359,13 +868,13 @@ const styles = StyleSheet.create({
   },
   content: {
     flex: 1,
-    padding: 16,
   },
   productsGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
     gap: 16,
     marginBottom: 24,
+    paddingHorizontal: 16,
   },
   productCard: {
     width: CARD_WIDTH,
@@ -380,6 +889,19 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.1,
     shadowRadius: 4,
     elevation: 3,
+    position: 'relative',
+  },
+  productFavoriteButton: {
+    position: 'absolute',
+    top: 8,
+    right: 8,
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    zIndex: 10,
   },
   productImage: {
     width: '100%',
@@ -409,6 +931,12 @@ const styles = StyleSheet.create({
   priceContainer: {
     flexDirection: 'row',
     alignItems: 'center',
+    gap: 4,
+  },
+  currencySymbol: {
+    fontSize: 16,
+    fontFamily: 'Inter-SemiBold',
+    color: '#4169E1',
   },
   priceText: {
     fontSize: 16,
@@ -435,6 +963,7 @@ const styles = StyleSheet.create({
   },
   section: {
     marginBottom: 24,
+    paddingHorizontal: 16,
   },
   sectionTitle: {
     fontSize: 18,
@@ -513,5 +1042,161 @@ const styles = StyleSheet.create({
     fontFamily: 'Inter-Regular',
     color: '#666666',
     textAlign: 'center',
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'flex-end',
+  },
+  modalContent: {
+    backgroundColor: '#FFFFFF',
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    maxHeight: '80%',
+    paddingBottom: 20,
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: 20,
+    paddingVertical: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: '#E2E8F0',
+  },
+  modalTitle: {
+    fontSize: 20,
+    fontFamily: 'Inter-SemiBold',
+    color: '#000000',
+  },
+  modalBody: {
+    flex: 1,
+    paddingHorizontal: 20,
+  },
+  filterSection: {
+    marginTop: 24,
+  },
+  filterSectionTitle: {
+    fontSize: 16,
+    fontFamily: 'Inter-SemiBold',
+    color: '#000000',
+    marginBottom: 12,
+  },
+  filterOptions: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+  },
+  filterChip: {
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 20,
+    backgroundColor: '#F8F9FA',
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+  },
+  filterChipActive: {
+    backgroundColor: '#4169E1',
+    borderColor: '#4169E1',
+  },
+  filterChipText: {
+    fontSize: 14,
+    fontFamily: 'Inter-Regular',
+    color: '#666666',
+  },
+  filterChipTextActive: {
+    color: '#FFFFFF',
+    fontFamily: 'Inter-SemiBold',
+  },
+  currencySelector: {
+    flexDirection: 'row',
+    gap: 8,
+    marginBottom: 16,
+  },
+  currencySelectorButton: {
+    flex: 1,
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    borderRadius: 12,
+    backgroundColor: '#F8F9FA',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+  },
+  currencySelectorButtonActive: {
+    backgroundColor: '#EBF0FF',
+    borderColor: '#4169E1',
+  },
+  currencySelectorText: {
+    fontSize: 14,
+    fontFamily: 'Inter-Regular',
+    color: '#666666',
+  },
+  currencySelectorTextActive: {
+    color: '#4169E1',
+    fontFamily: 'Inter-SemiBold',
+  },
+  priceRangeInputs: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  priceInputContainer: {
+    flex: 1,
+  },
+  priceInputLabel: {
+    fontSize: 12,
+    fontFamily: 'Inter-Regular',
+    color: '#666666',
+    marginBottom: 8,
+  },
+  priceInput: {
+    backgroundColor: '#F8F9FA',
+    borderRadius: 12,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    fontSize: 16,
+    fontFamily: 'Inter-Regular',
+    color: '#000000',
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+  },
+  priceRangeSeparator: {
+    fontSize: 18,
+    fontFamily: 'Inter-Regular',
+    color: '#666666',
+    marginTop: 20,
+  },
+  modalFooter: {
+    flexDirection: 'row',
+    paddingHorizontal: 20,
+    paddingTop: 16,
+    gap: 12,
+    borderTopWidth: 1,
+    borderTopColor: '#E2E8F0',
+  },
+  clearButton: {
+    flex: 1,
+    paddingVertical: 14,
+    borderRadius: 12,
+    backgroundColor: '#F8F9FA',
+    alignItems: 'center',
+  },
+  clearButtonText: {
+    fontSize: 16,
+    fontFamily: 'Inter-SemiBold',
+    color: '#666666',
+  },
+  applyButton: {
+    flex: 1,
+    paddingVertical: 14,
+    borderRadius: 12,
+    backgroundColor: '#4169E1',
+    alignItems: 'center',
+  },
+  applyButtonText: {
+    fontSize: 16,
+    fontFamily: 'Inter-SemiBold',
+    color: '#FFFFFF',
   },
 });

@@ -5,6 +5,7 @@ import { SplashScreen, useRouter } from 'expo-router';
 import { ArrowLeft, Image as ImageIcon, Send, Calendar, Clock, MapPin, Tag, Info } from 'lucide-react-native';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/hooks/useAuth';
+import { useRequireAuth } from '@/hooks/useRequireAuth';
 
 SplashScreen.preventAutoHideAsync();
 
@@ -19,6 +20,7 @@ const EVENT_CATEGORIES = [
 export default function CreateEventScreen() {
   const router = useRouter();
   const { user } = useAuth();
+  const { isVerified, isChecking } = useRequireAuth();
   const [title, setTitle] = useState('');
   const [organizer, setOrganizer] = useState('');
   const [location, setLocation] = useState('');
@@ -39,14 +41,6 @@ export default function CreateEventScreen() {
       SplashScreen.hideAsync();
     }
   }, [fontsLoaded]);
-
-  useEffect(() => {
-    if (!user) {
-      Alert.alert('Authentication Required', 'Please sign in to submit events.');
-      router.replace('/');
-      return;
-    }
-  }, [user, router]);
 
   const handleSubmit = async () => {
     // Validate inputs
@@ -123,8 +117,12 @@ export default function CreateEventScreen() {
     }
   };
 
-  if (!fontsLoaded || !user) {
-    return null;
+  if (!fontsLoaded || isChecking || !isVerified) {
+    return (
+      <View style={[{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#FFFFFF' }]}>
+        <ActivityIndicator size="large" color="#4169E1" />
+      </View>
+    );
   }
 
   return (
@@ -297,7 +295,7 @@ export default function CreateEventScreen() {
         
         <View style={styles.infoContainer}>
           <Info size={20} color="#666666" />
-          <Text style={styles.infoText}>
+          <Text style={styles.infoTextFlex}>
             Your submission will be reviewed by administrators before being published. This helps ensure all events are legitimate and valuable to our community.
           </Text>
         </View>
@@ -447,7 +445,7 @@ const styles = StyleSheet.create({
     marginBottom: 24,
     gap: 12,
   },
-  infoText: {
+  infoTextFlex: {
     flex: 1,
     fontSize: 14,
     fontFamily: 'Inter-Regular',

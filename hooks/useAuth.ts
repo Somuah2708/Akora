@@ -11,54 +11,104 @@ export function useAuth() {
   const [user, setUser] = useState<AuthUser | null>(null);
   const [profile, setProfile] = useState<Profile | null>(null);
   const [loading, setLoading] = useState(true);
+  const [initialized, setInitialized] = useState(false);
+  const [isReady, setIsReady] = useState(false);
 
   useEffect(() => {
+    console.log('[useAuth] Setting up auth listener...');
+    
+    let mounted = true;
+    
     // Get initial session
     supabase.auth.getSession().then(({ data: { session } }) => {
-      setUser(session?.user ?? null);
+      if (!mounted) return;
+      
+      console.log('[useAuth] Initial session check:', session ? `Session found for ${session.user.email}` : 'No session');
+      
       if (session?.user) {
+        setUser(session.user);
         fetchProfile(session.user.id);
       } else {
         setLoading(false);
+        setIsReady(true);
       }
+      setInitialized(true);
     });
 
     // Listen for auth changes
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      if (!mounted) return;
+      
+      console.log('[useAuth] Auth state changed:', _event, session ? `Session for ${session.user.email}` : 'No session', 'initialized:', initialized);
+      
+      // Only process auth state changes after initialization to avoid clearing valid sessions
+      if (!initialized && !session) {
+        console.log('[useAuth] Ignoring early null session before initialization');
+        return;
+      }
+      
+      // Don't clear user on INITIAL_SESSION event if we already have a user
+      if (_event === 'INITIAL_SESSION' && user && !session) {
+        console.log('[useAuth] Ignoring INITIAL_SESSION with null when user exists');
+        return;
+      }
+      
       setUser(session?.user ?? null);
       if (session?.user) {
         fetchProfile(session.user.id);
-      } else {
+      } else if (_event === 'SIGNED_OUT') {
         setProfile(null);
         setLoading(false);
       }
     });
 
-    return () => subscription.unsubscribe();
+    return () => {
+      mounted = false;
+      subscription.unsubscribe();
+    };
   }, []);
 
   const fetchProfile = async (userId: string) => {
     try {
+      console.log('[useAuth] Fetching profile for user:', userId);
       const { data, error } = await supabase
         .from('profiles')
         .select('*')
         .eq('id', userId)
         .single();
 
-      if (error) throw error;
-      setProfile(data);
+      if (error) {
+        console.error('[useAuth] Error fetching profile:', error);
+        // Don't throw - user can still be authenticated without profile
+        // Profile might not exist yet for new users
+      } else {
+        console.log('[useAuth] Profile fetched successfully');
+        setProfile(data);
+      }
     } catch (error) {
-      console.error('Error fetching profile:', error);
+      console.error('[useAuth] Error fetching profile:', error);
     } finally {
       setLoading(false);
+      setIsReady(true);
     }
   };
 
   const signIn = async (email: string, password: string) => {
+    console.log('[useAuth] signIn called for:', email);
     const { data, error } = await supabase.auth.signInWithPassword({
       email,
       password,
     });
+    
+    if (data?.session) {
+      console.log('[useAuth] Sign in successful, session created:', {
+        userId: data.user?.id,
+        expiresAt: data.session.expires_at
+      });
+    } else {
+      console.log('[useAuth] Sign in failed or no session:', error);
+    }
+    
     return { data, error };
   };
 
@@ -114,6 +164,7 @@ export function useAuth() {
     user,
     profile,
     loading,
+    isReady,
     signIn,
     signUp,
     signOut,

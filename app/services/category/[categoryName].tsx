@@ -30,6 +30,16 @@ export default function CategoryScreen() {
   const fetchProducts = useCallback(async () => {
     if (!categoryName) return;
     
+    // Prevent showing job/internship categories in marketplace
+    const jobCategories = ['Full Time Jobs', 'Internships', 'National Service', 'Part Time', 'Remote Work', 'Volunteering'];
+    const decodedCategory = decodeURIComponent(categoryName);
+    
+    if (jobCategories.includes(decodedCategory)) {
+      setProducts([]);
+      setLoading(false);
+      return;
+    }
+    
     try {
       setLoading(true);
       
@@ -37,7 +47,7 @@ export default function CategoryScreen() {
       const { data: productsData, error: productsError } = await supabase
         .from('products_services')
         .select('*')
-        .eq('category_name', decodeURIComponent(categoryName))
+        .eq('category_name', decodedCategory)
         .order('created_at', { ascending: false });
       
       if (productsError) throw productsError;
@@ -116,7 +126,7 @@ export default function CategoryScreen() {
           </View>
         ) : (
           <View style={styles.productsGrid}>
-            {products.map((product) => (
+            {products.slice(0, 2).map((product) => (
               <TouchableOpacity key={product.id} style={styles.productCard}>
                 <Image 
                   source={{ uri: product.image_url || 'https://images.unsplash.com/photo-1460925895917-afdab827c52f?w=800&auto=format&fit=crop&q=60' }} 
@@ -127,7 +137,7 @@ export default function CategoryScreen() {
                   <Text style={styles.businessName} numberOfLines={1}>
                     {product.user?.full_name || product.user?.username}
                   </Text>
-                  <Text style={styles.price}>{formatPrice(product.price)}</Text>
+                  <Text style={styles.price}>{formatPrice(product.price ?? 0)}</Text>
                   <View style={styles.productFooter}>
                     <View style={styles.ratingContainer}>
                       <Star size={12} color="#FFB800" fill="#FFB800" />

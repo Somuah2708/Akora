@@ -6,7 +6,7 @@ if (typeof window !== 'undefined') {
   global.WebSocket = window.WebSocket;
 }
 
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
 import { Stack, useRouter, useSegments } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { useFrameworkReady } from '@/hooks/useFrameworkReady';
@@ -17,19 +17,74 @@ export default function RootLayout() {
   const { user, loading } = useAuth();
   const segments = useSegments();
   const router = useRouter();
+  const navigationTimeoutRef = useRef<any>();
+  const previousUserRef = useRef(user);
 
   useEffect(() => {
-    if (loading) return;
+    // Only log when user state actually changes
+    if (previousUserRef.current !== user) {
+      console.log('[RootLayout] User state changed:', { 
+        previous: !!previousUserRef.current,
+        current: !!user, 
+        userId: user?.id, 
+      });
+      previousUserRef.current = user;
+    }
+    
+    console.log('[RootLayout] Navigation check:', { 
+      user: !!user, 
+      loading, 
+      segments: segments.join('/'),
+      inAuthGroup: segments[0] === 'auth'
+    });
+    
+    // Clear any pending navigation
+    if (navigationTimeoutRef.current) {
+      clearTimeout(navigationTimeoutRef.current);
+    }
+    
+    if (loading) {
+      console.log('[RootLayout] Still loading auth state, skipping navigation...');
+      return;
+    }
 
     const inAuthGroup = segments[0] === 'auth';
+    
+    // Routes that require authentication but shouldn't trigger redirects
+    const protectedRoutes = ['create-job-listing', 'create-post', 'create-listing', 'create-event', 'create-educational-listing'];
+    const isProtectedRoute = protectedRoutes.includes(segments[0] || '');
 
-    if (!user && !inAuthGroup) {
-      // Redirect to sign-in if not authenticated
-      router.replace('/auth/sign-in');
+    console.log('[RootLayout] Route check:', { 
+      segment0: segments[0], 
+      isProtectedRoute,
+      shouldSkipRedirect: isProtectedRoute || inAuthGroup
+    });
+
+    if (!user && !inAuthGroup && !isProtectedRoute) {
+      console.log('[RootLayout] No user and not in auth/protected group, scheduling redirect to sign-in');
+      // Slight delay to ensure state is stable
+      navigationTimeoutRef.current = setTimeout(() => {
+        router.replace('/auth/sign-in');
+      }, 100);
     } else if (user && inAuthGroup) {
-      // Redirect to app if authenticated
-      router.replace('/(tabs)');
+      console.log('[RootLayout] User exists and in auth group, scheduling redirect to tabs');
+      // Slight delay to ensure state is stable
+      navigationTimeoutRef.current = setTimeout(() => {
+        router.replace('/(tabs)');
+      }, 100);
+    } else {
+      console.log('[RootLayout] User state is stable, no redirect needed', {
+        user: !!user,
+        inAuthGroup,
+        isProtectedRoute
+      });
     }
+
+    return () => {
+      if (navigationTimeoutRef.current) {
+        clearTimeout(navigationTimeoutRef.current);
+      }
+    };
   }, [user, loading, segments]);
 
   if (loading) {
