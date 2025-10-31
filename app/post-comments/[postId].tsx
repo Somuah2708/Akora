@@ -228,7 +228,7 @@ export default function PostCommentsScreen() {
             <View key={comment.id} style={styles.commentCard}>
               <Image
                 source={{ 
-                  uri: comment.user.avatar_url || 'https://via.placeholder.com/40' 
+                  uri: comment.user.avatar_url || 'https://ui-avatars.com/api/?name=' + encodeURIComponent(comment.user.username || 'User') + '&background=random'
                 }}
                 style={styles.commentAvatar}
               />
@@ -292,7 +292,7 @@ export default function PostCommentsScreen() {
           <View style={styles.inputRow}>
             <Image
               source={{ 
-                uri: userProfile.avatar_url || 'https://via.placeholder.com/40' 
+                uri: userProfile.avatar_url || 'https://ui-avatars.com/api/?name=' + encodeURIComponent(userProfile.username || 'User') + '&background=random'
               }}
               style={styles.inputAvatar}
             />

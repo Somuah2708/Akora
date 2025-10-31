@@ -117,17 +117,40 @@ export async function fetchDiscoverFeed(
     }
 
     // Fetch featured products/services
-    const { data: products } = await supabase
+    const { data: products, error: productsError } = await supabase
       .from('products_services')
-      .select('*, user:profiles(id, username, full_name, avatar_url)')
+      .select('*')
       .eq('is_approved', true)
       .eq('is_featured', true)
       .order('created_at', { ascending: false })
       .limit(8);
 
-    if (products) {
+    if (productsError) {
+      console.error('Error fetching products:', productsError);
+    }
+
+    // Fetch user profiles separately for products
+    let productsWithUsers = products || [];
+    if (products && products.length > 0) {
+      const userIds = products.map(p => p.user_id).filter(Boolean);
+      if (userIds.length > 0) {
+        const { data: users } = await supabase
+          .from('profiles')
+          .select('id, username, full_name, avatar_url')
+          .in('id', userIds);
+        
+        if (users) {
+          productsWithUsers = products.map(product => ({
+            ...product,
+            user: users.find(u => u.id === product.user_id)
+          }));
+        }
+      }
+    }
+
+    if (productsWithUsers.length > 0) {
       items.push(
-        ...products.map((product) => ({
+        ...productsWithUsers.map((product) => ({
           id: `product-${product.id}`,
           type: 'product' as const,
           category: 'marketplace',

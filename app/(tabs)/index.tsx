@@ -993,4 +993,4 @@ const styles = StyleSheet.create({
     color: '#EF4444',
     fontWeight: '600',
   },
-});
+}); 
