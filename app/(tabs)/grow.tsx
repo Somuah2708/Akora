@@ -42,8 +42,7 @@ const HIGHLIGHTS = [
 
 const USER_STATS = {
   posts: 127,
-  followers: 2847,
-  following: 892,
+  friends: 342,
 };
 
 export default function ProfileScreen() {
@@ -54,8 +53,7 @@ export default function ProfileScreen() {
   const [loading, setLoading] = useState(true);
   const [stats, setStats] = useState({
     posts: 0,
-    followers: 0,
-    following: 0,
+    friends: 0,
   });
   
   const [fontsLoaded] = useFonts({
@@ -87,24 +85,23 @@ export default function ProfileScreen() {
       setUserPosts(posts || []);
       setStats(prev => ({ ...prev, posts: posts?.length || 0 }));
 
-      // Fetch followers count (from friends table where friend_id = user.id)
-      const { count: followersCount, error: followersError } = await supabase
+      // Fetch friends count (mutual friendships)
+      // Count friends where either user_id or friend_id matches current user
+      const { data: friendsList, error: friendsError } = await supabase
         .from('friends')
-        .select('*', { count: 'exact', head: true })
-        .eq('friend_id', user.id);
+        .select('*')
+        .or(`user_id.eq.${user.id},friend_id.eq.${user.id}`);
 
-      if (!followersError) {
-        setStats(prev => ({ ...prev, followers: followersCount || 0 }));
-      }
-
-      // Fetch following count (from friends table where user_id = user.id)
-      const { count: followingCount, error: followingError } = await supabase
-        .from('friends')
-        .select('*', { count: 'exact', head: true })
-        .eq('user_id', user.id);
-
-      if (!followingError) {
-        setStats(prev => ({ ...prev, following: followingCount || 0 }));
+      if (!friendsError && friendsList) {
+        // Remove duplicates by creating a set of unique friend IDs
+        const uniqueFriends = new Set<string>();
+        friendsList.forEach((friendship: any) => {
+          const friendId = friendship.user_id === user.id 
+            ? friendship.friend_id 
+            : friendship.user_id;
+          uniqueFriends.add(friendId);
+        });
+        setStats(prev => ({ ...prev, friends: uniqueFriends.size }));
       }
 
     } catch (error) {
@@ -171,13 +168,12 @@ export default function ProfileScreen() {
               <Text style={styles.statNumber}>{stats.posts}</Text>
               <Text style={styles.statLabel}>Posts</Text>
             </TouchableOpacity>
-            <TouchableOpacity style={styles.statItem}>
-              <Text style={styles.statNumber}>{stats.followers}</Text>
-              <Text style={styles.statLabel}>Followers</Text>
-            </TouchableOpacity>
-            <TouchableOpacity style={styles.statItem}>
-              <Text style={styles.statNumber}>{stats.following}</Text>
-              <Text style={styles.statLabel}>Following</Text>
+            <TouchableOpacity 
+              style={styles.statItem}
+              onPress={() => router.push('/friends')}
+            >
+              <Text style={styles.statNumber}>{stats.friends}</Text>
+              <Text style={styles.statLabel}>Friends</Text>
             </TouchableOpacity>
           </View>
         </View>

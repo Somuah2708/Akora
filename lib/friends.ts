@@ -41,7 +41,7 @@ export type DirectMessage = {
   sender_id: string;
   receiver_id: string;
   message: string;
-  message_type?: 'text' | 'image' | 'video' | 'voice';
+  message_type?: 'text' | 'image' | 'video' | 'voice' | 'document';
   media_url?: string;
   created_at: string;
   is_read: boolean;
@@ -265,9 +265,17 @@ export async function sendDirectMessage(
   senderId: string,
   receiverId: string,
   message: string,
-  messageType: 'text' | 'image' | 'video' | 'voice' = 'text',
+  messageType: 'text' | 'image' | 'video' | 'voice' | 'document' = 'text',
   mediaUrl?: string
 ) {
+  console.log('sendDirectMessage called with:', {
+    senderId,
+    receiverId,
+    message: message.substring(0, 50),
+    messageType,
+    mediaUrl: mediaUrl?.substring(0, 50) + '...'
+  });
+
   const { data, error } = await supabase
     .from('direct_messages')
     .insert({
@@ -288,7 +296,12 @@ export async function sendDirectMessage(
     `)
     .single();
 
-  if (error) throw error;
+  if (error) {
+    console.error('Error in sendDirectMessage:', error);
+    throw error;
+  }
+  
+  console.log('Message sent successfully:', data?.id);
   return data as DirectMessage;
 }
 

@@ -51,6 +51,17 @@ export type Profile = {
   is_contact_public?: boolean;
   phone?: string;
   location?: string;
+  // Occupation fields
+  occupation_status?: 'student' | 'employed' | 'self_employed' | 'unemployed' | 'other';
+  job_title?: string;
+  company_name?: string;
+  // Education fields
+  education_level?: 'high_school' | 'undergraduate' | 'postgraduate' | 'doctorate' | 'other';
+  institution_name?: string;
+  program_of_study?: string;
+  graduation_year?: number;
+  is_occupation_public?: boolean;
+  is_education_public?: boolean;
 };
 
 export type Chat = {
@@ -88,6 +99,10 @@ export type Post = {
   user_id: string;
   content: string;
   image_url?: string;
+  image_urls?: string[]; // Multiple images support
+  video_url?: string;
+  category?: 'general' | 'education' | 'career' | 'health' | 'fitness' | 'mental_health' | 'finance' | 'relationships' | 'hobbies' | 'travel' | 'technology' | 'entrepreneurship' | 'spirituality' | 'sports' | 'arts' | 'music' | 'other';
+  visibility?: 'public' | 'friends_only' | 'private';
   created_at: string;
   user?: Profile;
 };
@@ -96,6 +111,13 @@ export type PostLike = {
   id: string;
   post_id: string;
   user_id: string;
+  created_at: string;
+};
+
+export type UserInterest = {
+  id: string;
+  user_id: string;
+  category: 'education' | 'career' | 'health' | 'fitness' | 'mental_health' | 'finance' | 'relationships' | 'hobbies' | 'travel' | 'technology' | 'entrepreneurship' | 'spirituality' | 'sports' | 'arts' | 'music';
   created_at: string;
 };
 

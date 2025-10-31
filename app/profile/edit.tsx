@@ -26,11 +26,24 @@ export default function EditProfileScreen() {
   const [location, setLocation] = useState('');
   const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
   
+  // Occupation fields
+  const [occupationStatus, setOccupationStatus] = useState<'student' | 'employed' | 'self_employed' | 'unemployed' | 'other'>('student');
+  const [jobTitle, setJobTitle] = useState('');
+  const [companyName, setCompanyName] = useState('');
+  
+  // Education fields
+  const [educationLevel, setEducationLevel] = useState<'high_school' | 'undergraduate' | 'postgraduate' | 'doctorate' | 'other'>('undergraduate');
+  const [institutionName, setInstitutionName] = useState('');
+  const [programOfStudy, setProgramOfStudy] = useState('');
+  const [graduationYear, setGraduationYear] = useState('');
+  
   // Visibility settings
   const [isClassPublic, setIsClassPublic] = useState(false);
   const [isYearGroupPublic, setIsYearGroupPublic] = useState(false);
   const [isHousePublic, setIsHousePublic] = useState(false);
   const [isContactPublic, setIsContactPublic] = useState(false);
+  const [isOccupationPublic, setIsOccupationPublic] = useState(false);
+  const [isEducationPublic, setIsEducationPublic] = useState(false);
   const [receivesNotifications, setReceivesNotifications] = useState(true);
   const [themePreference, setThemePreference] = useState('light');
   
@@ -74,11 +87,24 @@ export default function EditProfileScreen() {
         setLocation(data.location || '');
         setAvatarUrl(data.avatar_url || null);
         
+        // Set occupation fields
+        setOccupationStatus(data.occupation_status || 'student');
+        setJobTitle(data.job_title || '');
+        setCompanyName(data.company_name || '');
+        
+        // Set education fields
+        setEducationLevel(data.education_level || 'undergraduate');
+        setInstitutionName(data.institution_name || '');
+        setProgramOfStudy(data.program_of_study || '');
+        setGraduationYear(data.graduation_year?.toString() || '');
+        
         // Set visibility preferences
         setIsClassPublic(data.is_class_public || false);
         setIsYearGroupPublic(data.is_year_group_public || false);
         setIsHousePublic(data.is_house_public || false);
         setIsContactPublic(data.is_contact_public || false);
+        setIsOccupationPublic(data.is_occupation_public || false);
+        setIsEducationPublic(data.is_education_public || false);
         setReceivesNotifications(data.receives_notifications !== false); // Default to true
         setThemePreference(data.theme_preference || 'light');
       }
@@ -181,10 +207,22 @@ export default function EditProfileScreen() {
           phone: phone.trim(),
           location: location.trim(),
           avatar_url: avatarUrl,
+          // Occupation fields
+          occupation_status: occupationStatus,
+          job_title: jobTitle.trim(),
+          company_name: companyName.trim(),
+          // Education fields
+          education_level: educationLevel,
+          institution_name: institutionName.trim(),
+          program_of_study: programOfStudy.trim(),
+          graduation_year: graduationYear ? parseInt(graduationYear) : null,
+          // Visibility settings
           is_class_public: isClassPublic,
           is_year_group_public: isYearGroupPublic,
           is_house_public: isHousePublic,
           is_contact_public: isContactPublic,
+          is_occupation_public: isOccupationPublic,
+          is_education_public: isEducationPublic,
           receives_notifications: receivesNotifications,
           theme_preference: themePreference,
         })
@@ -371,6 +409,178 @@ export default function EditProfileScreen() {
                   placeholderTextColor="#666666"
                   value={house}
                   onChangeText={setHouse}
+                />
+              </View>
+            </View>
+
+            <View style={styles.sectionDivider} />
+
+            <Text style={styles.sectionTitle}>Occupation</Text>
+            <View style={styles.visibilityNote}>
+              <Text style={styles.visibilityNoteText}>
+                Share your current occupation status and work details
+              </Text>
+              <View style={styles.visibilityToggle}>
+                <Text style={styles.visibilityText}>Public</Text>
+                <Switch
+                  value={isOccupationPublic}
+                  onValueChange={setIsOccupationPublic}
+                  trackColor={{ false: '#767577', true: '#4169E1' }}
+                  thumbColor="#FFFFFF"
+                />
+              </View>
+            </View>
+
+            <View style={styles.formGroup}>
+              <Text style={styles.label}>Status</Text>
+              <View style={styles.pickerContainer}>
+                <TouchableOpacity 
+                  style={styles.pickerButton}
+                  onPress={() => {
+                    Alert.alert(
+                      'Select Status',
+                      'Choose your current occupation status',
+                      [
+                        { text: 'Student', onPress: () => setOccupationStatus('student') },
+                        { text: 'Employed', onPress: () => setOccupationStatus('employed') },
+                        { text: 'Self-Employed', onPress: () => setOccupationStatus('self_employed') },
+                        { text: 'Unemployed', onPress: () => setOccupationStatus('unemployed') },
+                        { text: 'Other', onPress: () => setOccupationStatus('other') },
+                        { text: 'Cancel', style: 'cancel' }
+                      ]
+                    );
+                  }}
+                >
+                  <Text style={styles.pickerButtonText}>
+                    {occupationStatus === 'student' ? 'Student' :
+                     occupationStatus === 'employed' ? 'Employed' :
+                     occupationStatus === 'self_employed' ? 'Self-Employed' :
+                     occupationStatus === 'unemployed' ? 'Unemployed' : 'Other'}
+                  </Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+
+            {(occupationStatus === 'employed' || occupationStatus === 'self_employed') && (
+              <>
+                <View style={styles.formGroup}>
+                  <Text style={styles.label}>Job Title</Text>
+                  <View style={styles.inputContainer}>
+                    <User size={20} color="#666666" />
+                    <TextInput
+                      style={styles.input}
+                      placeholder="e.g., Software Engineer, Manager"
+                      placeholderTextColor="#666666"
+                      value={jobTitle}
+                      onChangeText={setJobTitle}
+                    />
+                  </View>
+                </View>
+
+                <View style={styles.formGroup}>
+                  <Text style={styles.label}>Company/Organization</Text>
+                  <View style={styles.inputContainer}>
+                    <Home size={20} color="#666666" />
+                    <TextInput
+                      style={styles.input}
+                      placeholder="e.g., Google, Ministry of Health"
+                      placeholderTextColor="#666666"
+                      value={companyName}
+                      onChangeText={setCompanyName}
+                    />
+                  </View>
+                </View>
+              </>
+            )}
+
+            <View style={styles.sectionDivider} />
+
+            <Text style={styles.sectionTitle}>Education</Text>
+            <View style={styles.visibilityNote}>
+              <Text style={styles.visibilityNoteText}>
+                Share your educational background and program
+              </Text>
+              <View style={styles.visibilityToggle}>
+                <Text style={styles.visibilityText}>Public</Text>
+                <Switch
+                  value={isEducationPublic}
+                  onValueChange={setIsEducationPublic}
+                  trackColor={{ false: '#767577', true: '#4169E1' }}
+                  thumbColor="#FFFFFF"
+                />
+              </View>
+            </View>
+
+            <View style={styles.formGroup}>
+              <Text style={styles.label}>Education Level</Text>
+              <View style={styles.pickerContainer}>
+                <TouchableOpacity 
+                  style={styles.pickerButton}
+                  onPress={() => {
+                    Alert.alert(
+                      'Select Level',
+                      'Choose your current or highest education level',
+                      [
+                        { text: 'High School', onPress: () => setEducationLevel('high_school') },
+                        { text: 'Undergraduate', onPress: () => setEducationLevel('undergraduate') },
+                        { text: 'Postgraduate', onPress: () => setEducationLevel('postgraduate') },
+                        { text: 'Doctorate', onPress: () => setEducationLevel('doctorate') },
+                        { text: 'Other', onPress: () => setEducationLevel('other') },
+                        { text: 'Cancel', style: 'cancel' }
+                      ]
+                    );
+                  }}
+                >
+                  <Text style={styles.pickerButtonText}>
+                    {educationLevel === 'high_school' ? 'High School' :
+                     educationLevel === 'undergraduate' ? 'Undergraduate' :
+                     educationLevel === 'postgraduate' ? 'Postgraduate' :
+                     educationLevel === 'doctorate' ? 'Doctorate' : 'Other'}
+                  </Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+
+            <View style={styles.formGroup}>
+              <Text style={styles.label}>Institution Name</Text>
+              <View style={styles.inputContainer}>
+                <GraduationCap size={20} color="#666666" />
+                <TextInput
+                  style={styles.input}
+                  placeholder="e.g., University of Ghana, Achimota School"
+                  placeholderTextColor="#666666"
+                  value={institutionName}
+                  onChangeText={setInstitutionName}
+                />
+              </View>
+            </View>
+
+            <View style={styles.formGroup}>
+              <Text style={styles.label}>Program of Study</Text>
+              <View style={styles.inputContainer}>
+                <GraduationCap size={20} color="#666666" />
+                <TextInput
+                  style={styles.input}
+                  placeholder="e.g., Computer Science, Medicine, Business"
+                  placeholderTextColor="#666666"
+                  value={programOfStudy}
+                  onChangeText={setProgramOfStudy}
+                />
+              </View>
+            </View>
+
+            <View style={styles.formGroup}>
+              <Text style={styles.label}>Graduation Year</Text>
+              <View style={styles.inputContainer}>
+                <Calendar size={20} color="#666666" />
+                <TextInput
+                  style={styles.input}
+                  placeholder="e.g., 2025"
+                  placeholderTextColor="#666666"
+                  keyboardType="numeric"
+                  maxLength={4}
+                  value={graduationYear}
+                  onChangeText={setGraduationYear}
                 />
               </View>
             </View>
@@ -657,6 +867,22 @@ const styles = StyleSheet.create({
     borderBottomColor: '#E2E8F0',
   },
   preferenceLabel: {
+    fontSize: 16,
+    fontFamily: 'Inter-Regular',
+    color: '#000000',
+  },
+  pickerContainer: {
+    marginTop: 4,
+  },
+  pickerButton: {
+    backgroundColor: '#F8F9FA',
+    borderRadius: 12,
+    paddingHorizontal: 16,
+    paddingVertical: 16,
+    height: 56,
+    justifyContent: 'center',
+  },
+  pickerButtonText: {
     fontSize: 16,
     fontFamily: 'Inter-Regular',
     color: '#000000',

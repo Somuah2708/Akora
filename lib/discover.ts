@@ -26,6 +26,7 @@ export interface DiscoverItem {
 
 /**
  * Fetch personalized discover feed combining posts, products, and other content
+ * Shows posts from friends and based on user's interests
  */
 export async function fetchDiscoverFeed(
   userId?: string,
@@ -34,35 +35,85 @@ export async function fetchDiscoverFeed(
   try {
     const items: DiscoverItem[] = [];
 
-    // Fetch recent posts
-    const { data: posts } = await supabase
-      .from('posts')
-      .select('*, user:profiles(id, username, full_name, avatar_url)')
-      .order('created_at', { ascending: false })
-      .limit(10);
+    // Fetch posts using the new function that filters by friendships and interests
+    if (userId) {
+      const { data: posts, error } = await supabase
+        .rpc('get_discover_posts', {
+          p_user_id: userId,
+          p_limit: 20,
+          p_offset: 0
+        });
 
-    if (posts) {
-      items.push(
-        ...posts.map((post) => ({
-          id: `post-${post.id}`,
-          type: 'post' as const,
-          category: 'social',
-          title: post.content.substring(0, 60) + (post.content.length > 60 ? '...' : ''),
-          description: post.content,
-          image: post.image_url,
-          author: post.user
-            ? {
-                id: post.user.id,
-                username: post.user.username || '',
-                full_name: post.user.full_name || '',
-                avatar_url: post.user.avatar_url || '',
-              }
-            : undefined,
-          sourceId: post.id,
-          sourceTable: 'posts',
-          matchScore: 85,
-        }))
-      );
+      if (error) {
+        console.error('Error fetching discover posts:', error);
+      }
+
+      if (posts) {
+        // Fetch user profiles for each post
+        const postIds = posts.map((p: any) => p.id);
+        const { data: postsWithProfiles } = await supabase
+          .from('posts')
+          .select('*, user:profiles(id, username, full_name, avatar_url)')
+          .in('id', postIds);
+
+        if (postsWithProfiles) {
+          items.push(
+            ...postsWithProfiles.map((post) => ({
+              id: `post-${post.id}`,
+              type: 'post' as const,
+              category: post.category || 'social',
+              title: post.content.substring(0, 60) + (post.content.length > 60 ? '...' : ''),
+              description: post.content,
+              image: post.image_url,
+              author: post.user
+                ? {
+                    id: post.user.id,
+                    username: post.user.username || '',
+                    full_name: post.user.full_name || '',
+                    avatar_url: post.user.avatar_url || '',
+                  }
+                : undefined,
+              sourceId: post.id,
+              sourceTable: 'posts',
+              matchScore: post.user_id === userId ? 100 : 85, // Higher score for own posts
+              tags: post.category ? [post.category] : [],
+            }))
+          );
+        }
+      }
+    } else {
+      // If no user ID, show public posts only
+      const { data: posts } = await supabase
+        .from('posts')
+        .select('*, user:profiles(id, username, full_name, avatar_url)')
+        .eq('visibility', 'public')
+        .order('created_at', { ascending: false })
+        .limit(10);
+
+      if (posts) {
+        items.push(
+          ...posts.map((post) => ({
+            id: `post-${post.id}`,
+            type: 'post' as const,
+            category: post.category || 'social',
+            title: post.content.substring(0, 60) + (post.content.length > 60 ? '...' : ''),
+            description: post.content,
+            image: post.image_url,
+            author: post.user
+              ? {
+                  id: post.user.id,
+                  username: post.user.username || '',
+                  full_name: post.user.full_name || '',
+                  avatar_url: post.user.avatar_url || '',
+                }
+              : undefined,
+            sourceId: post.id,
+            sourceTable: 'posts',
+            matchScore: 75,
+            tags: post.category ? [post.category] : [],
+          }))
+        );
+      }
     }
 
     // Fetch featured products/services

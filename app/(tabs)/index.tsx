@@ -1,14 +1,37 @@
-import { View, Text, StyleSheet, ScrollView, Image, TouchableOpacity, FlatList, Dimensions } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, Image, TouchableOpacity, FlatList, Dimensions, Alert, Modal } from 'react-native';
 import { useFonts, Inter_400Regular, Inter_600SemiBold } from '@expo-google-fonts/inter';
 import { useEffect, useState, useCallback } from 'react';
-import { SplashScreen, useRouter } from 'expo-router';
-import { Heart, MessageCircle, Send, Bookmark, MoreHorizontal, Plus, BookOpen, PartyPopper, Calendar, TrendingUp, Users, Newspaper, Search, User } from 'lucide-react-native';
+import { SplashScreen, useRouter, useFocusEffect } from 'expo-router';
+import { Heart, MessageCircle, Send, Bookmark, MoreHorizontal, Plus, BookOpen, PartyPopper, Calendar, TrendingUp, Users, Newspaper, Search, User, Edit3, Trash2 } from 'lucide-react-native';
 import { supabase, type Post, type Profile } from '@/lib/supabase';
 import { useAuth } from '@/hooks/useAuth';
 
 SplashScreen.preventAutoHideAsync();
 
 const { width } = Dimensions.get('window');
+const CARD_WIDTH = width - 48;
+
+// Featured items for horizontal scroll
+const FEATURED_ITEMS = [
+  {
+    id: 'featured1',
+    title: 'Upcoming Alumni Meet',
+    description: 'Join us for the annual gathering',
+    image: 'https://images.unsplash.com/photo-1523580494863-6f3031224c94?w=800&auto=format&fit=crop&q=60',
+  },
+  {
+    id: 'featured2',
+    title: 'Scholarship Program 2024',
+    description: 'Applications now open',
+    image: 'https://images.unsplash.com/photo-1524178232363-1fb2b075b655?w=800&auto=format&fit=crop&q=60',
+  },
+  {
+    id: 'featured3',
+    title: 'Career Development Workshop',
+    description: 'Enhance your professional skills',
+    image: 'https://images.unsplash.com/photo-1552664730-d307ca884978?w=800&auto=format&fit=crop&q=60',
+  },
+];
 
 // Category tabs data
 const CATEGORY_TABS = [
@@ -154,6 +177,7 @@ const PLACEHOLDER_POSTS = [
 interface PostWithUser extends Post {
   user: Profile;
   isLiked?: boolean;
+  comments_count?: number;
 }
 
 export default function HomeScreen() {
@@ -161,6 +185,7 @@ export default function HomeScreen() {
   const { user } = useAuth();
   const [posts, setPosts] = useState<PostWithUser[]>([]);
   const [loading, setLoading] = useState(true);
+  const [carouselIndices, setCarouselIndices] = useState<{ [key: string]: number }>({});
 
   const [fontsLoaded] = useFonts({
     'Inter-Regular': Inter_400Regular,
@@ -176,6 +201,7 @@ export default function HomeScreen() {
           id,
           content,
           image_url,
+          image_urls,
           created_at,
           user_id,
           profiles:user_id (
@@ -183,24 +209,55 @@ export default function HomeScreen() {
             username,
             full_name,
             avatar_url
-          )
+          ),
+          post_comments(count),
+          post_likes(count)
         `)
         .order('created_at', { ascending: false });
 
-      if (error) throw error;
+      if (error) {
+        console.error('Error fetching posts:', error);
+        throw error;
+      }
 
-      // Format the data to match our expected structure
+      console.log('Fetched posts:', data?.length || 0);
+      
+      // Get user's liked posts if logged in
+      let userLikes: Set<string> = new Set();
+      if (user) {
+        const { data: likesData } = await supabase
+          .from('post_likes')
+          .select('post_id')
+          .eq('user_id', user.id);
+        
+        if (likesData) {
+          userLikes = new Set(likesData.map(like => like.post_id));
+        }
+      }
+      
+      // Log image URLs for debugging
+      data?.forEach((post, index) => {
+        console.log(`Post ${index + 1}:`, {
+          id: post.id,
+          image_url: post.image_url,
+          image_urls: post.image_urls,
+          has_single_image: !!post.image_url,
+          has_multiple_images: !!post.image_urls && post.image_urls.length > 0,
+        });
+      });
+
+            // Format the data to match our expected structure
       const formattedPosts = data.map(post => ({
         id: post.id,
         user_id: post.user_id,
         content: post.content,
         image_url: post.image_url,
+        image_urls: post.image_urls,
         created_at: post.created_at,
         user: post.profiles as Profile,
-        isLiked: false,
-        // Mock data for likes and comments since we don't have those tables yet
-        likes: Math.floor(Math.random() * 200) + 50,
-        comments: Math.floor(Math.random() * 50) + 5,
+        likes: Array.isArray(post.post_likes) ? post.post_likes.length : 0,
+        isLiked: userLikes.has(post.id),
+        comments_count: Array.isArray(post.post_comments) ? post.post_comments.length : 0,
       }));
 
       // If no posts from database, use placeholder posts
@@ -212,7 +269,7 @@ export default function HomeScreen() {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [user]);
 
   useEffect(() => {
     if (fontsLoaded) {
@@ -226,17 +283,138 @@ export default function HomeScreen() {
     }
   }, [fetchPosts, user]);
 
-  const handleLikeToggle = (postId: string) => {
+  // Refresh posts when screen comes into focus (e.g., after creating a post)
+  useFocusEffect(
+    useCallback(() => {
+      if (user) {
+        fetchPosts();
+      }
+    }, [user])
+  );
+
+  const handleLikeToggle = async (postId: string) => {
+    if (!user) {
+      Alert.alert('Error', 'You must be logged in to like posts');
+      return;
+    }
+
+    const post = posts.find(p => p.id === postId);
+    if (!post) return;
+
+    const wasLiked = post.isLiked;
+
+    // Optimistic update
     setPosts(prevPosts =>
-      prevPosts.map(post =>
-        post.id === postId
+      prevPosts.map(p =>
+        p.id === postId
           ? {
-              ...post,
-              isLiked: !post.isLiked,
-              likes: post.isLiked ? post.likes - 1 : post.likes + 1,
+              ...p,
+              isLiked: !p.isLiked,
+              likes: p.isLiked ? p.likes - 1 : p.likes + 1,
             }
-          : post
+          : p
       )
+    );
+
+    try {
+      if (wasLiked) {
+        // Unlike: Delete the like
+        const { error } = await supabase
+          .from('post_likes')
+          .delete()
+          .eq('post_id', postId)
+          .eq('user_id', user.id);
+
+        if (error) throw error;
+      } else {
+        // Like: Insert a new like
+        const { error } = await supabase
+          .from('post_likes')
+          .insert({
+            post_id: postId,
+            user_id: user.id,
+          });
+
+        if (error) throw error;
+      }
+    } catch (error: any) {
+      console.error('Error toggling like:', error);
+      
+      // Revert optimistic update on error
+      setPosts(prevPosts =>
+        prevPosts.map(p =>
+          p.id === postId
+            ? {
+                ...p,
+                isLiked: wasLiked,
+                likes: wasLiked ? p.likes + 1 : p.likes - 1,
+              }
+            : p
+        )
+      );
+      
+      Alert.alert('Error', 'Failed to update like');
+    }
+  };
+
+  const handleEditPost = (postId: string) => {
+    console.log('Edit post clicked:', postId);
+    router.push(`/edit-post/${postId}`);
+  };
+
+  const handleDeletePost = (postId: string) => {
+    console.log('Delete post clicked:', postId);
+    Alert.alert(
+      'Delete Post',
+      'Are you sure you want to delete this post? This action cannot be undone.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              const { error } = await supabase
+                .from('posts')
+                .delete()
+                .eq('id', postId)
+                .eq('user_id', user?.id); // Ensure user owns the post
+
+              if (error) throw error;
+
+              // Remove from local state
+              setPosts(prevPosts => prevPosts.filter(post => post.id !== postId));
+              Alert.alert('Success', 'Post deleted successfully');
+            } catch (error: any) {
+              console.error('Error deleting post:', error);
+              Alert.alert('Error', 'Failed to delete post');
+            }
+          },
+        },
+      ]
+    );
+  };
+
+  const showPostMenu = (postId: string) => {
+    console.log('Show post menu for:', postId);
+    Alert.alert(
+      'Post Actions',
+      'Choose an action',
+      [
+        {
+          text: 'Edit Post',
+          onPress: () => handleEditPost(postId),
+        },
+        {
+          text: 'Delete Post',
+          style: 'destructive',
+          onPress: () => handleDeletePost(postId),
+        },
+        {
+          text: 'Cancel',
+          style: 'cancel',
+        },
+      ]
     );
   };
 
@@ -256,28 +434,18 @@ export default function HomeScreen() {
   };
 
   return (
-    <ScrollView 
-      style={styles.container}
-      showsVerticalScrollIndicator={false}
-      stickyHeaderIndices={[]}
-    >
-      {/* Header */}
-      <View style={styles.header}>
+    <View style={styles.container}>
+      <ScrollView 
+        style={styles.scrollView}
+        showsVerticalScrollIndicator={false}
+        stickyHeaderIndices={[]}
+      >
+        {/* Header */}
+        <View style={styles.header}>
         <Text style={styles.logoText}>Akora</Text>
         <View style={styles.headerIcons}>
-          {user?.is_admin && (
-            <TouchableOpacity 
-              style={styles.headerIcon}
-              onPress={() => router.push('/create-post')}
-            >
-              <Plus size={24} color="#000000" strokeWidth={2} />
-            </TouchableOpacity>
-          )}
           <TouchableOpacity style={styles.headerIcon}>
             <Heart size={24} color="#000000" strokeWidth={2} />
-          </TouchableOpacity>
-          <TouchableOpacity style={styles.headerIcon}>
-            <Send size={24} color="#000000" strokeWidth={2} />
           </TouchableOpacity>
           <TouchableOpacity 
             style={styles.headerIcon}
@@ -287,6 +455,24 @@ export default function HomeScreen() {
           </TouchableOpacity>
         </View>
       </View>
+
+      {/* Featured Items */}
+      <ScrollView 
+        horizontal 
+        showsHorizontalScrollIndicator={false} 
+        style={styles.featuredScroll}
+        contentContainerStyle={styles.featuredContent}
+      >
+        {FEATURED_ITEMS.map((item) => (
+          <TouchableOpacity key={item.id} style={styles.featuredItem}>
+            <Image source={{ uri: item.image }} style={styles.featuredImage} />
+            <View style={styles.featuredOverlay}>
+              <Text style={styles.featuredTitle}>{item.title}</Text>
+              <Text style={styles.featuredDescription}>{item.description}</Text>
+            </View>
+          </TouchableOpacity>
+        ))}
+      </ScrollView>
 
       {/* Category Tabs */}
       <ScrollView 
@@ -305,7 +491,7 @@ export default function HomeScreen() {
             >
               <Image source={{ uri: category.image }} style={styles.categoryImage} />
               <View style={[styles.categoryOverlay, { backgroundColor: category.color + '95' }]}>
-                <IconComponent size={24} color="#FFFFFF" strokeWidth={2.5} />
+                <IconComponent size={16} color="#FFFFFF" strokeWidth={2} />
                 <Text style={styles.categoryTitle}>{category.title}</Text>
               </View>
             </TouchableOpacity>
@@ -353,19 +539,70 @@ export default function HomeScreen() {
                     <Text style={styles.postTime}>{getTimeAgo(post.created_at)}</Text>
                   </View>
                 </View>
-                <TouchableOpacity>
-                  <MoreHorizontal size={20} color="#000000" />
+                <TouchableOpacity 
+                  onPress={() => {
+                    console.log('=== THREE DOT BUTTON CLICKED ===');
+                    console.log('Post ID:', post.id);
+                    console.log('Post user_id:', post.user_id);
+                    console.log('Current user id:', user?.id);
+                    console.log('Are they equal?', post.user_id === user?.id);
+                    
+                    if (post.user_id === user?.id) {
+                      showPostMenu(post.id);
+                    } else {
+                      Alert.alert('Info', 'You can only edit your own posts');
+                    }
+                  }}
+                  hitSlop={{ top: 20, bottom: 20, left: 20, right: 20 }}
+                  style={styles.moreButton}
+                  activeOpacity={0.6}
+                >
+                  <MoreHorizontal size={24} color="#64748B" strokeWidth={2} />
                 </TouchableOpacity>
               </View>
 
-              {/* Post Image */}
-              {post.image_url && (
+              {/* Post Images Carousel */}
+              {post.image_urls && post.image_urls.length > 0 ? (
+                <View style={styles.carouselContainer}>
+                  <ScrollView
+                    horizontal
+                    pagingEnabled
+                    showsHorizontalScrollIndicator={false}
+                    style={styles.carousel}
+                    onScroll={(event) => {
+                      const scrollX = event.nativeEvent.contentOffset.x;
+                      const currentIndex = Math.round(scrollX / width);
+                      setCarouselIndices({
+                        ...carouselIndices,
+                        [post.id]: currentIndex,
+                      });
+                    }}
+                    scrollEventThrottle={16}
+                  >
+                    {post.image_urls.map((imageUrl, index) => (
+                      <Image 
+                        key={index}
+                        source={{ uri: imageUrl }} 
+                        style={styles.postImage}
+                        resizeMode="cover"
+                      />
+                    ))}
+                  </ScrollView>
+                  {post.image_urls.length > 1 && (
+                    <View style={styles.carouselIndicator}>
+                      <Text style={styles.carouselIndicatorText}>
+                        {(carouselIndices[post.id] ?? 0) + 1}/{post.image_urls.length}
+                      </Text>
+                    </View>
+                  )}
+                </View>
+              ) : post.image_url ? (
                 <Image 
                   source={{ uri: post.image_url }} 
                   style={styles.postImage}
                   resizeMode="cover"
                 />
-              )}
+              ) : null}
 
               {/* Post Actions */}
               <View style={styles.postActions}>
@@ -381,15 +618,15 @@ export default function HomeScreen() {
                       strokeWidth={2}
                     />
                   </TouchableOpacity>
-                  <TouchableOpacity style={styles.actionButton}>
+                  <TouchableOpacity 
+                    style={styles.actionButton}
+                    onPress={() => router.push(`/post-comments/${post.id}`)}
+                  >
                     <MessageCircle size={26} color="#000000" strokeWidth={2} />
                   </TouchableOpacity>
-                  <TouchableOpacity style={styles.actionButton}>
-                    <Send size={24} color="#000000" strokeWidth={2} />
-                  </TouchableOpacity>
                 </View>
-                <TouchableOpacity>
-                  <Bookmark size={24} color="#000000" strokeWidth={2} />
+                <TouchableOpacity style={styles.actionButton}>
+                  <Bookmark size={26} color="#000000" strokeWidth={2} />
                 </TouchableOpacity>
               </View>
 
@@ -405,17 +642,30 @@ export default function HomeScreen() {
               </View>
 
               {/* Post Comments */}
-              {post.comments > 0 && (
-                <TouchableOpacity>
+              {post.comments_count !== undefined && post.comments_count > 0 && (
+                <TouchableOpacity onPress={() => router.push(`/post-comments/${post.id}`)}>
                   <Text style={styles.viewComments}>
-                    View all {post.comments} comments
+                    View all {post.comments_count} {post.comments_count === 1 ? 'comment' : 'comments'}
                   </Text>
                 </TouchableOpacity>
               )}
             </View>
           ))
         )}
-    </ScrollView>
+
+      </ScrollView>
+
+      {/* Floating Action Button for Creating Posts */}
+      {user && (
+        <TouchableOpacity 
+          style={styles.fabButton}
+          onPress={() => router.push('/create-post')}
+          activeOpacity={0.8}
+        >
+          <Plus size={28} color="#FFFFFF" strokeWidth={2.5} />
+        </TouchableOpacity>
+      )}
+    </View>
   );
 }
 
@@ -423,6 +673,9 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#FFFFFF',
+  },
+  scrollView: {
+    flex: 1,
   },
   header: {
     flexDirection: 'row',
@@ -447,6 +700,44 @@ const styles = StyleSheet.create({
   headerIcon: {
     padding: 4,
   },
+  featuredScroll: {
+    marginBottom: 0,
+  },
+  featuredContent: {
+    paddingHorizontal: 24,
+    paddingVertical: 16,
+    gap: 16,
+  },
+  featuredItem: {
+    width: CARD_WIDTH,
+    height: 200,
+    borderRadius: 16,
+    overflow: 'hidden',
+  },
+  featuredImage: {
+    width: '100%',
+    height: '100%',
+  },
+  featuredOverlay: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    padding: 20,
+    backgroundColor: 'rgba(0,0,0,0.4)',
+  },
+  featuredTitle: {
+    fontSize: 20,
+    fontFamily: 'Inter-SemiBold',
+    color: '#FFFFFF',
+    marginBottom: 4,
+  },
+  featuredDescription: {
+    fontSize: 14,
+    fontFamily: 'Inter-Regular',
+    color: '#FFFFFF',
+    opacity: 0.8,
+  },
   categoriesContainer: {
     borderBottomWidth: 0,
     borderBottomColor: '#DBDBDB',
@@ -459,9 +750,9 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   categoryTab: {
-    width: 140,
-    height: 100,
-    borderRadius: 12,
+    width: 80,
+    height: 60,
+    borderRadius: 8,
     overflow: 'hidden',
     position: 'relative',
   },
@@ -477,10 +768,10 @@ const styles = StyleSheet.create({
     bottom: 0,
     justifyContent: 'center',
     alignItems: 'center',
-    gap: 8,
+    gap: 4,
   },
   categoryTitle: {
-    fontSize: 14,
+    fontSize: 10,
     fontFamily: 'Inter-SemiBold',
     color: '#FFFFFF',
     textAlign: 'center',
@@ -518,11 +809,17 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingHorizontal: 16,
     paddingVertical: 12,
+    zIndex: 10,
   },
   postHeaderLeft: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 12,
+    flex: 1,
+  },
+  moreButton: {
+    padding: 8,
+    zIndex: 100,
   },
   postUserAvatar: {
     width: 32,
@@ -539,10 +836,30 @@ const styles = StyleSheet.create({
     fontFamily: 'Inter-Regular',
     color: '#8E8E8E',
   },
+  carouselContainer: {
+    position: 'relative',
+  },
+  carousel: {
+    width: width,
+  },
   postImage: {
     width: width,
     height: width * 0.75,
     backgroundColor: '#F8F8F8',
+  },
+  carouselIndicator: {
+    position: 'absolute',
+    top: 12,
+    right: 12,
+    backgroundColor: 'rgba(0, 0, 0, 0.6)',
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 12,
+  },
+  carouselIndicatorText: {
+    color: '#FFFFFF',
+    fontSize: 12,
+    fontFamily: 'Inter-SemiBold',
   },
   postActions: {
     flexDirection: 'row',
@@ -618,5 +935,62 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontFamily: 'Inter-SemiBold',
     color: '#FFFFFF',
+  },
+  fabButton: {
+    position: 'absolute',
+    right: 20,
+    bottom: 20,
+    width: 60,
+    height: 60,
+    borderRadius: 30,
+    backgroundColor: '#475569',
+    justifyContent: 'center',
+    alignItems: 'center',
+    shadowColor: '#000000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 8,
+  },
+  modalBackdrop: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  postMenuContainer: {
+    width: '80%',
+    maxWidth: 300,
+  },
+  postMenu: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 12,
+    overflow: 'hidden',
+    shadowColor: '#000000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.2,
+    shadowRadius: 12,
+    elevation: 8,
+  },
+  postMenuItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 16,
+    gap: 12,
+    backgroundColor: '#FFFFFF',
+    borderBottomWidth: 1,
+    borderBottomColor: '#F1F5F9',
+  },
+  postMenuItemDanger: {
+    borderBottomWidth: 0,
+  },
+  postMenuItemText: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: '#475569',
+  },
+  postMenuItemTextDanger: {
+    color: '#EF4444',
+    fontWeight: '600',
   },
 });

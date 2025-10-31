@@ -1,12 +1,14 @@
-import { View, Text, StyleSheet, ScrollView, Image, TouchableOpacity, Alert, ActivityIndicator } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, Image, TouchableOpacity, Alert, ActivityIndicator, Modal, Pressable, Dimensions } from 'react-native';
 import { useFonts, Inter_400Regular, Inter_600SemiBold } from '@expo-google-fonts/inter';
 import { useEffect, useState } from 'react';
 import { SplashScreen, useRouter, useLocalSearchParams } from 'expo-router';
-import { ArrowLeft, Mail, GraduationCap, Calendar, MapPin, MessageCircle, UserPlus, UserCheck, UserMinus, Users } from 'lucide-react-native';
+import { ArrowLeft, Mail, GraduationCap, Calendar, MapPin, MessageCircle, UserPlus, UserCheck, UserMinus, Users, X } from 'lucide-react-native';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/hooks/useAuth';
 import { checkFriendshipStatus, sendFriendRequest, unfriend, getMutualFriendsCount } from '@/lib/friends';
 import type { Profile } from '@/lib/supabase';
+
+const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 
 SplashScreen.preventAutoHideAsync();
 
@@ -19,6 +21,7 @@ export default function UserProfileScreen() {
   const [friendshipStatus, setFriendshipStatus] = useState<'friends' | 'request_sent' | 'request_received' | 'none' | null>(null);
   const [mutualFriendsCount, setMutualFriendsCount] = useState(0);
   const [actionLoading, setActionLoading] = useState(false);
+  const [showFullImage, setShowFullImage] = useState(false);
 
   const [fontsLoaded] = useFonts({
     'Inter-Regular': Inter_400Regular,
@@ -284,50 +287,49 @@ export default function UserProfileScreen() {
       {/* Header */}
       <View style={styles.header}>
         <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
-          <ArrowLeft size={24} color="#FFFFFF" />
+          <ArrowLeft size={24} color="#000000" />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Profile</Text>
         <View style={styles.placeholder} />
       </View>
 
       <ScrollView style={styles.scrollView} showsVerticalScrollIndicator={false}>
-        {/* Cover Photo & Avatar */}
-        <View style={styles.coverSection}>
-          <View style={styles.coverPhoto}>
-            {/* Placeholder gradient cover - can be replaced with actual cover_photo_url field */}
-            <View style={styles.coverGradient} />
-          </View>
-          <View style={styles.avatarContainer}>
+        {/* Profile Header */}
+        <View style={styles.profileHeader}>
+          <TouchableOpacity 
+            style={styles.avatarWrapper}
+            onPress={() => setShowFullImage(true)}
+            activeOpacity={0.8}
+          >
             <Image
               source={{
                 uri: userProfile.avatar_url || 'https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?w=400&auto=format&fit=crop&q=60',
               }}
               style={styles.avatar}
             />
-          </View>
-        </View>
-
-        {/* User Info */}
-        <View style={styles.userInfo}>
-          <Text style={styles.fullName}>
-            {userProfile.full_name || userProfile.username || 'Unknown User'}
-          </Text>
-          {userProfile.username && (
-            <Text style={styles.username}>@{userProfile.username}</Text>
-          )}
-          {userProfile.bio && (
-            <Text style={styles.bio}>{userProfile.bio}</Text>
-          )}
+          </TouchableOpacity>
           
-          {/* Mutual Friends */}
-          {user && user.id !== id && mutualFriendsCount > 0 && (
-            <View style={styles.mutualFriendsContainer}>
-              <Users size={16} color="#666666" />
-              <Text style={styles.mutualFriendsText}>
-                {mutualFriendsCount} mutual friend{mutualFriendsCount > 1 ? 's' : ''}
-              </Text>
-            </View>
-          )}
+          <View style={styles.userInfo}>
+            <Text style={styles.fullName}>
+              {userProfile.full_name || userProfile.username || 'Unknown User'}
+            </Text>
+            {userProfile.username && (
+              <Text style={styles.username}>@{userProfile.username}</Text>
+            )}
+            {userProfile.bio && (
+              <Text style={styles.bio}>{userProfile.bio}</Text>
+            )}
+            
+            {/* Mutual Friends */}
+            {user && user.id !== id && mutualFriendsCount > 0 && (
+              <View style={styles.mutualFriendsContainer}>
+                <Users size={16} color="#666666" />
+                <Text style={styles.mutualFriendsText}>
+                  {mutualFriendsCount} mutual friend{mutualFriendsCount > 1 ? 's' : ''}
+                </Text>
+              </View>
+            )}
+          </View>
         </View>
 
         {/* Action Button */}
@@ -422,6 +424,42 @@ export default function UserProfileScreen() {
           )}
         </View>
       </ScrollView>
+
+      {/* Full Screen Image Modal */}
+      <Modal
+        visible={showFullImage}
+        transparent={true}
+        animationType="fade"
+        onRequestClose={() => setShowFullImage(false)}
+      >
+        <Pressable 
+          style={styles.fullImageModal}
+          onPress={() => setShowFullImage(false)}
+        >
+          <View style={styles.fullImageHeader}>
+            <TouchableOpacity 
+              style={styles.closeButton}
+              onPress={() => setShowFullImage(false)}
+            >
+              <X size={28} color="#FFFFFF" />
+            </TouchableOpacity>
+          </View>
+          <View style={styles.fullImageContainer}>
+            <Image
+              source={{
+                uri: userProfile.avatar_url || 'https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?w=400&auto=format&fit=crop&q=60',
+              }}
+              style={styles.fullImage}
+              resizeMode="contain"
+            />
+          </View>
+          <View style={styles.fullImageFooter}>
+            <Text style={styles.fullImageName}>
+              {userProfile.full_name || userProfile.username || 'Unknown User'}
+            </Text>
+          </View>
+        </Pressable>
+      </Modal>
     </View>
   );
 }
@@ -460,22 +498,19 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingTop: 60,
     paddingBottom: 16,
-    backgroundColor: 'transparent',
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    zIndex: 10,
+    backgroundColor: '#FFFFFF',
+    borderBottomWidth: 1,
+    borderBottomColor: '#F0F0F0',
   },
   backButton: {
     padding: 8,
-    backgroundColor: 'rgba(0, 0, 0, 0.3)',
+    backgroundColor: '#F5F5F5',
     borderRadius: 20,
   },
   headerTitle: {
     fontFamily: 'Inter-SemiBold',
     fontSize: 18,
-    color: '#FFFFFF',
+    color: '#000000',
   },
   placeholder: {
     width: 40,
@@ -483,51 +518,46 @@ const styles = StyleSheet.create({
   scrollView: {
     flex: 1,
   },
-  coverSection: {
-    position: 'relative',
-    height: 200,
+  profileHeader: {
+    backgroundColor: '#FFFFFF',
+    paddingTop: 120,
+    paddingHorizontal: 20,
+    paddingBottom: 24,
+    alignItems: 'center',
   },
-  coverPhoto: {
-    width: '100%',
-    height: 200,
-    backgroundColor: '#E0E0E0',
-  },
-  coverGradient: {
-    flex: 1,
-    backgroundColor: '#4169E1',
-    opacity: 0.8,
-  },
-  avatarContainer: {
-    position: 'absolute',
-    bottom: -50,
-    left: 20,
-    borderWidth: 4,
-    borderColor: '#FFFFFF',
-    borderRadius: 60,
+  avatarWrapper: {
+    marginBottom: 20,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.1,
+    shadowRadius: 12,
+    elevation: 8,
   },
   avatar: {
-    width: 120,
-    height: 120,
-    borderRadius: 60,
+    width: 140,
+    height: 140,
+    borderRadius: 70,
     backgroundColor: '#E0E0E0',
+    borderWidth: 4,
+    borderColor: '#FFFFFF',
   },
   userInfo: {
-    paddingHorizontal: 20,
-    paddingTop: 60,
-    paddingBottom: 20,
-    backgroundColor: '#FFFFFF',
+    alignItems: 'center',
+    width: '100%',
   },
   fullName: {
     fontFamily: 'Inter-SemiBold',
-    fontSize: 24,
+    fontSize: 26,
     color: '#000000',
     marginBottom: 4,
+    textAlign: 'center',
   },
   username: {
     fontFamily: 'Inter-Regular',
     fontSize: 16,
     color: '#666666',
     marginBottom: 12,
+    textAlign: 'center',
   },
   bio: {
     fontFamily: 'Inter-Regular',
@@ -535,14 +565,18 @@ const styles = StyleSheet.create({
     color: '#333333',
     lineHeight: 22,
     marginTop: 8,
+    textAlign: 'center',
+    paddingHorizontal: 20,
   },
   mutualFriendsContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginTop: 12,
-    paddingTop: 12,
+    justifyContent: 'center',
+    marginTop: 16,
+    paddingTop: 16,
     borderTopWidth: 1,
     borderTopColor: '#F0F0F0',
+    width: '100%',
   },
   mutualFriendsText: {
     fontFamily: 'Inter-Regular',
@@ -642,5 +676,45 @@ const styles = StyleSheet.create({
     color: '#999999',
     textAlign: 'center',
     paddingVertical: 20,
+  },
+  fullImageModal: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.95)',
+    justifyContent: 'space-between',
+  },
+  fullImageHeader: {
+    paddingTop: 60,
+    paddingHorizontal: 20,
+    paddingBottom: 20,
+  },
+  closeButton: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: 'rgba(255, 255, 255, 0.1)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  fullImageContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 20,
+  },
+  fullImage: {
+    width: SCREEN_WIDTH,
+    height: SCREEN_WIDTH,
+    borderRadius: 0,
+  },
+  fullImageFooter: {
+    paddingHorizontal: 20,
+    paddingVertical: 30,
+    alignItems: 'center',
+  },
+  fullImageName: {
+    fontFamily: 'Inter-SemiBold',
+    fontSize: 20,
+    color: '#FFFFFF',
+    textAlign: 'center',
   },
 });
