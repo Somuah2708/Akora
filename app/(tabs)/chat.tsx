@@ -1,11 +1,12 @@
 import { View, Text, StyleSheet, ScrollView, Image, TouchableOpacity, TextInput, Modal, FlatList, Alert } from 'react-native';
-import { Search, Plus, MoveVertical as MoreVertical, X, MessageCircle, UserPlus } from 'lucide-react-native';
+import { Search, Plus, MoveVertical as MoreVertical, X, MessageCircle, UserPlus, Check, CheckCheck, Users } from 'lucide-react-native';
 import { useFonts, Inter_400Regular, Inter_600SemiBold } from '@expo-google-fonts/inter';
 import { useEffect, useState } from 'react';
 import { SplashScreen, useRouter } from 'expo-router';
-import { getConversationList, searchUsers as searchUsersHelper } from '@/lib/friends';
+import { getConversationList, searchUsers as searchUsersHelper, getUserOnlineStatus, subscribeToUserPresence } from '@/lib/friends';
 import { useAuth } from '@/hooks/useAuth';
 import { supabase } from '@/lib/supabase';
+import { formatChatListTime } from '@/lib/timeUtils';
 import type { Profile } from '@/lib/supabase';
 
 SplashScreen.preventAutoHideAsync();
@@ -28,15 +29,34 @@ export default function ChatScreen() {
   const { user } = useAuth();
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [loading, setLoading] = useState(true);
+  // Groups state
+  type GroupItem = { group: { id: string; name: string; avatar_url?: string | null }, lastMessage: any | null, unreadCount: number };
+  const [groups, setGroups] = useState<GroupItem[]>([]);
+  const [groupsLoading, setGroupsLoading] = useState(true);
   const [searchModalVisible, setSearchModalVisible] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [searchResults, setSearchResults] = useState<Profile[]>([]);
   const [searchLoading, setSearchLoading] = useState(false);
+  const [onlineUsers, setOnlineUsers] = useState<Set<string>>(new Set());
 
   const [fontsLoaded] = useFonts({
     'Inter-Regular': Inter_400Regular,
     'Inter-SemiBold': Inter_600SemiBold,
   });
+
+  // Upsert conversation by friend id to prevent duplicates
+  const upsertConversation = (list: Conversation[], conv: Conversation) => {
+    const friendId = Array.isArray(conv.friend) ? conv.friend[0]?.id : conv.friend?.id;
+    if (!friendId) return list;
+    
+    const map = new Map<string, Conversation>();
+    for (const c of list) {
+      const fid = Array.isArray(c.friend) ? c.friend[0]?.id : c.friend?.id;
+      if (fid) map.set(fid, c);
+    }
+    map.set(friendId, conv);
+    return Array.from(map.values());
+  };
 
   useEffect(() => {
     if (fontsLoaded) {
@@ -46,42 +66,208 @@ export default function ChatScreen() {
 
   useEffect(() => {
     if (user) {
-      fetchConversations();
+      // Initial fetch shows loading once
+      fetchConversations(true);
+      fetchGroups(true);
       
       // Subscribe to real-time updates for direct messages
-      const subscription = supabase
+      const messageSubscription = supabase
         .channel('direct_messages_changes')
-        .on('postgres_changes', 
-          { 
-            event: '*', 
-            schema: 'public', 
+        .on(
+          'postgres_changes',
+          {
+            event: '*',
+            schema: 'public',
             table: 'direct_messages',
-            filter: `or(sender_id.eq.${user.id},receiver_id.eq.${user.id})`
-          }, 
-          () => {
-            // Refresh conversations when messages are added/updated
-            fetchConversations();
+          },
+          async (payload) => {
+            if (!user) return;
+            const msg: any = payload.new;
+            if (!msg) return;
+            // Only react to conversations that involve the current user
+            if (!(msg.sender_id === user.id || msg.receiver_id === user.id)) return;
+
+            const otherUserId = msg.sender_id === user.id ? msg.receiver_id : msg.sender_id;
+
+            setConversations((prev) => {
+              const list = [...prev];
+              // Find conversation index by friend id
+              let idx = list.findIndex((c) => {
+                const f = Array.isArray(c.friend) ? c.friend[0] : c.friend;
+                return f?.id === otherUserId;
+              });
+
+              const latestMessage = {
+                id: msg.id,
+                content: msg.content || msg.message || '',
+                created_at: msg.created_at,
+                sender_id: msg.sender_id,
+                receiver_id: msg.receiver_id,
+                is_read: !!msg.is_read,
+              };
+
+              if (idx === -1) {
+                // Not in list yet; we'll handle async profile fetch below
+                return list;
+              }
+
+              const existing = list[idx];
+              const isIncoming = msg.sender_id === otherUserId;
+              const nextUnread = isIncoming
+                ? (existing.unreadCount || 0) + (msg.is_read ? 0 : 1)
+                : existing.unreadCount || 0;
+
+              list[idx] = {
+                ...existing,
+                latestMessage,
+                unreadCount: nextUnread,
+              };
+
+              // Reorder by latest message time (descending)
+              list.sort((a, b) => {
+                const at = new Date(a.latestMessage?.created_at || 0).getTime();
+                const bt = new Date(b.latestMessage?.created_at || 0).getTime();
+                return bt - at;
+              });
+              return list;
+            });
+
+            // If conversation wasn't present, fetch the friend's profile once and insert it
+            const hasConversation = (list: any[]) =>
+              list.some((c) => {
+                const f = Array.isArray(c.friend) ? c.friend[0] : c.friend;
+                return f?.id === otherUserId;
+              });
+
+            // Double-check current state before fetching
+            let alreadyThere = false;
+            setConversations((prev) => {
+              alreadyThere = hasConversation(prev as any);
+              return prev;
+            });
+
+            if (!alreadyThere) {
+              const { data: friend, error } = await supabase
+                .from('profiles')
+                .select('id, username, full_name, avatar_url')
+                .eq('id', otherUserId)
+                .single();
+              if (!error && friend) {
+                const conv = {
+                  friend,
+                  latestMessage: {
+                    id: msg.id,
+                    content: msg.content || msg.message || '',
+                    created_at: msg.created_at,
+                    sender_id: msg.sender_id,
+                    receiver_id: msg.receiver_id,
+                    is_read: !!msg.is_read,
+                  },
+                  unreadCount: msg.sender_id === otherUserId && !msg.is_read ? 1 : 0,
+                } as Conversation;
+                setConversations((prev) => {
+                  const next = upsertConversation(prev, conv);
+                  next.sort((a, b) => {
+                    const at = new Date(a.latestMessage?.created_at || 0).getTime();
+                    const bt = new Date(b.latestMessage?.created_at || 0).getTime();
+                    return bt - at;
+                  });
+                  return next;
+                });
+              }
+            }
+          }
+        )
+        .subscribe();
+
+      // Subscribe to profile updates for online status
+      const profileSubscription = supabase
+        .channel('profile_status_changes')
+        .on('postgres_changes',
+          {
+            event: 'UPDATE',
+            schema: 'public',
+            table: 'profiles',
+          },
+          (payload) => {
+            const updatedProfile = payload.new as any;
+            setOnlineUsers(prev => {
+              const newSet = new Set(prev);
+              if (updatedProfile.is_online) {
+                newSet.add(updatedProfile.id);
+              } else {
+                newSet.delete(updatedProfile.id);
+              }
+              return newSet;
+            });
+          }
+        )
+        .subscribe();
+
+      // Subscribe to real-time updates for group messages
+      const groupMessageSub = supabase
+        .channel('group_messages_changes')
+        .on(
+          'postgres_changes',
+          { event: '*', schema: 'public', table: 'group_messages' },
+          (payload) => {
+            const msg: any = payload.new;
+            if (!msg || !user) return;
+            setGroups((prev) => {
+              const idx = prev.findIndex((g) => g.group.id === msg.group_id);
+              if (idx === -1) return prev; // not a group I belong to (or not loaded yet)
+              const list = [...prev];
+              const existing = list[idx];
+              const isIncoming = msg.sender_id !== user.id;
+              const alreadyRead = Array.isArray(msg.read_by) && msg.read_by.includes(user.id);
+              const nextUnread = isIncoming && !alreadyRead ? (existing.unreadCount || 0) + 1 : existing.unreadCount || 0;
+              list[idx] = { ...existing, lastMessage: msg, unreadCount: nextUnread };
+              // Reorder by time desc
+              list.sort((a, b) => new Date(b.lastMessage?.created_at || 0).getTime() - new Date(a.lastMessage?.created_at || 0).getTime());
+              return list;
+            });
           }
         )
         .subscribe();
 
       return () => {
-        subscription.unsubscribe();
+        messageSubscription.unsubscribe();
+        profileSubscription.unsubscribe();
+        groupMessageSub.unsubscribe();
       };
     }
   }, [user]);
 
-  const fetchConversations = async () => {
+  const fetchConversations = async (showLoading = false) => {
     if (!user) return;
     try {
-      setLoading(true);
+      if (showLoading) setLoading(true);
       const convos = await getConversationList(user.id);
       setConversations(convos);
+      
+      // Load online status for all friends
+      const friendIds = convos.map(c => {
+        // Handle friend being an array or object
+        const friend = Array.isArray(c.friend) ? c.friend[0] : c.friend;
+        return friend?.id;
+      }).filter(Boolean) as string[];
+      
+      const statuses = await Promise.all(
+        friendIds.map(id => getUserOnlineStatus(id))
+      );
+      
+      const online = new Set<string>();
+      statuses.forEach((status, index) => {
+        if (status.isOnline) {
+          online.add(friendIds[index]);
+        }
+      });
+      setOnlineUsers(online);
     } catch (error) {
       console.error('Error fetching conversations:', error);
       Alert.alert('Error', 'Failed to load conversations');
     } finally {
-      setLoading(false);
+      if (showLoading) setLoading(false);
     }
   };
 
@@ -96,6 +282,47 @@ export default function ChatScreen() {
       Alert.alert('Error', 'Failed to search users');
     } finally {
       setSearchLoading(false);
+    }
+  };
+
+  const fetchGroups = async (showLoading = false) => {
+    if (!user) return;
+    try {
+      if (showLoading) setGroupsLoading(true);
+      const { data: memberships, error } = await supabase
+        .from('group_members')
+        .select('group_id, groups(id, name, avatar_url)')
+        .eq('user_id', user.id);
+      if (error) throw error;
+      const groupList = (memberships || []).map((m: any) => m.groups).filter(Boolean);
+      // Compose base items
+      const base: GroupItem[] = groupList.map((g: any) => ({ group: { id: g.id, name: g.name, avatar_url: g.avatar_url }, lastMessage: null, unreadCount: 0 }));
+      // Fetch last message per group (N calls; OK for small N)
+      await Promise.all(
+        base.map(async (item) => {
+          const { data: last } = await supabase
+            .from('group_messages')
+            .select('*')
+            .eq('group_id', item.group.id)
+            .order('created_at', { ascending: false })
+            .limit(1)
+            .maybeSingle();
+          item.lastMessage = last || null;
+          // Unread count
+          const { count } = await supabase
+            .from('group_messages')
+            .select('*', { count: 'exact', head: true })
+            .eq('group_id', item.group.id)
+            .not('read_by', 'cs', `["${user.id}"]` as any);
+          item.unreadCount = count || 0;
+        })
+      );
+      base.sort((a, b) => new Date(b.lastMessage?.created_at || 0).getTime() - new Date(a.lastMessage?.created_at || 0).getTime());
+      setGroups(base);
+    } catch (e) {
+      console.error('Error fetching groups', e);
+    } finally {
+      if (showLoading) setGroupsLoading(false);
     }
   };
 
@@ -115,16 +342,25 @@ export default function ChatScreen() {
   };
 
   const formatTime = (timestamp: string) => {
-    const date = new Date(timestamp);
-    const now = new Date();
-    const diffInHours = (now.getTime() - date.getTime()) / (1000 * 60 * 60);
+    return formatChatListTime(timestamp);
+  };
 
-    if (diffInHours < 24) {
-      return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-    } else if (diffInHours < 168) { // 7 days
-      return date.toLocaleDateString([], { weekday: 'short' });
-    } else {
-      return date.toLocaleDateString([], { month: 'short', day: 'numeric' });
+  const getMessagePreview = (message: any): string => {
+    if (!message) return 'No messages yet';
+    
+    // Handle different message types with proper icons
+    switch (message.message_type || 'text') {
+      case 'image':
+        return '📷 Photo';
+      case 'video':
+        return '🎥 Video';
+      case 'voice':
+        return '🎤 Voice message';
+      case 'text':
+      default:
+        // Show first 40 characters of text message
+        const content = message.content || message.message || '';
+        return content.length > 40 ? `${content.substring(0, 40)}...` : content;
     }
   };
 
@@ -159,6 +395,9 @@ export default function ChatScreen() {
             onPress={() => router.push('/friends')}
           >
             <UserPlus size={24} color="#1A1A1A" />
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.iconButton} onPress={() => router.push('/create-group' as any)}>
+            <Users size={24} color="#1A1A1A" />
           </TouchableOpacity>
           <TouchableOpacity style={styles.iconButton}>
             <MoreVertical size={24} color="#1A1A1A" />
@@ -206,7 +445,9 @@ export default function ChatScreen() {
                       }} 
                       style={styles.avatar} 
                     />
-                    <View style={styles.onlineIndicator} />
+                    {onlineUsers.has(conversation.friend.id) && (
+                      <View style={styles.onlineIndicator} />
+                    )}
                   </View>
                 </TouchableOpacity>
                 <View style={styles.chatInfo}>
@@ -228,7 +469,9 @@ export default function ChatScreen() {
                       ]} 
                       numberOfLines={1}
                     >
-                      {conversation.latestMessage?.content || 'No messages yet'}
+                      {conversation.latestMessage 
+                        ? getMessagePreview(conversation.latestMessage)
+                        : 'No messages yet'}
                     </Text>
                     {conversation.unreadCount > 0 && (
                       <View style={styles.unreadBadge}>
@@ -240,6 +483,44 @@ export default function ChatScreen() {
               </TouchableOpacity>
             ))
           )}
+
+          {/* Groups Section */}
+          <View style={{ height: 10 }} />
+          <Text style={{ paddingHorizontal: 16, paddingVertical: 8, color: '#64748B', fontFamily: 'Inter-SemiBold' }}>Groups</Text>
+          {groupsLoading && (
+            <View style={styles.loadingContainer}><Text style={styles.loadingText}>Loading groups...</Text></View>
+          )}
+          {groups.map((g) => (
+            <TouchableOpacity key={g.group.id} style={styles.chatItem} onPress={() => router.push(`/chat/group/${g.group.id}`)}>
+              <View style={styles.avatarContainer}>
+                <Image 
+                  source={{ uri: g.group.avatar_url || 'https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?w=400&auto=format&fit=crop&q=60' }} 
+                  style={styles.avatar} 
+                />
+              </View>
+              <View style={styles.chatInfo}>
+                <View style={styles.chatHeader}>
+                  <Text style={styles.chatName}>{g.group.name}</Text>
+                  {!!g.lastMessage && (
+                    <Text style={styles.chatTime}>{formatTime(g.lastMessage.created_at)}</Text>
+                  )}
+                </View>
+                <View style={styles.chatFooter}>
+                  <Text 
+                    style={[styles.lastMessage, g.unreadCount > 0 && styles.unreadMessage]} 
+                    numberOfLines={1}
+                  >
+                    {g.lastMessage ? getMessagePreview(g.lastMessage) : 'No messages yet'}
+                  </Text>
+                  {g.unreadCount > 0 && (
+                    <View style={styles.unreadBadge}>
+                      <Text style={styles.unreadCount}>{g.unreadCount}</Text>
+                    </View>
+                  )}
+                </View>
+              </View>
+            </TouchableOpacity>
+          ))}
         </ScrollView>
       )}
 

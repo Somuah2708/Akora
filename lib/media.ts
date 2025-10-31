@@ -3,6 +3,9 @@ import * as ImagePicker from 'expo-image-picker';
 import { Audio } from 'expo-av';
 import { Platform, Alert } from 'react-native';
 
+const IMAGE_MAX_BYTES = 5 * 1024 * 1024; // 5MB
+const VIDEO_MAX_BYTES = 25 * 1024 * 1024; // 25MB
+
 // Request permissions
 export async function requestMediaPermissions() {
   const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
@@ -38,9 +41,10 @@ export async function pickMedia(): Promise<ImagePicker.ImagePickerAsset | null> 
     if (!hasPermission) return null;
 
     const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ['images', 'videos'],
-      allowsEditing: true,
+      mediaTypes: ImagePicker.MediaTypeOptions.All,
+      allowsEditing: false,
       quality: 0.8,
+      selectionLimit: 1,
       videoMaxDuration: 60, // 60 seconds max
     });
 
@@ -62,8 +66,8 @@ export async function takeMedia(): Promise<ImagePicker.ImagePickerAsset | null> 
     if (!hasPermission) return null;
 
     const result = await ImagePicker.launchCameraAsync({
-      mediaTypes: ['images', 'videos'],
-      allowsEditing: true,
+      mediaTypes: ImagePicker.MediaTypeOptions.All,
+      allowsEditing: false,
       quality: 0.8,
       videoMaxDuration: 60,
     });
@@ -83,23 +87,56 @@ export async function takeMedia(): Promise<ImagePicker.ImagePickerAsset | null> 
 export async function uploadMedia(
   uri: string,
   userId: string,
-  type: 'image' | 'video'
+  type: 'image' | 'video',
+  fileName?: string | null,
+  mimeType?: string | null
 ): Promise<string | null> {
   try {
     const timestamp = Date.now();
-    const extension = uri.split('.').pop() || 'jpg';
-    const fileName = `${userId}_${timestamp}.${extension}`;
-    const filePath = `messages/media/${userId}/${fileName}`;
+    // Determine extension
+    const inferExtFromMime = (mt?: string | null) => {
+      switch (mt) {
+        case 'image/jpeg':
+          return 'jpg';
+        case 'image/png':
+          return 'png';
+        case 'image/heic':
+        case 'image/heif':
+          return 'heic';
+        case 'video/mp4':
+          return 'mp4';
+        case 'video/quicktime':
+          return 'mov';
+        default:
+          return type === 'image' ? 'jpg' : 'mp4';
+      }
+    };
+
+    const extFromName = fileName && fileName.includes('.') ? fileName.split('.').pop() : null;
+    const finalExt = (extFromName || inferExtFromMime(mimeType)) || (type === 'image' ? 'jpg' : 'mp4');
+    const safeFileName = `${userId}_${timestamp}.${finalExt}`;
+    const filePath = `messages/media/${userId}/${safeFileName}`;
 
     // Fetch the file
     const response = await fetch(uri);
     const blob = await response.blob();
 
+    // Size guard (prevents 413 Payload too large)
+    const size = blob.size;
+    const max = type === 'image' ? IMAGE_MAX_BYTES : VIDEO_MAX_BYTES;
+    if (size > max) {
+      Alert.alert(
+        'File too large',
+        `${type === 'image' ? 'Image' : 'Video'} exceeds the ${Math.round(max / (1024*1024))}MB limit. Please choose a smaller file.`
+      );
+      return null;
+    }
+
     // Upload to Supabase Storage
     const { data, error } = await supabase.storage
       .from('chat-media')
       .upload(filePath, blob, {
-        contentType: type === 'image' ? 'image/jpeg' : 'video/mp4',
+        contentType: mimeType || (type === 'image' ? 'image/jpeg' : 'video/mp4'),
         upsert: false,
       });
 
@@ -111,9 +148,16 @@ export async function uploadMedia(
       .getPublicUrl(filePath);
 
     return urlData.publicUrl;
-  } catch (error) {
+  } catch (error: any) {
     console.error('Error uploading media:', error);
-    Alert.alert('Error', 'Failed to upload media');
+    const message = typeof error?.message === 'string' ? error.message : '';
+    if (message.toLowerCase().includes('payload too large')) {
+      Alert.alert('File too large', 'The selected media exceeds the maximum allowed size.');
+    } else if (message.toLowerCase().includes('bucket not found')) {
+      Alert.alert('Storage bucket missing', 'The chat-media bucket does not exist yet. Please run the storage migration.');
+    } else {
+      Alert.alert('Error', 'Failed to upload media');
+    }
     return null;
   }
 }

@@ -93,10 +93,12 @@ export default function RootLayout() {
   
   return (
     <>
-      <Stack>
-        <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
-        <Stack.Screen name="auth" options={{ headerShown: false }} />
-        <Stack.Screen name="+not-found" />
+      <Stack screenOptions={{ headerShown: false }}>
+        <Stack.Screen name="(tabs)" />
+        <Stack.Screen name="auth" />
+        {/* Ensure non-tab stacks (e.g., chat, user-profile, etc.) also have no header */}
+        <Stack.Screen name="chat" />
+        <Stack.Screen name="+not-found" options={{ headerShown: true }} />
       </Stack>
       <StatusBar style="auto" />
     </>
