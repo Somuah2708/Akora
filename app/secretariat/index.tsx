@@ -1,8 +1,10 @@
-import { View, Text, StyleSheet, ScrollView, Image, TouchableOpacity, TextInput, Dimensions } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, Image, TouchableOpacity, TextInput, Dimensions, ActivityIndicator } from 'react-native';
 import { useFonts, Inter_400Regular, Inter_600SemiBold } from '@expo-google-fonts/inter';
-import { useEffect } from 'react';
-import { SplashScreen, useRouter } from 'expo-router';
+import { useEffect, useState, useCallback } from 'react';
+import { SplashScreen, useRouter, useFocusEffect } from 'expo-router';
 import { ArrowLeft, Building2, ShoppingBag, Calendar, FileText, Mail, Phone, Globe, MessageCircle, ChevronRight, Bell, Megaphone, BookOpen, History, Award, Heart } from 'lucide-react-native';
+import { supabase } from '@/lib/supabase';
+import { useAuth } from '@/hooks/useAuth';
 
 SplashScreen.preventAutoHideAsync();
 
@@ -91,10 +93,97 @@ const HERITAGE_ITEMS = [
 
 export default function SecretariatScreen() {
   const router = useRouter();
+  const { user } = useAuth();
+  const [unreadCount, setUnreadCount] = useState(0);
+  const [announcements, setAnnouncements] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [lastViewedAt, setLastViewedAt] = useState<string | null>(null);
+  
   const [fontsLoaded] = useFonts({
     'Inter-Regular': Inter_400Regular,
     'Inter-SemiBold': Inter_600SemiBold,
   });
+
+  // Fetch announcements and check for new items
+  const fetchAnnouncementsAndCheckNew = async () => {
+    if (!user) return;
+
+    try {
+      setLoading(true);
+
+      // Get user's last viewed timestamp for secretariat
+      const { data: viewData } = await supabase
+        .from('secretariat_views')
+        .select('last_viewed_at')
+        .eq('user_id', user.id)
+        .single();
+
+      const lastViewed = viewData?.last_viewed_at;
+      setLastViewedAt(lastViewed);
+
+      // Fetch announcements (you can replace this with actual database query)
+      // For now, using static data with timestamps
+      const announcementsData = ANNOUNCEMENTS.map((ann, index) => ({
+        ...ann,
+        created_at: new Date(Date.now() - (index * 24 * 60 * 60 * 1000)).toISOString()
+      }));
+
+      setAnnouncements(announcementsData);
+
+      // Count unread announcements
+      if (lastViewed) {
+        const unread = announcementsData.filter(
+          ann => new Date(ann.created_at) > new Date(lastViewed)
+        ).length;
+        setUnreadCount(unread);
+      } else {
+        setUnreadCount(announcementsData.length);
+      }
+
+    } catch (error) {
+      console.error('Error fetching announcements:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Mark all as read when user views the page
+  const markAsRead = async () => {
+    if (!user) return;
+
+    try {
+      const now = new Date().toISOString();
+
+      // Upsert the view record
+      const { error } = await supabase
+        .from('secretariat_views')
+        .upsert({
+          user_id: user.id,
+          last_viewed_at: now,
+        }, {
+          onConflict: 'user_id'
+        });
+
+      if (error) {
+        console.error('Error marking as read:', error);
+      } else {
+        setUnreadCount(0);
+        setLastViewedAt(now);
+      }
+    } catch (error) {
+      console.error('Error in markAsRead:', error);
+    }
+  };
+
+  useEffect(() => {
+    fetchAnnouncementsAndCheckNew();
+  }, [user]);
+
+  useFocusEffect(
+    useCallback(() => {
+      fetchAnnouncementsAndCheckNew();
+    }, [user])
+  );
 
   useEffect(() => {
     if (fontsLoaded) {
@@ -113,8 +202,18 @@ export default function SecretariatScreen() {
           <ArrowLeft size={24} color="#000000" />
         </TouchableOpacity>
         <Text style={styles.title}>OAA Secretariat</Text>
-        <TouchableOpacity style={styles.notificationButton}>
+        <TouchableOpacity 
+          style={styles.notificationButton}
+          onPress={() => router.push('/secretariat/notifications')}
+        >
           <Bell size={24} color="#000000" />
+          {unreadCount > 0 && (
+            <View style={styles.notificationBadge}>
+              <Text style={styles.notificationBadgeText}>
+                {unreadCount > 9 ? '9+' : unreadCount}
+              </Text>
+            </View>
+          )}
         </TouchableOpacity>
       </View>
 
@@ -156,19 +255,38 @@ export default function SecretariatScreen() {
             <ChevronRight size={16} color="#666666" />
           </TouchableOpacity>
         </View>
-        {ANNOUNCEMENTS.map((announcement) => (
-          <TouchableOpacity key={announcement.id} style={styles.announcementCard}>
-            <Image source={{ uri: announcement.image }} style={styles.announcementImage} />
-            <View style={styles.announcementContent}>
-              <View style={styles.announcementBadge}>
-                <Megaphone size={12} color="#4169E1" />
-                <Text style={styles.announcementType}>{announcement.type}</Text>
-              </View>
-              <Text style={styles.announcementTitle}>{announcement.title}</Text>
-              <Text style={styles.announcementDate}>{announcement.date}</Text>
-            </View>
-          </TouchableOpacity>
-        ))}
+        {loading ? (
+          <View style={styles.loadingContainer}>
+            <ActivityIndicator size="small" color="#4169E1" />
+          </View>
+        ) : (
+          announcements.map((announcement) => {
+            const isNew = lastViewedAt 
+              ? new Date(announcement.created_at) > new Date(lastViewedAt)
+              : true;
+            
+            return (
+              <TouchableOpacity key={announcement.id} style={styles.announcementCard}>
+                <Image source={{ uri: announcement.image }} style={styles.announcementImage} />
+                <View style={styles.announcementContent}>
+                  <View style={styles.announcementBadgeContainer}>
+                    <View style={styles.announcementBadge}>
+                      <Megaphone size={12} color="#4169E1" />
+                      <Text style={styles.announcementType}>{announcement.type}</Text>
+                    </View>
+                    {isNew && (
+                      <View style={styles.newBadge}>
+                        <Text style={styles.newBadgeText}>NEW</Text>
+                      </View>
+                    )}
+                  </View>
+                  <Text style={styles.announcementTitle}>{announcement.title}</Text>
+                  <Text style={styles.announcementDate}>{announcement.date}</Text>
+                </View>
+              </TouchableOpacity>
+            );
+          })
+        )}
       </View>
 
       <View style={styles.section}>
@@ -241,6 +359,24 @@ const styles = StyleSheet.create({
   },
   notificationButton: {
     padding: 8,
+    position: 'relative',
+  },
+  notificationBadge: {
+    position: 'absolute',
+    top: 4,
+    right: 4,
+    backgroundColor: '#EF4444',
+    borderRadius: 10,
+    minWidth: 20,
+    height: 20,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 4,
+  },
+  notificationBadgeText: {
+    color: '#FFFFFF',
+    fontSize: 10,
+    fontFamily: 'Inter-SemiBold',
   },
   welcomeCard: {
     margin: 16,
@@ -338,6 +474,11 @@ const styles = StyleSheet.create({
     padding: 12,
     gap: 8,
   },
+  announcementBadgeContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
   announcementBadge: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -347,6 +488,17 @@ const styles = StyleSheet.create({
     paddingVertical: 4,
     borderRadius: 8,
     alignSelf: 'flex-start',
+  },
+  newBadge: {
+    backgroundColor: '#EF4444',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 8,
+  },
+  newBadgeText: {
+    fontSize: 10,
+    fontFamily: 'Inter-SemiBold',
+    color: '#FFFFFF',
   },
   announcementType: {
     fontSize: 12,
@@ -434,5 +586,10 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontFamily: 'Inter-Regular',
     color: '#666666',
+  },
+  loadingContainer: {
+    padding: 40,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
 });

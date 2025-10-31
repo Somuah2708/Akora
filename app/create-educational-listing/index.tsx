@@ -82,7 +82,7 @@ export default function CreateEducationalListingScreen() {
           category_name: category,
           is_featured: false,
           is_premium_listing: false,
-          is_approved: false,
+          is_approved: true,
         })
         .select()
         .single();
@@ -90,10 +90,20 @@ export default function CreateEducationalListingScreen() {
       if (listingError) throw listingError;
 
       Alert.alert(
-        'Submission Successful', 
-        'Your educational opportunity has been submitted for review. An administrator will review and approve it shortly.',
-        [{ text: 'OK', onPress: () => router.back() }]
+        '✅ Success!', 
+        'Your educational listing has been created successfully!',
+        [
+          {
+            text: 'View My Listings',
+            onPress: () => router.push('/my-listings')
+          }
+        ]
       );
+      
+      // Auto-navigate after 1 second
+      setTimeout(() => {
+        router.push('/my-listings');
+      }, 1000);
     } catch (error: any) {
       console.error('Error creating educational listing:', error);
       Alert.alert('Error', error.message || 'Failed to submit educational opportunity');

@@ -1,12 +1,11 @@
-import { View, Text, StyleSheet, TextInput, TouchableOpacity, ScrollView, Alert, ActivityIndicator, Image } from 'react-native';
+import { View, Text, StyleSheet, TextInput, TouchableOpacity, ScrollView, ActivityIndicator, Image } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
 import { useFonts, Inter_400Regular, Inter_600SemiBold } from '@expo-google-fonts/inter';
 import { useEffect, useState } from 'react';
-import { SplashScreen, useRouter } from 'expo-router';
-import { ArrowLeft, Image as ImageIcon, Send, DollarSign, Tag, Info, Briefcase, Mail, Trash2, Upload } from 'lucide-react-native';
+import { SplashScreen, useRouter, useLocalSearchParams } from 'expo-router';
+import { ArrowLeft, Image as ImageIcon, DollarSign, Info, Briefcase, Mail, Trash2, Upload, Save } from 'lucide-react-native';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/hooks/useAuth';
-import { LinearGradient } from 'expo-linear-gradient';
 
 SplashScreen.preventAutoHideAsync();
 
@@ -19,21 +18,23 @@ const JOB_CATEGORIES = [
   { id: '6', name: 'Volunteering' },
 ];
 
-export default function CreateJobListingScreen() {
+export default function EditJobListingScreen() {
   const router = useRouter();
-  const { user, loading } = useAuth();
+  const { id } = useLocalSearchParams();
+  const { user, loading: authLoading } = useAuth();
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
   const [company, setCompany] = useState('');
   const [location, setLocation] = useState('');
   const [salary, setSalary] = useState('');
-  const [currency, setCurrency] = useState('USD'); // USD or GHS (Ghana Cedis)
+  const [currency, setCurrency] = useState('USD');
   const [email, setEmail] = useState('');
   const [imageUrl, setImageUrl] = useState('');
-  const [uploadedImages, setUploadedImages] = useState<string[]>([]);
+  const [uploadedImage, setUploadedImage] = useState<string | null>(null);
   const [useUrlInput, setUseUrlInput] = useState(false);
   const [category, setCategory] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [loading, setLoading] = useState(true);
   
   const [fontsLoaded] = useFonts({
     'Inter-Regular': Inter_400Regular,
@@ -47,48 +48,98 @@ export default function CreateJobListingScreen() {
   }, [fontsLoaded]);
 
   useEffect(() => {
-    if (loading) return;
+    if (authLoading) return;
     if (!user) {
-      Alert.alert('Authentication Required', 'Please sign in to submit job listings.');
+      alert('Authentication Required. Please sign in.');
       router.replace('/auth/sign-in');
       return;
     }
-  }, [user, loading, router]);
+    if (id) {
+      fetchJobListing();
+    }
+  }, [user, authLoading, id]);
+
+  const fetchJobListing = async () => {
+    try {
+      setLoading(true);
+      const { data, error } = await supabase
+        .from('products_services')
+        .select('*')
+        .eq('id', id)
+        .single();
+
+      if (error) throw error;
+
+      if (data) {
+        // Check if user owns this listing
+        if (data.user_id !== user?.id) {
+          alert('You can only edit your own job listings');
+          router.back();
+          return;
+        }
+
+        setTitle(data.title || '');
+        setCategory(data.category_name || '');
+        
+        // Parse description: "Company | Location | Description | Email: email@example.com"
+        const descParts = (data.description || '').split(' | ');
+        setCompany(descParts[0] || '');
+        setLocation(descParts[1] || '');
+        
+        // Check if email is in description
+        let desc = descParts.slice(2).join(' | ');
+        const emailMatch = desc.match(/Email:\s*(.+?)(?:\s*\||$)/);
+        if (emailMatch) {
+          setEmail(emailMatch[1].trim());
+          desc = desc.replace(/\s*\|\s*Email:.*$/, '').trim();
+        }
+        setDescription(desc);
+        
+        // Parse salary with currency
+        if (data.price) {
+          setSalary(data.price.toString());
+          // You could enhance this to detect currency from description if needed
+          setCurrency('USD');
+        }
+
+        // Handle image URL
+        if (data.image_url) {
+          try {
+            const parsed = JSON.parse(data.image_url);
+            if (Array.isArray(parsed) && parsed.length > 0) {
+              setImageUrl(parsed[0]);
+            } else {
+              setImageUrl(data.image_url);
+            }
+          } catch {
+            setImageUrl(data.image_url);
+          }
+          setUseUrlInput(true);
+        }
+      }
+    } catch (error: any) {
+      console.error('Error fetching job listing:', error);
+      alert(`Error: ${error.message}`);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const pickImage = async () => {
     const result = await ImagePicker.launchImageLibraryAsync({
       mediaTypes: ImagePicker.MediaTypeOptions.Images,
-      allowsMultipleSelection: true,
+      allowsEditing: true,
+      aspect: [4, 3],
       quality: 1,
-      selectionLimit: 20,
     });
-    if (!result.canceled && result.assets && result.assets.length > 0) {
-      setUploadedImages((prev) => {
-        const combined = [...prev, ...result.assets.map((a) => a.uri)];
-        return combined.slice(0, 20);
-      });
+
+    if (!result.canceled && result.assets[0]) {
+      setUploadedImage(result.assets[0].uri);
       setImageUrl('');
     }
   };
 
-  const handleClearForm = () => {
-    const confirmed = confirm('Are you sure you want to clear all fields?');
-    if (confirmed) {
-      setTitle('');
-      setDescription('');
-      setCompany('');
-      setLocation('');
-      setSalary('');
-      setCurrency('USD');
-      setEmail('');
-      setImageUrl('');
-      setUploadedImage(null);
-      setCategory('');
-    }
-  };
-
-  const handleSubmit = async () => {
-    // Validate inputs
+  const handleSave = async () => {
     if (!title.trim()) {
       alert('Please enter a job title');
       return;
@@ -117,56 +168,69 @@ export default function CreateJobListingScreen() {
     try {
       setIsSubmitting(true);
       
-      // Determine final image URLs
-      let finalImageUrls: string[] = [];
-      if (uploadedImages.length > 0) {
-        finalImageUrls = uploadedImages;
-      } else if (imageUrl.trim()) {
-        finalImageUrls = imageUrl.split(',').map(url => url.trim()).slice(0, 20);
-      }
-      
-      // Format salary with currency
+      const finalImageUrl = uploadedImage || imageUrl.trim() || null;
       const formattedSalary = salary.trim() ? `${currency} ${salary}` : null;
       
-      // Construct description with email if provided
       let fullDescription = `${company.trim()} | ${location.trim()} | ${description.trim()}`;
       if (email.trim()) {
         fullDescription += ` | Email: ${email.trim()}`;
       }
       
-      // Insert the job listing
-      const { data: newListing, error: listingError } = await supabase
+      const { error } = await supabase
         .from('products_services')
-        .insert({
-          user_id: user?.id,
+        .update({
           title: title.trim(),
           description: fullDescription,
           price: salary.trim() ? Number(salary) : null,
-          image_url: finalImageUrls.length > 0 ? JSON.stringify(finalImageUrls) : null,
+          image_url: finalImageUrl,
           category_name: category,
-          is_featured: false,
-          is_premium_listing: false,
-          is_approved: true,
         })
-        .select()
-        .single();
+        .eq('id', id);
 
-      if (listingError) throw listingError;
+      if (error) throw error;
 
-      alert('✅ Success! Your job listing has been created successfully!');
-      
-      // Navigate to workplace
+      alert('✅ Job listing updated successfully!');
       router.push('/workplace');
     } catch (error: any) {
-      console.error('Error creating job listing:', error);
-      alert(`Error: ${error.message || 'Failed to submit job listing'}`);
+      console.error('Error updating job listing:', error);
+      alert(`Error: ${error.message || 'Failed to update job listing'}`);
     } finally {
       setIsSubmitting(false);
     }
   };
 
-  if (!fontsLoaded || !user) {
-    return null;
+  const handleDelete = async () => {
+    const confirmed = confirm('Are you sure you want to delete this job listing? This action cannot be undone.');
+    
+    if (confirmed) {
+      try {
+        setIsSubmitting(true);
+        
+        const { error } = await supabase
+          .from('products_services')
+          .delete()
+          .eq('id', id);
+
+        if (error) throw error;
+
+        alert('Job listing deleted successfully');
+        router.push('/workplace');
+      } catch (error: any) {
+        console.error('Error deleting job listing:', error);
+        alert(`Error: ${error.message || 'Failed to delete job listing'}`);
+      } finally {
+        setIsSubmitting(false);
+      }
+    }
+  };
+
+  if (!fontsLoaded || loading) {
+    return (
+      <View style={[styles.container, styles.centerContent]}>
+        <ActivityIndicator size="large" color="#4169E1" />
+        <Text style={styles.loadingText}>Loading job listing...</Text>
+      </View>
+    );
   }
 
   return (
@@ -175,16 +239,16 @@ export default function CreateJobListingScreen() {
         <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
           <ArrowLeft size={24} color="#000000" />
         </TouchableOpacity>
-        <Text style={styles.title}>Submit Job Listing</Text>
+        <Text style={styles.title}>Edit Job Listing</Text>
         <View style={{ width: 40 }} />
       </View>
 
       <ScrollView style={styles.formContainer}>
         <View style={styles.infoCard}>
           <Briefcase size={24} color="#4169E1" />
-          <Text style={styles.infoTitle}>Submit Job Opportunity</Text>
+          <Text style={styles.infoTitle}>Edit Job Opportunity</Text>
           <Text style={styles.infoText}>
-            Your submission will be reviewed by administrators before being published.
+            Update your job listing details. Changes will be visible immediately.
           </Text>
         </View>
         
@@ -319,7 +383,6 @@ export default function CreateJobListingScreen() {
         <View style={styles.formGroup}>
           <Text style={styles.label}>Company Logo (Optional)</Text>
           
-          {/* Toggle between Gallery and URL */}
           <View style={styles.imageToggleContainer}>
             <TouchableOpacity
               style={[styles.toggleButton, !useUrlInput && styles.toggleButtonActive]}
@@ -345,7 +408,7 @@ export default function CreateJobListingScreen() {
             <TouchableOpacity style={styles.uploadButton} onPress={pickImage}>
               <Upload size={24} color="#4169E1" />
               <Text style={styles.uploadButtonText}>
-                {uploadedImages.length > 0 ? `Change Images (${uploadedImages.length}/20)` : 'Upload from Gallery'}
+                {uploadedImage ? 'Change Image' : 'Upload from Gallery'}
               </Text>
             </TouchableOpacity>
           ) : (
@@ -353,7 +416,7 @@ export default function CreateJobListingScreen() {
               <ImageIcon size={20} color="#666666" />
               <TextInput
                 style={styles.imageUrlInput}
-                placeholder="Enter image URLs (comma separated, up to 20)"
+                placeholder="Enter image URL"
                 placeholderTextColor="#666666"
                 value={imageUrl}
                 onChangeText={setImageUrl}
@@ -361,28 +424,14 @@ export default function CreateJobListingScreen() {
             </View>
           )}
 
-          {/* Image Preview */}
-          {(uploadedImages.length > 0 || imageUrl.trim() !== '') && (
+          {(uploadedImage || imageUrl.trim() !== '') && (
             <View style={styles.imagePreviewContainer}>
               <Text style={styles.imagePreviewLabel}>Preview:</Text>
-              <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-                {uploadedImages.map((uri, idx) => (
-                  <Image 
-                    key={uri + idx}
-                    source={{ uri }} 
-                    style={styles.imagePreview}
-                    onError={() => alert('Invalid Image URL')}
-                  />
-                ))}
-                {imageUrl.trim() !== '' && imageUrl.split(',').slice(0, 20).map((url, idx) => (
-                  <Image 
-                    key={url.trim() + idx}
-                    source={{ uri: url.trim() }} 
-                    style={styles.imagePreview}
-                    onError={() => alert('Invalid Image URL')}
-                  />
-                ))}
-              </ScrollView>
+              <Image 
+                source={{ uri: uploadedImage || imageUrl }} 
+                style={styles.imagePreview}
+                onError={() => alert('Invalid Image URL')}
+              />
             </View>
           )}
         </View>
@@ -390,34 +439,34 @@ export default function CreateJobListingScreen() {
         <View style={styles.infoContainer}>
           <Info size={20} color="#666666" />
           <Text style={styles.infoText}>
-            Your job listing will be published immediately and appear in the Workplace section for job seekers to view.
+            Your changes will be saved immediately and visible to all users in the Workplace section.
           </Text>
         </View>
 
-        {/* Action Buttons */}
         <View style={styles.actionButtons}>
           <TouchableOpacity 
             style={styles.deleteButton}
-            onPress={handleClearForm}
+            onPress={handleDelete}
+            disabled={isSubmitting}
           >
             <Trash2 size={20} color="#EF4444" />
-            <Text style={styles.deleteButtonText}>Clear Form</Text>
+            <Text style={styles.deleteButtonText}>Delete</Text>
           </TouchableOpacity>
 
           <TouchableOpacity 
             style={[
-              styles.postButton,
-              (!title.trim() || !description.trim() || !company.trim() || !location.trim() || !category || isSubmitting) && styles.postButtonDisabled
+              styles.saveButton,
+              (!title.trim() || !description.trim() || !company.trim() || !location.trim() || !category || isSubmitting) && styles.saveButtonDisabled
             ]}
-            onPress={handleSubmit}
+            onPress={handleSave}
             disabled={!title.trim() || !description.trim() || !company.trim() || !location.trim() || !category || isSubmitting}
           >
             {isSubmitting ? (
               <ActivityIndicator color="#FFFFFF" size="small" />
             ) : (
               <>
-                <Send size={20} color="#FFFFFF" />
-                <Text style={styles.postButtonText}>Post Job</Text>
+                <Save size={20} color="#FFFFFF" />
+                <Text style={styles.saveButtonText}>Save Changes</Text>
               </>
             )}
           </TouchableOpacity>
@@ -431,6 +480,16 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#FFFFFF',
+  },
+  centerContent: {
+    justifyContent: 'center',
+    alignItems: 'center',
+    gap: 12,
+  },
+  loadingText: {
+    fontSize: 16,
+    fontFamily: 'Inter-Regular',
+    color: '#666666',
   },
   header: {
     flexDirection: 'row',
@@ -450,17 +509,6 @@ const styles = StyleSheet.create({
     fontSize: 20,
     fontFamily: 'Inter-SemiBold',
     color: '#000000',
-  },
-  submitButton: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: '#4169E1',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  submitButtonDisabled: {
-    backgroundColor: '#CBD5E1',
   },
   formContainer: {
     flex: 1,
@@ -505,82 +553,6 @@ const styles = StyleSheet.create({
   },
   textArea: {
     height: 120,
-  },
-  priceInputContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#F8F9FA',
-    borderRadius: 12,
-    paddingHorizontal: 16,
-  },
-  priceInput: {
-    flex: 1,
-    padding: 16,
-    fontSize: 16,
-    fontFamily: 'Inter-Regular',
-    color: '#000000',
-  },
-  categoriesContainer: {
-    flexDirection: 'row',
-    paddingVertical: 8,
-    gap: 8,
-  },
-  categoryChip: {
-    backgroundColor: '#F8F9FA',
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    borderRadius: 20,
-  },
-  selectedCategoryChip: {
-    backgroundColor: '#4169E1',
-  },
-  categoryChipText: {
-    fontSize: 14,
-    fontFamily: 'Inter-Regular',
-    color: '#000000',
-  },
-  selectedCategoryChipText: {
-    color: '#FFFFFF',
-    fontFamily: 'Inter-SemiBold',
-  },
-  imageUrlContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#F8F9FA',
-    borderRadius: 12,
-    paddingHorizontal: 16,
-    gap: 8,
-  },
-  imageUrlInput: {
-    flex: 1,
-    padding: 16,
-    fontSize: 16,
-    fontFamily: 'Inter-Regular',
-    color: '#000000',
-  },
-  imagePreviewContainer: {
-    marginTop: 12,
-  },
-  imagePreviewLabel: {
-    fontSize: 14,
-    fontFamily: 'Inter-Regular',
-    color: '#666666',
-    marginBottom: 8,
-  },
-  imagePreview: {
-    width: '100%',
-    height: 200,
-    borderRadius: 12,
-    backgroundColor: '#F8F9FA',
-  },
-  infoContainer: {
-    flexDirection: 'row',
-    backgroundColor: '#F8F9FA',
-    padding: 16,
-    borderRadius: 12,
-    marginTop: 8,
-    marginBottom: 24,
-    gap: 12,
   },
   emailContainer: {
     flexDirection: 'row',
@@ -629,6 +601,43 @@ const styles = StyleSheet.create({
     color: '#666666',
     marginRight: 8,
   },
+  priceInputContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#F8F9FA',
+    borderRadius: 12,
+    paddingHorizontal: 16,
+  },
+  priceInput: {
+    flex: 1,
+    padding: 16,
+    fontSize: 16,
+    fontFamily: 'Inter-Regular',
+    color: '#000000',
+  },
+  categoriesContainer: {
+    flexDirection: 'row',
+    paddingVertical: 8,
+    gap: 8,
+  },
+  categoryChip: {
+    backgroundColor: '#F8F9FA',
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 20,
+  },
+  selectedCategoryChip: {
+    backgroundColor: '#4169E1',
+  },
+  categoryChipText: {
+    fontSize: 14,
+    fontFamily: 'Inter-Regular',
+    color: '#000000',
+  },
+  selectedCategoryChipText: {
+    color: '#FFFFFF',
+    fontFamily: 'Inter-SemiBold',
+  },
   imageToggleContainer: {
     flexDirection: 'row',
     gap: 12,
@@ -672,6 +681,45 @@ const styles = StyleSheet.create({
     fontFamily: 'Inter-SemiBold',
     color: '#4169E1',
   },
+  imageUrlContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#F8F9FA',
+    borderRadius: 12,
+    paddingHorizontal: 16,
+    gap: 8,
+  },
+  imageUrlInput: {
+    flex: 1,
+    padding: 16,
+    fontSize: 16,
+    fontFamily: 'Inter-Regular',
+    color: '#000000',
+  },
+  imagePreviewContainer: {
+    marginTop: 12,
+  },
+  imagePreviewLabel: {
+    fontSize: 14,
+    fontFamily: 'Inter-Regular',
+    color: '#666666',
+    marginBottom: 8,
+  },
+  imagePreview: {
+    width: '100%',
+    height: 200,
+    borderRadius: 12,
+    backgroundColor: '#F8F9FA',
+  },
+  infoContainer: {
+    flexDirection: 'row',
+    backgroundColor: '#F8F9FA',
+    padding: 16,
+    borderRadius: 12,
+    marginTop: 8,
+    marginBottom: 24,
+    gap: 12,
+  },
   actionButtons: {
     flexDirection: 'row',
     gap: 12,
@@ -692,20 +740,20 @@ const styles = StyleSheet.create({
     fontFamily: 'Inter-SemiBold',
     color: '#EF4444',
   },
-  postButton: {
+  saveButton: {
     flex: 2,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#4169E1',
+    backgroundColor: '#10B981',
     paddingVertical: 16,
     borderRadius: 12,
     gap: 8,
   },
-  postButtonDisabled: {
+  saveButtonDisabled: {
     backgroundColor: '#CBD5E1',
   },
-  postButtonText: {
+  saveButtonText: {
     fontSize: 16,
     fontFamily: 'Inter-SemiBold',
     color: '#FFFFFF',

@@ -1,8 +1,8 @@
-import { View, Text, StyleSheet, ScrollView, Image, TouchableOpacity, Dimensions, ActivityIndicator, RefreshControl, Alert } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, Image, TouchableOpacity, Dimensions, ActivityIndicator, RefreshControl, Alert, TextInput } from 'react-native';
 import { useFonts, Inter_400Regular, Inter_600SemiBold, Inter_700Bold } from '@expo-google-fonts/inter';
 import { useEffect, useState, useCallback } from 'react';
 import { useRouter } from 'expo-router';
-import { Heart, ShoppingBag, Star, Trash2, Share2, ExternalLink, Sparkles } from 'lucide-react-native';
+import { Heart, ShoppingBag, Star, Trash2, Share2, ExternalLink, Sparkles, ArrowLeft, Eye, Search } from 'lucide-react-native';
 import { supabase, type ProductService, type Profile } from '@/lib/supabase';
 import { useAuth } from '@/hooks/useAuth';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -30,6 +30,7 @@ export default function FavoritesScreen() {
   const [favorites, setFavorites] = useState<FavoriteItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
 
   const [fontsLoaded] = useFonts({
     'Inter-Regular': Inter_400Regular,
@@ -112,7 +113,7 @@ export default function FavoritesScreen() {
     fetchFavorites();
   }, [fetchFavorites]);
 
-  const handleRemoveFavorite = async (favoriteId: string) => {
+  const handleRemoveFavorite = async (favoriteId: string, productTitle: string) => {
     try {
       const { error } = await supabase
         .from('service_bookmarks')
@@ -122,22 +123,28 @@ export default function FavoritesScreen() {
       if (error) throw error;
 
       setFavorites(prev => prev.filter(fav => fav.id !== favoriteId));
-      Alert.alert('Success', 'Removed from favorites');
+      alert(`${productTitle} removed from favorites`);
     } catch (error) {
       console.error('Error removing favorite:', error);
-      Alert.alert('Error', 'Failed to remove from favorites');
+      alert('Failed to remove from favorites');
     }
   };
 
-  const handleAddToCart = (product: ProductServiceWithUser) => {
-    // Add to cart logic here
-    Alert.alert('Success', `${product.title} added to cart!`);
-  };
-
   const handleViewProduct = (productId: string) => {
-    // Navigate to product detail page
     router.push(`/services/${productId}` as any);
   };
+
+  // Filter favorites based on search query
+  const filteredFavorites = favorites.filter(favorite => {
+    if (!searchQuery.trim()) return true;
+    const query = searchQuery.toLowerCase();
+    const product = favorite.product;
+    return (
+      product.title.toLowerCase().includes(query) ||
+      product.description?.toLowerCase().includes(query) ||
+      product.category_name?.toLowerCase().includes(query)
+    );
+  });
 
   if (!fontsLoaded) {
     return null;
@@ -150,6 +157,9 @@ export default function FavoritesScreen() {
           colors={['#4169E1', '#5B7FE8']}
           style={styles.header}
         >
+          <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
+            <ArrowLeft size={24} color="#FFFFFF" />
+          </TouchableOpacity>
           <Text style={styles.headerTitle}>Favorites</Text>
           <Text style={styles.headerSubtitle}>Save your favorite items</Text>
         </LinearGradient>
@@ -175,6 +185,9 @@ export default function FavoritesScreen() {
           colors={['#4169E1', '#5B7FE8']}
           style={styles.header}
         >
+          <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
+            <ArrowLeft size={24} color="#FFFFFF" />
+          </TouchableOpacity>
           <Text style={styles.headerTitle}>Favorites</Text>
           <Text style={styles.headerSubtitle}>Your saved items</Text>
         </LinearGradient>
@@ -188,25 +201,47 @@ export default function FavoritesScreen() {
 
   return (
     <View style={styles.container}>
-      <LinearGradient
-        colors={['#4169E1', '#5B7FE8']}
-        style={styles.header}
-      >
-        <View style={styles.headerContent}>
-          <View>
-            <Text style={styles.headerTitle}>Favorites</Text>
-            <Text style={styles.headerSubtitle}>
-              {favorites.length} {favorites.length === 1 ? 'item' : 'items'} saved
-            </Text>
-          </View>
-          {favorites.length > 0 && (
-            <View style={styles.favoritesBadge}>
-              <Heart size={20} color="#FFFFFF" fill="#FFFFFF" />
-              <Text style={styles.favoritesBadgeText}>{favorites.length}</Text>
-            </View>
+      {/* Header with Back Button and Title */}
+      <View style={styles.topBar}>
+        <TouchableOpacity onPress={() => router.back()} style={styles.backButtonTop}>
+          <ArrowLeft size={24} color="#000000" />
+        </TouchableOpacity>
+        <Text style={styles.topBarTitle}>Favorites</Text>
+        <View style={{ width: 40 }} />
+      </View>
+
+      {/* Search Bar */}
+      <View style={styles.searchContainer}>
+        <View style={styles.searchBar}>
+          <Search size={20} color="#666666" />
+          <TextInput
+            style={styles.searchInput}
+            placeholder="Search favorites..."
+            placeholderTextColor="#999999"
+            value={searchQuery}
+            onChangeText={setSearchQuery}
+          />
+          {searchQuery.length > 0 && (
+            <TouchableOpacity onPress={() => setSearchQuery('')}>
+              <Text style={styles.clearText}>✕</Text>
+            </TouchableOpacity>
           )}
         </View>
-      </LinearGradient>
+      </View>
+
+      {/* Info Section */}
+      <View style={styles.infoSection}>
+        <Text style={styles.infoText}>
+          {filteredFavorites.length} {filteredFavorites.length === 1 ? 'item' : 'items'} 
+          {searchQuery ? ' found' : ' saved'}
+        </Text>
+        {favorites.length > 0 && (
+          <View style={styles.favoritesBadgeSmall}>
+            <Heart size={16} color="#4169E1" fill="#4169E1" />
+            <Text style={styles.favoritesCountText}>{favorites.length}</Text>
+          </View>
+        )}
+      </View>
 
       <ScrollView
         style={styles.scrollView}
@@ -231,9 +266,23 @@ export default function FavoritesScreen() {
               <Text style={styles.browseButtonText}>Browse Marketplace</Text>
             </TouchableOpacity>
           </View>
+        ) : filteredFavorites.length === 0 ? (
+          <View style={styles.emptyState}>
+            <Search size={80} color="#E5E7EB" strokeWidth={1.5} />
+            <Text style={styles.emptyTitle}>No matches found</Text>
+            <Text style={styles.emptyText}>
+              Try searching with different keywords
+            </Text>
+            <TouchableOpacity
+              style={styles.clearSearchButton}
+              onPress={() => setSearchQuery('')}
+            >
+              <Text style={styles.clearSearchButtonText}>Clear Search</Text>
+            </TouchableOpacity>
+          </View>
         ) : (
           <View style={styles.grid}>
-            {favorites.map((favorite) => {
+            {filteredFavorites.map((favorite) => {
               const product = favorite.product;
               return (
                 <TouchableOpacity
@@ -262,19 +311,9 @@ export default function FavoritesScreen() {
                       {/* Remove from favorites button */}
                       <TouchableOpacity
                         style={styles.removeFavoriteButton}
-                        onPress={() => {
-                          Alert.alert(
-                            'Remove from Favorites',
-                            'Are you sure you want to remove this item?',
-                            [
-                              { text: 'Cancel', style: 'cancel' },
-                              { 
-                                text: 'Remove', 
-                                style: 'destructive',
-                                onPress: () => handleRemoveFavorite(favorite.id)
-                              }
-                            ]
-                          );
+                        onPress={(e) => {
+                          e.stopPropagation();
+                          handleRemoveFavorite(favorite.id, product.title);
                         }}
                       >
                         <Heart size={20} color="#EF4444" fill="#EF4444" />
@@ -331,11 +370,11 @@ export default function FavoritesScreen() {
                       {/* Action Buttons */}
                       <View style={styles.actionButtons}>
                         <TouchableOpacity
-                          style={styles.addToCartButton}
-                          onPress={() => handleAddToCart(product)}
+                          style={styles.viewButton}
+                          onPress={() => handleViewProduct(product.id)}
                         >
-                          <ShoppingBag size={18} color="#FFFFFF" />
-                          <Text style={styles.addToCartText}>Add to Cart</Text>
+                          <Eye size={18} color="#FFFFFF" />
+                          <Text style={styles.viewButtonText}>View</Text>
                         </TouchableOpacity>
                       </View>
                     </View>
@@ -364,6 +403,84 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     padding: 24,
   },
+  topBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 16,
+    paddingTop: 60,
+    paddingBottom: 16,
+    backgroundColor: '#FFFFFF',
+    borderBottomWidth: 1,
+    borderBottomColor: '#E5E7EB',
+  },
+  backButtonTop: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: '#F3F4F6',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  topBarTitle: {
+    fontSize: 20,
+    fontFamily: 'Inter-Bold',
+    color: '#000000',
+  },
+  searchContainer: {
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    backgroundColor: '#FFFFFF',
+  },
+  searchBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#F3F4F6',
+    borderRadius: 12,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    gap: 12,
+  },
+  searchInput: {
+    flex: 1,
+    fontSize: 15,
+    fontFamily: 'Inter-Regular',
+    color: '#000000',
+  },
+  clearText: {
+    fontSize: 20,
+    color: '#666666',
+    paddingHorizontal: 8,
+  },
+  infoSection: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    backgroundColor: '#FFFFFF',
+    borderBottomWidth: 1,
+    borderBottomColor: '#E5E7EB',
+  },
+  infoText: {
+    fontSize: 14,
+    fontFamily: 'Inter-SemiBold',
+    color: '#4B5563',
+  },
+  favoritesBadgeSmall: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    backgroundColor: '#EBF1FF',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 16,
+  },
+  favoritesCountText: {
+    fontSize: 14,
+    fontFamily: 'Inter-Bold',
+    color: '#4169E1',
+  },
   header: {
     paddingTop: 60,
     paddingBottom: 24,
@@ -386,6 +503,18 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontFamily: 'Inter-Regular',
     color: 'rgba(255, 255, 255, 0.9)',
+  },
+  backButton: {
+    position: 'absolute',
+    top: 60,
+    left: 24,
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: 'rgba(255, 255, 255, 0.3)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    zIndex: 10,
   },
   favoritesBadge: {
     flexDirection: 'row',
@@ -452,6 +581,24 @@ const styles = StyleSheet.create({
     fontFamily: 'Inter-SemiBold',
     fontSize: 16,
     color: '#FFFFFF',
+  },
+  clearSearchButton: {
+    marginTop: 32,
+    backgroundColor: '#4169E1',
+    paddingHorizontal: 32,
+    paddingVertical: 16,
+    borderRadius: 16,
+    shadowColor: '#4169E1',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 12,
+    elevation: 6,
+  },
+  clearSearchButtonText: {
+    fontFamily: 'Inter-SemiBold',
+    fontSize: 16,
+    color: '#FFFFFF',
+    textAlign: 'center',
   },
   signInButton: {
     marginTop: 32,
@@ -634,7 +781,7 @@ const styles = StyleSheet.create({
   actionButtons: {
     gap: 8,
   },
-  addToCartButton: {
+  viewButton: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
@@ -648,7 +795,7 @@ const styles = StyleSheet.create({
     shadowRadius: 8,
     elevation: 3,
   },
-  addToCartText: {
+  viewButtonText: {
     fontFamily: 'Inter-SemiBold',
     fontSize: 14,
     color: '#FFFFFF',

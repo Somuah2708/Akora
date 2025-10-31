@@ -1,49 +1,22 @@
 import { View, Text, StyleSheet, ScrollView, Image, TouchableOpacity, Alert, Animated, Dimensions } from 'react-native';
 import { useFonts, Inter_400Regular, Inter_600SemiBold, Inter_700Bold } from '@expo-google-fonts/inter';
-import { useEffect, useState, useRef } from 'react';
-import { SplashScreen, useRouter } from 'expo-router';
+import { useEffect, useState, useRef, useCallback } from 'react';
+import { SplashScreen, useRouter, useFocusEffect } from 'expo-router';
 import { ArrowLeft, Trash2, Plus, Minus, ShoppingBag, ShoppingCart, Sparkles, Lock, Heart, Share2, Tag } from 'lucide-react-native';
 import { useAuth } from '@/hooks/useAuth';
 import { LinearGradient } from 'expo-linear-gradient';
+import { getCartItems, updateCartItemQuantity, removeFromCart, clearCart, SecretariatCartItem, markCartAsViewed, getFavorites, toggleFavorite } from '@/lib/secretariatCart';
 
 SplashScreen.preventAutoHideAsync();
 
 const { width } = Dimensions.get('window');
 
-interface CartItem {
-  id: string;
-  productId: string;
-  title: string;
-  price: number;
-  image: string;
-  quantity: number;
-  seller: string;
-}
-
 export default function CartScreen() {
   const router = useRouter();
   const { user } = useAuth();
-  const [cartItems, setCartItems] = useState<CartItem[]>([
-    // Sample cart items - replace with actual cart data from your backend
-    {
-      id: '1',
-      productId: 'prod1',
-      title: 'Web Design Services',
-      price: 500,
-      image: 'https://images.unsplash.com/photo-1467232004584-a241de8bcf5d?w=400',
-      quantity: 1,
-      seller: 'John Doe',
-    },
-    {
-      id: '2',
-      productId: 'prod2',
-      title: 'Math Tutoring',
-      price: 300,
-      image: 'https://images.unsplash.com/photo-1509228468518-180dd4864904?w=400',
-      quantity: 2,
-      seller: 'Jane Smith',
-    },
-  ]);
+  const [cartItems, setCartItems] = useState<SecretariatCartItem[]>([]);
+  const [displayCurrency, setDisplayCurrency] = useState<'USD' | 'GHS'>('USD');
+  const [favorites, setFavorites] = useState<string[]>([]);
 
   const [fontsLoaded] = useFonts({
     'Inter-Regular': Inter_400Regular,
@@ -53,6 +26,28 @@ export default function CartScreen() {
 
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const slideAnim = useRef(new Animated.Value(30)).current;
+
+  const loadCart = async () => {
+    const items = await getCartItems();
+    setCartItems(items);
+    
+    // Load favorites
+    const favoriteIds = await getFavorites();
+    setFavorites(favoriteIds);
+    
+    // Mark cart as viewed when user opens the cart page
+    await markCartAsViewed();
+  };
+
+  useEffect(() => {
+    loadCart();
+  }, []);
+
+  useFocusEffect(
+    useCallback(() => {
+      loadCart();
+    }, [])
+  );
 
   useEffect(() => {
     if (fontsLoaded) {
@@ -72,33 +67,36 @@ export default function CartScreen() {
     }
   }, [fontsLoaded]);
 
-  const updateQuantity = (itemId: string, change: number) => {
-    setCartItems(prevItems =>
-      prevItems.map(item => {
-        if (item.id === itemId) {
-          const newQuantity = Math.max(1, item.quantity + change);
-          return { ...item, quantity: newQuantity };
-        }
-        return item;
-      })
-    );
+  const updateQuantity = async (itemId: string, change: number) => {
+    const item = cartItems.find(i => i.id === itemId);
+    if (item) {
+      const newQuantity = item.quantity + change;
+      if (newQuantity > 0) {
+        await updateCartItemQuantity(itemId, newQuantity);
+        await loadCart();
+      }
+    }
   };
 
-  const removeItem = (itemId: string) => {
-    Alert.alert(
-      'Remove Item',
-      'Are you sure you want to remove this item from your cart?',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Remove',
-          style: 'destructive',
-          onPress: () => {
-            setCartItems(prevItems => prevItems.filter(item => item.id !== itemId));
-          },
-        },
-      ]
-    );
+  const removeItem = async (itemId: string, itemName: string) => {
+    if (confirm(`Are you sure you want to remove "${itemName}" from your cart?`)) {
+      try {
+        const updatedItems = await removeFromCart(itemId);
+        setCartItems(updatedItems);
+        
+        // Also reload to ensure consistency
+        await loadCart();
+      } catch (error) {
+        console.error('Error removing item:', error);
+        alert('Failed to remove item from cart');
+      }
+    }
+  };
+
+  const handleToggleFavorite = async (productId: string) => {
+    await toggleFavorite(productId);
+    const updatedFavorites = await getFavorites();
+    setFavorites(updatedFavorites);
   };
 
   const calculateSubtotal = () => {
@@ -113,6 +111,48 @@ export default function CartScreen() {
     return calculateSubtotal() + calculateTax();
   };
 
+  // Currency conversion rate (approximately 12 GHS = 1 USD)
+  const EXCHANGE_RATE = 12;
+
+  const convertPrice = (price: number, fromCurrency: 'USD' | 'GHS', toCurrency: 'USD' | 'GHS') => {
+    if (fromCurrency === toCurrency) return price;
+    if (fromCurrency === 'USD' && toCurrency === 'GHS') {
+      return price * EXCHANGE_RATE;
+    }
+    if (fromCurrency === 'GHS' && toCurrency === 'USD') {
+      return price / EXCHANGE_RATE;
+    }
+    return price;
+  };
+
+  const calculateSubtotalInDisplayCurrency = () => {
+    return cartItems.reduce((sum, item) => {
+      const itemPrice = convertPrice(item.price, item.currency, displayCurrency);
+      return sum + itemPrice * item.quantity;
+    }, 0);
+  };
+
+  const calculateTaxInDisplayCurrency = () => {
+    return calculateSubtotalInDisplayCurrency() * 0.1;
+  };
+
+  const calculateTotalInDisplayCurrency = () => {
+    return calculateSubtotalInDisplayCurrency() + calculateTaxInDisplayCurrency();
+  };
+
+  const getDisplayCurrencySymbol = () => {
+    return displayCurrency === 'USD' ? '$' : '₵';
+  };
+
+  const getCartCurrency = () => {
+    // Return the currency of the first item, or USD as default
+    return cartItems.length > 0 ? cartItems[0].currency : 'USD';
+  };
+
+  const getCurrencySymbol = () => {
+    return getCartCurrency() === 'USD' ? '$' : '₵';
+  };
+
   const handleCheckout = () => {
     if (!user) {
       Alert.alert('Authentication Required', 'Please sign in to proceed with checkout');
@@ -124,13 +164,14 @@ export default function CartScreen() {
       return;
     }
 
-    // Navigate to checkout page with cart totals
+    // Navigate to checkout page with cart totals in display currency
     router.push({
-      pathname: '/checkout/index',
+      pathname: '/checkout' as any,
       params: {
-        subtotal: calculateSubtotal().toFixed(2),
-        tax: calculateTax().toFixed(2),
-        total: calculateTotal().toFixed(2),
+        subtotal: calculateSubtotalInDisplayCurrency().toFixed(2),
+        tax: calculateTaxInDisplayCurrency().toFixed(2),
+        total: calculateTotalInDisplayCurrency().toFixed(2),
+        currency: displayCurrency,
       },
     });
   };
@@ -149,17 +190,42 @@ export default function CartScreen() {
         style={styles.headerGradient}
       >
         <View style={styles.header}>
-          <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
+          <TouchableOpacity onPress={() => router.push('/secretariat-shop')} style={styles.backButton}>
             <ArrowLeft size={24} color="#FFFFFF" />
           </TouchableOpacity>
           <View style={styles.headerCenter}>
-            <Text style={styles.title}>Shopping Cart</Text>
+            <Text style={styles.title}>Secretariat Shop Cart</Text>
           </View>
           <View style={styles.cartBadge}>
             <Text style={styles.cartBadgeText}>{cartItems.length}</Text>
           </View>
         </View>
       </LinearGradient>
+
+      {/* Currency Toggle */}
+      {cartItems.length > 0 && (
+        <View style={styles.currencyContainer}>
+          <Text style={styles.currencyLabel}>Display Total in:</Text>
+          <View style={styles.currencyToggle}>
+            <TouchableOpacity
+              style={[styles.currencyButton, displayCurrency === 'USD' && styles.activeCurrencyButton]}
+              onPress={() => setDisplayCurrency('USD')}
+            >
+              <Text style={[styles.currencyButtonText, displayCurrency === 'USD' && styles.activeCurrencyButtonText]}>
+                USD ($)
+              </Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.currencyButton, displayCurrency === 'GHS' && styles.activeCurrencyButton]}
+              onPress={() => setDisplayCurrency('GHS')}
+            >
+              <Text style={[styles.currencyButtonText, displayCurrency === 'GHS' && styles.activeCurrencyButtonText]}>
+                GHS (₵)
+              </Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      )}
 
       {cartItems.length === 0 ? (
         <View style={styles.emptyContainer}>
@@ -168,10 +234,10 @@ export default function CartScreen() {
             <Sparkles size={32} color="#4169E1" style={styles.sparkleIcon} />
           </View>
           <Text style={styles.emptyTitle}>Your cart is empty</Text>
-          <Text style={styles.emptyText}>Discover amazing services and add them to your cart</Text>
+          <Text style={styles.emptyText}>Browse the Secretariat Shop and add items to your cart</Text>
           <TouchableOpacity
             style={styles.shopButton}
-            onPress={() => router.push('/services')}
+            onPress={() => router.push('/secretariat-shop')}
             activeOpacity={0.9}
           >
             <LinearGradient
@@ -181,7 +247,7 @@ export default function CartScreen() {
               style={styles.shopButtonGradient}
             >
               <Sparkles size={20} color="#FFFFFF" />
-              <Text style={styles.shopButtonText}>Start Shopping</Text>
+              <Text style={styles.shopButtonText}>Shop Now</Text>
             </LinearGradient>
           </TouchableOpacity>
         </View>
@@ -238,10 +304,10 @@ export default function CartScreen() {
                       <Image source={{ uri: item.image }} style={styles.itemImageLarge} />
                       <View style={styles.imageBadge}>
                         <Tag size={12} color="#4169E1" />
-                        <Text style={styles.imageBadgeText}>Service</Text>
+                        <Text style={styles.imageBadgeText}>{item.category}</Text>
                       </View>
                       <TouchableOpacity
-                        onPress={() => removeItem(item.id)}
+                        onPress={() => removeItem(item.id, item.name)}
                         style={styles.removeButton}
                         activeOpacity={0.8}
                       >
@@ -253,34 +319,38 @@ export default function CartScreen() {
                     <View style={styles.infoSection}>
                       <View style={styles.titleRow}>
                         <Text style={styles.itemTitleLarge} numberOfLines={2}>
-                          {item.title}
+                          {item.name}
                         </Text>
-                        <TouchableOpacity style={styles.favoriteButton}>
-                          <Heart size={20} color="#FF3B30" />
+                        <TouchableOpacity 
+                          style={styles.favoriteButton}
+                          onPress={() => handleToggleFavorite(item.productId)}
+                          activeOpacity={0.7}
+                        >
+                          <Heart 
+                            size={20} 
+                            color={favorites.includes(item.productId) ? "#FF3B30" : "#CCCCCC"}
+                            fill={favorites.includes(item.productId) ? "#FF3B30" : "transparent"}
+                          />
                         </TouchableOpacity>
                       </View>
                       
-                      <View style={styles.sellerRow}>
-                        <View style={styles.sellerAvatar}>
-                          <Text style={styles.sellerInitial}>{item.seller.charAt(0)}</Text>
-                        </View>
-                        <Text style={styles.itemSellerName}>{item.seller}</Text>
-                        <View style={styles.verifiedBadge}>
-                          <Sparkles size={10} color="#10B981" />
-                        </View>
-                      </View>
+                      <Text style={styles.itemDescription} numberOfLines={2}>
+                        {item.description}
+                      </Text>
 
                       {/* Price and Quantity Row */}
                       <View style={styles.bottomRow}>
                         <View style={styles.priceSection}>
-                          <Text style={styles.priceLabel}>Price per hour</Text>
+                          <Text style={styles.priceLabel}>Price</Text>
                           <View style={styles.priceRowLarge}>
-                            <Text style={styles.itemPriceLarge}>₵{item.price}</Text>
+                            <Text style={styles.itemPriceLarge}>
+                              {item.currency === 'USD' ? '$' : '₵'}{item.price.toFixed(2)}
+                            </Text>
                           </View>
                         </View>
 
                         <View style={styles.quantitySection}>
-                          <Text style={styles.quantityLabel}>Hours</Text>
+                          <Text style={styles.quantityLabel}>Quantity</Text>
                           <View style={styles.quantityControlModern}>
                             <TouchableOpacity
                               onPress={() => updateQuantity(item.id, -1)}
@@ -306,7 +376,9 @@ export default function CartScreen() {
                       {/* Subtotal with Highlight */}
                       <View style={styles.itemSubtotal}>
                         <Text style={styles.subtotalLabel}>Item Total</Text>
-                        <Text style={styles.subtotalValue}>₵{(item.price * item.quantity).toFixed(2)}</Text>
+                        <Text style={styles.subtotalValue}>
+                          {item.currency === 'USD' ? '$' : '₵'}{(item.price * item.quantity).toFixed(2)}
+                        </Text>
                       </View>
                     </View>
                   </View>
@@ -314,50 +386,56 @@ export default function CartScreen() {
               </Animated.View>
             ))}
 
+            {/* Modern Summary Footer - moved inside ScrollView */}
+            <View style={styles.footerContainer}>
+              <View style={styles.promoSection}>
+                <View style={styles.promoIcon}>
+                  <Sparkles size={16} color="#4169E1" />
+                </View>
+                <Text style={styles.promoText}>Add promo code at checkout</Text>
+              </View>
+
+              <View style={styles.summarySection}>
+                <View style={styles.summaryRow}>
+                  <Text style={styles.summaryLabel}>Subtotal</Text>
+                  <Text style={styles.summaryValue}>
+                    {getDisplayCurrencySymbol()}{calculateSubtotalInDisplayCurrency().toFixed(2)}
+                  </Text>
+                </View>
+                <View style={styles.summaryRow}>
+                  <Text style={styles.summaryLabel}>Tax (10%)</Text>
+                  <Text style={styles.summaryValue}>
+                    {getDisplayCurrencySymbol()}{calculateTaxInDisplayCurrency().toFixed(2)}
+                  </Text>
+                </View>
+                <View style={styles.divider} />
+                <View style={styles.summaryRow}>
+                  <Text style={styles.totalLabel}>Total Amount</Text>
+                  <Text style={styles.totalValue}>
+                    {getDisplayCurrencySymbol()}{calculateTotalInDisplayCurrency().toFixed(2)}
+                  </Text>
+                </View>
+              </View>
+              
+              <TouchableOpacity 
+                style={styles.checkoutButton} 
+                onPress={handleCheckout}
+                activeOpacity={0.9}
+              >
+                <LinearGradient
+                  colors={['#4169E1', '#5B7FE8']}
+                  start={{ x: 0, y: 0 }}
+                  end={{ x: 1, y: 0 }}
+                  style={styles.checkoutButtonGradient}
+                >
+                  <Lock size={20} color="#FFFFFF" />
+                  <Text style={styles.checkoutButtonText}>Proceed to Checkout</Text>
+                </LinearGradient>
+              </TouchableOpacity>
+            </View>
+
             <View style={styles.bottomPadding} />
           </Animated.ScrollView>
-
-          {/* Modern Summary Footer */}
-          <View style={styles.footerContainer}>
-            <View style={styles.promoSection}>
-              <View style={styles.promoIcon}>
-                <Sparkles size={16} color="#4169E1" />
-              </View>
-              <Text style={styles.promoText}>Add promo code at checkout</Text>
-            </View>
-
-            <View style={styles.summarySection}>
-              <View style={styles.summaryRow}>
-                <Text style={styles.summaryLabel}>Subtotal</Text>
-                <Text style={styles.summaryValue}>₵{calculateSubtotal().toFixed(2)}</Text>
-              </View>
-              <View style={styles.summaryRow}>
-                <Text style={styles.summaryLabel}>Tax (10%)</Text>
-                <Text style={styles.summaryValue}>₵{calculateTax().toFixed(2)}</Text>
-              </View>
-              <View style={styles.divider} />
-              <View style={styles.summaryRow}>
-                <Text style={styles.totalLabel}>Total Amount</Text>
-                <Text style={styles.totalValue}>₵{calculateTotal().toFixed(2)}</Text>
-              </View>
-            </View>
-            
-            <TouchableOpacity 
-              style={styles.checkoutButton} 
-              onPress={handleCheckout}
-              activeOpacity={0.9}
-            >
-              <LinearGradient
-                colors={['#4169E1', '#5B7FE8']}
-                start={{ x: 0, y: 0 }}
-                end={{ x: 1, y: 0 }}
-                style={styles.checkoutButtonGradient}
-              >
-                <Lock size={20} color="#FFFFFF" />
-                <Text style={styles.checkoutButtonText}>Proceed to Checkout</Text>
-              </LinearGradient>
-            </TouchableOpacity>
-          </View>
         </>
       )}
     </View>
@@ -642,6 +720,14 @@ const styles = StyleSheet.create({
     color: '#1A1A1A',
     lineHeight: 28,
   },
+  itemDescription: {
+    fontFamily: 'Inter-Regular',
+    fontSize: 13,
+    color: '#666666',
+    lineHeight: 18,
+    marginTop: 4,
+    marginBottom: 12,
+  },
   sellerRow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -852,5 +938,47 @@ const styles = StyleSheet.create({
     fontSize: 17,
     color: '#FFFFFF',
     letterSpacing: 0.5,
+  },
+  currencyContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    backgroundColor: '#F8F9FA',
+    borderBottomWidth: 1,
+    borderBottomColor: '#E2E8F0',
+  },
+  currencyLabel: {
+    fontSize: 14,
+    fontFamily: 'Inter-SemiBold',
+    color: '#000000',
+  },
+  currencyToggle: {
+    flexDirection: 'row',
+    backgroundColor: '#FFFFFF',
+    borderRadius: 12,
+    padding: 2,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+  },
+  currencyButton: {
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 10,
+    justifyContent: 'center',
+    alignItems: 'center',
+    minWidth: 70,
+  },
+  activeCurrencyButton: {
+    backgroundColor: '#4169E1',
+  },
+  currencyButtonText: {
+    fontSize: 13,
+    fontFamily: 'Inter-SemiBold',
+    color: '#666666',
+  },
+  activeCurrencyButtonText: {
+    color: '#FFFFFF',
   },
 });

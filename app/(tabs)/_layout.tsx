@@ -1,5 +1,5 @@
 import { Tabs } from 'expo-router';
-import { Home, LayoutGrid, MessageSquare, Heart, User } from 'lucide-react-native';
+import { Home, LayoutGrid, MessageSquare, Sparkles, User } from 'lucide-react-native';
 
 export default function TabLayout() {
   return (
@@ -50,8 +50,8 @@ export default function TabLayout() {
       <Tabs.Screen
         name="discover"
         options={{
-          title: 'Favorites',
-          tabBarIcon: ({ color, size }) => <Heart size={24} color={color} strokeWidth={2.5} />,
+          title: 'Discover',
+          tabBarIcon: ({ color, size }) => <Sparkles size={24} color={color} strokeWidth={2.5} />,
         }}
       />
       <Tabs.Screen

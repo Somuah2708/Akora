@@ -2,7 +2,7 @@ import { View, Text, StyleSheet, ScrollView, TouchableOpacity, TextInput, Alert,
 import { useFonts, Inter_400Regular, Inter_600SemiBold, Inter_700Bold } from '@expo-google-fonts/inter';
 import { useEffect, useState, useRef } from 'react';
 import { SplashScreen, useRouter, useLocalSearchParams } from 'expo-router';
-import { ArrowLeft, CreditCard, Smartphone, CheckCircle, Shield, Lock } from 'lucide-react-native';
+import { ArrowLeft, CreditCard, Smartphone, CheckCircle, Shield, Lock, Truck, Package } from 'lucide-react-native';
 import { useAuth } from '@/hooks/useAuth';
 import { LinearGradient } from 'expo-linear-gradient';
 
@@ -16,6 +16,7 @@ export default function CheckoutScreen() {
   const params = useLocalSearchParams();
   
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('momo');
+  const [deliveryMethod, setDeliveryMethod] = useState<'delivery' | 'pickup'>('pickup');
   const [momoNumber, setMomoNumber] = useState('');
   const [momoNetwork, setMomoNetwork] = useState('');
   const [cardNumber, setCardNumber] = useState('');
@@ -348,6 +349,90 @@ export default function CheckoutScreen() {
             </View>
           </View>
         )}
+
+        {/* Delivery Options */}
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>Delivery Method</Text>
+          <View style={styles.deliveryOptions}>
+            <TouchableOpacity
+              style={[
+                styles.deliveryCard,
+                deliveryMethod === 'delivery' && styles.deliveryCardActive,
+              ]}
+              onPress={() => setDeliveryMethod('delivery')}
+              activeOpacity={0.7}
+            >
+              <View style={[
+                styles.deliveryIconContainer,
+                deliveryMethod === 'delivery' && styles.deliveryIconContainerActive,
+              ]}>
+                <Truck size={24} color={deliveryMethod === 'delivery' ? '#FFFFFF' : '#4169E1'} />
+              </View>
+              <View style={styles.deliveryInfo}>
+                <Text style={[
+                  styles.deliveryTitle,
+                  deliveryMethod === 'delivery' && styles.deliveryTitleActive,
+                ]}>
+                  Home Delivery
+                </Text>
+                <Text style={styles.deliveryDescription}>
+                  Get items delivered to your doorstep
+                </Text>
+                <Text style={styles.deliveryTime}>3-5 business days</Text>
+              </View>
+              {deliveryMethod === 'delivery' && (
+                <CheckCircle size={24} color="#4169E1" />
+              )}
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={[
+                styles.deliveryCard,
+                deliveryMethod === 'pickup' && styles.deliveryCardActive,
+              ]}
+              onPress={() => setDeliveryMethod('pickup')}
+              activeOpacity={0.7}
+            >
+              <View style={[
+                styles.deliveryIconContainer,
+                deliveryMethod === 'pickup' && styles.deliveryIconContainerActive,
+              ]}>
+                <Package size={24} color={deliveryMethod === 'pickup' ? '#FFFFFF' : '#4169E1'} />
+              </View>
+              <View style={styles.deliveryInfo}>
+                <Text style={[
+                  styles.deliveryTitle,
+                  deliveryMethod === 'pickup' && styles.deliveryTitleActive,
+                ]}>
+                  Pickup at Secretariat
+                </Text>
+                <Text style={styles.deliveryDescription}>
+                  Collect items from the OAA Secretariat
+                </Text>
+                <Text style={styles.deliveryTime}>Free • Next business day</Text>
+              </View>
+              {deliveryMethod === 'pickup' && (
+                <CheckCircle size={24} color="#4169E1" />
+              )}
+            </TouchableOpacity>
+          </View>
+
+          {/* Delivery Details Link */}
+          <TouchableOpacity
+            style={styles.detailsLink}
+            onPress={() => {
+              if (deliveryMethod === 'delivery') {
+                router.push('/secretariat-shop/delivery');
+              } else {
+                router.push('/secretariat-shop/pickup');
+              }
+            }}
+          >
+            <Text style={styles.detailsLinkText}>
+              View {deliveryMethod === 'delivery' ? 'delivery services' : 'pickup details'} →
+            </Text>
+          </TouchableOpacity>
+        </View>
 
         {/* Security Info */}
         <View style={styles.securityInfo}>
@@ -715,5 +800,66 @@ const styles = StyleSheet.create({
     fontFamily: 'Inter-Bold',
     fontSize: 18,
     color: '#FFFFFF',
+  },
+  deliveryOptions: {
+    gap: 12,
+  },
+  deliveryCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 16,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 16,
+    borderWidth: 2,
+    borderColor: '#F0F0F0',
+    gap: 12,
+  },
+  deliveryCardActive: {
+    borderColor: '#4169E1',
+    backgroundColor: '#F0F6FF',
+  },
+  deliveryIconContainer: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    backgroundColor: '#F5F5F5',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  deliveryIconContainerActive: {
+    backgroundColor: '#E6F0FF',
+  },
+  deliveryInfo: {
+    flex: 1,
+    gap: 4,
+  },
+  deliveryTitle: {
+    fontFamily: 'Inter-SemiBold',
+    fontSize: 16,
+    color: '#1A1A1A',
+  },
+  deliveryTitleActive: {
+    color: '#4169E1',
+  },
+  deliveryDescription: {
+    fontFamily: 'Inter-Regular',
+    fontSize: 13,
+    color: '#666666',
+    lineHeight: 18,
+  },
+  deliveryTime: {
+    fontFamily: 'Inter-Medium',
+    fontSize: 12,
+    color: '#059669',
+    marginTop: 2,
+  },
+  detailsLink: {
+    alignItems: 'center',
+    marginTop: 12,
+  },
+  detailsLinkText: {
+    fontFamily: 'Inter-Medium',
+    fontSize: 14,
+    color: '#4169E1',
   },
 });

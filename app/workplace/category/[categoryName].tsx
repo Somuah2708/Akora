@@ -4,6 +4,7 @@ import { useEffect, useState, useCallback } from 'react';
 import { SplashScreen, useRouter, useLocalSearchParams } from 'expo-router';
 import { ArrowLeft, Briefcase, Clock, MapPin, Building2, Wallet } from 'lucide-react-native';
 import { supabase, type ProductService, type Profile } from '@/lib/supabase';
+import { useAuth } from '@/hooks/useAuth';
 
 SplashScreen.preventAutoHideAsync();
 
@@ -20,6 +21,7 @@ interface JobWithUser extends ProductService {
 
 export default function CategoryScreen() {
   const router = useRouter();
+  const { user } = useAuth();
   const { categoryName } = useLocalSearchParams<{ categoryName: string }>();
   const [jobs, setJobs] = useState<JobWithUser[]>([]);
   const [loading, setLoading] = useState(true);
@@ -35,53 +37,70 @@ export default function CategoryScreen() {
     try {
       setLoading(true);
       
-      // Fetch jobs by category
+      const decodedCategory = decodeURIComponent(categoryName);
+      console.log('🔍 Fetching jobs for category:', decodedCategory);
+      
+      // Fetch jobs by category (without user join to avoid 400 error)
       const { data: jobsData, error: jobsError } = await supabase
         .from('products_services')
-        .select(`
-          *,
-          profiles (
-            id,
-            username,
-            full_name,
-            avatar_url
-          )
-        `)
-        .eq('category_name', decodeURIComponent(categoryName))
+        .select('*')
+        .eq('category_name', decodedCategory)
         .eq('is_approved', true)
         .order('created_at', { ascending: false });
       
-      if (jobsError) throw jobsError;
+      if (jobsError) {
+        console.error('❌ Error fetching jobs:', jobsError);
+        throw jobsError;
+      }
+      
+      console.log('✅ Fetched jobs:', jobsData?.length || 0);
       
       // Process the job listings
       const processedJobs = (jobsData || []).map(job => {
         // Parse the description to extract company and location
-        // Format expected: "Company | Location | Description"
-        const parts = job.description.split('|');
+        // Format expected: "Company | Location | Description | Email: email"
+        const parts = job.description?.split('|') || [];
         let company = '';
         let location = '';
-        let description = job.description;
+        let description = job.description || '';
         
-        if (parts.length >= 3) {
-          company = parts[0].trim();
-          location = parts[1].trim();
-          description = parts.slice(2).join('|').trim();
+        if (parts.length >= 2) {
+          company = parts[0]?.trim() || '';
+          location = parts[1]?.trim() || '';
+          // Remove email if present and join remaining parts
+          let remainingDesc = parts.slice(2).join('|').trim();
+          const emailMatch = remainingDesc.match(/Email:\s*(.+?)(?:\s*\||$)/);
+          if (emailMatch) {
+            remainingDesc = remainingDesc.replace(/\s*\|\s*Email:.*$/, '').trim();
+          }
+          description = remainingDesc;
+        }
+        
+        // Parse image URL if it's a JSON array
+        let imageUrl = job.image_url;
+        if (imageUrl && typeof imageUrl === 'string' && imageUrl.startsWith('[')) {
+          try {
+            const parsed = JSON.parse(imageUrl);
+            imageUrl = Array.isArray(parsed) && parsed.length > 0 ? parsed[0] : imageUrl;
+          } catch (e) {
+            // Keep original if parsing fails
+          }
         }
         
         return {
           ...job,
-          user: job.profiles as Profile,
+          image_url: imageUrl,
           company,
           location,
           description,
-          salary: job.price ? `$${job.price}${job.price % 1 === 0 ? '' : '/month'}` : 'Not specified',
+          salary: job.price ? `₵${job.price}/month` : 'Not specified',
           jobType: job.category_name
         };
       });
       
       setJobs(processedJobs);
     } catch (error) {
-      console.error('Error fetching jobs by category:', error);
+      console.error('❌ Error fetching jobs by category:', error);
     } finally {
       setLoading(false);
     }
@@ -96,6 +115,11 @@ export default function CategoryScreen() {
   useEffect(() => {
     fetchJobs();
   }, [fetchJobs]);
+
+  const handleJobPress = (jobId: string) => {
+    // Navigate to job detail page (detail page shows edit button for owners)
+    router.push(`/job-detail/${jobId}` as any);
+  };
 
   if (!fontsLoaded) {
     return null;
@@ -123,7 +147,11 @@ export default function CategoryScreen() {
         ) : (
           <View style={styles.jobsContainer}>
             {jobs.map((job) => (
-              <TouchableOpacity key={job.id} style={styles.jobCard}>
+              <TouchableOpacity 
+                key={job.id} 
+                style={styles.jobCard}
+                onPress={() => handleJobPress(job.id)}
+              >
                 <View style={styles.jobHeader}>
                   <View style={styles.jobTypeTag}>
                     <Briefcase size={14} color="#4169E1" />
@@ -168,7 +196,13 @@ export default function CategoryScreen() {
                     </Text>
                   </View>
                   
-                  <TouchableOpacity style={styles.applyButton}>
+                  <TouchableOpacity 
+                    style={styles.applyButton}
+                    onPress={(e) => {
+                      e.stopPropagation();
+                      router.push(`/job-application/${job.id}` as any);
+                    }}
+                  >
                     <Text style={styles.applyButtonText}>Apply Now</Text>
                   </TouchableOpacity>
                 </View>
