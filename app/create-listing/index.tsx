@@ -1,9 +1,10 @@
 import { View, Text, StyleSheet, TextInput, TouchableOpacity, ScrollView, Alert, ActivityIndicator, Image } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
+import { Video, ResizeMode } from 'expo-av';
 import { useFonts, Inter_400Regular, Inter_600SemiBold, Inter_700Bold } from '@expo-google-fonts/inter';
 import { useEffect, useState } from 'react';
 import { SplashScreen, useRouter } from 'expo-router';
-import { ArrowLeft, Image as ImageIcon, Send, DollarSign, Tag, Info, CheckCircle, Sparkles } from 'lucide-react-native';
+import { ArrowLeft, Image as ImageIcon, Send, DollarSign, Tag, Info, CheckCircle, Sparkles, Video as VideoIcon, X } from 'lucide-react-native';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/hooks/useAuth';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -38,6 +39,11 @@ const CATEGORIES = [
   { id: '25', name: 'Kitchen & Dining' },
 ];
 
+interface MediaItem {
+  uri: string;
+  type: 'image' | 'video';
+}
+
 export default function CreateListingScreen() {
   const router = useRouter();
   const { user, loading } = useAuth();
@@ -49,26 +55,30 @@ export default function CreateListingScreen() {
   const [category, setCategory] = useState('');
   const [email, setEmail] = useState('');
   const [location, setLocation] = useState('');
-  const [localImages, setLocalImages] = useState<string[]>([]);
+  const [localMedia, setLocalMedia] = useState<MediaItem[]>([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
-  // Image picker handler
-  const pickImages = async () => {
+  // Media picker handler
+  const pickMedia = async () => {
     const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      mediaTypes: ImagePicker.MediaTypeOptions.All,
       allowsMultipleSelection: true,
       quality: 1,
       selectionLimit: 20,
     });
     if (!result.canceled && result.assets && result.assets.length > 0) {
-      setLocalImages((prev) => {
-        const combined = [...prev, ...result.assets.map((a) => a.uri)];
+      setLocalMedia((prev) => {
+        const newMedia: MediaItem[] = result.assets.map(asset => ({
+          uri: asset.uri,
+          type: asset.type === 'video' ? 'video' : 'image',
+        }));
+        const combined = [...prev, ...newMedia];
         return combined.slice(0, 20);
       });
     }
   };
 
-  const removeImage = (uri: string) => {
-    setLocalImages((prev) => prev.filter((img) => img !== uri));
+  const removeMedia = (uri: string) => {
+    setLocalMedia((prev) => prev.filter((item) => item.uri !== uri));
   };
 
   const [fontsLoaded] = useFonts({
@@ -142,8 +152,11 @@ export default function CreateListingScreen() {
     console.log('✅ All validations passed!');
 
     let finalImageUrls: string[] = [];
-    if (localImages.length > 0) {
-      finalImageUrls = localImages;
+    let finalVideoUrls: string[] = [];
+    
+    if (localMedia.length > 0) {
+      finalImageUrls = localMedia.filter(m => m.type === 'image').map(m => m.uri);
+      finalVideoUrls = localMedia.filter(m => m.type === 'video').map(m => m.uri);
     } else if (imageUrl.trim()) {
       finalImageUrls = imageUrl.split(',').map(url => url.trim()).slice(0, 20);
     }
@@ -159,6 +172,7 @@ export default function CreateListingScreen() {
         description: description.trim(),
       price: price.trim() ? `${currency} ${price}` : null,
         image_url: finalImageUrls.length > 0 ? JSON.stringify(finalImageUrls) : null,
+        video_url: finalVideoUrls.length > 0 ? JSON.stringify(finalVideoUrls) : null,
         category_name: category,
         is_featured: false,
         is_premium_listing: false,
@@ -356,11 +370,11 @@ export default function CreateListingScreen() {
         </View>
 
         <View style={styles.formGroup}>
-          <Text style={styles.label}>Images</Text>
+          <Text style={styles.label}>Images & Videos</Text>
           <View style={{ flexDirection: 'row', gap: 12, flexWrap: 'wrap' }}>
-            <TouchableOpacity style={styles.imagePickerButton} onPress={pickImages}>
+            <TouchableOpacity style={styles.imagePickerButton} onPress={pickMedia}>
               <ImageIcon size={20} color="#4169E1" />
-              <Text style={{ color: '#4169E1', fontFamily: 'Inter-SemiBold' }}>Upload from Camera Roll</Text>
+              <Text style={{ color: '#4169E1', fontFamily: 'Inter-SemiBold' }}>Upload Media from Camera Roll</Text>
             </TouchableOpacity>
             <View style={styles.imageUrlContainer}>
               <ImageIcon size={20} color="#666666" />
@@ -374,23 +388,38 @@ export default function CreateListingScreen() {
               />
             </View>
           </View>
-          {(localImages.length > 0 || imageUrl.trim() !== '') && (
+          {(localMedia.length > 0 || imageUrl.trim() !== '') && (
             <View style={styles.imagePreviewContainer}>
               <Text style={styles.imagePreviewLabel}>Preview:</Text>
               <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
-                {localImages.map((uri) => (
-                  <View key={uri} style={{ position: 'relative', marginBottom: 8 }}>
-                    <Image 
-                      source={{ uri }} 
-                      style={[styles.imagePreview, { width: 100, height: 100 }]} 
-                      onError={() => Alert.alert('Invalid Image', 'The selected image is not valid.')}
-                    />
+                {localMedia.map((mediaItem) => (
+                  <View key={mediaItem.uri} style={{ position: 'relative', marginBottom: 8 }}>
+                    {mediaItem.type === 'video' ? (
+                      <Video
+                        source={{ uri: mediaItem.uri }}
+                        style={[styles.imagePreview, { width: 100, height: 100 }]}
+                        useNativeControls
+                        resizeMode={ResizeMode.COVER}
+                        isLooping={false}
+                      />
+                    ) : (
+                      <Image 
+                        source={{ uri: mediaItem.uri }} 
+                        style={[styles.imagePreview, { width: 100, height: 100 }]} 
+                        onError={() => Alert.alert('Invalid Image', 'The selected image is not valid.')}
+                      />
+                    )}
                     <TouchableOpacity
                       style={{ position: 'absolute', top: 4, right: 4, backgroundColor: '#fff', borderRadius: 12, padding: 2 }}
-                      onPress={() => removeImage(uri)}
+                      onPress={() => removeMedia(mediaItem.uri)}
                     >
-                      <Text style={{ color: '#EF4444', fontWeight: 'bold' }}>×</Text>
+                      <X size={16} color="#EF4444" />
                     </TouchableOpacity>
+                    {mediaItem.type === 'video' && (
+                      <View style={styles.videoIndicator}>
+                        <VideoIcon size={14} color="#FFFFFF" />
+                      </View>
+                    )}
                   </View>
                 ))}
                 {imageUrl.trim() !== '' && (
@@ -703,5 +732,24 @@ const styles = StyleSheet.create({
   },
   bottomPadding: {
     height: 40,
+  },
+  currencyButton: {
+    flex: 1,
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    borderRadius: 12,
+    borderWidth: 2,
+    borderColor: '#4169E1',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#FFFFFF',
+  },
+  videoIndicator: {
+    position: 'absolute',
+    bottom: 4,
+    left: 4,
+    backgroundColor: 'rgba(0, 0, 0, 0.6)',
+    borderRadius: 12,
+    padding: 4,
   },
 });
