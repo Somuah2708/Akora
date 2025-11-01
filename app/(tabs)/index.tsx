@@ -205,6 +205,10 @@ export default function HomeScreen() {
           content,
           image_url,
           image_urls,
+          video_url,
+          video_urls,
+          youtube_url,
+          youtube_urls,
           created_at,
           user_id,
           profiles:user_id (
@@ -238,14 +242,22 @@ export default function HomeScreen() {
         }
       }
       
-      // Log image URLs for debugging
+      // Log media URLs for debugging
       data?.forEach((post, index) => {
         console.log(`Post ${index + 1}:`, {
           id: post.id,
           image_url: post.image_url,
           image_urls: post.image_urls,
+          video_url: post.video_url,
+          video_urls: post.video_urls,
+          youtube_url: post.youtube_url,
+          youtube_urls: post.youtube_urls,
           has_single_image: !!post.image_url,
           has_multiple_images: !!post.image_urls && post.image_urls.length > 0,
+          has_single_video: !!post.video_url,
+          has_multiple_videos: !!post.video_urls && post.video_urls.length > 0,
+          has_single_youtube: !!post.youtube_url,
+          has_multiple_youtube: !!post.youtube_urls && post.youtube_urls.length > 0,
         });
       });
 
@@ -256,6 +268,10 @@ export default function HomeScreen() {
         content: post.content,
         image_url: post.image_url,
         image_urls: post.image_urls,
+        video_url: post.video_url,
+        video_urls: post.video_urls,
+        youtube_url: post.youtube_url,
+        youtube_urls: post.youtube_urls,
         created_at: post.created_at,
         user: post.profiles as Profile,
         likes: Array.isArray(post.post_likes) ? post.post_likes.length : 0,
