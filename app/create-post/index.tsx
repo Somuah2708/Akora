@@ -373,22 +373,27 @@ export default function CreatePostScreen() {
           </View>
         )}
 
-        <TouchableOpacity 
-          style={styles.addImageButton} 
-          onPress={pickMedia}
-          disabled={media.length >= 20}
-        >
-          <ImageIcon size={20} color={media.length >= 20 ? '#CBD5E1' : '#475569'} />
-          <Text style={[
-            styles.addImageText,
-            media.length >= 20 && styles.addImageTextDisabled
-          ]}>
-            {media.length === 0 ? 'Add Images/Videos' : `Add More Media (${media.length}/20)`}
-          </Text>
-        </TouchableOpacity>
+        <View style={styles.mediaButtonsContainer}>
+          <TouchableOpacity 
+            style={styles.addMediaButton} 
+            onPress={pickMedia}
+            disabled={media.length >= 20}
+          >
+            <View style={styles.mediaButtonContent}>
+              <ImageIcon size={22} color={media.length >= 20 ? '#CBD5E1' : '#0095F6'} />
+              <VideoIcon size={22} color={media.length >= 20 ? '#CBD5E1' : '#0095F6'} style={{ marginLeft: -4 }} />
+            </View>
+            <Text style={[
+              styles.addMediaText,
+              media.length >= 20 && styles.addMediaTextDisabled
+            ]}>
+              {media.length === 0 ? 'Add Photos/Videos from Device' : `Add More (${media.length}/20)`}
+            </Text>
+          </TouchableOpacity>
+        </View>
 
         <View style={styles.youtubeSection}>
-          <Text style={styles.youtubeSectionLabel}>Or add a YouTube video</Text>
+          <Text style={styles.youtubeSectionLabel}>Or add YouTube videos</Text>
           <View style={styles.youtubeInputContainer}>
             <LinkIcon size={20} color="#475569" />
             <TextInput
@@ -629,6 +634,32 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     fontSize: 12,
     fontFamily: 'Inter-SemiBold',
+  },
+  mediaButtonsContainer: {
+    marginBottom: 16,
+  },
+  addMediaButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 18,
+    backgroundColor: '#E8F4FD',
+    borderRadius: 12,
+    borderWidth: 2,
+    borderColor: '#0095F6',
+    gap: 12,
+  },
+  mediaButtonContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  addMediaText: {
+    fontSize: 16,
+    fontFamily: 'Inter-SemiBold',
+    color: '#0095F6',
+  },
+  addMediaTextDisabled: {
+    color: '#CBD5E1',
   },
   addImageButton: {
     flexDirection: 'row',
