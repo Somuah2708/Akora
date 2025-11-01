@@ -2,11 +2,12 @@ import { View, Text, StyleSheet, TextInput, TouchableOpacity, ScrollView, Alert,
 import { useFonts, Inter_400Regular, Inter_600SemiBold } from '@expo-google-fonts/inter';
 import { useEffect, useState } from 'react';
 import { SplashScreen, useRouter } from 'expo-router';
-import { ArrowLeft, Image as ImageIcon, Send, Globe, Users, Lock, X, ChevronDown, Video as VideoIcon } from 'lucide-react-native';
+import { ArrowLeft, Image as ImageIcon, Send, Globe, Users, Lock, X, ChevronDown, Video as VideoIcon, Link as LinkIcon } from 'lucide-react-native';
 import * as ImagePicker from 'expo-image-picker';
 import { Video, ResizeMode } from 'expo-av';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/hooks/useAuth';
+import { isYouTubeUrl, extractYouTubeVideoId, getYouTubeThumbnail } from '@/lib/youtube';
 
 SplashScreen.preventAutoHideAsync();
 
@@ -38,7 +39,8 @@ const VISIBILITY_OPTIONS = [
 
 interface MediaItem {
   uri: string;
-  type: 'image' | 'video';
+  type: 'image' | 'video' | 'youtube';
+  videoId?: string; // For YouTube videos
 }
 
 export default function CreatePostScreen() {
@@ -46,6 +48,7 @@ export default function CreatePostScreen() {
   const { user } = useAuth();
   const [content, setContent] = useState('');
   const [media, setMedia] = useState<MediaItem[]>([]);
+  const [youtubeUrl, setYoutubeUrl] = useState('');
   const [category, setCategory] = useState('general');
   const [visibility, setVisibility] = useState('friends_only');
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -104,6 +107,34 @@ export default function CreatePostScreen() {
 
   const removeMedia = (index: number) => {
     setMedia(media.filter((_, i) => i !== index));
+  };
+
+  const addYouTubeVideo = () => {
+    if (!youtubeUrl.trim()) {
+      Alert.alert('Error', 'Please enter a YouTube URL');
+      return;
+    }
+
+    if (!isYouTubeUrl(youtubeUrl)) {
+      Alert.alert('Invalid URL', 'Please enter a valid YouTube video URL');
+      return;
+    }
+
+    if (media.length >= 20) {
+      Alert.alert('Limit Reached', 'You can only add up to 20 media items per post.');
+      return;
+    }
+
+    const videoId = extractYouTubeVideoId(youtubeUrl);
+    if (videoId) {
+      const newMedia: MediaItem = {
+        uri: youtubeUrl,
+        type: 'youtube',
+        videoId,
+      };
+      setMedia([...media, newMedia]);
+      setYoutubeUrl('');
+    }
   };
 
   const uploadMedia = async (uri: string, type: 'image' | 'video'): Promise<string | null> => {
@@ -185,27 +216,35 @@ export default function CreatePostScreen() {
       
       let uploadedImageUrls: string[] = [];
       let uploadedVideoUrls: string[] = [];
+      let youtubeUrls: string[] = [];
       
       if (media.length > 0) {
-        console.log('Uploading media...');
-        // Upload all media
+        console.log('Processing media...');
+        // Process all media
         for (const mediaItem of media) {
-          console.log('Uploading media:', mediaItem.uri, 'type:', mediaItem.type);
-          const url = await uploadMedia(mediaItem.uri, mediaItem.type);
-          if (url) {
-            console.log('Media uploaded:', url);
-            if (mediaItem.type === 'video') {
-              uploadedVideoUrls.push(url);
-            } else {
-              uploadedImageUrls.push(url);
-            }
+          if (mediaItem.type === 'youtube') {
+            // YouTube videos don't need upload, just save the URL
+            console.log('Adding YouTube video:', mediaItem.uri);
+            youtubeUrls.push(mediaItem.uri);
           } else {
-            console.log('Failed to upload media:', mediaItem.uri);
+            // Upload local images and videos
+            console.log('Uploading media:', mediaItem.uri, 'type:', mediaItem.type);
+            const url = await uploadMedia(mediaItem.uri, mediaItem.type);
+            if (url) {
+              console.log('Media uploaded:', url);
+              if (mediaItem.type === 'video') {
+                uploadedVideoUrls.push(url);
+              } else {
+                uploadedImageUrls.push(url);
+              }
+            } else {
+              console.log('Failed to upload media:', mediaItem.uri);
+            }
           }
         }
         
-        if (uploadedImageUrls.length === 0 && uploadedVideoUrls.length === 0 && media.length > 0) {
-          Alert.alert('Warning', 'Failed to upload media. Post will be created without media.');
+        if (uploadedImageUrls.length === 0 && uploadedVideoUrls.length === 0 && youtubeUrls.length === 0 && media.length > 0) {
+          Alert.alert('Warning', 'Failed to process media. Post will be created without media.');
         }
       }
       
@@ -216,6 +255,8 @@ export default function CreatePostScreen() {
         image_urls: uploadedImageUrls.length > 0 ? uploadedImageUrls : null,
         video_url: uploadedVideoUrls.length > 0 ? uploadedVideoUrls[0] : null,
         video_urls: uploadedVideoUrls.length > 0 ? uploadedVideoUrls : null,
+        youtube_url: youtubeUrls.length > 0 ? youtubeUrls[0] : null,
+        youtube_urls: youtubeUrls.length > 0 ? youtubeUrls : null,
         category,
         visibility,
       };
@@ -291,7 +332,12 @@ export default function CreatePostScreen() {
             >
               {media.map((mediaItem, index) => (
                 <View key={index} style={styles.imagePreview}>
-                  {mediaItem.type === 'video' ? (
+                  {mediaItem.type === 'youtube' ? (
+                    <Image 
+                      source={{ uri: getYouTubeThumbnail(mediaItem.videoId!) }} 
+                      style={styles.previewImage} 
+                    />
+                  ) : mediaItem.type === 'video' ? (
                     <Video
                       source={{ uri: mediaItem.uri }}
                       style={styles.previewImage}
@@ -316,6 +362,11 @@ export default function CreatePostScreen() {
                       <VideoIcon size={16} color="#FFFFFF" />
                     </View>
                   )}
+                  {mediaItem.type === 'youtube' && (
+                    <View style={styles.youtubeIndicator}>
+                      <Text style={styles.youtubeIndicatorText}>▶ YouTube</Text>
+                    </View>
+                  )}
                 </View>
               ))}
             </ScrollView>
@@ -335,6 +386,29 @@ export default function CreatePostScreen() {
             {media.length === 0 ? 'Add Images/Videos' : `Add More Media (${media.length}/20)`}
           </Text>
         </TouchableOpacity>
+
+        <View style={styles.youtubeSection}>
+          <Text style={styles.youtubeSectionLabel}>Or add a YouTube video</Text>
+          <View style={styles.youtubeInputContainer}>
+            <LinkIcon size={20} color="#475569" />
+            <TextInput
+              style={styles.youtubeInput}
+              placeholder="Paste YouTube URL here..."
+              placeholderTextColor="#94A3B8"
+              value={youtubeUrl}
+              onChangeText={setYoutubeUrl}
+              autoCapitalize="none"
+              autoCorrect={false}
+            />
+            <TouchableOpacity
+              style={styles.addYoutubeButton}
+              onPress={addYouTubeVideo}
+              disabled={!youtubeUrl.trim() || media.length >= 20}
+            >
+              <Text style={styles.addYoutubeButtonText}>Add</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
 
         <View style={styles.section}>
           <Text style={styles.sectionLabel}>Category</Text>
@@ -678,5 +752,58 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(0, 0, 0, 0.6)',
     borderRadius: 12,
     padding: 4,
+  },
+  youtubeIndicator: {
+    position: 'absolute',
+    bottom: 8,
+    left: 8,
+    backgroundColor: '#FF0000',
+    borderRadius: 12,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+  },
+  youtubeIndicatorText: {
+    color: '#FFFFFF',
+    fontSize: 12,
+    fontFamily: 'Inter-SemiBold',
+  },
+  youtubeSection: {
+    marginTop: 16,
+    marginBottom: 16,
+  },
+  youtubeSectionLabel: {
+    fontSize: 14,
+    fontFamily: 'Inter-Regular',
+    color: '#64748B',
+    marginBottom: 8,
+  },
+  youtubeInputContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#F8FAFC',
+    borderRadius: 12,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    gap: 8,
+  },
+  youtubeInput: {
+    flex: 1,
+    fontSize: 16,
+    fontFamily: 'Inter-Regular',
+    color: '#1E293B',
+    paddingVertical: 8,
+  },
+  addYoutubeButton: {
+    backgroundColor: '#0095F6',
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 8,
+  },
+  addYoutubeButtonText: {
+    color: '#FFFFFF',
+    fontSize: 14,
+    fontFamily: 'Inter-SemiBold',
   },
 });

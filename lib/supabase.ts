@@ -144,6 +144,9 @@ export type Post = {
   image_url?: string;
   image_urls?: string[]; // Multiple images support
   video_url?: string;
+  video_urls?: string[]; // Multiple videos support
+  youtube_url?: string; // Single YouTube video
+  youtube_urls?: string[]; // Multiple YouTube videos
   category?: 'general' | 'education' | 'career' | 'health' | 'fitness' | 'mental_health' | 'finance' | 'relationships' | 'hobbies' | 'travel' | 'technology' | 'entrepreneurship' | 'spirituality' | 'sports' | 'arts' | 'music' | 'other';
   visibility?: 'public' | 'friends_only' | 'private';
   created_at: string;

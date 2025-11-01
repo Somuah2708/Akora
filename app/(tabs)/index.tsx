@@ -6,6 +6,8 @@ import { Heart, MessageCircle, Send, Bookmark, MoreHorizontal, Plus, BookOpen, P
 import { supabase, type Post, type Profile } from '@/lib/supabase';
 import { useAuth } from '@/hooks/useAuth';
 import { Video, ResizeMode } from 'expo-av';
+import YouTubePlayer from '@/components/YouTubePlayer';
+import { isYouTubeUrl, getYouTubeThumbnail, extractYouTubeVideoId } from '@/lib/youtube';
 
 SplashScreen.preventAutoHideAsync();
 
@@ -562,8 +564,37 @@ export default function HomeScreen() {
                 </TouchableOpacity>
               </View>
 
-              {/* Post Media (Images/Videos Carousel) */}
-              {post.video_urls && post.video_urls.length > 0 ? (
+              {/* Post Media (Images/Videos/YouTube Carousel) */}
+              {post.youtube_urls && post.youtube_urls.length > 0 ? (
+                <View style={styles.carouselContainer}>
+                  <ScrollView
+                    horizontal
+                    pagingEnabled
+                    showsHorizontalScrollIndicator={false}
+                    style={styles.carousel}
+                    onScroll={(event) => {
+                      const scrollX = event.nativeEvent.contentOffset.x;
+                      const currentIndex = Math.round(scrollX / width);
+                      setCarouselIndices({
+                        ...carouselIndices,
+                        [post.id]: currentIndex,
+                      });
+                    }}
+                    scrollEventThrottle={16}
+                  >
+                    {post.youtube_urls.map((youtubeUrl, index) => (
+                      <YouTubePlayer key={index} url={youtubeUrl} />
+                    ))}
+                  </ScrollView>
+                  {post.youtube_urls.length > 1 && (
+                    <View style={styles.carouselIndicator}>
+                      <Text style={styles.carouselIndicatorText}>
+                        {(carouselIndices[post.id] ?? 0) + 1}/{post.youtube_urls.length}
+                      </Text>
+                    </View>
+                  )}
+                </View>
+              ) : post.video_urls && post.video_urls.length > 0 ? (
                 <View style={styles.carouselContainer}>
                   <ScrollView
                     horizontal
@@ -634,6 +665,8 @@ export default function HomeScreen() {
                     </View>
                   )}
                 </View>
+              ) : post.youtube_url ? (
+                <YouTubePlayer url={post.youtube_url} />
               ) : post.video_url ? (
                 <View style={styles.videoContainer}>
                   <Video

@@ -4,10 +4,11 @@ import { Video, ResizeMode } from 'expo-av';
 import { useFonts, Inter_400Regular, Inter_600SemiBold, Inter_700Bold } from '@expo-google-fonts/inter';
 import { useEffect, useState } from 'react';
 import { SplashScreen, useRouter } from 'expo-router';
-import { ArrowLeft, Image as ImageIcon, Send, DollarSign, Tag, Info, CheckCircle, Sparkles, Video as VideoIcon, X } from 'lucide-react-native';
+import { ArrowLeft, Image as ImageIcon, Send, DollarSign, Tag, Info, CheckCircle, Sparkles, Video as VideoIcon, X, Link as LinkIcon } from 'lucide-react-native';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/hooks/useAuth';
 import { LinearGradient } from 'expo-linear-gradient';
+import { isYouTubeUrl, extractYouTubeVideoId, getYouTubeThumbnail } from '@/lib/youtube';
 
 SplashScreen.preventAutoHideAsync();
 
@@ -41,7 +42,8 @@ const CATEGORIES = [
 
 interface MediaItem {
   uri: string;
-  type: 'image' | 'video';
+  type: 'image' | 'video' | 'youtube';
+  videoId?: string;
 }
 
 export default function CreateListingScreen() {
@@ -52,6 +54,7 @@ export default function CreateListingScreen() {
   const [price, setPrice] = useState('');
   const [currency, setCurrency] = useState('USD'); // USD or GHS
   const [imageUrl, setImageUrl] = useState('');
+  const [youtubeUrl, setYoutubeUrl] = useState('');
   const [category, setCategory] = useState('');
   const [email, setEmail] = useState('');
   const [location, setLocation] = useState('');
@@ -79,6 +82,34 @@ export default function CreateListingScreen() {
 
   const removeMedia = (uri: string) => {
     setLocalMedia((prev) => prev.filter((item) => item.uri !== uri));
+  };
+
+  const addYouTubeVideo = () => {
+    if (!youtubeUrl.trim()) {
+      Alert.alert('Error', 'Please enter a YouTube URL');
+      return;
+    }
+
+    if (!isYouTubeUrl(youtubeUrl)) {
+      Alert.alert('Invalid URL', 'Please enter a valid YouTube video URL');
+      return;
+    }
+
+    if (localMedia.length >= 20) {
+      Alert.alert('Limit Reached', 'You can only add up to 20 media items per listing.');
+      return;
+    }
+
+    const videoId = extractYouTubeVideoId(youtubeUrl);
+    if (videoId) {
+      const newMedia: MediaItem = {
+        uri: youtubeUrl,
+        type: 'youtube',
+        videoId,
+      };
+      setLocalMedia([...localMedia, newMedia]);
+      setYoutubeUrl('');
+    }
   };
 
   const [fontsLoaded] = useFonts({
@@ -153,10 +184,12 @@ export default function CreateListingScreen() {
 
     let finalImageUrls: string[] = [];
     let finalVideoUrls: string[] = [];
+    let finalYoutubeUrls: string[] = [];
     
     if (localMedia.length > 0) {
       finalImageUrls = localMedia.filter(m => m.type === 'image').map(m => m.uri);
       finalVideoUrls = localMedia.filter(m => m.type === 'video').map(m => m.uri);
+      finalYoutubeUrls = localMedia.filter(m => m.type === 'youtube').map(m => m.uri);
     } else if (imageUrl.trim()) {
       finalImageUrls = imageUrl.split(',').map(url => url.trim()).slice(0, 20);
     }
@@ -173,6 +206,7 @@ export default function CreateListingScreen() {
       price: price.trim() ? `${currency} ${price}` : null,
         image_url: finalImageUrls.length > 0 ? JSON.stringify(finalImageUrls) : null,
         video_url: finalVideoUrls.length > 0 ? JSON.stringify(finalVideoUrls) : null,
+        youtube_url: finalYoutubeUrls.length > 0 ? JSON.stringify(finalYoutubeUrls) : null,
         category_name: category,
         is_featured: false,
         is_premium_listing: false,
@@ -394,7 +428,12 @@ export default function CreateListingScreen() {
               <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
                 {localMedia.map((mediaItem) => (
                   <View key={mediaItem.uri} style={{ position: 'relative', marginBottom: 8 }}>
-                    {mediaItem.type === 'video' ? (
+                    {mediaItem.type === 'youtube' ? (
+                      <Image 
+                        source={{ uri: getYouTubeThumbnail(mediaItem.videoId!) }} 
+                        style={[styles.imagePreview, { width: 100, height: 100 }]} 
+                      />
+                    ) : mediaItem.type === 'video' ? (
                       <Video
                         source={{ uri: mediaItem.uri }}
                         style={[styles.imagePreview, { width: 100, height: 100 }]}
@@ -420,6 +459,11 @@ export default function CreateListingScreen() {
                         <VideoIcon size={14} color="#FFFFFF" />
                       </View>
                     )}
+                    {mediaItem.type === 'youtube' && (
+                      <View style={styles.youtubeIndicator}>
+                        <Text style={styles.youtubeIndicatorText}>▶ YT</Text>
+                      </View>
+                    )}
                   </View>
                 ))}
                 {imageUrl.trim() !== '' && (
@@ -432,6 +476,28 @@ export default function CreateListingScreen() {
               </View>
             </View>
           )}
+          <View style={styles.youtubeSection}>
+            <Text style={styles.youtubeSectionLabel}>Or add a YouTube video</Text>
+            <View style={styles.youtubeInputContainer}>
+              <LinkIcon size={20} color="#4169E1" />
+              <TextInput
+                style={styles.youtubeInput}
+                placeholder="Paste YouTube URL here..."
+                placeholderTextColor="#999999"
+                value={youtubeUrl}
+                onChangeText={setYoutubeUrl}
+                autoCapitalize="none"
+                autoCorrect={false}
+              />
+              <TouchableOpacity
+                style={styles.addYoutubeButton}
+                onPress={addYouTubeVideo}
+                disabled={!youtubeUrl.trim() || localMedia.length >= 20}
+              >
+                <Text style={styles.addYoutubeButtonText}>Add</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
         </View>
         
         <View style={styles.infoContainer}>
@@ -751,5 +817,57 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(0, 0, 0, 0.6)',
     borderRadius: 12,
     padding: 4,
+  },
+  youtubeIndicator: {
+    position: 'absolute',
+    bottom: 4,
+    right: 4,
+    backgroundColor: '#FF0000',
+    borderRadius: 8,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+  },
+  youtubeIndicatorText: {
+    color: '#FFFFFF',
+    fontSize: 10,
+    fontFamily: 'Inter-SemiBold',
+  },
+  youtubeSection: {
+    marginTop: 12,
+  },
+  youtubeSectionLabel: {
+    fontSize: 14,
+    fontFamily: 'Inter-Regular',
+    color: '#666666',
+    marginBottom: 8,
+  },
+  youtubeInputContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#F8F9FA',
+    borderRadius: 12,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    gap: 8,
+  },
+  youtubeInput: {
+    flex: 1,
+    fontSize: 14,
+    fontFamily: 'Inter-Regular',
+    color: '#1A1A1A',
+    paddingVertical: 6,
+  },
+  addYoutubeButton: {
+    backgroundColor: '#4169E1',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 8,
+  },
+  addYoutubeButtonText: {
+    color: '#FFFFFF',
+    fontSize: 13,
+    fontFamily: 'Inter-SemiBold',
   },
 });
