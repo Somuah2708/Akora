@@ -2,9 +2,10 @@ import { View, Text, StyleSheet, ScrollView, Image, TouchableOpacity, FlatList, 
 import { useFonts, Inter_400Regular, Inter_600SemiBold } from '@expo-google-fonts/inter';
 import { useEffect, useState, useCallback } from 'react';
 import { SplashScreen, useRouter, useFocusEffect } from 'expo-router';
-import { Heart, MessageCircle, Send, Bookmark, MoreHorizontal, Plus, BookOpen, PartyPopper, Calendar, TrendingUp, Users, Newspaper, Search, User, Edit3, Trash2 } from 'lucide-react-native';
+import { Heart, MessageCircle, Send, Bookmark, MoreHorizontal, Plus, BookOpen, PartyPopper, Calendar, TrendingUp, Users, Newspaper, Search, User, Edit3, Trash2, Play } from 'lucide-react-native';
 import { supabase, type Post, type Profile } from '@/lib/supabase';
 import { useAuth } from '@/hooks/useAuth';
+import { Video, ResizeMode } from 'expo-av';
 
 SplashScreen.preventAutoHideAsync();
 
@@ -561,8 +562,45 @@ export default function HomeScreen() {
                 </TouchableOpacity>
               </View>
 
-              {/* Post Images Carousel */}
-              {post.image_urls && post.image_urls.length > 0 ? (
+              {/* Post Media (Images/Videos Carousel) */}
+              {post.video_urls && post.video_urls.length > 0 ? (
+                <View style={styles.carouselContainer}>
+                  <ScrollView
+                    horizontal
+                    pagingEnabled
+                    showsHorizontalScrollIndicator={false}
+                    style={styles.carousel}
+                    onScroll={(event) => {
+                      const scrollX = event.nativeEvent.contentOffset.x;
+                      const currentIndex = Math.round(scrollX / width);
+                      setCarouselIndices({
+                        ...carouselIndices,
+                        [post.id]: currentIndex,
+                      });
+                    }}
+                    scrollEventThrottle={16}
+                  >
+                    {post.video_urls.map((videoUrl, index) => (
+                      <View key={index} style={styles.videoContainer}>
+                        <Video
+                          source={{ uri: videoUrl }}
+                          style={styles.postImage}
+                          useNativeControls
+                          resizeMode={ResizeMode.COVER}
+                          isLooping
+                        />
+                      </View>
+                    ))}
+                  </ScrollView>
+                  {post.video_urls.length > 1 && (
+                    <View style={styles.carouselIndicator}>
+                      <Text style={styles.carouselIndicatorText}>
+                        {(carouselIndices[post.id] ?? 0) + 1}/{post.video_urls.length}
+                      </Text>
+                    </View>
+                  )}
+                </View>
+              ) : post.image_urls && post.image_urls.length > 0 ? (
                 <View style={styles.carouselContainer}>
                   <ScrollView
                     horizontal
@@ -595,6 +633,16 @@ export default function HomeScreen() {
                       </Text>
                     </View>
                   )}
+                </View>
+              ) : post.video_url ? (
+                <View style={styles.videoContainer}>
+                  <Video
+                    source={{ uri: post.video_url }}
+                    style={styles.postImage}
+                    useNativeControls
+                    resizeMode={ResizeMode.COVER}
+                    isLooping
+                  />
                 </View>
               ) : post.image_url ? (
                 <Image 
@@ -860,6 +908,11 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     fontSize: 12,
     fontFamily: 'Inter-SemiBold',
+  },
+  videoContainer: {
+    width: width,
+    height: width,
+    backgroundColor: '#000000',
   },
   postActions: {
     flexDirection: 'row',

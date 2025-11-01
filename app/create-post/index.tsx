@@ -2,8 +2,9 @@ import { View, Text, StyleSheet, TextInput, TouchableOpacity, ScrollView, Alert,
 import { useFonts, Inter_400Regular, Inter_600SemiBold } from '@expo-google-fonts/inter';
 import { useEffect, useState } from 'react';
 import { SplashScreen, useRouter } from 'expo-router';
-import { ArrowLeft, Image as ImageIcon, Send, Globe, Users, Lock, X, ChevronDown } from 'lucide-react-native';
+import { ArrowLeft, Image as ImageIcon, Send, Globe, Users, Lock, X, ChevronDown, Video as VideoIcon } from 'lucide-react-native';
 import * as ImagePicker from 'expo-image-picker';
+import { Video, ResizeMode } from 'expo-av';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/hooks/useAuth';
 
@@ -35,11 +36,16 @@ const VISIBILITY_OPTIONS = [
   { value: 'private', label: 'Private', icon: Lock, description: 'Only you can see this' },
 ];
 
+interface MediaItem {
+  uri: string;
+  type: 'image' | 'video';
+}
+
 export default function CreatePostScreen() {
   const router = useRouter();
   const { user } = useAuth();
   const [content, setContent] = useState('');
-  const [images, setImages] = useState<string[]>([]);
+  const [media, setMedia] = useState<MediaItem[]>([]);
   const [category, setCategory] = useState('general');
   const [visibility, setVisibility] = useState('friends_only');
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -67,58 +73,65 @@ export default function CreatePostScreen() {
     checkAuth();
   }, [user]);
 
-  const pickImage = async () => {
-    if (images.length >= 20) {
-      Alert.alert('Limit Reached', 'You can only add up to 20 images per post.');
+  const pickMedia = async () => {
+    if (media.length >= 20) {
+      Alert.alert('Limit Reached', 'You can only add up to 20 images/videos per post.');
       return;
     }
 
     const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
     if (status !== 'granted') {
-      Alert.alert('Permission Denied', 'We need camera roll permissions to upload images.');
+      Alert.alert('Permission Denied', 'We need camera roll permissions to upload media.');
       return;
     }
 
     const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      mediaTypes: ImagePicker.MediaTypeOptions.All,
       allowsEditing: false,
       allowsMultipleSelection: true,
       quality: 0.8,
-      selectionLimit: 20 - images.length,
+      selectionLimit: 20 - media.length,
     });
 
     if (!result.canceled) {
-      const newImages = result.assets.map(asset => asset.uri);
-      setImages([...images, ...newImages]);
+      const newMedia: MediaItem[] = result.assets.map(asset => ({
+        uri: asset.uri,
+        type: asset.type === 'video' ? 'video' : 'image',
+      }));
+      setMedia([...media, ...newMedia]);
     }
   };
 
-  const removeImage = (index: number) => {
-    setImages(images.filter((_, i) => i !== index));
+  const removeMedia = (index: number) => {
+    setMedia(media.filter((_, i) => i !== index));
   };
 
-  const uploadImage = async (uri: string): Promise<string | null> => {
+  const uploadMedia = async (uri: string, type: 'image' | 'video'): Promise<string | null> => {
     try {
-      console.log('📤 Starting upload for:', uri);
+      console.log('📤 Starting upload for:', uri, 'type:', type);
       
       const response = await fetch(uri);
       if (!response.ok) {
-        throw new Error(`Failed to fetch image: ${response.status}`);
+        throw new Error(`Failed to fetch media: ${response.status}`);
       }
       
       const blob = await response.blob();
       console.log('📦 Blob created, size:', blob.size, 'type:', blob.type);
       
-      const fileExt = uri.split('.').pop() || 'jpg';
+      const fileExt = uri.split('.').pop() || (type === 'video' ? 'mp4' : 'jpg');
       const fileName = `${user?.id}-${Date.now()}.${fileExt}`;
       const filePath = `posts/${fileName}`;
       
       console.log('📁 Uploading to path:', filePath);
 
+      const contentType = type === 'video' 
+        ? (blob.type || 'video/mp4')
+        : (blob.type || 'image/jpeg');
+
       const { data: uploadData, error: uploadError } = await supabase.storage
         .from('media')
         .upload(filePath, blob, {
-          contentType: blob.type || 'image/jpeg',
+          contentType,
           cacheControl: '3600',
           upsert: false
         });
@@ -137,13 +150,13 @@ export default function CreatePostScreen() {
       console.log('🔗 Public URL:', urlData.publicUrl);
       return urlData.publicUrl;
     } catch (error: any) {
-      console.error('❌ Error uploading image:', error);
+      console.error('❌ Error uploading media:', error);
       console.error('Error details:', {
         message: error.message,
         name: error.name,
         stack: error.stack
       });
-      Alert.alert('Upload Error', error.message || 'Failed to upload image');
+      Alert.alert('Upload Error', error.message || 'Failed to upload media');
       return null;
     }
   };
@@ -152,7 +165,7 @@ export default function CreatePostScreen() {
     console.log('Submit button pressed');
     console.log('Content:', content);
     console.log('User:', user?.id);
-    console.log('Images:', images.length);
+    console.log('Media:', media.length);
     console.log('Category:', category);
     console.log('Visibility:', visibility);
 
@@ -171,22 +184,28 @@ export default function CreatePostScreen() {
       console.log('Starting post creation...');
       
       let uploadedImageUrls: string[] = [];
-      if (images.length > 0) {
-        console.log('Uploading images...');
-        // Upload all images
-        for (const imageUri of images) {
-          console.log('Uploading image:', imageUri);
-          const url = await uploadImage(imageUri);
+      let uploadedVideoUrls: string[] = [];
+      
+      if (media.length > 0) {
+        console.log('Uploading media...');
+        // Upload all media
+        for (const mediaItem of media) {
+          console.log('Uploading media:', mediaItem.uri, 'type:', mediaItem.type);
+          const url = await uploadMedia(mediaItem.uri, mediaItem.type);
           if (url) {
-            console.log('Image uploaded:', url);
-            uploadedImageUrls.push(url);
+            console.log('Media uploaded:', url);
+            if (mediaItem.type === 'video') {
+              uploadedVideoUrls.push(url);
+            } else {
+              uploadedImageUrls.push(url);
+            }
           } else {
-            console.log('Failed to upload image:', imageUri);
+            console.log('Failed to upload media:', mediaItem.uri);
           }
         }
         
-        if (uploadedImageUrls.length === 0 && images.length > 0) {
-          Alert.alert('Warning', 'Failed to upload images. Post will be created without images.');
+        if (uploadedImageUrls.length === 0 && uploadedVideoUrls.length === 0 && media.length > 0) {
+          Alert.alert('Warning', 'Failed to upload media. Post will be created without media.');
         }
       }
       
@@ -195,6 +214,8 @@ export default function CreatePostScreen() {
         content: content.trim(),
         image_url: uploadedImageUrls.length > 0 ? uploadedImageUrls[0] : null,
         image_urls: uploadedImageUrls.length > 0 ? uploadedImageUrls : null,
+        video_url: uploadedVideoUrls.length > 0 ? uploadedVideoUrls[0] : null,
+        video_urls: uploadedVideoUrls.length > 0 ? uploadedVideoUrls : null,
         category,
         visibility,
       };
@@ -261,25 +282,40 @@ export default function CreatePostScreen() {
           textAlignVertical="top"
         />
         
-        {images.length > 0 && (
+        {media.length > 0 && (
           <View style={styles.imagesContainer}>
             <ScrollView 
               horizontal 
               showsHorizontalScrollIndicator={false}
               style={styles.imagesScroll}
             >
-              {images.map((imageUri, index) => (
+              {media.map((mediaItem, index) => (
                 <View key={index} style={styles.imagePreview}>
-                  <Image source={{ uri: imageUri }} style={styles.previewImage} />
+                  {mediaItem.type === 'video' ? (
+                    <Video
+                      source={{ uri: mediaItem.uri }}
+                      style={styles.previewImage}
+                      useNativeControls
+                      resizeMode={ResizeMode.COVER}
+                      isLooping={false}
+                    />
+                  ) : (
+                    <Image source={{ uri: mediaItem.uri }} style={styles.previewImage} />
+                  )}
                   <TouchableOpacity 
                     style={styles.removeImageButton}
-                    onPress={() => removeImage(index)}
+                    onPress={() => removeMedia(index)}
                   >
                     <X size={16} color="#FFFFFF" />
                   </TouchableOpacity>
                   <View style={styles.imageCounter}>
-                    <Text style={styles.imageCounterText}>{index + 1}/{images.length}</Text>
+                    <Text style={styles.imageCounterText}>{index + 1}/{media.length}</Text>
                   </View>
+                  {mediaItem.type === 'video' && (
+                    <View style={styles.videoIndicator}>
+                      <VideoIcon size={16} color="#FFFFFF" />
+                    </View>
+                  )}
                 </View>
               ))}
             </ScrollView>
@@ -288,15 +324,15 @@ export default function CreatePostScreen() {
 
         <TouchableOpacity 
           style={styles.addImageButton} 
-          onPress={pickImage}
-          disabled={images.length >= 20}
+          onPress={pickMedia}
+          disabled={media.length >= 20}
         >
-          <ImageIcon size={20} color={images.length >= 20 ? '#CBD5E1' : '#475569'} />
+          <ImageIcon size={20} color={media.length >= 20 ? '#CBD5E1' : '#475569'} />
           <Text style={[
             styles.addImageText,
-            images.length >= 20 && styles.addImageTextDisabled
+            media.length >= 20 && styles.addImageTextDisabled
           ]}>
-            {images.length === 0 ? 'Add Images' : `Add More Images (${images.length}/20)`}
+            {media.length === 0 ? 'Add Images/Videos' : `Add More Media (${media.length}/20)`}
           </Text>
         </TouchableOpacity>
 
@@ -634,5 +670,13 @@ const styles = StyleSheet.create({
     fontFamily: 'Inter-Regular',
     color: '#94A3B8',
     marginTop: 2,
+  },
+  videoIndicator: {
+    position: 'absolute',
+    top: 8,
+    left: 8,
+    backgroundColor: 'rgba(0, 0, 0, 0.6)',
+    borderRadius: 12,
+    padding: 4,
   },
 });
