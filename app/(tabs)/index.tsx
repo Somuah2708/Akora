@@ -633,8 +633,10 @@ export default function HomeScreen() {
                           source={{ uri: videoUrl }}
                           style={styles.postImage}
                           useNativeControls
-                          resizeMode={ResizeMode.COVER}
-                          isLooping
+                          resizeMode={ResizeMode.CONTAIN}
+                          shouldPlay={false}
+                          isLooping={false}
+                          videoStyle={styles.postImage}
                         />
                       </View>
                     ))}
@@ -689,8 +691,10 @@ export default function HomeScreen() {
                     source={{ uri: post.video_url }}
                     style={styles.postImage}
                     useNativeControls
-                    resizeMode={ResizeMode.COVER}
-                    isLooping
+                    resizeMode={ResizeMode.CONTAIN}
+                    shouldPlay={false}
+                    isLooping={false}
+                    videoStyle={styles.postImage}
                   />
                 </View>
               ) : post.image_url ? (
