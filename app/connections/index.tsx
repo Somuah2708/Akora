@@ -24,6 +24,7 @@ import {
   type Connection,
 } from '@/lib/connections';
 import type { Profile } from '@/lib/supabase';
+import { formatProfileSubtitle } from '@/lib/display';
 
 SplashScreen.preventAutoHideAsync();
 
@@ -148,8 +149,17 @@ export default function ConnectionsScreen() {
           style={styles.avatar}
         />
         <View style={styles.requestInfo}>
-          <Text style={styles.requestName}>{requester.full_name || requester.username}</Text>
-          {requester.username && <Text style={styles.requestUsername}>@{requester.username}</Text>}
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+            <Text style={styles.requestName}>{requester.full_name}</Text>
+            {(requester as any)?.is_admin && (
+              <View style={styles.adminBadge}>
+                <Text style={styles.adminBadgeText}>Admin</Text>
+              </View>
+            )}
+          </View>
+          {!!formatProfileSubtitle(requester) && (
+            <Text style={styles.requestUsername}>{formatProfileSubtitle(requester)}</Text>
+          )}
           <Text style={styles.requestTime}>
             {new Date(connection.created_at).toLocaleDateString()}
           </Text>
@@ -189,8 +199,17 @@ export default function ConnectionsScreen() {
           style={styles.avatar}
         />
         <View style={styles.requestInfo}>
-          <Text style={styles.requestName}>{addressee.full_name || addressee.username}</Text>
-          {addressee.username && <Text style={styles.requestUsername}>@{addressee.username}</Text>}
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+            <Text style={styles.requestName}>{addressee.full_name}</Text>
+            {(addressee as any)?.is_admin && (
+              <View style={styles.adminBadge}>
+                <Text style={styles.adminBadgeText}>Admin</Text>
+              </View>
+            )}
+          </View>
+          {!!formatProfileSubtitle(addressee) && (
+            <Text style={styles.requestUsername}>{formatProfileSubtitle(addressee)}</Text>
+          )}
           <Text style={styles.requestTime}>
             Sent {new Date(connection.created_at).toLocaleDateString()}
           </Text>
@@ -213,15 +232,24 @@ export default function ConnectionsScreen() {
     <TouchableOpacity
       key={profile.id}
       style={styles.requestCard}
-      onPress={() => router.push(`/profile/${profile.id}` as any)}
+      onPress={() => router.push(`/user-profile/${profile.id}` as any)}
     >
       <Image
         source={{ uri: profile.avatar_url || 'https://i.pravatar.cc/150' }}
         style={styles.avatar}
       />
       <View style={styles.requestInfo}>
-        <Text style={styles.requestName}>{profile.full_name || profile.username}</Text>
-        {profile.username && <Text style={styles.requestUsername}>@{profile.username}</Text>}
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+          <Text style={styles.requestName}>{profile.full_name}</Text>
+          {(profile as any)?.is_admin && (
+            <View style={styles.adminBadge}>
+              <Text style={styles.adminBadgeText}>Admin</Text>
+            </View>
+          )}
+        </View>
+        {!!formatProfileSubtitle(profile) && (
+          <Text style={styles.requestUsername}>{formatProfileSubtitle(profile)}</Text>
+        )}
       </View>
       <UserCheck size={20} color="#10B981" />
     </TouchableOpacity>
@@ -492,5 +520,18 @@ const styles = StyleSheet.create({
   },
   cancelButton: {
     backgroundColor: '#FEE2E2',
+  },
+  adminBadge: {
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 999,
+    backgroundColor: '#EEF6FF',
+    borderWidth: 1,
+    borderColor: '#CDE3FF',
+  },
+  adminBadgeText: {
+    color: '#0A84FF',
+    fontSize: 11,
+    fontFamily: 'Inter-SemiBold',
   },
 });

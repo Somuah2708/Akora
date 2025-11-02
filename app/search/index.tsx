@@ -98,7 +98,7 @@ export default function SearchScreen() {
     setSendingRequest(targetUser.id);
     try {
       await sendConnectionRequest(user.id, targetUser.id);
-      Alert.alert('Success', `Connection request sent to ${targetUser.full_name || targetUser.username}`);
+  Alert.alert('Success', `Connection request sent to ${targetUser.full_name}`);
 
       // Update the user's connection status in the list
       setUsers((prev) =>
@@ -120,7 +120,7 @@ export default function SearchScreen() {
 
     Alert.alert(
       'Cancel Request',
-      `Cancel connection request to ${targetUser.full_name || targetUser.username}?`,
+  `Cancel connection request to ${targetUser.full_name}?`,
       [
         { text: 'No', style: 'cancel' },
         {
@@ -228,8 +228,7 @@ export default function SearchScreen() {
         style={styles.avatar}
       />
       <View style={styles.userInfo}>
-        <Text style={styles.userName}>{item.full_name || item.username}</Text>
-        {item.username && <Text style={styles.userUsername}>@{item.username}</Text>}
+  <Text style={styles.userName}>{item.full_name}</Text>
         {item.bio && <Text style={styles.userBio} numberOfLines={2}>{item.bio}</Text>}
       </View>
       {renderConnectionButton(item)}
@@ -256,7 +255,7 @@ export default function SearchScreen() {
         <Search size={20} color="#9CA3AF" />
         <TextInput
           style={styles.searchInput}
-          placeholder="Search by name or username..."
+          placeholder="Search by name..."
           placeholderTextColor="#9CA3AF"
           value={searchQuery}
           onChangeText={setSearchQuery}

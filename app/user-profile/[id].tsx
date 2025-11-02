@@ -1,8 +1,9 @@
 import { View, Text, StyleSheet, ScrollView, Image, TouchableOpacity, Alert, ActivityIndicator, Modal, Pressable, Dimensions } from 'react-native';
+import * as Linking from 'expo-linking';
 import { useFonts, Inter_400Regular, Inter_600SemiBold } from '@expo-google-fonts/inter';
 import { useEffect, useState } from 'react';
 import { SplashScreen, useRouter, useLocalSearchParams } from 'expo-router';
-import { ArrowLeft, Mail, GraduationCap, Calendar, MapPin, MessageCircle, UserPlus, UserCheck, UserMinus, Users, X } from 'lucide-react-native';
+import { ArrowLeft, Mail, GraduationCap, Calendar, MapPin, MessageCircle, UserPlus, UserCheck, UserMinus, Users, X, Star } from 'lucide-react-native';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/hooks/useAuth';
 import { checkFriendshipStatus, sendFriendRequest, unfriend, getMutualFriendsCount } from '@/lib/friends';
@@ -22,6 +23,22 @@ export default function UserProfileScreen() {
   const [mutualFriendsCount, setMutualFriendsCount] = useState(0);
   const [actionLoading, setActionLoading] = useState(false);
   const [showFullImage, setShowFullImage] = useState(false);
+  type Highlight = {
+    id: string;
+    user_id: string;
+    title?: string | null;
+    subtitle?: string | null;
+    media_url?: string | null; // deprecated but tolerated
+    action_url?: string | null; // deprecated but tolerated
+    emoji?: string | null; // deprecated but tolerated
+    color?: string | null; // optional border accent
+    order_index?: number | null;
+    visible?: boolean | null;
+    pinned?: boolean | null;
+    post_id?: string | null;
+  };
+  const [highlights, setHighlights] = useState<Highlight[]>([]);
+  const [postPreview, setPostPreview] = useState<Record<string, { thumb?: string | null }>>({});
 
   const [fontsLoaded] = useFonts({
     'Inter-Regular': Inter_400Regular,
@@ -41,6 +58,44 @@ export default function UserProfileScreen() {
       fetchMutualFriends();
     }
   }, [id, user]);
+
+  // Load profile highlights for this user
+  useEffect(() => {
+    (async () => {
+      try {
+        if (!id) return;
+        const { data, error } = await supabase
+          .from('profile_highlights')
+          .select('id,user_id,title,order_index,visible,pinned,post_id')
+          .eq('user_id', id)
+          .eq('visible', true)
+          .order('pinned', { ascending: false })
+          .order('order_index', { ascending: true })
+          .limit(12);
+        if (error) throw error;
+        const rows = (data as Highlight[]) || [];
+        setHighlights(rows);
+        // fetch post thumbs
+        const postIds = rows.map(r => r.post_id).filter(Boolean) as string[];
+        if (postIds.length) {
+          const { data: posts } = await supabase
+            .from('posts')
+            .select('id,image_url,image_urls,video_urls')
+            .in('id', postIds);
+          const map: Record<string, { thumb?: string | null }> = {};
+          (posts || []).forEach((p: any) => {
+            const thumb = p.image_url || (Array.isArray(p.image_urls) && p.image_urls.length > 0 ? p.image_urls[0] : null);
+            map[p.id] = { thumb };
+          });
+          setPostPreview(map);
+        } else {
+          setPostPreview({});
+        }
+      } catch (e) {
+        // ignore
+      }
+    })();
+  }, [id]);
 
   // Subscribe to real-time profile updates
   useEffect(() => {
@@ -143,6 +198,23 @@ export default function UserProfileScreen() {
     }
   };
 
+  const formatOccupation = (s?: string | null) => {
+    switch (s) {
+      case 'student':
+        return 'Student';
+      case 'employed':
+        return 'Employed';
+      case 'self_employed':
+        return 'Self-Employed';
+      case 'unemployed':
+        return 'Unemployed';
+      case 'other':
+        return 'Other';
+      default:
+        return s ? s.charAt(0).toUpperCase() + s.slice(1) : '';
+    }
+  };
+
   const handleAddFriend = async () => {
     if (!user || !id) return;
 
@@ -164,7 +236,7 @@ export default function UserProfileScreen() {
 
     Alert.alert(
       'Unfriend',
-      `Are you sure you want to remove ${userProfile?.full_name || userProfile?.username} from your friends?`,
+      `Are you sure you want to remove ${userProfile?.full_name || 'this user'} from your friends?`,
       [
         { text: 'Cancel', style: 'cancel' },
         {
@@ -294,6 +366,42 @@ export default function UserProfileScreen() {
       </View>
 
       <ScrollView style={styles.scrollView} showsVerticalScrollIndicator={false}>
+        {/* Highlights */}
+        {highlights.length > 0 && (
+          <View style={[styles.aboutSection, { marginTop: 8 }]}> 
+            <Text style={styles.sectionTitle}>Highlights</Text>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.highlightsContent}>
+              {highlights.map((h) => (
+                <TouchableOpacity
+                  key={h.id}
+                  style={styles.highlightItem}
+                  activeOpacity={0.8}
+                  onPress={() => {
+                    const title = encodeURIComponent(h.title || 'Highlight');
+                    router.push(`/highlights/${id}?t=${title}&hid=${h.id}` as any);
+                  }}
+                >
+                  <View style={[styles.highlightImageContainer, h.color ? { borderColor: h.color } : null]}>
+                    {h.post_id && postPreview[h.post_id]?.thumb ? (
+                      <Image source={{ uri: postPreview[h.post_id]?.thumb as string }} style={styles.highlightImage} />
+                    ) : h.media_url ? (
+                      <Image source={{ uri: h.media_url }} style={styles.highlightImage} />
+                    ) : (
+                      <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#F3F4F6' }}>
+                        {h.emoji ? (
+                          <Text style={{ fontSize: 20 }}>{h.emoji}</Text>
+                        ) : (
+                          <Star size={18} color="#0A84FF" />
+                        )}
+                      </View>
+                    )}
+                  </View>
+                  <Text style={styles.highlightTitle} numberOfLines={1}>{h.title || 'Highlight'}</Text>
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
+          </View>
+        )}
         {/* Profile Header */}
         <View style={styles.profileHeader}>
           <TouchableOpacity 
@@ -310,12 +418,17 @@ export default function UserProfileScreen() {
           </TouchableOpacity>
           
           <View style={styles.userInfo}>
-            <Text style={styles.fullName}>
-              {userProfile.full_name || userProfile.username || 'Unknown User'}
-            </Text>
-            {userProfile.username && (
-              <Text style={styles.username}>@{userProfile.username}</Text>
-            )}
+            <View style={styles.nameRow}>
+              <Text style={styles.fullName}>
+                {userProfile.full_name || 'Unknown User'}
+              </Text>
+              {userProfile.is_admin && (
+                <View style={styles.adminBadge}>
+                  <Text style={styles.adminBadgeText}>Admin</Text>
+                </View>
+              )}
+            </View>
+            
             {userProfile.bio && (
               <Text style={styles.bio}>{userProfile.bio}</Text>
             )}
@@ -340,6 +453,18 @@ export default function UserProfileScreen() {
         {/* About Section */}
         <View style={styles.aboutSection}>
           <Text style={styles.sectionTitle}>About</Text>
+
+          {userProfile.occupation_status && (
+            <View style={styles.infoRow}>
+              <View style={styles.iconContainer}>
+                <GraduationCap size={20} color="#4169E1" />
+              </View>
+              <View style={styles.infoContent}>
+                <Text style={styles.infoLabel}>Status</Text>
+                <Text style={styles.infoValue}>{formatOccupation(userProfile.occupation_status)}</Text>
+              </View>
+            </View>
+          )}
 
           {userProfile.email && (
             <View style={styles.infoRow}>
@@ -423,41 +548,57 @@ export default function UserProfileScreen() {
             <Text style={styles.emptyText}>No additional information available</Text>
           )}
         </View>
+
+        {/* Links Section */}
+        {(userProfile as any).website_url || (userProfile as any).linkedin_url || (userProfile as any).twitter_url || (userProfile as any).instagram_url || (userProfile as any).facebook_url ? (
+          <View style={[styles.aboutSection, { marginTop: 8 }]}>
+            <Text style={styles.sectionTitle}>Links</Text>
+            <View style={styles.linksRow}>
+              {(userProfile as any).website_url && (
+                <TouchableOpacity style={styles.linkPill} onPress={() => Linking.openURL(String((userProfile as any).website_url))}>
+                  <Text style={styles.linkPillText}>Website</Text>
+                </TouchableOpacity>
+              )}
+              {(userProfile as any).linkedin_url && (
+                <TouchableOpacity style={styles.linkPill} onPress={() => Linking.openURL(String((userProfile as any).linkedin_url))}>
+                  <Text style={styles.linkPillText}>LinkedIn</Text>
+                </TouchableOpacity>
+              )}
+              {(userProfile as any).twitter_url && (
+                <TouchableOpacity style={styles.linkPill} onPress={() => Linking.openURL(String((userProfile as any).twitter_url))}>
+                  <Text style={styles.linkPillText}>Twitter</Text>
+                </TouchableOpacity>
+              )}
+              {(userProfile as any).instagram_url && (
+                <TouchableOpacity style={styles.linkPill} onPress={() => Linking.openURL(String((userProfile as any).instagram_url))}>
+                  <Text style={styles.linkPillText}>Instagram</Text>
+                </TouchableOpacity>
+              )}
+              {(userProfile as any).facebook_url && (
+                <TouchableOpacity style={styles.linkPill} onPress={() => Linking.openURL(String((userProfile as any).facebook_url))}>
+                  <Text style={styles.linkPillText}>Facebook</Text>
+                </TouchableOpacity>
+              )}
+            </View>
+          </View>
+        ) : null}
       </ScrollView>
 
-      {/* Full Screen Image Modal */}
+      {/* Full Screen Image Modal (edge-to-edge) */}
       <Modal
         visible={showFullImage}
-        transparent={true}
+        transparent
         animationType="fade"
         onRequestClose={() => setShowFullImage(false)}
       >
-        <Pressable 
-          style={styles.fullImageModal}
-          onPress={() => setShowFullImage(false)}
-        >
-          <View style={styles.fullImageHeader}>
-            <TouchableOpacity 
-              style={styles.closeButton}
-              onPress={() => setShowFullImage(false)}
-            >
-              <X size={28} color="#FFFFFF" />
-            </TouchableOpacity>
-          </View>
-          <View style={styles.fullImageContainer}>
-            <Image
-              source={{
-                uri: userProfile.avatar_url || 'https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?w=400&auto=format&fit=crop&q=60',
-              }}
-              style={styles.fullImage}
-              resizeMode="contain"
-            />
-          </View>
-          <View style={styles.fullImageFooter}>
-            <Text style={styles.fullImageName}>
-              {userProfile.full_name || userProfile.username || 'Unknown User'}
-            </Text>
-          </View>
+        <Pressable style={styles.fullscreenOverlay} onPress={() => setShowFullImage(false)}>
+          <Image
+            source={{
+              uri: userProfile.avatar_url || 'https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?w=400&auto=format&fit=crop&q=60',
+            }}
+            style={{ width: SCREEN_WIDTH, height: SCREEN_HEIGHT }}
+            resizeMode="contain"
+          />
         </Pressable>
       </Modal>
     </View>
@@ -545,12 +686,31 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     width: '100%',
   },
+  nameRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
   fullName: {
     fontFamily: 'Inter-SemiBold',
     fontSize: 26,
     color: '#000000',
     marginBottom: 4,
     textAlign: 'center',
+  },
+  adminBadge: {
+    marginLeft: 6,
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 999,
+    backgroundColor: '#EEF6FF',
+    borderWidth: 1,
+    borderColor: '#CDE3FF',
+  },
+  adminBadgeText: {
+    fontFamily: 'Inter-SemiBold',
+    fontSize: 12,
+    color: '#0A84FF',
   },
   username: {
     fontFamily: 'Inter-Regular',
@@ -670,6 +830,22 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: '#000000',
   },
+  linksRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+  },
+  linkPill: {
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    backgroundColor: '#F2F3F5',
+    borderRadius: 999,
+  },
+  linkPillText: {
+    fontFamily: 'Inter-SemiBold',
+    fontSize: 13,
+    color: '#111827',
+  },
   emptyText: {
     fontFamily: 'Inter-Regular',
     fontSize: 15,
@@ -681,6 +857,12 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: 'rgba(0, 0, 0, 0.95)',
     justifyContent: 'space-between',
+  },
+  fullscreenOverlay: {
+    flex: 1,
+    backgroundColor: 'black',
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   fullImageHeader: {
     paddingTop: 60,
@@ -715,6 +897,33 @@ const styles = StyleSheet.create({
     fontFamily: 'Inter-SemiBold',
     fontSize: 20,
     color: '#FFFFFF',
+    textAlign: 'center',
+  },
+  highlightsContent: {
+    paddingHorizontal: 20,
+    gap: 16,
+  },
+  highlightItem: {
+    alignItems: 'center',
+    width: 70,
+  },
+  highlightImageContainer: {
+    width: 64,
+    height: 64,
+    borderRadius: 12,
+    overflow: 'hidden',
+    marginBottom: 6,
+    borderWidth: 1,
+    borderColor: '#DBDBDB',
+  },
+  highlightImage: {
+    width: '100%',
+    height: '100%',
+  },
+  highlightTitle: {
+    fontFamily: 'Inter-Regular',
+    fontSize: 12,
+    color: '#000000',
     textAlign: 'center',
   },
 });

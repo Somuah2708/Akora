@@ -1,4 +1,5 @@
 import { createClient } from '@supabase/supabase-js';
+import type { InterestOptionId } from './interest-data';
 import { Platform } from 'react-native';
 
 const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL;
@@ -32,7 +33,7 @@ const createWebStorage = () => {
           return value;
         }
       } catch (error) {
-        console.error('[Storage] Error getting item:', error);
+        console.warn('[Storage] getItem error:', error);
       }
       return null;
     },
@@ -40,22 +41,22 @@ const createWebStorage = () => {
       try {
         if (typeof window !== 'undefined' && window.localStorage) {
           window.localStorage.setItem(key, value);
-          console.log('[Storage] setItem:', key, 'saved successfully');
+          console.log('[Storage] setItem:', key);
         }
       } catch (error) {
-        console.error('[Storage] Error setting item:', error);
+        console.warn('[Storage] setItem error:', error);
       }
     },
     removeItem: async (key: string): Promise<void> => {
       try {
         if (typeof window !== 'undefined' && window.localStorage) {
           window.localStorage.removeItem(key);
-          console.log('[Storage] removeItem:', key, 'removed successfully');
+          console.log('[Storage] removeItem:', key);
         }
       } catch (error) {
-        console.error('[Storage] Error removing item:', error);
+        console.warn('[Storage] removeItem error:', error);
       }
-    },
+    }
   };
 };
 
@@ -65,11 +66,13 @@ export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
     persistSession: true,
     autoRefreshToken: true,
     detectSessionInUrl: false,
-    storageKey: 'sb-auth-token',
   },
 });
 
 console.log('Supabase client initialized successfully');
+
+// Storage buckets
+export const AVATAR_BUCKET = process.env.EXPO_PUBLIC_SUPABASE_AVATAR_BUCKET || 'avatars';
 
 // Types for our database
 export type Profile = {
@@ -115,26 +118,11 @@ export type Chat = {
   created_at: string;
 };
 
-export type ChatParticipant = {
-  chat_id: string;
-  user_id: string;
-  joined_at: string;
-};
-
-export type Message = {
+export type UserInterest = {
   id: string;
-  chat_id: string;
-  sender_id: string;
-  content: string;
+  user_id: string;
+  category: InterestOptionId;
   created_at: string;
-  sender?: Profile;
-};
-
-export type ChatWithDetails = Chat & {
-  participants: (ChatParticipant & { profiles: Profile })[];
-  messages: Message[];
-  last_message?: Message;
-  unread_count?: number;
 };
 
 export type Post = {
@@ -147,7 +135,7 @@ export type Post = {
   video_urls?: string[]; // Multiple videos support
   youtube_url?: string; // Single YouTube video
   youtube_urls?: string[]; // Multiple YouTube videos
-  category?: 'general' | 'education' | 'career' | 'health' | 'fitness' | 'mental_health' | 'finance' | 'relationships' | 'hobbies' | 'travel' | 'technology' | 'entrepreneurship' | 'spirituality' | 'sports' | 'arts' | 'music' | 'other';
+  category?: InterestOptionId;
   visibility?: 'public' | 'friends_only' | 'private';
   created_at: string;
   user?: Profile;
@@ -157,13 +145,6 @@ export type PostLike = {
   id: string;
   post_id: string;
   user_id: string;
-  created_at: string;
-};
-
-export type UserInterest = {
-  id: string;
-  user_id: string;
-  category: 'education' | 'career' | 'health' | 'fitness' | 'mental_health' | 'finance' | 'relationships' | 'hobbies' | 'travel' | 'technology' | 'entrepreneurship' | 'spirituality' | 'sports' | 'arts' | 'music';
   created_at: string;
 };
 

@@ -1,11 +1,13 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, Image, TouchableOpacity, Dimensions, ActivityIndicator, RefreshControl } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, Image, TouchableOpacity, Dimensions, ActivityIndicator, RefreshControl, Modal, TextInput } from 'react-native';
 import { useFonts, Inter_400Regular, Inter_600SemiBold } from '@expo-google-fonts/inter';
-import { useRouter } from 'expo-router';
-import { Users, Sparkles, Heart, MessageCircle, Bookmark, Briefcase, GraduationCap, Zap, Trophy, MapPin, TrendingUp, Star, Lightbulb } from 'lucide-react-native';
+import { useRouter, useLocalSearchParams } from 'expo-router';
+import { Sparkles, Heart, MessageCircle, Bookmark, Lightbulb, SlidersHorizontal, Check, X, ChevronDown, Users } from 'lucide-react-native';
+import type { LucideIcon } from 'lucide-react-native';
 import { useAuth } from '@/hooks/useAuth';
 import { supabase } from '@/lib/supabase';
 import { fetchDiscoverFeed, type DiscoverItem } from '@/lib/discover';
+import { INTEREST_LIBRARY, type InterestCategoryDefinition, type InterestOptionId } from '@/lib/interest-data';
 
 const { width } = Dimensions.get('window');
 
@@ -24,17 +26,52 @@ function getTimeAgo(dateString: string): string {
   return past.toLocaleDateString();
 }
 
-const INTEREST_CATEGORIES = [
-  { id: 'technology', label: 'Technology', icon: Zap },
-  { id: 'music', label: 'Music', icon: Zap },
-  { id: 'education', label: 'Education', icon: GraduationCap },
-  { id: 'career', label: 'Career', icon: Briefcase },
-  { id: 'sports', label: 'Sports', icon: Trophy },
-  { id: 'travel', label: 'Travel', icon: MapPin },
-  { id: 'arts', label: 'Arts', icon: Star },
-  { id: 'finance', label: 'Finance', icon: TrendingUp },
-  { id: 'entrepreneurship', label: 'Entrepreneurship', icon: Lightbulb },
-];
+type InterestMeta = {
+  label: string;
+  icon: LucideIcon;
+  parentId?: string;
+  description?: string;
+};
+
+const INTEREST_LOOKUP: Record<string, InterestMeta> = {};
+const SUBCATEGORY_IDS_BY_PARENT = new Map<string, string[]>();
+
+INTEREST_LIBRARY.forEach((category) => {
+  INTEREST_LOOKUP[category.id] = {
+    label: category.label,
+    icon: category.icon,
+    description: category.description,
+  };
+
+  if (category.subcategories?.length) {
+    SUBCATEGORY_IDS_BY_PARENT.set(
+      category.id,
+      category.subcategories.map((sub) => sub.id)
+    );
+
+    category.subcategories.forEach((sub) => {
+      INTEREST_LOOKUP[sub.id] = {
+        label: sub.label,
+        icon: category.icon,
+        parentId: category.id,
+        description: sub.description,
+      };
+    });
+  }
+});
+
+const FILTER_ORDER = INTEREST_LIBRARY.flatMap((category) => [
+  category.id,
+  ...(category.subcategories?.map((sub) => sub.id) ?? []),
+]);
+
+const formatInterestLabel = (value: string) =>
+  value
+    .split('_')
+    .map((segment) => segment.charAt(0).toUpperCase() + segment.slice(1))
+    .join(' ');
+
+const getInterestMeta = (id: string) => INTEREST_LOOKUP[id];
 
 interface CarouselIndices {
   [key: string]: number;
@@ -42,6 +79,7 @@ interface CarouselIndices {
 
 export default function DiscoverScreen() {
   const router = useRouter();
+  const params = useLocalSearchParams();
   const { user } = useAuth();
   const [activeFilter, setActiveFilter] = useState<'all' | 'friends' | string>('all');
   const [discoverFeed, setDiscoverFeed] = useState<DiscoverItem[]>([]);
@@ -50,6 +88,108 @@ export default function DiscoverScreen() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [carouselIndices, setCarouselIndices] = useState<CarouselIndices>({});
+  const [interestModalVisible, setInterestModalVisible] = useState(false);
+  const [interestSearch, setInterestSearch] = useState('');
+  const [expandedCategories, setExpandedCategories] = useState<Set<string>>(new Set());
+
+  const interestKey = useMemo(
+    () => Array.from(userInterests).sort().join(','),
+    [userInterests]
+  );
+
+  const interestFilters = useMemo(() => {
+    const baseSelection = userInterests.size > 0
+      ? Array.from(userInterests)
+      : INTEREST_LIBRARY.map((option) => option.id);
+
+    const hiddenParents = new Set<string>();
+    userInterests.forEach((id) => {
+      const parentId = getInterestMeta(id)?.parentId;
+      if (parentId) {
+        hiddenParents.add(parentId);
+      }
+    });
+
+    const rankedFilters = baseSelection
+      .filter((id) => !(hiddenParents.has(id) && SUBCATEGORY_IDS_BY_PARENT.has(id)))
+      .map((id) => {
+        const meta = getInterestMeta(id);
+        const sortKey = FILTER_ORDER.indexOf(id);
+        return {
+          id,
+          label: meta ? meta.label : formatInterestLabel(id),
+          icon: meta ? meta.icon : Sparkles,
+          sortKey: sortKey === -1 ? Number.MAX_SAFE_INTEGER : sortKey,
+        };
+      })
+      .sort((a, b) => (a.sortKey === b.sortKey ? a.label.localeCompare(b.label) : a.sortKey - b.sortKey));
+
+    return [
+      { id: 'all', label: 'For You', icon: Sparkles },
+      { id: 'friends', label: 'Friends', icon: Users },
+      ...rankedFilters.map(({ sortKey, ...rest }) => rest),
+    ];
+  }, [userInterests]);
+
+  const filteredInterestOptions = useMemo(() => {
+    const query = interestSearch.trim().toLowerCase();
+    if (!query) return INTEREST_LIBRARY as InterestCategoryDefinition[];
+
+    return INTEREST_LIBRARY
+      .map((category) => {
+        const matchesCategory =
+          category.label.toLowerCase().includes(query) ||
+          category.description.toLowerCase().includes(query);
+
+        const matchingSubcategories = category.subcategories?.filter((sub) => {
+          const labelMatch = sub.label.toLowerCase().includes(query);
+          const descriptionMatch = sub.description
+            ? sub.description.toLowerCase().includes(query)
+            : false;
+          return labelMatch || descriptionMatch;
+        }) ?? [];
+
+        if (!matchesCategory && matchingSubcategories.length === 0) {
+          return null;
+        }
+
+        return {
+          ...category,
+          subcategories: matchesCategory ? category.subcategories : matchingSubcategories,
+        } as InterestCategoryDefinition;
+      })
+      .filter(Boolean) as InterestCategoryDefinition[];
+  }, [interestSearch]);
+
+  const openInterestModal = useCallback(() => {
+    const nextExpanded = new Set<string>();
+    userInterests.forEach((id) => {
+      const parentId = getInterestMeta(id)?.parentId;
+      if (parentId) {
+        nextExpanded.add(parentId);
+      }
+    });
+
+    setInterestSearch('');
+    setExpandedCategories(nextExpanded);
+    setInterestModalVisible(true);
+  }, [userInterests]);
+
+  const closeInterestModal = useCallback(() => {
+    setInterestModalVisible(false);
+  }, []);
+
+  const toggleCategoryExpansion = useCallback((categoryId: string) => {
+    setExpandedCategories((prev) => {
+      const next = new Set(prev);
+      if (next.has(categoryId)) {
+        next.delete(categoryId);
+      } else {
+        next.add(categoryId);
+      }
+      return next;
+    });
+  }, []);
 
   const [fontsLoaded] = useFonts({
     'Inter-Regular': Inter_400Regular,
@@ -63,13 +203,33 @@ export default function DiscoverScreen() {
         user?.id,
         activeFilter === 'all' || activeFilter === 'friends' ? undefined : activeFilter
       );
-      setDiscoverFeed(feed);
+      // Enrich with like/save state for current user
+      if (user?.id) {
+        const postIds = feed.filter((f) => f.type === 'post' && f.sourceId).map((f) => String(f.sourceId));
+        if (postIds.length > 0) {
+          const [likesRes, bmsRes] = await Promise.all([
+            supabase.from('post_likes').select('post_id').eq('user_id', user.id).in('post_id', postIds),
+            supabase.from('post_bookmarks').select('post_id').eq('user_id', user.id).in('post_id', postIds),
+          ]);
+          const liked = new Set((likesRes.data || []).map((r: any) => r.post_id));
+          const saved = new Set((bmsRes.data || []).map((r: any) => r.post_id));
+          setDiscoverFeed(feed.map((f) =>
+            f.type === 'post' && f.sourceId
+              ? { ...f, isLiked: liked.has(String(f.sourceId)), saved: saved.has(String(f.sourceId)) ? 1 : 0, isBookmarked: saved.has(String(f.sourceId)) }
+              : f
+          ));
+        } else {
+          setDiscoverFeed(feed);
+        }
+      } else {
+        setDiscoverFeed(feed);
+      }
     } catch (e) {
       console.error('Error loading discover feed', e);
     } finally {
       setLoading(false);
     }
-  }, [user?.id, activeFilter]);
+  }, [user?.id, activeFilter, interestKey]);
 
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
@@ -80,6 +240,14 @@ export default function DiscoverScreen() {
   useEffect(() => {
     loadDiscoverFeed();
   }, [loadDiscoverFeed]);
+
+  // If routed with ?openInterestModal=1, open the interests modal on mount
+  useEffect(() => {
+    if (params && (params as any).openInterestModal) {
+      openInterestModal();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [(params as any)?.openInterestModal]);
 
   useEffect(() => {
     const loadInterests = async () => {
@@ -113,34 +281,175 @@ export default function DiscoverScreen() {
     loadFriends();
   }, [user?.id]);
 
-  const toggleUserInterest = async (category: string) => {
+  const toggleUserInterest = async (interestId: InterestOptionId) => {
     if (!user?.id) return;
-    const next = new Set(userInterests);
-    const isSelected = next.has(category);
+
+    const parentId = getInterestMeta(interestId)?.parentId;
+    const previousSelection = new Set(userInterests);
+    const previousActive = activeFilter;
+    const nextSelection = new Set(userInterests);
+    const isSelected = nextSelection.has(interestId);
+
     if (isSelected) {
-      next.delete(category);
-      setUserInterests(next);
-      const { error } = await supabase
-        .from('user_interests')
-        .delete()
-        .eq('user_id', user.id)
-        .eq('category', category);
-      if (error) {
-        console.error('Failed to remove interest', error);
-        setUserInterests(new Set(userInterests));
+      nextSelection.delete(interestId);
+
+      const categoriesToDelete = [interestId];
+      let removeParent = false;
+
+      if (parentId) {
+        const siblings = SUBCATEGORY_IDS_BY_PARENT.get(parentId) ?? [];
+        const hasOtherSiblings = siblings.some((id) => id !== interestId && nextSelection.has(id));
+        if (!hasOtherSiblings) {
+          removeParent = true;
+          nextSelection.delete(parentId);
+        }
+      }
+
+      if (parentId && removeParent) {
+        categoriesToDelete.push(parentId);
+      }
+
+      if (activeFilter === interestId || (parentId && activeFilter === parentId)) {
+        setActiveFilter('all');
+      }
+
+      setUserInterests(nextSelection);
+
+      if (categoriesToDelete.length > 0) {
+        const { error } = await supabase
+          .from('user_interests')
+          .delete()
+          .eq('user_id', user.id)
+          .in('category', categoriesToDelete);
+
+        if (error) {
+          console.error('Failed to remove interest', error);
+          setUserInterests(previousSelection);
+          setActiveFilter(previousActive);
+        }
       }
     } else {
-      next.add(category);
-      setUserInterests(next);
-      const { error } = await supabase
-        .from('user_interests')
-        .insert({ user_id: user.id, category });
-      if (error) {
-        console.error('Failed to add interest', error);
-        setUserInterests(new Set(userInterests));
+      const wasEmpty = nextSelection.size === 0;
+      nextSelection.add(interestId);
+
+      const categoriesToInsert: { user_id: string; category: string }[] = [];
+
+      if (!previousSelection.has(interestId)) {
+        categoriesToInsert.push({ user_id: user.id, category: interestId });
+      }
+
+      if (parentId) {
+        if (!nextSelection.has(parentId)) {
+          nextSelection.add(parentId);
+        }
+        if (!previousSelection.has(parentId)) {
+          categoriesToInsert.push({ user_id: user.id, category: parentId });
+        }
+      }
+
+      setUserInterests(nextSelection);
+      if (wasEmpty) {
+        setActiveFilter(interestId);
+      }
+
+      if (categoriesToInsert.length > 0) {
+        const { error } = await supabase
+          .from('user_interests')
+          .insert(categoriesToInsert);
+
+        if (error) {
+          console.error('Failed to add interest', error);
+          setUserInterests(previousSelection);
+          setActiveFilter(previousActive);
+        }
       }
     }
   };
+
+  const toggleCategoryGroup = useCallback(
+    async (category: InterestCategoryDefinition, mode: 'select' | 'clear') => {
+      if (!user?.id) return;
+
+      const previousSelection = new Set(userInterests);
+      const previousActive = activeFilter;
+      const subcategoryIds = SUBCATEGORY_IDS_BY_PARENT.get(category.id) ?? [];
+      const bundle = [category.id, ...subcategoryIds];
+
+      if (mode === 'select') {
+        const nextSelection = new Set(previousSelection);
+        bundle.forEach((id) => nextSelection.add(id));
+        setUserInterests(nextSelection);
+        setExpandedCategories((prev) => new Set(prev).add(category.id));
+        if (previousSelection.size === 0) {
+          setActiveFilter(category.id);
+        }
+
+        const rowsToInsert = bundle
+          .filter((id) => !previousSelection.has(id))
+          .map((id) => ({ user_id: user.id, category: id }));
+
+        if (rowsToInsert.length === 0) {
+          return;
+        }
+
+        const { error } = await supabase.from('user_interests').insert(rowsToInsert);
+
+        if (error) {
+          console.error('Failed to follow category group', error);
+          setUserInterests(previousSelection);
+          setActiveFilter(previousActive);
+        }
+      } else {
+        const nextSelection = new Set(previousSelection);
+        bundle.forEach((id) => nextSelection.delete(id));
+        setUserInterests(nextSelection);
+        if (activeFilter === category.id || subcategoryIds.includes(activeFilter)) {
+          setActiveFilter('all');
+        }
+
+        const rowsToDelete = bundle.filter((id) => previousSelection.has(id));
+        if (rowsToDelete.length === 0) {
+          return;
+        }
+
+        const { error } = await supabase
+          .from('user_interests')
+          .delete()
+          .eq('user_id', user.id)
+          .in('category', rowsToDelete);
+
+        if (error) {
+          console.error('Failed to clear category group', error);
+          setUserInterests(previousSelection);
+          setActiveFilter(previousActive);
+        }
+      }
+    },
+    [user?.id, userInterests, activeFilter]
+  );
+
+  useEffect(() => {
+    if (!interestSearch.trim()) {
+      return;
+    }
+    setExpandedCategories(new Set(filteredInterestOptions.map((category) => category.id)));
+  }, [interestSearch, filteredInterestOptions]);
+
+  useEffect(() => {
+    if (interestSearch.trim()) {
+      return;
+    }
+    setExpandedCategories((prev) => {
+      const next = new Set(prev);
+      userInterests.forEach((id) => {
+        const parentId = getInterestMeta(id)?.parentId;
+        if (parentId) {
+          next.add(parentId);
+        }
+      });
+      return next;
+    });
+  }, [userInterests, interestSearch]);
 
   const handleLikeToggle = async (itemId: string) => {
     if (!user?.id) return;
@@ -178,6 +487,26 @@ export default function DiscoverScreen() {
     }
   };
 
+  const handleBookmarkToggle = async (itemId: string) => {
+    if (!user?.id) return;
+    const item = discoverFeed.find((i) => i.id === itemId);
+    if (!item || item.type !== 'post' || !item.sourceId) return;
+    const wasSaved = (item as any).isBookmarked === true || (item as any).saved === 1;
+    // Optimistic
+    setDiscoverFeed(prev => prev.map(i => i.id === itemId ? { ...i, isBookmarked: !wasSaved, saved: !wasSaved ? 1 : 0 } : i));
+    try {
+      if (wasSaved) {
+        const { error } = await supabase.from('post_bookmarks').delete().eq('post_id', item.sourceId).eq('user_id', user.id);
+        if (error) throw error;
+      } else {
+        const { error } = await supabase.from('post_bookmarks').insert({ post_id: item.sourceId, user_id: user.id });
+        if (error) throw error;
+      }
+    } catch (e) {
+      setDiscoverFeed(prev => prev.map(i => i.id === itemId ? { ...i, isBookmarked: wasSaved, saved: wasSaved ? 1 : 0 } : i));
+    }
+  };
+
   const filteredSections = useMemo(() => {
     const friendsPosts = discoverFeed.filter((i) => i.type === 'post' && i.author && friendIds.has(i.author.id));
     const otherItems = discoverFeed.filter((i) => {
@@ -204,6 +533,186 @@ export default function DiscoverScreen() {
 
   return (
     <View style={styles.container}>
+      <Modal
+        animationType="slide"
+        transparent
+        visible={interestModalVisible}
+        onRequestClose={closeInterestModal}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalCard}>
+            <View style={styles.modalHeader}>
+              <View style={styles.modalHeaderText}>
+                <Text style={styles.modalTitle}>Fine-tune your Discover feed</Text>
+                <Text style={styles.modalSubtitle}>
+                  Select the topics you care about. We&rsquo;ll prioritize stories, opportunities, and
+                  updates that match them.
+                </Text>
+              </View>
+              <TouchableOpacity
+                style={styles.modalCloseButton}
+                onPress={closeInterestModal}
+                accessibilityLabel="Close interest selector"
+              >
+                <X size={18} color="#111827" strokeWidth={2} />
+              </TouchableOpacity>
+            </View>
+
+            <TextInput
+              style={styles.modalSearch}
+              placeholder="Search interests"
+              placeholderTextColor="#9CA3AF"
+              value={interestSearch}
+              onChangeText={setInterestSearch}
+            />
+
+            <ScrollView
+              style={styles.modalScroll}
+              contentContainerStyle={styles.modalScrollContent}
+              showsVerticalScrollIndicator={false}
+            >
+              {filteredInterestOptions.map((category) => {
+                const IconComponent = category.icon;
+                const hasSubcategories = Boolean(category.subcategories?.length);
+                const subcategoryIds = SUBCATEGORY_IDS_BY_PARENT.get(category.id) ?? [];
+                const selectedSubCount = subcategoryIds.filter((id) => userInterests.has(id)).length;
+                const totalSubCount = subcategoryIds.length;
+                const categorySelected = userInterests.has(category.id);
+                const isExpanded = hasSubcategories ? expandedCategories.has(category.id) : categorySelected;
+                const followingBadgeVisible = hasSubcategories ? selectedSubCount > 0 : categorySelected;
+                const allTopicsSelected = totalSubCount > 0 && selectedSubCount === totalSubCount;
+
+                return (
+                  <View key={category.id} style={styles.categorySection}>
+                    <TouchableOpacity
+                      activeOpacity={0.85}
+                      style={[styles.categoryHeader, isExpanded && hasSubcategories && styles.categoryHeaderExpanded]}
+                      onPress={() =>
+                        hasSubcategories
+                          ? toggleCategoryExpansion(category.id)
+                          : toggleUserInterest(category.id)
+                      }
+                    >
+                      <View style={styles.categoryHeaderLeft}>
+                        <View style={styles.categoryIconWrapper}>
+                          <IconComponent size={20} color="#0A84FF" strokeWidth={1.75} />
+                        </View>
+                        <View style={styles.categoryHeaderText}>
+                          <Text style={styles.categoryTitle}>{category.label}</Text>
+                          <Text style={styles.categorySubtitle}>{category.description}</Text>
+                          {hasSubcategories && (
+                            <Text style={styles.categoryMetaText}>
+                              {selectedSubCount > 0
+                                ? `${selectedSubCount} of ${totalSubCount} topics`
+                                : `${totalSubCount} topics`}
+                            </Text>
+                          )}
+                        </View>
+                      </View>
+                      <View style={styles.categoryHeaderRight}>
+                        {followingBadgeVisible && (
+                          <View style={styles.categoryStatusBadge}>
+                            <Text style={styles.categoryStatusText}>Following</Text>
+                          </View>
+                        )}
+                        {hasSubcategories ? (
+                          <ChevronDown
+                            size={18}
+                            color="#1F2937"
+                            strokeWidth={2}
+                            style={isExpanded ? styles.chevronExpanded : undefined}
+                          />
+                        ) : (
+                          <View
+                            style={[
+                              styles.categorySoloBadge,
+                              categorySelected && styles.categorySoloBadgeSelected,
+                            ]}
+                          >
+                            {categorySelected && <Check size={14} color="#FFFFFF" strokeWidth={2} />}
+                          </View>
+                        )}
+                      </View>
+                    </TouchableOpacity>
+
+                    {hasSubcategories && isExpanded && (
+                      <View style={styles.categoryBody}>
+                        <View style={styles.categoryActions}>
+                          <TouchableOpacity
+                            style={[
+                              styles.categoryActionButton,
+                              allTopicsSelected && styles.categoryActionButtonDisabled,
+                            ]}
+                            onPress={() => {
+                              if (!allTopicsSelected) {
+                                toggleCategoryGroup(category, 'select');
+                              }
+                            }}
+                            disabled={allTopicsSelected}
+                          >
+                            <Text
+                              style={[
+                                styles.categoryActionText,
+                                allTopicsSelected && styles.categoryActionTextMuted,
+                              ]}
+                            >
+                              {allTopicsSelected ? 'Following all topics' : 'Follow all topics'}
+                            </Text>
+                          </TouchableOpacity>
+                          {selectedSubCount > 0 && (
+                            <TouchableOpacity
+                              style={styles.categoryActionButtonGhost}
+                              onPress={() => toggleCategoryGroup(category, 'clear')}
+                            >
+                              <Text style={styles.categoryActionGhostText}>Clear</Text>
+                            </TouchableOpacity>
+                          )}
+                        </View>
+
+                        <View style={styles.subcategoryGrid}>
+                          {category.subcategories?.map((sub) => {
+                            const isSelected = userInterests.has(sub.id);
+                            return (
+                              <TouchableOpacity
+                                key={sub.id}
+                                style={[
+                                  styles.subcategoryPill,
+                                  isSelected && styles.subcategoryPillSelected,
+                                ]}
+                                onPress={() => toggleUserInterest(sub.id)}
+                                activeOpacity={0.85}
+                              >
+                                <Text
+                                  style={[
+                                    styles.subcategoryLabel,
+                                    isSelected && styles.subcategoryLabelSelected,
+                                  ]}
+                                >
+                                  {sub.label}
+                                </Text>
+                                {isSelected && <Check size={14} color="#FFFFFF" strokeWidth={2} />}
+                              </TouchableOpacity>
+                            );
+                          })}
+                        </View>
+                      </View>
+                    )}
+                  </View>
+                );
+              })}
+            </ScrollView>
+
+            <TouchableOpacity
+              style={styles.modalPrimaryButton}
+              onPress={closeInterestModal}
+              activeOpacity={0.9}
+            >
+              <Text style={styles.modalPrimaryButtonText}>Save interests</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+
       <ScrollView 
         style={styles.scrollView}
         showsVerticalScrollIndicator={false} 
@@ -211,7 +720,20 @@ export default function DiscoverScreen() {
       >
         {/* Header */}
         <View style={styles.header}>
-          <Text style={styles.logoText}>Discover</Text>
+          <View>
+            <Text style={styles.logoText}>Discover</Text>
+            <Text style={styles.headerSubtitle}>Handpicked for your Akora journey</Text>
+          </View>
+          <TouchableOpacity
+            style={styles.manageInterestsButton}
+            onPress={openInterestModal}
+            activeOpacity={0.85}
+          >
+            <SlidersHorizontal size={16} color="#0A84FF" strokeWidth={2} />
+            <Text style={styles.manageInterestsText}>
+              {userInterests.size ? `Personalize (${userInterests.size})` : 'Pick interests'}
+            </Text>
+          </TouchableOpacity>
         </View>
 
         {/* Filter Tabs */}
@@ -221,16 +743,12 @@ export default function DiscoverScreen() {
           style={styles.filtersContainer}
           contentContainerStyle={styles.filtersContent}
         >
-          {[
-            { id: 'all', label: 'For You', icon: Sparkles }, 
-            { id: 'friends', label: 'Friends', icon: Users }, 
-            ...INTEREST_CATEGORIES
-          ].map((filter: any) => {
+          {interestFilters.map((filter) => {
             const IconComponent = filter.icon;
             const isActive = activeFilter === filter.id;
             return (
               <TouchableOpacity 
-                key={`filter-${filter.id}`} 
+                key={filter.id} 
                 style={[styles.filterChip, isActive && styles.filterChipActive]} 
                 onPress={() => setActiveFilter(filter.id)}
               >
@@ -269,7 +787,7 @@ export default function DiscoverScreen() {
                   />
                   <View>
                     <Text style={styles.postUsername}>
-                      {item.author?.username || 'Anonymous'}
+                      {item.author?.full_name || 'Anonymous'}
                     </Text>
                     <Text style={styles.postTime}>{getTimeAgo(item.created_at || new Date().toISOString())}</Text>
                   </View>
@@ -278,11 +796,13 @@ export default function DiscoverScreen() {
 
               {/* Post Image */}
               {item.image && (
-                <Image 
-                  source={{ uri: item.image }} 
-                  style={styles.postImage}
-                  resizeMode="cover"
-                />
+                <TouchableOpacity activeOpacity={0.85} onPress={() => item.sourceId && router.push(`/post/${item.sourceId}`)}>
+                  <Image 
+                    source={{ uri: item.image }} 
+                    style={styles.postImage}
+                    resizeMode="cover"
+                  />
+                </TouchableOpacity>
               )}
 
               {/* Post Actions */}
@@ -306,8 +826,8 @@ export default function DiscoverScreen() {
                     <MessageCircle size={26} color="#000000" strokeWidth={2} />
                   </TouchableOpacity>
                 </View>
-                <TouchableOpacity style={styles.actionButton}>
-                  <Bookmark size={26} color="#000000" strokeWidth={2} />
+                <TouchableOpacity style={styles.actionButton} onPress={() => handleBookmarkToggle(item.id)}>
+                  <Bookmark size={26} color={(item as any).isBookmarked ? '#111827' : '#000000'} fill={(item as any).isBookmarked ? '#111827' : 'none'} strokeWidth={2} />
                 </TouchableOpacity>
               </View>
 
@@ -318,7 +838,7 @@ export default function DiscoverScreen() {
               <View style={styles.postCaption}>
                 <Text style={styles.postCaptionText}>
                   <Text style={styles.postCaptionUsername}>
-                    {item.author?.username || 'anonymous'}
+                    {item.author?.full_name || 'Anonymous'}
                   </Text>
                   {' '}{item.description}
                 </Text>
@@ -373,6 +893,257 @@ const styles = StyleSheet.create({
     fontSize: 28,
     fontFamily: 'Inter-SemiBold',
     color: '#000000',
+  },
+  headerSubtitle: {
+    marginTop: 6,
+    fontSize: 13,
+    fontFamily: 'Inter-Regular',
+    color: '#6B7280',
+  },
+  manageInterestsButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 18,
+    backgroundColor: '#EFF6FF',
+    borderWidth: 1,
+    borderColor: '#BFDBFE',
+  },
+  manageInterestsText: {
+    fontSize: 12,
+    fontFamily: 'Inter-SemiBold',
+    color: '#0A84FF',
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(17, 24, 39, 0.65)',
+    justifyContent: 'flex-end',
+  },
+  modalCard: {
+    maxHeight: '85%',
+    backgroundColor: '#FFFFFF',
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    paddingHorizontal: 20,
+    paddingTop: 20,
+    paddingBottom: 28,
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+    marginBottom: 16,
+  },
+  modalHeaderText: {
+    flex: 1,
+    paddingRight: 12,
+  },
+  modalTitle: {
+    fontSize: 20,
+    fontFamily: 'Inter-SemiBold',
+    color: '#111827',
+  },
+  modalSubtitle: {
+    marginTop: 6,
+    fontSize: 13,
+    fontFamily: 'Inter-Regular',
+    color: '#6B7280',
+    lineHeight: 18,
+  },
+  modalCloseButton: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: '#F3F4F6',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  modalSearch: {
+    backgroundColor: '#F9FAFB',
+    borderRadius: 16,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    fontSize: 14,
+    fontFamily: 'Inter-Regular',
+    color: '#111827',
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+    marginBottom: 16,
+  },
+  modalScroll: {
+    maxHeight: 360,
+  },
+  modalScrollContent: {
+    paddingBottom: 8,
+    gap: 12,
+  },
+  categorySection: {
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+    borderRadius: 20,
+    backgroundColor: '#FFFFFF',
+    paddingVertical: 4,
+  },
+  categoryHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    borderRadius: 18,
+  },
+  categoryHeaderExpanded: {
+    backgroundColor: '#F9FAFB',
+  },
+  categoryHeaderLeft: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    flex: 1,
+    gap: 12,
+  },
+  categoryIconWrapper: {
+    width: 44,
+    height: 44,
+    borderRadius: 14,
+    backgroundColor: '#EEF2FF',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  categoryHeaderText: {
+    flex: 1,
+  },
+  categoryTitle: {
+    fontSize: 15,
+    fontFamily: 'Inter-SemiBold',
+    color: '#111827',
+  },
+  categorySubtitle: {
+    marginTop: 4,
+    fontSize: 12,
+    lineHeight: 18,
+    fontFamily: 'Inter-Regular',
+    color: '#6B7280',
+  },
+  categoryMetaText: {
+    marginTop: 6,
+    fontSize: 11,
+    fontFamily: 'Inter-Regular',
+    color: '#4B5563',
+  },
+  categoryHeaderRight: {
+    alignItems: 'flex-end',
+    gap: 8,
+  },
+  categoryStatusBadge: {
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 999,
+    backgroundColor: '#0A84FF',
+  },
+  categoryStatusText: {
+    fontSize: 11,
+    fontFamily: 'Inter-SemiBold',
+    color: '#FFFFFF',
+  },
+  categorySoloBadge: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: '#D1D5DB',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  categorySoloBadgeSelected: {
+    backgroundColor: '#0A84FF',
+    borderColor: '#0A84FF',
+  },
+  chevronExpanded: {
+    transform: [{ rotate: '180deg' }],
+  },
+  categoryBody: {
+    paddingHorizontal: 16,
+    paddingBottom: 16,
+    gap: 12,
+  },
+  categoryActions: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 12,
+    alignItems: 'center',
+  },
+  categoryActionButton: {
+    backgroundColor: '#0A84FF',
+    borderRadius: 16,
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+  },
+  categoryActionButtonDisabled: {
+    backgroundColor: '#E5E7EB',
+  },
+  categoryActionText: {
+    fontSize: 13,
+    fontFamily: 'Inter-SemiBold',
+    color: '#FFFFFF',
+  },
+  categoryActionTextMuted: {
+    color: '#6B7280',
+  },
+  categoryActionButtonGhost: {
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: '#D1D5DB',
+    backgroundColor: '#FFFFFF',
+  },
+  categoryActionGhostText: {
+    fontSize: 13,
+    fontFamily: 'Inter-SemiBold',
+    color: '#4B5563',
+  },
+  subcategoryGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 10,
+  },
+  subcategoryPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 18,
+    borderWidth: 1,
+    borderColor: '#D1D5DB',
+    backgroundColor: '#FFFFFF',
+  },
+  subcategoryPillSelected: {
+    borderColor: '#0A84FF',
+    backgroundColor: '#0A84FF',
+  },
+  subcategoryLabel: {
+    fontSize: 12,
+    fontFamily: 'Inter-SemiBold',
+    color: '#4B5563',
+  },
+  subcategoryLabelSelected: {
+    color: '#FFFFFF',
+  },
+  modalPrimaryButton: {
+    marginTop: 18,
+    backgroundColor: '#0A84FF',
+    borderRadius: 20,
+    paddingVertical: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  modalPrimaryButtonText: {
+    fontSize: 15,
+    fontFamily: 'Inter-SemiBold',
+    color: '#FFFFFF',
   },
   filtersContainer: {
     borderBottomWidth: 0.5,

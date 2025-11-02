@@ -15,9 +15,12 @@ export interface DiscoverItem {
     avatar_url: string;
   };
   date?: string;
+  created_at?: string;
   location?: string;
   likes?: number;
+  isLiked?: boolean;
   saved?: number;
+  comments?: number;
   matchScore?: number;
   tags?: string[];
   sourceId?: string;
@@ -53,12 +56,14 @@ export async function fetchDiscoverFeed(
         const postIds = posts.map((p: any) => p.id);
         const { data: postsWithProfiles } = await supabase
           .from('posts')
-          .select('*, user:profiles(id, username, full_name, avatar_url)')
+          .select('*, user:profiles(id, username, full_name, avatar_url, is_admin)')
           .in('id', postIds);
 
         if (postsWithProfiles) {
+          // Filter out admin-authored posts for Discover
+          const nonAdminPosts = postsWithProfiles.filter((post: any) => !post.user?.is_admin);
           items.push(
-            ...postsWithProfiles.map((post) => ({
+            ...nonAdminPosts.map((post) => ({
               id: `post-${post.id}`,
               type: 'post' as const,
               category: post.category || 'social',
@@ -85,14 +90,15 @@ export async function fetchDiscoverFeed(
       // If no user ID, show public posts only
       const { data: posts } = await supabase
         .from('posts')
-        .select('*, user:profiles(id, username, full_name, avatar_url)')
+        .select('*, user:profiles(id, username, full_name, avatar_url, is_admin)')
         .eq('visibility', 'public')
         .order('created_at', { ascending: false })
         .limit(10);
 
       if (posts) {
+        const nonAdminPosts = posts.filter((post: any) => !post.user?.is_admin);
         items.push(
-          ...posts.map((post) => ({
+          ...nonAdminPosts.map((post) => ({
             id: `post-${post.id}`,
             type: 'post' as const,
             category: post.category || 'social',

@@ -1,35 +1,44 @@
 import { View, Text, StyleSheet, TextInput, TouchableOpacity, ScrollView, Alert, ActivityIndicator, Image, Modal } from 'react-native';
 import { useFonts, Inter_400Regular, Inter_600SemiBold } from '@expo-google-fonts/inter';
 import { useEffect, useState } from 'react';
-import { SplashScreen, useRouter } from 'expo-router';
+import { SplashScreen, useLocalSearchParams, useRouter } from 'expo-router';
 import { ArrowLeft, Image as ImageIcon, Send, Globe, Users, Lock, X, ChevronDown, Video as VideoIcon, Link as LinkIcon } from 'lucide-react-native';
 import * as ImagePicker from 'expo-image-picker';
 import { Video, ResizeMode } from 'expo-av';
 import { supabase } from '@/lib/supabase';
+import { INTEREST_LIBRARY } from '@/lib/interest-data';
 import { useAuth } from '@/hooks/useAuth';
 import { isYouTubeUrl, extractYouTubeVideoId, getYouTubeThumbnail } from '@/lib/youtube';
 
 SplashScreen.preventAutoHideAsync();
 
-const CATEGORIES = [
-  { value: 'general', label: 'General' },
-  { value: 'education', label: 'Education' },
-  { value: 'career', label: 'Career' },
-  { value: 'health', label: 'Health' },
-  { value: 'fitness', label: 'Fitness' },
-  { value: 'mental_health', label: 'Mental Health' },
-  { value: 'finance', label: 'Finance' },
-  { value: 'relationships', label: 'Relationships' },
-  { value: 'hobbies', label: 'Hobbies' },
-  { value: 'travel', label: 'Travel' },
-  { value: 'technology', label: 'Technology' },
-  { value: 'entrepreneurship', label: 'Entrepreneurship' },
-  { value: 'spirituality', label: 'Spirituality' },
-  { value: 'sports', label: 'Sports' },
-  { value: 'arts', label: 'Arts' },
-  { value: 'music', label: 'Music' },
-  { value: 'other', label: 'Other' },
-];
+const CATEGORY_GROUPS = INTEREST_LIBRARY.map((category) => ({
+  id: category.id,
+  label: category.label,
+  subcategories: category.subcategories ?? [],
+}));
+
+type CategoryOption = {
+  value: string;
+  label: string;
+  isSubcategory: boolean;
+};
+
+const CATEGORY_OPTIONS: CategoryOption[] = CATEGORY_GROUPS.flatMap((group) => {
+  const entries: CategoryOption[] = [
+    { value: group.id, label: group.label, isSubcategory: false },
+  ];
+
+  group.subcategories.forEach((sub) => {
+    entries.push({
+      value: sub.id,
+      label: `${group.label} • ${sub.label}`,
+      isSubcategory: true,
+    });
+  });
+
+  return entries;
+});
 
 const VISIBILITY_OPTIONS = [
   { value: 'public', label: 'Public', icon: Globe, description: 'Anyone can see this post' },
@@ -45,6 +54,7 @@ interface MediaItem {
 
 export default function CreatePostScreen() {
   const router = useRouter();
+  const params = useLocalSearchParams<{ highlight?: string; autoPick?: string; ht?: string }>();
   const { user } = useAuth();
   const [content, setContent] = useState('');
   const [media, setMedia] = useState<MediaItem[]>([]);
@@ -54,6 +64,8 @@ export default function CreatePostScreen() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [showCategoryPicker, setShowCategoryPicker] = useState(false);
   const [showVisibilityPicker, setShowVisibilityPicker] = useState(false);
+  const [addToHighlights, setAddToHighlights] = useState(false);
+  const [highlightTitle, setHighlightTitle] = useState('');
   
   const [fontsLoaded] = useFonts({
     'Inter-Regular': Inter_400Regular,
@@ -75,6 +87,35 @@ export default function CreatePostScreen() {
     };
     checkAuth();
   }, [user]);
+
+  // Preconfigure when launched for creating a highlight directly
+  useEffect(() => {
+    if (params?.highlight === '1') {
+      setAddToHighlights(true);
+      if (typeof params.ht === 'string' && params.ht.length > 0) {
+        try {
+          setHighlightTitle(decodeURIComponent(params.ht));
+        } catch {
+          setHighlightTitle(params.ht);
+        }
+      }
+    }
+  }, [params?.highlight, params?.ht]);
+
+  // Auto-open media picker if requested (first-time only)
+  useEffect(() => {
+    let opened = false;
+    const tryOpen = async () => {
+      if (!opened && params?.autoPick === '1' && fontsLoaded && user && media.length === 0) {
+        opened = true;
+        // slight delay to ensure UI is ready
+        setTimeout(() => {
+          pickMedia();
+        }, 200);
+      }
+    };
+    tryOpen();
+  }, [params?.autoPick, fontsLoaded, user, media.length]);
 
   const pickMedia = async () => {
     if (media.length >= 20) {
@@ -272,6 +313,25 @@ export default function CreatePostScreen() {
 
       console.log('Post created successfully:', data);
 
+      // Optionally add to highlights
+      try {
+        if (addToHighlights && data && data.length > 0) {
+          const post = data[0];
+          const { error: hErr } = await supabase.from('profile_highlights').insert({
+            user_id: user.id,
+            title: (highlightTitle || 'Highlight').slice(0, 40),
+            visible: true,
+            pinned: false,
+            post_id: post.id,
+          });
+          if (hErr) {
+            console.error('Add to highlights error:', hErr);
+          }
+        }
+      } catch (e) {
+        console.warn('Failed to add to highlights:', e);
+      }
+
       Alert.alert('Success', 'Post created successfully', [
         { text: 'OK', onPress: () => router.back() }
       ]);
@@ -287,7 +347,7 @@ export default function CreatePostScreen() {
     return null;
   }
 
-  const selectedCategory = CATEGORIES.find(c => c.value === category);
+  const selectedCategory = CATEGORY_OPTIONS.find((c) => c.value === category);
   const selectedVisibility = VISIBILITY_OPTIONS.find(v => v.value === visibility);
   const VisibilityIcon = selectedVisibility?.icon || Globe;
 
@@ -437,6 +497,28 @@ export default function CreatePostScreen() {
             {selectedVisibility?.description}
           </Text>
         </View>
+
+        {/* Add to highlights */}
+        <View style={styles.section}>
+          <Text style={styles.sectionLabel}>Highlights</Text>
+          <TouchableOpacity
+            style={styles.pickerButton}
+            onPress={() => setAddToHighlights(!addToHighlights)}
+          >
+            <Text style={styles.pickerButtonText}>{addToHighlights ? 'Will be added to Highlights' : 'Add to Highlights'}</Text>
+            <ChevronDown size={20} color="#64748B" />
+          </TouchableOpacity>
+          {addToHighlights && (
+            <TextInput
+              style={[styles.contentInput, { minHeight: 48, marginTop: 8 }]}
+              placeholder="Optional highlight title"
+              placeholderTextColor="#94A3B8"
+              maxLength={40}
+              value={highlightTitle}
+              onChangeText={setHighlightTitle}
+            />
+          )}
+        </View>
       </ScrollView>
 
       {/* Category Picker Modal */}
@@ -455,26 +537,63 @@ export default function CreatePostScreen() {
               </TouchableOpacity>
             </View>
             <ScrollView style={styles.modalScroll}>
-              {CATEGORIES.map((cat) => (
-                <TouchableOpacity
-                  key={cat.value}
-                  style={[
-                    styles.modalOption,
-                    category === cat.value && styles.modalOptionSelected
-                  ]}
-                  onPress={() => {
-                    setCategory(cat.value);
-                    setShowCategoryPicker(false);
-                  }}
-                >
-                  <Text style={[
-                    styles.modalOptionText,
-                    category === cat.value && styles.modalOptionTextSelected
-                  ]}>
-                    {cat.label}
-                  </Text>
-                </TouchableOpacity>
-              ))}
+              {CATEGORY_GROUPS.map((group) => {
+                const groupSelected = category === group.id;
+                const subcategories = group.subcategories ?? [];
+                return (
+                  <View key={group.id} style={styles.publishCategoryGroup}>
+                    <TouchableOpacity
+                      style={[
+                        styles.publishCategoryOption,
+                        groupSelected && styles.publishCategoryOptionSelected,
+                      ]}
+                      onPress={() => {
+                        setCategory(group.id);
+                        setShowCategoryPicker(false);
+                      }}
+                    >
+                      <Text
+                        style={[
+                          styles.publishCategoryOptionText,
+                          groupSelected && styles.publishCategoryOptionTextSelected,
+                        ]}
+                      >
+                        {group.label}
+                      </Text>
+                    </TouchableOpacity>
+
+                    {subcategories.length > 0 && (
+                      <View style={styles.publishCategoryChildren}>
+                        {subcategories.map((sub) => {
+                          const isSelected = category === sub.id;
+                          return (
+                            <TouchableOpacity
+                              key={sub.id}
+                              style={[
+                                styles.publishCategorySubOption,
+                                isSelected && styles.publishCategoryOptionSelected,
+                              ]}
+                              onPress={() => {
+                                setCategory(sub.id);
+                                setShowCategoryPicker(false);
+                              }}
+                            >
+                              <Text
+                                style={[
+                                  styles.publishCategorySubOptionText,
+                                  isSelected && styles.publishCategoryOptionTextSelected,
+                                ]}
+                              >
+                                {sub.label}
+                              </Text>
+                            </TouchableOpacity>
+                          );
+                        })}
+                      </View>
+                    )}
+                  </View>
+                );
+              })}
             </ScrollView>
           </View>
         </View>
@@ -718,6 +837,47 @@ const styles = StyleSheet.create({
     padding: 16,
     borderBottomWidth: 1,
     borderBottomColor: '#F1F5F9',
+  },
+  publishCategoryGroup: {
+    marginBottom: 14,
+  },
+  publishCategoryOption: {
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+    backgroundColor: '#FFFFFF',
+  },
+  publishCategoryOptionSelected: {
+    borderColor: '#0A84FF',
+    backgroundColor: '#EFF6FF',
+  },
+  publishCategoryOptionText: {
+    fontSize: 15,
+    fontFamily: 'Inter-SemiBold',
+    color: '#1F2937',
+  },
+  publishCategoryOptionTextSelected: {
+    color: '#0A84FF',
+  },
+  publishCategoryChildren: {
+    marginTop: 8,
+    marginLeft: 16,
+    gap: 8,
+  },
+  publishCategorySubOption: {
+    paddingVertical: 10,
+    paddingHorizontal: 14,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+    backgroundColor: '#FFFFFF',
+  },
+  publishCategorySubOptionText: {
+    fontSize: 14,
+    fontFamily: 'Inter-Regular',
+    color: '#4B5563',
   },
   modalOptionSelected: {
     backgroundColor: '#F8FAFC',

@@ -41,22 +41,12 @@ export function useAuth() {
       
       console.log('[useAuth] Auth state changed:', _event, session ? `Session for ${session.user.email}` : 'No session', 'initialized:', initialized);
       
-      // Only process auth state changes after initialization to avoid clearing valid sessions
-      if (!initialized && !session) {
-        console.log('[useAuth] Ignoring early null session before initialization');
-        return;
-      }
-      
-      // Don't clear user on INITIAL_SESSION event if we already have a user
-      if (_event === 'INITIAL_SESSION' && user && !session) {
-        console.log('[useAuth] Ignoring INITIAL_SESSION with null when user exists');
-        return;
-      }
-      
+      // Always reflect the current session; this avoids bounce and race issues
       setUser(session?.user ?? null);
       if (session?.user) {
         fetchProfile(session.user.id);
-      } else if (_event === 'SIGNED_OUT') {
+      } else {
+        // On any event without a session, clear profile and stop loading
         setProfile(null);
         setLoading(false);
       }

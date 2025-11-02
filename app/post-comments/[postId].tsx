@@ -168,7 +168,7 @@ export default function PostCommentsScreen() {
   const handleReplyComment = (comment: CommentWithUser) => {
     console.log('Reply to comment:', comment.id);
     setReplyingTo(comment.id);
-    setCommentText(`@${comment.user.username} `);
+    setCommentText(`${comment.user.full_name ?? ''} `);
   };
 
   const getTimeAgo = (dateString: string) => {
@@ -228,13 +228,13 @@ export default function PostCommentsScreen() {
             <View key={comment.id} style={styles.commentCard}>
               <Image
                 source={{ 
-                  uri: comment.user.avatar_url || 'https://ui-avatars.com/api/?name=' + encodeURIComponent(comment.user.username || 'User') + '&background=random'
+                  uri: comment.user.avatar_url || 'https://ui-avatars.com/api/?name=' + encodeURIComponent(comment.user.full_name || 'User') + '&background=random'
                 }}
                 style={styles.commentAvatar}
               />
               <View style={styles.commentContent}>
                 <View style={styles.commentHeader}>
-                  <Text style={styles.commentUsername}>{comment.user.username}</Text>
+                  <Text style={styles.commentUsername}>{comment.user.full_name}</Text>
                   <Text style={styles.commentTime}>{getTimeAgo(comment.created_at)}</Text>
                 </View>
                 <Text style={styles.commentText}>{comment.content}</Text>
@@ -292,7 +292,7 @@ export default function PostCommentsScreen() {
           <View style={styles.inputRow}>
             <Image
               source={{ 
-                uri: userProfile.avatar_url || 'https://ui-avatars.com/api/?name=' + encodeURIComponent(userProfile.username || 'User') + '&background=random'
+                uri: userProfile.avatar_url || 'https://ui-avatars.com/api/?name=' + encodeURIComponent(userProfile.full_name || 'User') + '&background=random'
               }}
               style={styles.inputAvatar}
             />

@@ -1,18 +1,15 @@
-import { View, Text, StyleSheet, TextInput, TouchableOpacity, ScrollView, Alert, ActivityIndicator, Image } from 'react-native';
-import * as ImagePicker from 'expo-image-picker';
-import { Video, ResizeMode } from 'expo-av';
-import { useFonts, Inter_400Regular, Inter_600SemiBold, Inter_700Bold } from '@expo-google-fonts/inter';
+import { View, Text, StyleSheet, TextInput, TouchableOpacity, ScrollView, Alert, ActivityIndicator, Image, FlatList } from 'react-native';
+import { useFonts, Inter_400Regular, Inter_600SemiBold } from '@expo-google-fonts/inter';
 import { useEffect, useState } from 'react';
 import { SplashScreen, useRouter } from 'expo-router';
-import { ArrowLeft, Image as ImageIcon, Send, DollarSign, Tag, Info, CheckCircle, Sparkles, Video as VideoIcon, X, Link as LinkIcon } from 'lucide-react-native';
+import { ArrowLeft, Image as ImageIcon, Send, DollarSign, Tag, Info, Package, Briefcase, Upload, X } from 'lucide-react-native';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/hooks/useAuth';
-import { LinearGradient } from 'expo-linear-gradient';
-import { isYouTubeUrl, extractYouTubeVideoId, getYouTubeThumbnail } from '@/lib/youtube';
+import * as ImagePicker from 'expo-image-picker';
 
 SplashScreen.preventAutoHideAsync();
 
-const CATEGORIES = [
+const SERVICE_CATEGORIES = [
   { id: '1', name: 'Business Services' },
   { id: '2', name: 'Education & Tutoring' },
   { id: '3', name: 'Technical Services' },
@@ -21,101 +18,37 @@ const CATEGORIES = [
   { id: '6', name: 'Healthcare' },
   { id: '7', name: 'Publishing' },
   { id: '8', name: 'Photography' },
-  { id: '9', name: 'Home Services' },
-  { id: '10', name: 'Automotive' },
-  { id: '11', name: 'Fashion & Beauty' },
-  { id: '12', name: 'Fitness & Sports' },
-  { id: '13', name: 'Hair & Salon' },
-  { id: '14', name: 'Pet Care' },
-  { id: '15', name: 'Entertainment' },
-  { id: '16', name: 'Construction' },
-  { id: '17', name: 'Electronics' },
-  { id: '18', name: 'Furniture' },
-  { id: '19', name: 'Clothing & Apparel' },
-  { id: '20', name: 'Watches & Jewelry' },
-  { id: '21', name: 'Bags & Accessories' },
-  { id: '22', name: 'Books & Stationery' },
-  { id: '23', name: 'Beauty Products' },
-  { id: '24', name: 'Baby & Kids' },
-  { id: '25', name: 'Kitchen & Dining' },
 ];
 
-interface MediaItem {
-  uri: string;
-  type: 'image' | 'video' | 'youtube';
-  videoId?: string;
-}
+const PRODUCT_CATEGORIES = [
+  { id: '9', name: 'Electronics' },
+  { id: '10', name: 'Clothing & Fashion' },
+  { id: '11', name: 'Books & Media' },
+  { id: '12', name: 'Home & Garden' },
+  { id: '13', name: 'Sports & Outdoors' },
+  { id: '14', name: 'Health & Beauty' },
+  { id: '15', name: 'Toys & Games' },
+  { id: '16', name: 'Automotive' },
+];
+
+const MAX_IMAGES = 20;
 
 export default function CreateListingScreen() {
   const router = useRouter();
-  const { user, loading } = useAuth();
+  const { user } = useAuth();
+  const [listingType, setListingType] = useState<'product' | 'service' | null>(null);
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
   const [price, setPrice] = useState('');
-  const [currency, setCurrency] = useState('USD'); // USD or GHS
   const [imageUrl, setImageUrl] = useState('');
-  const [youtubeUrl, setYoutubeUrl] = useState('');
+  const [selectedImages, setSelectedImages] = useState<string[]>([]);
   const [category, setCategory] = useState('');
-  const [email, setEmail] = useState('');
-  const [location, setLocation] = useState('');
-  const [localMedia, setLocalMedia] = useState<MediaItem[]>([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
-  // Media picker handler
-  const pickMedia = async () => {
-    const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ImagePicker.MediaTypeOptions.All,
-      allowsMultipleSelection: true,
-      quality: 1,
-      selectionLimit: 20,
-    });
-    if (!result.canceled && result.assets && result.assets.length > 0) {
-      setLocalMedia((prev) => {
-        const newMedia: MediaItem[] = result.assets.map(asset => ({
-          uri: asset.uri,
-          type: asset.type === 'video' ? 'video' : 'image',
-        }));
-        const combined = [...prev, ...newMedia];
-        return combined.slice(0, 20);
-      });
-    }
-  };
-
-  const removeMedia = (uri: string) => {
-    setLocalMedia((prev) => prev.filter((item) => item.uri !== uri));
-  };
-
-  const addYouTubeVideo = () => {
-    if (!youtubeUrl.trim()) {
-      Alert.alert('Error', 'Please enter a YouTube URL');
-      return;
-    }
-
-    if (!isYouTubeUrl(youtubeUrl)) {
-      Alert.alert('Invalid URL', 'Please enter a valid YouTube video URL');
-      return;
-    }
-
-    if (localMedia.length >= 20) {
-      Alert.alert('Limit Reached', 'You can only add up to 20 media items per listing.');
-      return;
-    }
-
-    const videoId = extractYouTubeVideoId(youtubeUrl);
-    if (videoId) {
-      const newMedia: MediaItem = {
-        uri: youtubeUrl,
-        type: 'youtube',
-        videoId,
-      };
-      setLocalMedia([...localMedia, newMedia]);
-      setYoutubeUrl('');
-    }
-  };
-
+  const [isUploadingImages, setIsUploadingImages] = useState(false);
+  
   const [fontsLoaded] = useFonts({
     'Inter-Regular': Inter_400Regular,
     'Inter-SemiBold': Inter_600SemiBold,
-    'Inter-Bold': Inter_700Bold,
   });
 
   useEffect(() => {
@@ -124,235 +57,308 @@ export default function CreateListingScreen() {
     }
   }, [fontsLoaded]);
 
+  // Check authentication when user tries to proceed with listing type selection
   useEffect(() => {
-    if (loading) return;
-    if (!user) {
+    if (listingType !== null && !user) {
       Alert.alert('Authentication Required', 'Please sign in to create a listing.');
+      setListingType(null);
       router.replace('/auth/sign-in');
+      return;
     }
-  }, [user, loading, router]);
+  }, [listingType, user, router]);
+
+  // Request permissions and pick images
+  const pickImages = async () => {
+    try {
+      // Request permission
+      const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      
+      if (status !== 'granted') {
+        Alert.alert('Permission Required', 'Please allow access to your photo library to upload images.');
+        return;
+      }
+
+      // Check if we've reached the limit
+      if (selectedImages.length >= MAX_IMAGES) {
+        Alert.alert('Limit Reached', `You can only upload up to ${MAX_IMAGES} images.`);
+        return;
+      }
+
+      // Launch image picker
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        allowsMultipleSelection: true,
+        quality: 0.8,
+        selectionLimit: MAX_IMAGES - selectedImages.length,
+      });
+
+      if (!result.canceled && result.assets) {
+        const newImages = result.assets.map(asset => asset.uri);
+        const totalImages = selectedImages.length + newImages.length;
+        
+        if (totalImages > MAX_IMAGES) {
+          Alert.alert('Too Many Images', `You can only upload up to ${MAX_IMAGES} images. Please select fewer images.`);
+          return;
+        }
+        
+        setSelectedImages([...selectedImages, ...newImages]);
+      }
+    } catch (error) {
+      console.error('Error picking images:', error);
+      Alert.alert('Error', 'Failed to pick images. Please try again.');
+    }
+  };
+
+  // Remove an image from selection
+  const removeImage = (index: number) => {
+    setSelectedImages(selectedImages.filter((_, i) => i !== index));
+  };
+
+  // Upload images to Supabase storage
+  const uploadImages = async (): Promise<string[]> => {
+    if (selectedImages.length === 0) return [];
+
+    try {
+      setIsUploadingImages(true);
+      const uploadedUrls: string[] = [];
+
+      for (const imageUri of selectedImages) {
+        // Create a unique filename
+        const fileName = `${user?.id}/${Date.now()}_${Math.random().toString(36).substring(7)}.jpg`;
+        
+        // Convert image to blob
+        const response = await fetch(imageUri);
+        const blob = await response.blob();
+        
+        // Upload to Supabase storage
+        const { data, error } = await supabase.storage
+          .from('listing-images')
+          .upload(fileName, blob, {
+            contentType: 'image/jpeg',
+            cacheControl: '3600',
+            upsert: false
+          });
+
+        if (error) throw error;
+
+        // Get public URL
+        const { data: { publicUrl } } = supabase.storage
+          .from('listing-images')
+          .getPublicUrl(fileName);
+
+        uploadedUrls.push(publicUrl);
+      }
+
+      return uploadedUrls;
+    } catch (error) {
+      console.error('Error uploading images:', error);
+      throw new Error('Failed to upload images');
+    } finally {
+      setIsUploadingImages(false);
+    }
+  };
 
   const handleSubmit = async () => {
-    console.log('🔵 === BUTTON CLICKED === 🔵');
-    console.log('Title:', title);
-    console.log('Description:', description);
-    console.log('Price:', price);
-    console.log('Category:', category);
-    console.log('Email:', email);
-    console.log('Location:', location);
-    console.log('User ID:', user?.id);
-    
     // Validate inputs
-    console.log('⚡ Starting validation...');
     if (!title.trim()) {
-      console.log('❌ Validation failed: No title');
       Alert.alert('Error', 'Please enter a title for your listing');
       return;
     }
-    console.log('✅ Title valid');
     
     if (!description.trim()) {
-      console.log('❌ Validation failed: No description');
       Alert.alert('Error', 'Please enter a description for your listing');
       return;
     }
-    console.log('✅ Description valid');
     
-    if (!price.trim() || isNaN(Number(price)) || Number(price) < 0) {
-      console.log('❌ Validation failed: Invalid price');
-      Alert.alert('Error', 'Please enter a valid price (or 0 for free)');
+    if (!price.trim() || isNaN(Number(price)) || Number(price) <= 0) {
+      Alert.alert('Error', 'Please enter a valid price');
       return;
     }
-    console.log('✅ Price valid');
     
     if (!category) {
-      console.log('❌ Validation failed: No category');
       Alert.alert('Error', 'Please select a category');
       return;
     }
-    console.log('✅ Category valid');
-    
-    // Email and location are optional since they're not stored in database
-    if (email.trim() && !email.includes('@')) {
-      console.log('❌ Validation failed: Invalid email format -', email);
-      Alert.alert('Error', 'Please enter a valid email with @ symbol, or leave it blank');
+
+    // Check if at least one image is provided
+    if (selectedImages.length === 0 && !imageUrl.trim()) {
+      Alert.alert('Error', 'Please add at least one image for your listing');
       return;
     }
-    console.log('✅ Email valid (or empty)');
-    console.log('✅ Location:', location.trim() || '(not provided)');
-    console.log('✅ All validations passed!');
 
-    let finalImageUrls: string[] = [];
-    let finalVideoUrls: string[] = [];
-    let finalYoutubeUrls: string[] = [];
-    
-    if (localMedia.length > 0) {
-      finalImageUrls = localMedia.filter(m => m.type === 'image').map(m => m.uri);
-      finalVideoUrls = localMedia.filter(m => m.type === 'video').map(m => m.uri);
-      finalYoutubeUrls = localMedia.filter(m => m.type === 'youtube').map(m => m.uri);
-    } else if (imageUrl.trim()) {
-      finalImageUrls = imageUrl.split(',').map(url => url.trim()).slice(0, 20);
-    }
-
-    console.log('All validations passed, submitting to database...');
-    
     try {
       setIsSubmitting(true);
       
-      const listingData = {
-        user_id: user?.id,
-        title: title.trim(),
-        description: description.trim(),
-      price: price.trim() ? `${currency} ${price}` : null,
-        image_url: finalImageUrls.length > 0 ? JSON.stringify(finalImageUrls) : null,
-        video_url: finalVideoUrls.length > 0 ? JSON.stringify(finalVideoUrls) : null,
-        youtube_url: finalYoutubeUrls.length > 0 ? JSON.stringify(finalYoutubeUrls) : null,
-        category_name: category,
-        is_featured: false,
-        is_premium_listing: false,
-        is_approved: true,
-      };
+      // Upload selected images first
+      let uploadedImageUrls: string[] = [];
+      if (selectedImages.length > 0) {
+        uploadedImageUrls = await uploadImages();
+      }
       
-      console.log('📝 Listing data prepared:', listingData);
+      // Combine uploaded images with manual URL (if provided)
+      const allImageUrls = [...uploadedImageUrls];
+      if (imageUrl.trim()) {
+        allImageUrls.push(imageUrl.trim());
+      }
       
-      console.log('Inserting listing data:', listingData);
+      // Use first image as primary image_url
+      const primaryImageUrl = allImageUrls[0] || null;
       
+      // Create the listing - users have unlimited listings
       const { data: newListing, error: listingError} = await supabase
         .from('products_services')
-        .insert(listingData)
+        .insert({
+          user_id: user?.id,
+          title: title.trim(),
+          description: description.trim(),
+          price: Number(price),
+          image_url: primaryImageUrl,
+          category_name: category,
+          is_featured: false,
+          is_premium_listing: false,
+        })
         .select()
         .single();
 
-      if (listingError) {
-        console.error('Database error:', listingError);
-        throw listingError;
-      }
-      
-      console.log('✅ Listing created successfully!', newListing);
-      console.log('Navigating to my-listings page...');
+      if (listingError) throw listingError;
 
-      // Navigate to my listings immediately
-      router.push('/my-listings');
-      
-      // Show success message after navigation starts
-      setTimeout(() => {
-        Alert.alert('✅ Success!', 'Your listing has been created successfully!');
-      }, 500);
-      
+      Alert.alert(
+        'Success', 
+        'Your listing has been created successfully!',
+        [{ text: 'OK', onPress: () => router.back() }]
+      );
     } catch (error: any) {
-      console.error('❌ Error creating listing:', error);
+      console.error('Error creating listing:', error);
       Alert.alert('Error', error.message || 'Failed to create listing');
     } finally {
       setIsSubmitting(false);
     }
   };
 
-  if (!fontsLoaded || loading) {
-    return null;
-  }
-  if (!user && !loading) {
-    // Optionally show a loading or sign-in prompt
+  if (!fontsLoaded) {
     return null;
   }
 
-  // Debug: Check button state (email and location are optional)
-  const isButtonDisabled = !title.trim() || !description.trim() || !price.trim() || !category || isSubmitting;
-  console.log('🔍 Button Disabled:', isButtonDisabled);
-  console.log('🔍 Form State:', {
-    hasTitle: !!title.trim(),
-    hasDescription: !!description.trim(),
-    hasPrice: !!price.trim(),
-    hasCategory: !!category,
-    email: email.trim() || '(optional)',
-    location: location.trim() || '(optional)',
-    isSubmitting
-  });
+  // Show listing type selection screen first
+  if (listingType === null) {
+    return (
+      <View style={styles.container}>
+        <View style={styles.header}>
+          <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
+            <ArrowLeft size={24} color="#000000" />
+          </TouchableOpacity>
+          <Text style={styles.title}>Create Listing</Text>
+          <View style={{ width: 40 }} />
+        </View>
+
+        <View style={styles.choiceContainer}>
+          <Text style={styles.choiceTitle}>What would you like to list?</Text>
+          <Text style={styles.choiceSubtitle}>Choose the type of listing you want to create</Text>
+
+          <TouchableOpacity 
+            style={styles.choiceCard}
+            onPress={() => setListingType('product')}
+          >
+            <View style={styles.choiceIconContainer}>
+              <Package size={48} color="#4169E1" />
+            </View>
+            <Text style={styles.choiceCardTitle}>Product</Text>
+            <Text style={styles.choiceCardDescription}>
+              List physical items, goods, or merchandise that you want to sell
+            </Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity 
+            style={styles.choiceCard}
+            onPress={() => setListingType('service')}
+          >
+            <View style={styles.choiceIconContainer}>
+              <Briefcase size={48} color="#4169E1" />
+            </View>
+            <Text style={styles.choiceCardTitle}>Service</Text>
+            <Text style={styles.choiceCardDescription}>
+              Offer your professional services, skills, or expertise to others
+            </Text>
+          </TouchableOpacity>
+        </View>
+      </View>
+    );
+  }
 
   return (
     <View style={styles.container}>
-      {/* Modern Header with Gradient */}
-      <LinearGradient
-        colors={['#4169E1', '#5B7FE8']}
-        start={{ x: 0, y: 0 }}
-        end={{ x: 1, y: 0 }}
-        style={styles.headerGradient}
-      >
-        <View style={styles.header}>
-            <TouchableOpacity
-              onPress={() => router.replace('/services')}
-              style={styles.backButton}
-            >
-              <ArrowLeft size={24} color="#FFFFFF" />
-            </TouchableOpacity>
-          <Text style={styles.title}>Create Listing</Text>
-          <TouchableOpacity 
-            style={[
-              styles.submitButton, 
-              isButtonDisabled && styles.submitButtonDisabled
-            ]}
-            onPress={() => {
-              console.log('👆 Header button pressed');
-              handleSubmit();
-            }}
-            disabled={isButtonDisabled}
-          >
-            {isSubmitting ? (
-              <ActivityIndicator color="#FFFFFF" size="small" />
-            ) : (
-              <Send size={20} color="#FFFFFF" />
-            )}
-          </TouchableOpacity>
-        </View>
-      </LinearGradient>
+      <View style={styles.header}>
+        <TouchableOpacity onPress={() => setListingType(null)} style={styles.backButton}>
+          <ArrowLeft size={24} color="#000000" />
+        </TouchableOpacity>
+        <Text style={styles.title}>Create {listingType === 'product' ? 'Product' : 'Service'} Listing</Text>
+        <TouchableOpacity 
+          style={[
+            styles.submitButton, 
+            (!title.trim() || !description.trim() || !price.trim() || !category || isSubmitting) && styles.submitButtonDisabled
+          ]}
+          onPress={handleSubmit}
+          disabled={!title.trim() || !description.trim() || !price.trim() || !category || isSubmitting}
+        >
+          {isSubmitting ? (
+            <ActivityIndicator color="#FFFFFF" size="small" />
+          ) : (
+            <Send size={20} color="#FFFFFF" />
+          )}
+        </TouchableOpacity>
+      </View>
 
-      <ScrollView style={styles.formContainer} showsVerticalScrollIndicator={false}>
-        {/* Success Badge */}
-        <View style={styles.successBadge}>
-          <Sparkles size={20} color="#10B981" />
-          <Text style={styles.successBadgeText}>List your service and reach thousands of potential customers!</Text>
-        </View>
+      <ScrollView style={styles.formContainer}>
         
         <View style={styles.formGroup}>
-          <Text style={styles.label}>Title *</Text>
+          <Text style={styles.label}>Title</Text>
           <TextInput
             style={styles.input}
-            placeholder="e.g., Professional Web Design Services"
-            placeholderTextColor="#999999"
+            placeholder="Enter the title of your product or service"
+            placeholderTextColor="#666666"
             value={title}
             onChangeText={setTitle}
             maxLength={100}
           />
-          <Text style={styles.charCount}>{title.length}/100</Text>
         </View>
         
         <View style={styles.formGroup}>
-          <View style={{backgroundColor:'#F8F9FA',borderRadius:16,padding:18,marginBottom:18,shadowColor:'#4169E1',shadowOffset:{width:0,height:2},shadowOpacity:0.08,shadowRadius:8,elevation:2,borderWidth:1,borderColor:'#E2E8F0'}}>
-            <Text style={{fontSize:16,fontFamily:'Inter-SemiBold',color:'#4169E1',marginBottom:10}}>Price *</Text>
-            <View style={{flexDirection:'row',gap:12,marginBottom:8,marginTop:4}}>
-              <TouchableOpacity style={[styles.currencyButton,currency==='USD'&&{backgroundColor:'#4169E1',borderWidth:2,borderColor:'#4169E1'}]} onPress={()=>setCurrency('USD')}>
-                <Text style={[{fontSize:16,fontFamily:'Inter-SemiBold',color:'#4169E1'},currency==='USD'&&{color:'#FFFFFF',fontWeight:'bold'}]}>$ USD</Text>
-              </TouchableOpacity>
-              <TouchableOpacity style={[styles.currencyButton,currency==='GHS'&&{backgroundColor:'#4169E1',borderWidth:2,borderColor:'#4169E1'}]} onPress={()=>setCurrency('GHS')}>
-                <Text style={[{fontSize:16,fontFamily:'Inter-SemiBold',color:'#4169E1'},currency==='GHS'&&{color:'#FFFFFF',fontWeight:'bold'}]}>₵ GHS</Text>
-              </TouchableOpacity>
-            </View>
-            <View style={{flexDirection:'row',alignItems:'center',backgroundColor:'#FFFFFF',borderRadius:12,paddingHorizontal:16,marginTop:8,marginBottom:8,borderWidth:1,borderColor:'#E2E8F0'}}>
-              <Text style={{fontSize:22,fontFamily:'Inter-Bold',color:'#4169E1',marginRight:8}}>{currency==='USD'?'$':'₵'}</Text>
-              <TextInput style={{flex:1,padding:16,fontSize:18,fontFamily:'Inter-SemiBold',color:'#4169E1',backgroundColor:'#F8F9FA',borderRadius:8}} placeholder="0.00" placeholderTextColor="#999999" keyboardType="decimal-pad" value={price} onChangeText={setPrice}/>
-              <Text style={{fontSize:14,color:'#4169E1',marginLeft:8,fontFamily:'Inter-SemiBold'}}>/hour</Text>
-            </View>
-            <Text style={{fontSize:12,color:'#666666',marginTop:4,fontFamily:'Inter-Regular'}}>Enter the hourly rate in your selected currency</Text>
+          <Text style={styles.label}>Description</Text>
+          <TextInput
+            style={[styles.input, styles.textArea]}
+            placeholder="Describe your product or service in detail"
+            placeholderTextColor="#666666"
+            multiline
+            value={description}
+            onChangeText={setDescription}
+            maxLength={500}
+            textAlignVertical="top"
+          />
+        </View>
+        
+        <View style={styles.formGroup}>
+          <Text style={styles.label}>Price ($)</Text>
+          <View style={styles.priceInputContainer}>
+            <DollarSign size={20} color="#666666" />
+            <TextInput
+              style={styles.priceInput}
+              placeholder="0.00"
+              placeholderTextColor="#666666"
+              keyboardType="numeric"
+              value={price}
+              onChangeText={setPrice}
+            />
           </View>
         </View>
         
         <View style={styles.formGroup}>
-          <Text style={styles.label}>Category *</Text>
+          <Text style={styles.label}>Category</Text>
           <ScrollView 
             horizontal 
             showsHorizontalScrollIndicator={false}
             contentContainerStyle={styles.categoriesContainer}
           >
-            {CATEGORIES.map((cat) => (
+            {(listingType === 'product' ? PRODUCT_CATEGORIES : SERVICE_CATEGORIES).map((cat) => (
               <TouchableOpacity
                 key={cat.id}
                 style={[
@@ -361,9 +367,6 @@ export default function CreateListingScreen() {
                 ]}
                 onPress={() => setCategory(cat.name)}
               >
-                {category === cat.name && (
-                  <CheckCircle size={16} color="#FFFFFF" style={styles.checkIcon} />
-                )}
                 <Text 
                   style={[
                     styles.categoryChipText,
@@ -378,171 +381,87 @@ export default function CreateListingScreen() {
         </View>
         
         <View style={styles.formGroup}>
-          <Text style={styles.label}>Contact Email (Optional)</Text>
-          <TextInput
-            style={styles.input}
-            placeholder="your@email.com (optional)"
-            placeholderTextColor="#999999"
-            value={email}
-            onChangeText={setEmail}
-            autoCapitalize="none"
-            keyboardType="email-address"
-          />
-          <Text style={styles.helperText}>This field is optional and not stored</Text>
-        </View>
+          <Text style={styles.label}>Images (Upload up to {MAX_IMAGES})</Text>
+          
+          {/* Upload Button */}
+          <TouchableOpacity 
+            style={styles.uploadButton}
+            onPress={pickImages}
+            disabled={isUploadingImages || selectedImages.length >= MAX_IMAGES}
+          >
+            <Upload size={24} color={selectedImages.length >= MAX_IMAGES ? "#999999" : "#4169E1"} />
+            <Text style={[
+              styles.uploadButtonText,
+              selectedImages.length >= MAX_IMAGES && styles.uploadButtonTextDisabled
+            ]}>
+              {selectedImages.length >= MAX_IMAGES 
+                ? 'Maximum images reached' 
+                : 'Select Images from Device'}
+            </Text>
+            <Text style={styles.uploadButtonSubtext}>
+              {selectedImages.length}/{MAX_IMAGES} images selected
+            </Text>
+          </TouchableOpacity>
 
-        <View style={styles.formGroup}>
-          <Text style={styles.label}>Location (Optional)</Text>
-          <TextInput
-            style={styles.input}
-            placeholder="e.g., Accra, Ghana (optional)"
-            placeholderTextColor="#999999"
-            value={location}
-            onChangeText={setLocation}
-          />
-          <Text style={styles.helperText}>This field is optional and not stored</Text>
-        </View>
-
-        <View style={styles.formGroup}>
-          <Text style={styles.label}>Images & Videos</Text>
-          <View style={{ flexDirection: 'row', gap: 12, flexWrap: 'wrap' }}>
-            <TouchableOpacity style={styles.imagePickerButton} onPress={pickMedia}>
-              <ImageIcon size={20} color="#4169E1" />
-              <Text style={{ color: '#4169E1', fontFamily: 'Inter-SemiBold' }}>Upload Media from Camera Roll</Text>
-            </TouchableOpacity>
-            <View style={styles.imageUrlContainer}>
-              <ImageIcon size={20} color="#666666" />
-              <TextInput
-                style={styles.imageUrlInput}
-                placeholder="https://example.com/image.jpg"
-                placeholderTextColor="#999999"
-                value={imageUrl}
-                onChangeText={setImageUrl}
-                autoCapitalize="none"
-              />
-            </View>
-          </View>
-          {(localMedia.length > 0 || imageUrl.trim() !== '') && (
-            <View style={styles.imagePreviewContainer}>
-              <Text style={styles.imagePreviewLabel}>Preview:</Text>
-              <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
-                {localMedia.map((mediaItem) => (
-                  <View key={mediaItem.uri} style={{ position: 'relative', marginBottom: 8 }}>
-                    {mediaItem.type === 'youtube' ? (
-                      <Image 
-                        source={{ uri: getYouTubeThumbnail(mediaItem.videoId!) }} 
-                        style={[styles.imagePreview, { width: 100, height: 100 }]} 
-                      />
-                    ) : mediaItem.type === 'video' ? (
-                      <Video
-                        source={{ uri: mediaItem.uri }}
-                        style={[styles.imagePreview, { width: 100, height: 100 }]}
-                        useNativeControls
-                        resizeMode={ResizeMode.COVER}
-                        isLooping={false}
-                      />
-                    ) : (
-                      <Image 
-                        source={{ uri: mediaItem.uri }} 
-                        style={[styles.imagePreview, { width: 100, height: 100 }]} 
-                        onError={() => Alert.alert('Invalid Image', 'The selected image is not valid.')}
-                      />
-                    )}
-                    <TouchableOpacity
-                      style={{ position: 'absolute', top: 4, right: 4, backgroundColor: '#fff', borderRadius: 12, padding: 2 }}
-                      onPress={() => removeMedia(mediaItem.uri)}
+          {/* Display Selected Images */}
+          {selectedImages.length > 0 && (
+            <View style={styles.selectedImagesContainer}>
+              <ScrollView 
+                horizontal 
+                showsHorizontalScrollIndicator={false}
+                contentContainerStyle={styles.imagesScrollContent}
+              >
+                {selectedImages.map((imageUri, index) => (
+                  <View key={index} style={styles.selectedImageWrapper}>
+                    <Image source={{ uri: imageUri }} style={styles.selectedImage} />
+                    <TouchableOpacity 
+                      style={styles.removeImageButton}
+                      onPress={() => removeImage(index)}
                     >
-                      <X size={16} color="#EF4444" />
+                      <X size={16} color="#FFFFFF" />
                     </TouchableOpacity>
-                    {mediaItem.type === 'video' && (
-                      <View style={styles.videoIndicator}>
-                        <VideoIcon size={14} color="#FFFFFF" />
-                      </View>
-                    )}
-                    {mediaItem.type === 'youtube' && (
-                      <View style={styles.youtubeIndicator}>
-                        <Text style={styles.youtubeIndicatorText}>▶ YT</Text>
+                    {index === 0 && (
+                      <View style={styles.primaryBadge}>
+                        <Text style={styles.primaryBadgeText}>Primary</Text>
                       </View>
                     )}
                   </View>
                 ))}
-                {imageUrl.trim() !== '' && (
-                  <Image 
-                    source={{ uri: imageUrl }} 
-                    style={[styles.imagePreview, { width: 100, height: 100 }]} 
-                    onError={() => Alert.alert('Invalid Image', 'The selected image or URL is not valid.')}
-                  />
-                )}
-              </View>
+              </ScrollView>
             </View>
           )}
-          <View style={styles.youtubeSection}>
-            <Text style={styles.youtubeSectionLabel}>Or add a YouTube video</Text>
-            <View style={styles.youtubeInputContainer}>
-              <LinkIcon size={20} color="#4169E1" />
-              <TextInput
-                style={styles.youtubeInput}
-                placeholder="Paste YouTube URL here..."
-                placeholderTextColor="#999999"
-                value={youtubeUrl}
-                onChangeText={setYoutubeUrl}
-                autoCapitalize="none"
-                autoCorrect={false}
-              />
-              <TouchableOpacity
-                style={styles.addYoutubeButton}
-                onPress={addYouTubeVideo}
-                disabled={!youtubeUrl.trim() || localMedia.length >= 20}
-              >
-                <Text style={styles.addYoutubeButtonText}>Add</Text>
-              </TouchableOpacity>
-            </View>
+        </View>
+        
+        <View style={styles.formGroup}>
+          <Text style={styles.label}>Or Add Image URL (Optional)</Text>
+          <View style={styles.imageUrlContainer}>
+            <ImageIcon size={20} color="#666666" />
+            <TextInput
+              style={styles.imageUrlInput}
+              placeholder="Enter image URL"
+              placeholderTextColor="#666666"
+              value={imageUrl}
+              onChangeText={setImageUrl}
+            />
           </View>
+          {imageUrl.trim() !== '' && (
+            <View style={styles.imagePreviewContainer}>
+              <Text style={styles.imagePreviewLabel}>Preview:</Text>
+              <Image 
+                source={{ uri: imageUrl }} 
+                style={styles.imagePreview}
+                onError={() => Alert.alert('Invalid Image URL', 'The provided URL does not contain a valid image.')}
+              />
+            </View>
+          )}
         </View>
         
         <View style={styles.infoContainer}>
-          <Info size={20} color="#4169E1" />
+          <Info size={20} color="#666666" />
           <Text style={styles.infoText}>
-            Your listing will be reviewed and published within 24 hours. You can create unlimited free listings!
+            You can create up to 3 free listings. Additional listings require a premium subscription.
           </Text>
         </View>
-
-        {/* Submit Button at Bottom */}
-        <TouchableOpacity 
-          style={[
-            styles.submitButtonLarge,
-            isButtonDisabled && styles.submitButtonLargeDisabled
-          ]}
-          onPress={() => {
-            console.log('👆 TouchableOpacity onPress triggered');
-            handleSubmit();
-          }}
-          disabled={isButtonDisabled}
-          activeOpacity={0.9}
-        >
-          <LinearGradient
-            colors={isButtonDisabled 
-              ? ['#CBD5E1', '#CBD5E1'] 
-              : ['#4169E1', '#5B7FE8']}
-            start={{ x: 0, y: 0 }}
-            end={{ x: 1, y: 0 }}
-            style={styles.submitButtonGradient}
-          >
-            {isSubmitting ? (
-              <>
-                <ActivityIndicator color="#FFFFFF" size="small" />
-                <Text style={styles.submitButtonLargeText}>Creating Listing...</Text>
-              </>
-            ) : (
-              <>
-                <Send size={20} color="#FFFFFF" />
-                <Text style={styles.submitButtonLargeText}>Publish Listing</Text>
-              </>
-            )}
-          </LinearGradient>
-        </TouchableOpacity>
-
-        <View style={styles.bottomPadding} />
       </ScrollView>
     </View>
   );
@@ -551,186 +470,135 @@ export default function CreateListingScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#F8F9FC',
-  },
-  headerGradient: {
-    paddingTop: 50,
-    paddingBottom: 20,
-    shadowColor: '#4169E1',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.2,
-    shadowRadius: 8,
-    elevation: 8,
+    backgroundColor: '#FFFFFF',
   },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: 20,
+    paddingHorizontal: 16,
+    paddingTop: 60,
+    paddingBottom: 16,
+    backgroundColor: '#FFFFFF',
+    borderBottomWidth: 1,
+    borderBottomColor: '#E2E8F0',
   },
   backButton: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: 'rgba(255, 255, 255, 0.2)',
-    alignItems: 'center',
-    justifyContent: 'center',
+    padding: 8,
   },
   title: {
-    fontSize: 22,
-    fontFamily: 'Inter-Bold',
-    color: '#FFFFFF',
+    fontSize: 20,
+    fontFamily: 'Inter-SemiBold',
+    color: '#000000',
   },
   submitButton: {
     width: 40,
     height: 40,
     borderRadius: 20,
-    backgroundColor: 'rgba(255, 255, 255, 0.3)',
+    backgroundColor: '#4169E1',
     justifyContent: 'center',
     alignItems: 'center',
   },
   submitButtonDisabled: {
-    backgroundColor: 'rgba(255, 255, 255, 0.1)',
+    backgroundColor: '#CBD5E1',
   },
   formContainer: {
     flex: 1,
-    paddingHorizontal: 20,
-    paddingTop: 20,
+    padding: 16,
   },
-  successBadge: {
+  listingsCounter: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#F0FDF4',
-    padding: 16,
-    borderRadius: 12,
-    marginBottom: 24,
-    gap: 12,
+    backgroundColor: '#EBF0FF',
+    padding: 12,
+    borderRadius: 8,
+    marginBottom: 16,
+    gap: 8,
   },
-  successBadgeText: {
+  listingsCounterText: {
     flex: 1,
     fontSize: 14,
     fontFamily: 'Inter-Regular',
-    color: '#10B981',
-    lineHeight: 20,
+    color: '#4169E1',
   },
   formGroup: {
-    marginBottom: 24,
+    marginBottom: 20,
   },
   label: {
     fontSize: 16,
-    fontFamily: 'Inter-Bold',
-    color: '#1A1A1A',
-    marginBottom: 10,
+    fontFamily: 'Inter-SemiBold',
+    color: '#000000',
+    marginBottom: 8,
   },
   input: {
-    backgroundColor: '#FFFFFF',
+    backgroundColor: '#F8F9FA',
     borderRadius: 12,
     padding: 16,
     fontSize: 16,
     fontFamily: 'Inter-Regular',
-    color: '#1A1A1A',
-    borderWidth: 1.5,
-    borderColor: '#E8E8E8',
-  },
-  charCount: {
-    fontSize: 12,
-    fontFamily: 'Inter-Regular',
-    color: '#999999',
-    marginTop: 6,
-    textAlign: 'right',
+    color: '#000000',
   },
   textArea: {
     height: 120,
-    textAlignVertical: 'top',
   },
   priceInputContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#FFFFFF',
+    backgroundColor: '#F8F9FA',
     borderRadius: 12,
-    borderWidth: 1.5,
-    borderColor: '#E8E8E8',
     paddingHorizontal: 16,
-  },
-  currencySymbol: {
-    fontSize: 20,
-    fontFamily: 'Inter-Bold',
-    color: '#4169E1',
-    marginRight: 8,
   },
   priceInput: {
     flex: 1,
     padding: 16,
     fontSize: 16,
     fontFamily: 'Inter-Regular',
-    color: '#1A1A1A',
-  },
-  perHourLabel: {
-    fontSize: 14,
-    fontFamily: 'Inter-Regular',
-    color: '#666666',
-    marginLeft: 8,
-  },
-  helperText: {
-    fontSize: 12,
-    fontFamily: 'Inter-Regular',
-    color: '#999999',
-    marginTop: 6,
+    color: '#000000',
   },
   categoriesContainer: {
     flexDirection: 'row',
     paddingVertical: 8,
-    gap: 10,
+    gap: 8,
   },
   categoryChip: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#FFFFFF',
+    backgroundColor: '#F8F9FA',
     paddingHorizontal: 16,
-    paddingVertical: 10,
+    paddingVertical: 8,
     borderRadius: 20,
-    borderWidth: 1.5,
-    borderColor: '#E8E8E8',
-    gap: 6,
   },
   selectedCategoryChip: {
     backgroundColor: '#4169E1',
-    borderColor: '#4169E1',
-  },
-  checkIcon: {
-    marginRight: 4,
   },
   categoryChipText: {
     fontSize: 14,
-    fontFamily: 'Inter-SemiBold',
-    color: '#666666',
+    fontFamily: 'Inter-Regular',
+    color: '#000000',
   },
   selectedCategoryChipText: {
     color: '#FFFFFF',
+    fontFamily: 'Inter-SemiBold',
   },
   imageUrlContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#FFFFFF',
+    backgroundColor: '#F8F9FA',
     borderRadius: 12,
     paddingHorizontal: 16,
     gap: 8,
-    borderWidth: 1.5,
-    borderColor: '#E8E8E8',
   },
   imageUrlInput: {
     flex: 1,
     padding: 16,
     fontSize: 16,
     fontFamily: 'Inter-Regular',
-    color: '#1A1A1A',
+    color: '#000000',
   },
   imagePreviewContainer: {
     marginTop: 12,
   },
   imagePreviewLabel: {
     fontSize: 14,
-    fontFamily: 'Inter-SemiBold',
+    fontFamily: 'Inter-Regular',
     color: '#666666',
     marginBottom: 8,
   },
@@ -738,24 +606,14 @@ const styles = StyleSheet.create({
     width: '100%',
     height: 200,
     borderRadius: 12,
-    backgroundColor: '#F5F5F5',
-    marginRight: 8,
-  },
-  imagePickerButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    backgroundColor: '#E8F0FE',
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 12,
-    marginBottom: 8,
+    backgroundColor: '#F8F9FA',
   },
   infoContainer: {
     flexDirection: 'row',
-    backgroundColor: '#E8F0FE',
+    backgroundColor: '#F8F9FA',
     padding: 16,
     borderRadius: 12,
+    marginTop: 8,
     marginBottom: 24,
     gap: 12,
   },
@@ -763,111 +621,132 @@ const styles = StyleSheet.create({
     flex: 1,
     fontSize: 14,
     fontFamily: 'Inter-Regular',
-    color: '#4169E1',
-    lineHeight: 20,
-  },
-  submitButtonLarge: {
-    borderRadius: 16,
-    overflow: 'hidden',
-    shadowColor: '#4169E1',
-    shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.4,
-    shadowRadius: 16,
-    elevation: 8,
-    minHeight: 56,
-    marginBottom: 16,
-  },
-  submitButtonLargeDisabled: {
-    shadowOpacity: 0,
-    elevation: 0,
-  },
-  submitButtonGradient: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: 18,
-    paddingHorizontal: 24,
-    gap: 12,
-    minHeight: 56,
-  },
-  submitButtonLargeText: {
-    fontFamily: 'Inter-Bold',
-    fontSize: 18,
-    color: '#FFFFFF',
-    letterSpacing: 0.5,
-  },
-  bottomPadding: {
-    height: 40,
-  },
-  currencyButton: {
-    flex: 1,
-    paddingVertical: 12,
-    paddingHorizontal: 16,
-    borderRadius: 12,
-    borderWidth: 2,
-    borderColor: '#4169E1',
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: '#FFFFFF',
-  },
-  videoIndicator: {
-    position: 'absolute',
-    bottom: 4,
-    left: 4,
-    backgroundColor: 'rgba(0, 0, 0, 0.6)',
-    borderRadius: 12,
-    padding: 4,
-  },
-  youtubeIndicator: {
-    position: 'absolute',
-    bottom: 4,
-    right: 4,
-    backgroundColor: '#FF0000',
-    borderRadius: 8,
-    paddingHorizontal: 6,
-    paddingVertical: 2,
-  },
-  youtubeIndicatorText: {
-    color: '#FFFFFF',
-    fontSize: 10,
-    fontFamily: 'Inter-SemiBold',
-  },
-  youtubeSection: {
-    marginTop: 12,
-  },
-  youtubeSectionLabel: {
-    fontSize: 14,
-    fontFamily: 'Inter-Regular',
     color: '#666666',
-    marginBottom: 8,
   },
-  youtubeInputContainer: {
-    flexDirection: 'row',
+  uploadButton: {
+    flexDirection: 'column',
     alignItems: 'center',
     backgroundColor: '#F8F9FA',
     borderRadius: 12,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderWidth: 1,
-    borderColor: '#E2E8F0',
-    gap: 8,
+    padding: 24,
+    borderWidth: 2,
+    borderColor: '#E0E0E0',
+    borderStyle: 'dashed',
   },
-  youtubeInput: {
-    flex: 1,
+  uploadButtonText: {
+    fontSize: 16,
+    fontFamily: 'Inter-SemiBold',
+    color: '#4169E1',
+    marginTop: 8,
+  },
+  uploadButtonTextDisabled: {
+    color: '#999999',
+  },
+  uploadButtonSubtext: {
     fontSize: 14,
     fontFamily: 'Inter-Regular',
-    color: '#1A1A1A',
-    paddingVertical: 6,
+    color: '#666666',
+    marginTop: 4,
   },
-  addYoutubeButton: {
+  selectedImagesContainer: {
+    marginTop: 16,
+  },
+  imagesScrollContent: {
+    gap: 12,
+    paddingVertical: 4,
+  },
+  selectedImageWrapper: {
+    position: 'relative',
+    width: 120,
+    height: 120,
+  },
+  selectedImage: {
+    width: 120,
+    height: 120,
+    borderRadius: 12,
+    backgroundColor: '#F8F9FA',
+  },
+  removeImageButton: {
+    position: 'absolute',
+    top: 4,
+    right: 4,
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: 'rgba(255, 0, 0, 0.8)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  primaryBadge: {
+    position: 'absolute',
+    bottom: 4,
+    left: 4,
     backgroundColor: '#4169E1',
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 8,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 6,
   },
-  addYoutubeButtonText: {
-    color: '#FFFFFF',
-    fontSize: 13,
+  primaryBadgeText: {
+    fontSize: 10,
     fontFamily: 'Inter-SemiBold',
+    color: '#FFFFFF',
+  },
+  choiceContainer: {
+    flex: 1,
+    padding: 24,
+    justifyContent: 'center',
+  },
+  choiceTitle: {
+    fontSize: 28,
+    fontFamily: 'Inter-SemiBold',
+    color: '#000000',
+    textAlign: 'center',
+    marginBottom: 8,
+  },
+  choiceSubtitle: {
+    fontSize: 16,
+    fontFamily: 'Inter-Regular',
+    color: '#666666',
+    textAlign: 'center',
+    marginBottom: 40,
+  },
+  choiceCard: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 16,
+    padding: 24,
+    marginBottom: 16,
+    alignItems: 'center',
+    shadowColor: '#000000',
+    shadowOffset: {
+      width: 0,
+      height: 2,
+    },
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
+    elevation: 4,
+    borderWidth: 2,
+    borderColor: '#F0F0F0',
+  },
+  choiceIconContainer: {
+    width: 80,
+    height: 80,
+    borderRadius: 40,
+    backgroundColor: '#EBF0FF',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 16,
+  },
+  choiceCardTitle: {
+    fontSize: 22,
+    fontFamily: 'Inter-SemiBold',
+    color: '#000000',
+    marginBottom: 8,
+  },
+  choiceCardDescription: {
+    fontSize: 15,
+    fontFamily: 'Inter-Regular',
+    color: '#666666',
+    textAlign: 'center',
+    lineHeight: 22,
   },
 });

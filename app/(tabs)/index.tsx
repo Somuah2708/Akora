@@ -180,7 +180,10 @@ const PLACEHOLDER_POSTS = [
 interface PostWithUser extends Post {
   user: Profile;
   isLiked?: boolean;
+  isBookmarked?: boolean;
   comments_count?: number;
+  likes?: number;
+  comments?: number;
 }
 
 export default function HomeScreen() {
@@ -189,6 +192,7 @@ export default function HomeScreen() {
   const [posts, setPosts] = useState<PostWithUser[]>([]);
   const [loading, setLoading] = useState(true);
   const [carouselIndices, setCarouselIndices] = useState<{ [key: string]: number }>({});
+  const [activeCategoryId, setActiveCategoryId] = useState<string | null>(null);
 
   const [fontsLoaded] = useFonts({
     'Inter-Regular': Inter_400Regular,
@@ -211,7 +215,8 @@ export default function HomeScreen() {
             id,
             username,
             full_name,
-            avatar_url
+            avatar_url,
+            is_admin
           ),
           post_comments(count),
           post_likes(count)
@@ -225,17 +230,16 @@ export default function HomeScreen() {
 
       console.log('Fetched posts:', data?.length || 0);
       
-      // Get user's liked posts if logged in
+      // Get user's liked and bookmarked posts if logged in
       let userLikes: Set<string> = new Set();
+      let userBookmarks: Set<string> = new Set();
       if (user) {
-        const { data: likesData } = await supabase
-          .from('post_likes')
-          .select('post_id')
-          .eq('user_id', user.id);
-        
-        if (likesData) {
-          userLikes = new Set(likesData.map(like => like.post_id));
-        }
+        const [likesRes, bmsRes] = await Promise.all([
+          supabase.from('post_likes').select('post_id').eq('user_id', user.id),
+          supabase.from('post_bookmarks').select('post_id').eq('user_id', user.id),
+        ]);
+        if (likesRes.data) userLikes = new Set(likesRes.data.map(l => l.post_id));
+        if (bmsRes.data) userBookmarks = new Set(bmsRes.data.map(b => b.post_id));
       }
       
       // Log image URLs for debugging
@@ -250,21 +254,41 @@ export default function HomeScreen() {
       });
 
             // Format the data to match our expected structure
-      const formattedPosts = data.map(post => ({
-        id: post.id,
-        user_id: post.user_id,
-        content: post.content,
-        image_url: post.image_url,
-        image_urls: post.image_urls,
-        created_at: post.created_at,
-        user: post.profiles as Profile,
-        likes: Array.isArray(post.post_likes) ? post.post_likes.length : 0,
-        isLiked: userLikes.has(post.id),
-        comments_count: Array.isArray(post.post_comments) ? post.post_comments.length : 0,
-      }));
+      const formattedPosts = data.map(post => {
+        const rawProfile = (Array.isArray(post.profiles) ? post.profiles[0] : post.profiles) as Partial<Profile> | undefined;
+        const safeProfile: Profile = {
+          id: rawProfile?.id ?? post.user_id,
+          username: rawProfile?.username ?? 'akora_member',
+          full_name: rawProfile?.full_name ?? 'Akora Member',
+          avatar_url: rawProfile?.avatar_url,
+          bio: rawProfile?.bio,
+          class: rawProfile?.class,
+          year_group: rawProfile?.year_group,
+          house: rawProfile?.house,
+          created_at: rawProfile?.created_at,
+          is_admin: (rawProfile as any)?.is_admin ?? false,
+        };
 
-      // If no posts from database, use placeholder posts
-      setPosts(formattedPosts.length > 0 ? formattedPosts : PLACEHOLDER_POSTS as any);
+        return {
+          id: post.id,
+          user_id: post.user_id,
+          content: post.content,
+          image_url: post.image_url,
+          image_urls: post.image_urls,
+          created_at: post.created_at,
+          user: safeProfile,
+          likes: Array.isArray(post.post_likes) ? post.post_likes.length : 0,
+          isLiked: userLikes.has(post.id),
+          isBookmarked: userBookmarks.has(post.id),
+          comments_count: Array.isArray(post.post_comments) ? post.post_comments.length : 0,
+        } as PostWithUser;
+      });
+
+  // Only show admin posts on Home
+  const adminOnly = formattedPosts.filter(p => (p.user as any)?.is_admin === true);
+
+  // If none, fall back to placeholders
+  setPosts(adminOnly.length > 0 ? adminOnly : PLACEHOLDER_POSTS as any);
     } catch (error) {
       console.error('Error fetching posts:', error);
       // On error, show placeholder posts
@@ -305,19 +329,21 @@ export default function HomeScreen() {
     if (!post) return;
 
     const wasLiked = post.isLiked;
+    const originalLikes = post.likes ?? 0;
 
     // Optimistic update
-    setPosts(prevPosts =>
-      prevPosts.map(p =>
-        p.id === postId
-          ? {
-              ...p,
-              isLiked: !p.isLiked,
-              likes: p.isLiked ? p.likes - 1 : p.likes + 1,
-            }
-          : p
-      )
-    );
+      setPosts(prevPosts => prevPosts.map(p => {
+        if (p.id !== postId) return p;
+
+        const currentLikes = p.likes ?? 0;
+        const nextLikes = p.isLiked ? Math.max(0, currentLikes - 1) : currentLikes + 1;
+
+        return {
+          ...p,
+          isLiked: !p.isLiked,
+          likes: nextLikes,
+        };
+      }));
 
     try {
       if (wasLiked) {
@@ -344,19 +370,42 @@ export default function HomeScreen() {
       console.error('Error toggling like:', error);
       
       // Revert optimistic update on error
-      setPosts(prevPosts =>
-        prevPosts.map(p =>
-          p.id === postId
-            ? {
-                ...p,
-                isLiked: wasLiked,
-                likes: wasLiked ? p.likes + 1 : p.likes - 1,
-              }
-            : p
-        )
-      );
+      setPosts(prevPosts => prevPosts.map(p => {
+        if (p.id !== postId) return p;
+
+        return {
+          ...p,
+          isLiked: wasLiked,
+          likes: originalLikes,
+        };
+      }));
       
       Alert.alert('Error', 'Failed to update like');
+    }
+  };
+
+  const handleBookmarkToggle = async (postId: string) => {
+    if (!user) {
+      Alert.alert('Error', 'You must be logged in to save posts');
+      return;
+    }
+    const post = posts.find(p => p.id === postId);
+    if (!post) return;
+    const wasSaved = (post as any).isBookmarked === true;
+    // Optimistic update
+    setPosts(prev => prev.map(p => p.id === postId ? { ...p, isBookmarked: !wasSaved } as any : p));
+    try {
+      if (wasSaved) {
+        const { error } = await supabase.from('post_bookmarks').delete().eq('post_id', postId).eq('user_id', user.id);
+        if (error) throw error;
+      } else {
+        const { error } = await supabase.from('post_bookmarks').insert({ post_id: postId, user_id: user.id });
+        if (error) throw error;
+      }
+    } catch (e) {
+      // Revert
+      setPosts(prev => prev.map(p => p.id === postId ? { ...p, isBookmarked: wasSaved } as any : p));
+      Alert.alert('Error', 'Failed to update saved');
     }
   };
 
@@ -486,14 +535,27 @@ export default function HomeScreen() {
       >
         {CATEGORY_TABS.map((category) => {
           const IconComponent = category.icon;
+          const isActiveCategory = activeCategoryId === category.id;
           return (
             <TouchableOpacity 
               key={category.id} 
-              style={styles.categoryTab}
-              onPress={() => category.route && router.push(category.route as any)}
+              style={[styles.categoryTab, isActiveCategory && styles.categoryTabActive]}
+              activeOpacity={0.85}
+              onPress={() => {
+                setActiveCategoryId(category.id);
+                if (category.route) {
+                  router.push(category.route as any);
+                }
+              }}
             >
               <Image source={{ uri: category.image }} style={styles.categoryImage} />
-              <View style={[styles.categoryOverlay, { backgroundColor: category.color + '95' }]}>
+              <View
+                style={[
+                  styles.categoryOverlay,
+                  { backgroundColor: category.color + '95' },
+                  isActiveCategory && styles.categoryOverlayActive,
+                ]}
+              >
                 <IconComponent size={16} color="#FFFFFF" strokeWidth={2} />
                 <Text style={styles.categoryTitle}>{category.title}</Text>
               </View>
@@ -538,7 +600,7 @@ export default function HomeScreen() {
                     style={styles.postUserAvatar} 
                   />
                   <View>
-                    <Text style={styles.postUsername}>{post.user.username}</Text>
+                    <Text style={styles.postUsername}>{post.user.full_name}</Text>
                     <Text style={styles.postTime}>{getTimeAgo(post.created_at)}</Text>
                   </View>
                 </View>
@@ -632,6 +694,7 @@ export default function HomeScreen() {
                   )}
                 </View>
               ) : post.image_urls && post.image_urls.length > 0 ? (
+                <TouchableOpacity activeOpacity={0.85} onPress={() => router.push(`/post/${post.id}`)}>
                 <View style={styles.carouselContainer}>
                   <ScrollView
                     horizontal
@@ -665,6 +728,7 @@ export default function HomeScreen() {
                     </View>
                   )}
                 </View>
+                </TouchableOpacity>
               ) : post.youtube_url ? (
                 <YouTubePlayer url={post.youtube_url} />
               ) : post.video_url ? (
@@ -678,11 +742,13 @@ export default function HomeScreen() {
                   />
                 </View>
               ) : post.image_url ? (
-                <Image 
-                  source={{ uri: post.image_url }} 
-                  style={styles.postImage}
-                  resizeMode="cover"
-                />
+                <TouchableOpacity activeOpacity={0.85} onPress={() => router.push(`/post/${post.id}`)}>
+                  <Image 
+                    source={{ uri: post.image_url }} 
+                    style={styles.postImage}
+                    resizeMode="cover"
+                  />
+                </TouchableOpacity>
               ) : null}
 
               {/* Post Actions */}
@@ -706,8 +772,8 @@ export default function HomeScreen() {
                     <MessageCircle size={26} color="#000000" strokeWidth={2} />
                   </TouchableOpacity>
                 </View>
-                <TouchableOpacity style={styles.actionButton}>
-                  <Bookmark size={26} color="#000000" strokeWidth={2} />
+                <TouchableOpacity style={styles.actionButton} onPress={() => handleBookmarkToggle(post.id)}>
+                  <Bookmark size={26} color={post.isBookmarked ? '#111827' : '#000000'} fill={post.isBookmarked ? '#111827' : 'none'} strokeWidth={2} />
                 </TouchableOpacity>
               </View>
 
@@ -717,7 +783,7 @@ export default function HomeScreen() {
               {/* Post Caption */}
               <View style={styles.postCaption}>
                 <Text style={styles.postCaptionText}>
-                  <Text style={styles.postCaptionUsername}>{post.user.username}</Text>
+                  <Text style={styles.postCaptionUsername}>{post.user.full_name}</Text>
                   {' '}{post.content}
                 </Text>
               </View>
@@ -837,6 +903,10 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
     position: 'relative',
   },
+  categoryTabActive: {
+    borderColor: '#0095F6',
+    borderWidth: 2,
+  },
   categoryImage: {
     width: '100%',
     height: '100%',
@@ -850,6 +920,9 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     gap: 4,
+  },
+  categoryOverlayActive: {
+    backgroundColor: '#0095F6',
   },
   categoryTitle: {
     fontSize: 10,

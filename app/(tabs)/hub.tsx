@@ -1,14 +1,31 @@
-import { View, Text, StyleSheet, ScrollView, Image, TouchableOpacity, TextInput, Dimensions } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, Image, TextInput, Dimensions, TouchableOpacity } from 'react-native';
+import { Plus } from 'lucide-react-native';
 import { useFonts, Inter_400Regular, Inter_600SemiBold } from '@expo-google-fonts/inter';
 import { useEffect } from 'react';
 import { SplashScreen, useRouter } from 'expo-router';
-import { Search, Plus, MoveVertical as MoreVertical, Bell, Moon, Lock, CircleHelp as HelpCircle, LogOut, Shield, Languages, MessageSquare, Bookmark, ShoppingBag, GraduationCap, Briefcase, MessageCircle, Building2, Calendar, Heart, FileText, Users, Newspaper, Globe, Video } from 'lucide-react-native';
+import { Search, MoveVertical as MoreVertical, Bell, Moon, Lock, CircleHelp as HelpCircle, LogOut, Shield, Languages, MessageSquare, Bookmark, ShoppingBag, GraduationCap, Briefcase, MessageCircle, Building2, Calendar, Heart, FileText, Users, Newspaper, Globe, Video } from 'lucide-react-native';
 
 SplashScreen.preventAutoHideAsync();
 
 const { width } = Dimensions.get('window');
+const CARD_WIDTH = width - 48;
 const GRID_SPACING = 16;
 const GRID_ITEM_WIDTH = (width - 48 - GRID_SPACING) / 2;
+
+const FEATURED_ITEMS = [
+  {
+    id: 'featured1',
+    title: 'Upcoming Alumni Meet',
+    description: 'Join us for the annual gathering',
+    image: 'https://images.unsplash.com/photo-1523580494863-6f3031224c94?w=800&auto=format&fit=crop&q=60',
+  },
+  {
+    id: 'featured2',
+    title: 'Scholarship Program 2024',
+    description: 'Applications now open',
+    image: 'https://images.unsplash.com/photo-1524178232363-1fb2b075b655?w=800&auto=format&fit=crop&q=60',
+  },
+];
 
 const HERITAGE_ITEMS = [
   {
@@ -130,70 +147,121 @@ export default function HubScreen() {
   const leftColumnItems = HERITAGE_ITEMS.filter((_, index) => index % 2 === 0);
   const rightColumnItems = HERITAGE_ITEMS.filter((_, index) => index % 2 === 1);
 
+  const navigateToRoute = (route?: string) => {
+    if (!route) return;
+    const path = route.startsWith('/') ? route : `/${route}`;
+    router.push(path as never);
+  };
+
   return (
-    <ScrollView style={styles.container} showsVerticalScrollIndicator={false}>
-      <View style={styles.header}>
-        <Text style={styles.title}>Akora Hub</Text>
-        <Text style={styles.subtitle}>Connect, grow, and engage with the community</Text>
-      </View>
-
-      {/* Two Column Layout */}
-      <View style={styles.columnsContainer}>
-        {/* Left Column */}
-        <View style={styles.column}>
-          {leftColumnItems.map((item) => {
-            const IconComponent = item.icon;
-            return (
-              <TouchableOpacity 
-                key={item.id}
-                style={styles.gridItem}
-                onPress={() => item.route && router.push(item.route)}
-              >
-                <Image source={{ uri: item.image }} style={styles.itemImage} />
-                <View style={styles.itemContent}>
-                  <View style={styles.iconContainer}>
-                    <IconComponent size={24} color="#FFFFFF" strokeWidth={1.5} />
-                  </View>
-                  <View style={styles.textContainer}>
-                    <Text style={styles.itemTitle} numberOfLines={2}>{item.title}</Text>
-                    <Text style={styles.itemDescription} numberOfLines={2}>{item.description}</Text>
-                  </View>
-                </View>
-              </TouchableOpacity>
-            );
-          })}
+    <View style={{ flex: 1 }}>
+      <ScrollView style={styles.container} showsVerticalScrollIndicator={false}>
+        <View style={styles.header}>
+          <Text style={styles.title}>Akora Hub</Text>
+          <Text style={styles.subtitle}>Connect, grow, and engage with the community</Text>
         </View>
 
-        {/* Right Column */}
-        <View style={styles.column}>
-          {rightColumnItems.map((item) => {
-            const IconComponent = item.icon;
-            return (
-              <TouchableOpacity 
-                key={item.id}
-                style={styles.gridItem}
-                onPress={() => item.route && router.push(item.route)}
-              >
-                <Image source={{ uri: item.image }} style={styles.itemImage} />
-                <View style={styles.itemContent}>
-                  <View style={styles.iconContainer}>
-                    <IconComponent size={24} color="#FFFFFF" strokeWidth={1.5} />
+        <ScrollView 
+          horizontal 
+          showsHorizontalScrollIndicator={false} 
+          style={styles.featuredScroll}
+          contentContainerStyle={styles.featuredContent}
+        >
+          {FEATURED_ITEMS.map((item) => (
+            <TouchableOpacity key={item.id} style={styles.featuredItem}>
+              <Image source={{ uri: item.image }} style={styles.featuredImage} />
+              <View style={styles.featuredOverlay}>
+                <Text style={styles.featuredTitle}>{item.title}</Text>
+                <Text style={styles.featuredDescription}>{item.description}</Text>
+              </View>
+            </TouchableOpacity>
+          ))}
+        </ScrollView>
+
+        {/* Two Column Layout */}
+        <View style={styles.columnsContainer}>
+          {/* Left Column */}
+          <View style={styles.column}>
+            {leftColumnItems.map((item) => {
+              const IconComponent = item.icon;
+              return (
+                <TouchableOpacity 
+                  key={item.id}
+                  style={styles.gridItem}
+                  onPress={() => navigateToRoute(item.route)}
+                >
+                  <Image source={{ uri: item.image }} style={styles.itemImage} />
+                  <View style={styles.itemContent}>
+                    <View style={styles.iconContainer}>
+                      <IconComponent size={24} color="#FFFFFF" strokeWidth={1.5} />
+                    </View>
+                    <View style={styles.textContainer}>
+                      <Text style={styles.itemTitle} numberOfLines={2}>{item.title}</Text>
+                      <Text style={styles.itemDescription} numberOfLines={2}>{item.description}</Text>
+                    </View>
                   </View>
-                  <View style={styles.textContainer}>
-                    <Text style={styles.itemTitle} numberOfLines={2}>{item.title}</Text>
-                    <Text style={styles.itemDescription} numberOfLines={2}>{item.description}</Text>
+                </TouchableOpacity>
+              );
+            })}
+          </View>
+
+          {/* Right Column */}
+          <View style={styles.column}>
+            {rightColumnItems.map((item) => {
+              const IconComponent = item.icon;
+              return (
+                <TouchableOpacity 
+                  key={item.id}
+                  style={styles.gridItem}
+                  onPress={() => navigateToRoute(item.route)}
+                >
+                  <Image source={{ uri: item.image }} style={styles.itemImage} />
+                  <View style={styles.itemContent}>
+                    <View style={styles.iconContainer}>
+                      <IconComponent size={24} color="#FFFFFF" strokeWidth={1.5} />
+                    </View>
+                    <View style={styles.textContainer}>
+                      <Text style={styles.itemTitle} numberOfLines={2}>{item.title}</Text>
+                      <Text style={styles.itemDescription} numberOfLines={2}>{item.description}</Text>
+                    </View>
                   </View>
-                </View>
-              </TouchableOpacity>
-            );
-          })}
+                </TouchableOpacity>
+              );
+            })}
+          </View>
         </View>
-      </View>
-    </ScrollView>
+      </ScrollView>
+
+      {/* Floating Add Button */}
+      <TouchableOpacity
+        style={styles.addButton}
+        onPress={() => router.push('/create-post')}
+        activeOpacity={0.8}
+      >
+        <Plus size={28} color="#fff" />
+      </TouchableOpacity>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
+  addButton: {
+    position: 'absolute',
+    right: 24,
+    bottom: 36,
+    backgroundColor: '#007AFF',
+    borderRadius: 32,
+    width: 56,
+    height: 56,
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.2,
+    shadowRadius: 4,
+    elevation: 5,
+    zIndex: 100,
+  },
   container: {
     flex: 1,
     backgroundColor: '#FFFFFF',
@@ -213,6 +281,44 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontFamily: 'Inter-Regular',
     color: '#666666',
+  },
+  featuredScroll: {
+    marginBottom: 0,
+  },
+  featuredContent: {
+    paddingHorizontal: 24,
+    paddingVertical: 0,
+    gap: 16,
+  },
+  featuredItem: {
+    width: CARD_WIDTH,
+    height: 200,
+    borderRadius: 16,
+    overflow: 'hidden',
+  },
+  featuredImage: {
+    width: '100%',
+    height: '100%',
+  },
+  featuredOverlay: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    padding: 20,
+    backgroundColor: 'rgba(0,0,0,0.4)',
+  },
+  featuredTitle: {
+    fontSize: 20,
+    fontFamily: 'Inter-SemiBold',
+    color: '#FFFFFF',
+    marginBottom: 4,
+  },
+  featuredDescription: {
+    fontSize: 14,
+    fontFamily: 'Inter-Regular',
+    color: '#FFFFFF',
+    opacity: 0.8,
   },
   columnsContainer: {
     flexDirection: 'row',

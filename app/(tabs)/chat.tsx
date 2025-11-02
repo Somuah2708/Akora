@@ -5,6 +5,7 @@ import { useEffect, useState } from 'react';
 import { SplashScreen, useRouter } from 'expo-router';
 import { getConversationList, searchUsers as searchUsersHelper, getUserOnlineStatus, subscribeToUserPresence } from '@/lib/friends';
 import { useAuth } from '@/hooks/useAuth';
+import { formatProfileSubtitle } from '@/lib/display';
 import { supabase } from '@/lib/supabase';
 import { formatChatListTime } from '@/lib/timeUtils';
 import type { Profile } from '@/lib/supabase';
@@ -480,9 +481,16 @@ export default function ChatScreen() {
                         </View>
                         <View style={styles.chatInfo}>
                           <View style={styles.chatHeader}>
-                            <Text style={styles.chatName} numberOfLines={1}>
-                              {friend?.full_name || friend?.username || 'Unknown'}
-                            </Text>
+                            <View style={{ flexDirection: 'row', alignItems: 'center', flex: 1 }}>
+                              <Text style={styles.chatName} numberOfLines={1}>
+                                {friend?.full_name || 'Unknown'}
+                              </Text>
+                              {(friend as any)?.is_admin && (
+                                <View style={styles.adminBadge}>
+                                  <Text style={styles.adminBadgeText}>Admin</Text>
+                                </View>
+                              )}
+                            </View>
                             {conversation.latestMessage && (
                               <Text style={styles.chatTime}>
                                 {formatTime(conversation.latestMessage.created_at)}
@@ -607,7 +615,7 @@ export default function ChatScreen() {
                 <Search size={20} color="#64748B" />
                 <TextInput
                   style={styles.searchInput}
-                  placeholder="Search by name or username"
+                  placeholder="Search by name..."
                   placeholderTextColor="#64748B"
                   value={searchQuery}
                   onChangeText={(text) => {
@@ -634,8 +642,17 @@ export default function ChatScreen() {
                     style={styles.userAvatar} 
                   />
                   <View style={styles.userInfo}>
-                    <Text style={styles.userName}>{item.full_name || item.username}</Text>
-                    <Text style={styles.userUsername}>@{item.username}</Text>
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                      <Text style={styles.userName}>{item.full_name || 'Unknown'}</Text>
+                      {(item as any)?.is_admin && (
+                        <View style={styles.adminBadge}>
+                          <Text style={styles.adminBadgeText}>Admin</Text>
+                        </View>
+                      )}
+                    </View>
+                    {!!formatProfileSubtitle(item) && (
+                      <Text style={styles.userUsername}>{formatProfileSubtitle(item)}</Text>
+                    )}
                   </View>
                 </TouchableOpacity>
               )}
@@ -1013,5 +1030,19 @@ const styles = StyleSheet.create({
     fontFamily: 'Inter-Regular',
     color: '#666666',
     textAlign: 'center',
+  },
+  adminBadge: {
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 999,
+    backgroundColor: '#EEF6FF',
+    borderWidth: 1,
+    borderColor: '#CDE3FF',
+    marginLeft: 6,
+  },
+  adminBadgeText: {
+    color: '#0A84FF',
+    fontSize: 11,
+    fontFamily: 'Inter-SemiBold',
   },
 });
