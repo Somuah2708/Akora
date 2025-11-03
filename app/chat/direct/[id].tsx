@@ -56,6 +56,7 @@ export default function DirectMessageScreen() {
   const [isTyping, setIsTyping] = useState(false);
   const [friendIsOnline, setFriendIsOnline] = useState(false);
   const [friendLastSeen, setFriendLastSeen] = useState<string | null>(null);
+  const [firstUnreadIndex, setFirstUnreadIndex] = useState<number | null>(null);
   const flatListRef = useRef<FlatList>(null);
   const soundObjects = useRef<{ [key: string]: Audio.Sound }>({});
   const typingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -180,6 +181,9 @@ export default function DirectMessageScreen() {
     try {
       if (!skipSpinner) setLoading(true);
       const msgs = await getDirectMessages(user.id, friendId);
+      // Determine first unread index before marking as read
+      const idx = msgs.findIndex((m) => m.receiver_id === user.id && !m.is_read);
+      setFirstUnreadIndex(idx >= 0 ? idx : null);
       setMessages(msgs);
       // Persist to cache
       setCachedThread(user.id, friendId, msgs, friendProfile);
@@ -608,6 +612,14 @@ export default function DirectMessageScreen() {
 
     return (
       <>
+        {/* New messages separator */}
+        {firstUnreadIndex !== null && index === firstUnreadIndex && (
+          <View style={styles.newMessagesDivider}>
+            <View style={styles.newMessagesLine} />
+            <Text style={styles.newMessagesText}>New messages</Text>
+            <View style={styles.newMessagesLine} />
+          </View>
+        )}
         {/* Date Divider */}
         {showDateDivider && (
           <View style={styles.dateDivider}>
@@ -1157,6 +1169,26 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginVertical: 20,
     paddingHorizontal: 4,
+  },
+  newMessagesDivider: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 8,
+    marginBottom: 8,
+    paddingHorizontal: 4,
+  },
+  newMessagesLine: {
+    flex: 1,
+    height: 1,
+    backgroundColor: '#F59E0B',
+  },
+  newMessagesText: {
+    paddingHorizontal: 10,
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#F59E0B',
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
   },
   dateDividerLine: {
     flex: 1,
