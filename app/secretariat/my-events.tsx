@@ -18,11 +18,16 @@ import { useAuth } from '@/hooks/useAuth';
 interface Event {
   id: string;
   title: string;
+  organizer: string;
   description: string;
   image_url: string | null;
-  category_name: string;
+  category: string;
+  date: string;
+  time: string;
+  location: string;
   created_at: string;
   is_approved: boolean;
+  view_count: number;
 }
 
 export default function MyEventsScreen() {
@@ -32,19 +37,32 @@ export default function MyEventsScreen() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    loadMyEvents();
-  }, []);
+    // Only load if user is available
+    if (user?.id) {
+      loadMyEvents();
+    }
+  }, [user?.id]);
 
   const loadMyEvents = async () => {
     try {
       setLoading(true);
+      console.log('[My Events] Loading events for user:', user?.id);
+      
+      // Don't query if user is not loaded yet
+      if (!user?.id) {
+        console.log('[My Events] User not loaded yet, skipping query');
+        setLoading(false);
+        return;
+      }
+      
       const { data, error } = await supabase
-        .from('products_services')
+        .from('secretariat_events')
         .select('*')
-        .eq('user_id', user?.id)
-        .like('category_name', 'Event - %')
+        .eq('user_id', user.id)
         .order('created_at', { ascending: false });
 
+      console.log('[My Events] Query result:', { data, error, count: data?.length });
+      
       if (error) throw error;
       setEvents(data || []);
     } catch (error: any) {
@@ -56,56 +74,67 @@ export default function MyEventsScreen() {
   };
 
   const handleDelete = async (eventId: string, eventTitle: string) => {
-    Alert.alert(
-      'Delete Event',
-      `Are you sure you want to delete "${eventTitle}"?`,
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Delete',
-          style: 'destructive',
-          onPress: async () => {
-            try {
-              const { error } = await supabase
-                .from('products_services')
-                .delete()
-                .eq('id', eventId);
+    // Platform detection
+    const isWeb = typeof window !== 'undefined';
+    
+    if (isWeb) {
+      const confirmed = window.confirm(`Are you sure you want to delete "${eventTitle}"?`);
+      if (!confirmed) return;
+      
+      try {
+        const { error } = await supabase
+          .from('secretariat_events')
+          .delete()
+          .eq('id', eventId);
 
-              if (error) throw error;
+        if (error) throw error;
 
-              Alert.alert('Success', 'Event deleted successfully');
-              loadMyEvents();
-            } catch (error: any) {
-              console.error('Error deleting event:', error);
-              Alert.alert('Error', 'Failed to delete event');
-            }
+        window.alert('Event deleted successfully');
+        loadMyEvents();
+      } catch (error: any) {
+        console.error('Error deleting event:', error);
+        window.alert('Failed to delete event');
+      }
+    } else {
+      Alert.alert(
+        'Delete Event',
+        `Are you sure you want to delete "${eventTitle}"?`,
+        [
+          { text: 'Cancel', style: 'cancel' },
+          {
+            text: 'Delete',
+            style: 'destructive',
+            onPress: async () => {
+              try {
+                const { error } = await supabase
+                  .from('secretariat_events')
+                  .delete()
+                  .eq('id', eventId);
+
+                if (error) throw error;
+
+                Alert.alert('Success', 'Event deleted successfully');
+                loadMyEvents();
+              } catch (error: any) {
+                console.error('Error deleting event:', error);
+                Alert.alert('Error', 'Failed to delete event');
+              }
+            },
           },
-        },
-      ]
-    );
+        ]
+      );
+    }
   };
 
-  const parseEventData = (description: string) => {
-    try {
-      const data = JSON.parse(description);
-      return {
-        date: data.date || 'TBA',
-        time: data.time || 'TBA',
-        location: data.location || 'TBA',
-        organizer: data.organizer || 'Unknown',
-        category: data.category || 'General',
-        attendees: Math.floor(Math.random() * 100) + 20,
-      };
-    } catch {
-      return {
-        date: 'TBA',
-        time: 'TBA',
-        location: 'TBA',
-        organizer: 'Unknown',
-        category: 'General',
-        attendees: 0,
-      };
-    }
+  const parseEventData = (event: Event, viewCount: number) => {
+    return {
+      date: event.date || 'TBA',
+      time: event.time || 'TBA',
+      location: event.location || 'TBA',
+      organizer: event.organizer || 'Unknown',
+      category: event.category || 'General',
+      attendees: viewCount || 0, // Use actual view count from database
+    };
   };
 
   if (loading) {
@@ -167,7 +196,7 @@ export default function MyEventsScreen() {
         ) : (
           <View style={styles.eventsList}>
             {events.map((event) => {
-              const eventData = parseEventData(event.description);
+              const eventData = parseEventData(event, event.view_count);
               return (
                 <View key={event.id} style={styles.eventCard}>
                   {/* Event Image */}
@@ -240,9 +269,7 @@ export default function MyEventsScreen() {
                       <View style={styles.actionButtons}>
                         <TouchableOpacity 
                           style={styles.editButton}
-                          onPress={() => {
-                            Alert.alert('Edit Event', 'Edit functionality coming soon');
-                          }}
+                          onPress={() => router.push(`/edit-event/${event.id}` as any)}
                         >
                           <Edit2 size={18} color="#4169E1" />
                         </TouchableOpacity>

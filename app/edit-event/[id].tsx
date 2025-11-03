@@ -1,11 +1,10 @@
 import { View, Text, StyleSheet, TextInput, TouchableOpacity, ScrollView, Alert, ActivityIndicator, Image } from 'react-native';
 import { useFonts, Inter_400Regular, Inter_600SemiBold } from '@expo-google-fonts/inter';
 import { useEffect, useState } from 'react';
-import { SplashScreen, useRouter } from 'expo-router';
-import { ArrowLeft, Image as ImageIcon, Send, Calendar, Clock, MapPin, Tag, Info, Plus, X, DollarSign, Users, Phone, Mail, Package } from 'lucide-react-native';
+import { SplashScreen, useRouter, useLocalSearchParams } from 'expo-router';
+import { ArrowLeft, Image as ImageIcon, Save, Calendar, Clock, MapPin, Tag, Info, Plus, X, DollarSign, Users, Phone, Mail, Package } from 'lucide-react-native';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/hooks/useAuth';
-import { useRequireAuth } from '@/hooks/useRequireAuth';
 import * as ImagePicker from 'expo-image-picker';
 
 SplashScreen.preventAutoHideAsync();
@@ -20,10 +19,12 @@ const EVENT_CATEGORIES = [
 
 const MAX_IMAGES = 20;
 
-export default function CreateEventScreen() {
+export default function EditEventScreen() {
   const router = useRouter();
+  const params = useLocalSearchParams();
+  const eventId = params.id as string;
   const { user } = useAuth();
-  const { isVerified, isChecking } = useRequireAuth();
+  const [loading, setLoading] = useState(true);
   const [title, setTitle] = useState('');
   const [organizer, setOrganizer] = useState('');
   const [location, setLocation] = useState('');
@@ -197,6 +198,85 @@ export default function CreateEventScreen() {
     setImageUrls(updated);
   };
 
+  useEffect(() => {
+    if (eventId && user?.id) {
+      loadEventData();
+    }
+  }, [eventId, user?.id]);
+
+  const loadEventData = async () => {
+    try {
+      setLoading(true);
+      
+      const { data, error } = await supabase
+        .from('secretariat_events')
+        .select('*')
+        .eq('id', eventId)
+        .eq('user_id', user?.id)
+        .single();
+
+      if (error) throw error;
+
+      if (!data) {
+        Alert.alert('Error', 'Event not found');
+        router.back();
+        return;
+      }
+
+      setTitle(data.title || '');
+      setOrganizer(data.organizer || '');
+      setLocation(data.location || '');
+      setLocationUrl(data.location_url || '');
+      setDate(data.date || '');
+      setDescription(data.description || '');
+      setCategory(data.category || '');
+      setContactEmail(data.contact_email || '');
+      setContactPhone(data.contact_phone || '');
+      setCapacity(data.capacity ? data.capacity.toString() : '');
+      
+      if (data.time) {
+        const timeMatch = data.time.match(/(\d+):(\d+)\s*(AM|PM)\s*-\s*(\d+):(\d+)\s*(AM|PM)\s*(.+)?/i);
+        if (timeMatch) {
+          setStartHour(timeMatch[1]);
+          setStartMinute(timeMatch[2]);
+          setStartPeriod(timeMatch[3].toUpperCase());
+          setEndHour(timeMatch[4]);
+          setEndMinute(timeMatch[5]);
+          setEndPeriod(timeMatch[6].toUpperCase());
+          if (timeMatch[7]) setTimezone(timeMatch[7].trim());
+        }
+      }
+      
+      setIsFreeEvent(data.is_free ?? true);
+      if (!data.is_free && data.ticket_price) {
+        setTicketPrice(data.ticket_price.toString());
+      }
+      if (data.currency) setCurrency(data.currency);
+      
+      if (data.packages && Array.isArray(data.packages) && data.packages.length > 0) {
+        setPackages(data.packages);
+      }
+      
+      if (data.agenda && Array.isArray(data.agenda) && data.agenda.length > 0) {
+        setAgendaItems(data.agenda);
+      }
+      
+      if (data.speakers && Array.isArray(data.speakers) && data.speakers.length > 0) {
+        setSpeakers(data.speakers);
+      }
+      
+      if (data.image_urls && Array.isArray(data.image_urls) && data.image_urls.length > 0) {
+        setImageUrls(data.image_urls);
+      }
+    } catch (error: any) {
+      console.error('Error loading event:', error);
+      Alert.alert('Error', 'Failed to load event');
+      router.back();
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const handleSubmit = async () => {
     // Validate inputs
     if (!title.trim()) {
@@ -239,7 +319,7 @@ export default function CreateEventScreen() {
       return;
     }
 
-    // Validate contact email is required
+    // Validate contact email
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
     if (!contactEmail.trim()) {
       Alert.alert('Error', 'Please enter a contact email address');
@@ -251,7 +331,7 @@ export default function CreateEventScreen() {
       return;
     }
 
-    // Validate contact phone is required
+    // Validate contact phone
     if (!contactPhone.trim()) {
       Alert.alert('Error', 'Please enter a contact phone number');
       return;
@@ -265,65 +345,21 @@ export default function CreateEventScreen() {
     try {
       setIsSubmitting(true);
       
-      console.log('Starting event submission...');
-      
-      // Prepare event data
+      // Prepare formatted time
       const formattedStartTime = startHour && startMinute ? `${startHour}:${startMinute} ${startPeriod}` : '';
       const formattedEndTime = endHour && endMinute ? `${endHour}:${endMinute} ${endPeriod}` : '';
       const formattedTime = `${formattedStartTime} - ${formattedEndTime} ${timezone}`;
-      const convertedPrice = !isFreeEvent && ticketPrice ? convertCurrency(ticketPrice, currency, secondaryCurrency) : '0.00';
-      
-      console.log('Formatted time:', formattedTime);
-      
-      const eventData = {
-        title: title.trim(),
-        organizer: organizer.trim(),
-        location: location.trim(),
-        locationUrl: locationUrl.trim(),
-        date: date.trim(),
-        time: formattedTime,
-        startTime: formattedStartTime,
-        endTime: formattedEndTime,
-        description: description.trim(),
-        category: category,
-        isFree: isFreeEvent,
-        ticketPrice: isFreeEvent ? 'Free' : ticketPrice.trim(),
-        currency: currency,
-        secondaryCurrency: secondaryCurrency,
-        convertedPrice: convertedPrice,
-        capacity: capacity.trim(),
-        packages: packages.filter(item => item.trim() !== ''),
-        agenda: agendaItems.filter(item => item.trim() !== ''),
-        speakers: speakers.filter(s => s.name.trim() !== '' || s.title.trim() !== ''),
-        contactEmail: contactEmail.trim(),
-        contactPhone: contactPhone.trim(),
-        galleryImages: imageUris,
-        imageUrls: imageUrls.filter(url => url.trim() !== ''),
-      };
-      
-      // Format the description to include all data as JSON for storage
-      const formattedDescription = JSON.stringify(eventData);
       
       // Get first available image
       const firstImage = imageUrls.find(url => url.trim() !== '') || null;
       
-      // Determine price value (0 for free events, actual price for paid events)
+      // Determine price value
       const priceValue = isFreeEvent ? 0 : (parseFloat(ticketPrice) || 0);
-      
-      console.log('Inserting event into database...');
-      console.log('Event data:', { 
-        user_id: user?.id,
-        title: title.trim(), 
-        category: category, 
-        price: priceValue,
-        is_approved: false
-      });
-      
-      // Insert the event into secretariat_events table
-      const { data: newEvent, error: eventError } = await supabase
+
+      // Update the event in secretariat_events table
+      const { error } = await supabase
         .from('secretariat_events')
-        .insert({
-          user_id: user?.id,
+        .update({
           title: title.trim(),
           organizer: organizer.trim(),
           description: description.trim(),
@@ -343,61 +379,38 @@ export default function CreateEventScreen() {
           speakers: speakers.filter(s => s.name.trim() !== '' || s.title.trim() !== ''),
           image_url: firstImage,
           image_urls: imageUrls.filter(url => url.trim() !== ''),
-          is_approved: false,
         })
-        .select()
-        .single();
+        .eq('id', eventId)
+        .eq('user_id', user?.id);
 
-      console.log('Insert result:', { 
-        success: !eventError,
-        eventId: newEvent?.id,
-        userId: newEvent?.user_id,
-        category: newEvent?.category,
-        error: eventError 
-      });
-      
-      if (eventError) throw eventError;
-      
-      console.log('Event created successfully!');
+      if (error) throw error;
 
-      // Note: Notifications can be handled separately through the event_notifications page
-      // which queries the secretariat_events table directly
-
-      console.log('Showing success alert...');
-      
-      // Show success message and redirect
-      // On web, Alert might not work well, so we'll just redirect
+      // Show success message and redirect to my-events
       if (typeof window !== 'undefined') {
-        // Web environment - redirect immediately
-        console.log('Web environment detected, redirecting...');
-        router.push('/secretariat/event-calendar' as any);
+        router.push('/secretariat/my-events' as any);
       } else {
-        // Mobile environment - show alert
         Alert.alert(
           '✓ Success!', 
-          `Your event "${title.trim()}" has been submitted successfully and posted to the Event Calendar!`,
+          `Your event "${title.trim()}" has been updated successfully!`,
           [
             {
               text: 'OK',
               onPress: () => {
-                console.log('Redirecting to event calendar...');
-                router.push('/secretariat/event-calendar' as any);
+                router.push('/secretariat/my-events' as any);
               }
             }
           ]
         );
       }
-      
-      console.log('Alert displayed');
     } catch (error: any) {
-      console.error('Error creating event:', error);
-      Alert.alert('Error', error.message || 'Failed to submit event');
+      console.error('Error updating event:', error);
+      Alert.alert('Error', 'Failed to update event');
     } finally {
       setIsSubmitting(false);
     }
   };
 
-  if (!fontsLoaded || isChecking || !isVerified) {
+  if (!fontsLoaded || loading) {
     return (
       <View style={[{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#FFFFFF' }]}>
         <ActivityIndicator size="large" color="#4169E1" />
@@ -423,7 +436,7 @@ export default function CreateEventScreen() {
           {isSubmitting ? (
             <ActivityIndicator color="#FFFFFF" size="small" />
           ) : (
-            <Send size={20} color="#FFFFFF" />
+            <Save size={20} color="#FFFFFF" />
           )}
         </TouchableOpacity>
       </View>
@@ -1119,8 +1132,8 @@ export default function CreateEventScreen() {
             <ActivityIndicator color="#FFFFFF" size="small" />
           ) : (
             <>
-              <Send size={20} color="#FFFFFF" />
-              <Text style={styles.submitEventButtonText}>Submit Event</Text>
+              <Save size={20} color="#FFFFFF" />
+              <Text style={styles.submitEventButtonText}>Save Changes</Text>
             </>
           )}
         </TouchableOpacity>

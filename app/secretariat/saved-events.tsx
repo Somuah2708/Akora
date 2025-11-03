@@ -10,6 +10,7 @@ import {
   ActivityIndicator,
 } from 'react-native';
 import { useRouter } from 'expo-router';
+import { useFocusEffect } from '@react-navigation/native';
 import { ArrowLeft, Bookmark, Calendar, MapPin, Clock, Users, Trash2, Package } from 'lucide-react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { supabase } from '@/lib/supabase';
@@ -36,25 +37,45 @@ export default function SavedEventsScreen() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    loadSavedEvents();
-  }, []);
+    if (user?.id) {
+      loadSavedEvents();
+    }
+  }, [user?.id]);
+
+  useFocusEffect(
+    React.useCallback(() => {
+      if (user?.id) {
+        loadSavedEvents();
+      }
+    }, [user?.id])
+  );
 
   const loadSavedEvents = async () => {
     try {
       setLoading(true);
-      // Note: You'll need to create the event_bookmarks table in Supabase
+      
+      if (!user?.id) {
+        console.log('[Saved Events] User not loaded yet');
+        setSavedEvents([]);
+        setLoading(false);
+        return;
+      }
+
+      console.log('[Saved Events] Loading bookmarks for user:', user.id);
+      
       const { data, error } = await supabase
         .from('event_bookmarks')
         .select(`
           *,
-          event:products_services(*)
+          event:event_id(*)
         `)
-        .eq('user_id', user?.id)
+        .eq('user_id', user.id)
         .order('created_at', { ascending: false });
+
+      console.log('[Saved Events] Query result:', { data, error, count: data?.length });
 
       if (error) {
         console.error('Bookmark fetch error:', error);
-        // If table doesn't exist, show empty state
         setSavedEvents([]);
       } else {
         setSavedEvents(data || []);
@@ -68,36 +89,76 @@ export default function SavedEventsScreen() {
   };
 
   const handleRemoveBookmark = async (bookmarkId: string, eventTitle: string) => {
-    Alert.alert(
-      'Remove Bookmark',
-      `Remove "${eventTitle}" from saved events?`,
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Remove',
-          style: 'destructive',
-          onPress: async () => {
-            try {
-              const { error } = await supabase
-                .from('event_bookmarks')
-                .delete()
-                .eq('id', bookmarkId);
+    console.log('[Saved Events] Remove bookmark clicked:', { bookmarkId, eventTitle });
+    
+    // Check if running on web
+    const isWeb = typeof window !== 'undefined';
+    
+    if (isWeb) {
+      // For web, use window.confirm
+      const confirmed = window.confirm(`Remove "${eventTitle}" from saved events?`);
+      if (!confirmed) return;
+      
+      try {
+        console.log('[Saved Events] Deleting bookmark:', bookmarkId);
+        
+        const { error } = await supabase
+          .from('event_bookmarks')
+          .delete()
+          .eq('id', bookmarkId);
 
-              if (error) throw error;
+        if (error) {
+          console.error('[Saved Events] Delete error:', error);
+          alert('Failed to remove bookmark');
+          return;
+        }
 
-              Alert.alert('Success', 'Event removed from saved');
-              loadSavedEvents();
-            } catch (error: any) {
-              console.error('Error removing bookmark:', error);
-              Alert.alert('Error', 'Failed to remove bookmark');
-            }
+        console.log('[Saved Events] Bookmark deleted successfully');
+        alert('Event removed from saved');
+        loadSavedEvents();
+      } catch (error: any) {
+        console.error('Error removing bookmark:', error);
+        alert('Failed to remove bookmark');
+      }
+    } else {
+      // For mobile, use Alert.alert
+      Alert.alert(
+        'Remove Bookmark',
+        `Remove "${eventTitle}" from saved events?`,
+        [
+          { text: 'Cancel', style: 'cancel' },
+          {
+            text: 'Remove',
+            style: 'destructive',
+            onPress: async () => {
+              try {
+                console.log('[Saved Events] Deleting bookmark:', bookmarkId);
+                
+                const { error } = await supabase
+                  .from('event_bookmarks')
+                  .delete()
+                  .eq('id', bookmarkId);
+
+                if (error) {
+                  console.error('[Saved Events] Delete error:', error);
+                  throw error;
+                }
+
+                console.log('[Saved Events] Bookmark deleted successfully');
+                Alert.alert('Success', 'Event removed from saved');
+                loadSavedEvents();
+              } catch (error: any) {
+                console.error('Error removing bookmark:', error);
+                Alert.alert('Error', 'Failed to remove bookmark');
+              }
+            },
           },
-        },
-      ]
-    );
+        ]
+      );
+    }
   };
 
-  const parseEventData = (description: string) => {
+  const parseEventData = (description: string, viewCount: number = 0) => {
     try {
       const data = JSON.parse(description);
       return {
@@ -105,7 +166,7 @@ export default function SavedEventsScreen() {
         time: data.time || 'TBA',
         location: data.location || 'TBA',
         category: data.category || 'General',
-        attendees: Math.floor(Math.random() * 100) + 20,
+        attendees: viewCount, // Use actual view count
       };
     } catch {
       return {
@@ -113,7 +174,7 @@ export default function SavedEventsScreen() {
         time: 'TBA',
         location: 'TBA',
         category: 'General',
-        attendees: 0,
+        attendees: viewCount,
       };
     }
   };
@@ -144,7 +205,6 @@ export default function SavedEventsScreen() {
             <Bookmark size={24} color="#FFFFFF" />
             <View style={styles.headerTextContainer}>
               <Text style={styles.title}>Saved Events</Text>
-              <Text style={styles.subtitle}>{savedEvents.length} saved</Text>
             </View>
           </View>
           <View style={styles.placeholder} />
@@ -180,12 +240,11 @@ export default function SavedEventsScreen() {
               const event = saved.event;
               if (!event) return null;
               
-              const eventData = parseEventData(event.description);
+              const eventData = parseEventData(event.description, event.view_count || 0);
               return (
-                <TouchableOpacity
+                <View
                   key={saved.id}
                   style={styles.eventCard}
-                  onPress={() => router.push(`/events/${event.id}` as any)}
                 >
                   {/* Event Image */}
                   {event.image_url ? (
@@ -251,16 +310,13 @@ export default function SavedEventsScreen() {
                       
                       <TouchableOpacity 
                         style={styles.removeButton}
-                        onPress={(e) => {
-                          e.stopPropagation();
-                          handleRemoveBookmark(saved.id, event.title);
-                        }}
+                        onPress={() => handleRemoveBookmark(saved.id, event.title)}
                       >
                         <Trash2 size={18} color="#EF4444" />
                       </TouchableOpacity>
                     </View>
                   </View>
-                </TouchableOpacity>
+                </View>
               );
             })}
           </View>

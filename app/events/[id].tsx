@@ -8,6 +8,7 @@ import {
   Image,
   Alert,
   Linking,
+  ActivityIndicator,
 } from 'react-native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { 
@@ -23,6 +24,8 @@ import {
   ExternalLink 
 } from 'lucide-react-native';
 import { LinearGradient } from 'expo-linear-gradient';
+import { supabase } from '@/lib/supabase';
+import { useAuth } from '@/hooks/useAuth';
 
 interface Event {
   id: string;
@@ -48,10 +51,13 @@ export default function EventDetailScreen() {
   const router = useRouter();
   const params = useLocalSearchParams();
   const eventId = params.id as string;
+  const { user } = useAuth();
 
   const [event, setEvent] = useState<Event | null>(null);
   const [isBookmarked, setIsBookmarked] = useState(false);
   const [isInterested, setIsInterested] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [bookmarkId, setBookmarkId] = useState<string | null>(null);
 
   // All events data
   const allEventsData: Event[] = [
@@ -443,30 +449,226 @@ export default function EventDetailScreen() {
   ];
 
   useEffect(() => {
-    const foundEvent = allEventsData.find(e => e.id === eventId);
-    setEvent(foundEvent || null);
-  }, [eventId]);
+    loadEvent();
+    checkBookmarkStatus();
+    incrementViewCount();
+  }, [eventId, user?.id]);
+
+  const incrementViewCount = async () => {
+    try {
+      if (!eventId) return;
+      
+      // Try secretariat_events table first
+      const { data: secretariatData } = await supabase
+        .from('secretariat_events')
+        .select('view_count')
+        .eq('id', eventId)
+        .single();
+      
+      if (secretariatData) {
+        const newCount = (secretariatData.view_count || 0) + 1;
+        await supabase
+          .from('secretariat_events')
+          .update({ view_count: newCount })
+          .eq('id', eventId);
+        return;
+      }
+
+      // Fall back to products_services table
+      const { data: currentData } = await supabase
+        .from('products_services')
+        .select('view_count')
+        .eq('id', eventId)
+        .single();
+      
+      if (currentData) {
+        const newCount = (currentData.view_count || 0) + 1;
+        await supabase
+          .from('products_services')
+          .update({ view_count: newCount })
+          .eq('id', eventId);
+      }
+        
+    } catch (error) {
+      console.error('Error incrementing view count:', error);
+      // Non-critical, don't block page load
+    }
+  };
+
+  const loadEvent = async () => {
+    try {
+      setLoading(true);
+      
+      // First, try to load from secretariat_events table (new table)
+      const { data: secretariatData, error: secretariatError } = await supabase
+        .from('secretariat_events')
+        .select('*')
+        .eq('id', eventId)
+        .single();
+
+      if (!secretariatError && secretariatData) {
+        // Load from new secretariat_events table
+        const loadedEvent: Event = {
+          id: secretariatData.id,
+          title: secretariatData.title,
+          date: secretariatData.date || 'TBA',
+          time: secretariatData.time || 'TBA',
+          location: secretariatData.location || 'TBA',
+          description: secretariatData.description || '',
+          organizer: secretariatData.organizer || 'OAA Secretariat',
+          imageUrl: secretariatData.image_url || secretariatData.image_urls?.[0] || 'https://images.unsplash.com/photo-1511795409834-ef04bbd61622?w=800&auto=format&fit=crop&q=60',
+          isFeatured: false, // Can add this field to secretariat_events table later
+          category: secretariatData.category || 'General',
+          capacity: secretariatData.capacity || undefined,
+          registered: secretariatData.registration_count || undefined,
+          price: secretariatData.is_free ? 'Free Entry' : `${secretariatData.currency || 'GHS'} ${secretariatData.ticket_price || 0}`,
+          contactEmail: secretariatData.contact_email,
+          contactPhone: secretariatData.contact_phone,
+          agenda: secretariatData.agenda || [],
+          speakers: secretariatData.speakers || [],
+        };
+        setEvent(loadedEvent);
+        return;
+      }
+
+      // Fall back to products_services table (old table)
+      const { data, error } = await supabase
+        .from('products_services')
+        .select('*')
+        .eq('id', eventId)
+        .single();
+
+      if (!error && data) {
+        // Parse the event data from description
+        const eventData = JSON.parse(data.description);
+        const loadedEvent: Event = {
+          id: data.id,
+          title: data.title,
+          date: eventData.date || 'TBA',
+          time: eventData.time || 'TBA',
+          location: eventData.location || 'TBA',
+          description: eventData.description || '',
+          organizer: eventData.organizer || 'OAA Secretariat',
+          imageUrl: eventData.imageUrl || 'https://images.unsplash.com/photo-1511795409834-ef04bbd61622?w=800&auto=format&fit=crop&q=60',
+          isFeatured: eventData.isFeatured || false,
+          category: eventData.category || data.category_name?.replace('Event - ', '') || 'General',
+          capacity: eventData.capacity ? parseInt(eventData.capacity) : undefined,
+          registered: eventData.registered ? parseInt(eventData.registered) : undefined,
+          price: data.price > 0 ? `GHS ${data.price}` : 'Free Entry',
+          contactEmail: eventData.contactEmail,
+          contactPhone: eventData.contactPhone,
+          agenda: eventData.agenda || [],
+          speakers: eventData.speakers || [],
+        };
+        setEvent(loadedEvent);
+      } else {
+        // Fall back to sample data if not found in database
+        const foundEvent = allEventsData.find(e => e.id === eventId);
+        setEvent(foundEvent || null);
+      }
+    } catch (error) {
+      console.error('Error loading event:', error);
+      // Fall back to sample data on error
+      const foundEvent = allEventsData.find(e => e.id === eventId);
+      setEvent(foundEvent || null);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const checkBookmarkStatus = async () => {
+    try {
+      if (!user?.id || !eventId) return;
+
+      const { data, error } = await supabase
+        .from('event_bookmarks')
+        .select('id')
+        .eq('user_id', user.id)
+        .eq('event_id', eventId)
+        .maybeSingle();
+
+      if (!error && data) {
+        setIsBookmarked(true);
+        setBookmarkId(data.id);
+      } else {
+        setIsBookmarked(false);
+        setBookmarkId(null);
+      }
+    } catch (error) {
+      console.error('Error checking bookmark status:', error);
+    }
+  };
+
+  const toggleBookmark = async () => {
+    try {
+      if (!user?.id) {
+        Alert.alert('Login Required', 'Please login to save events');
+        return;
+      }
+
+      if (isBookmarked && bookmarkId) {
+        // Remove bookmark
+        const { error } = await supabase
+          .from('event_bookmarks')
+          .delete()
+          .eq('id', bookmarkId);
+
+        if (error) throw error;
+
+        setIsBookmarked(false);
+        setBookmarkId(null);
+        Alert.alert('Success', 'Event removed from saved');
+      } else {
+        // Add bookmark
+        const { data, error } = await supabase
+          .from('event_bookmarks')
+          .insert({
+            user_id: user.id,
+            event_id: eventId,
+          })
+          .select()
+          .single();
+
+        if (error) throw error;
+
+        setIsBookmarked(true);
+        setBookmarkId(data.id);
+        Alert.alert('Success', 'Event saved successfully');
+      }
+    } catch (error: any) {
+      console.error('Error toggling bookmark:', error);
+      Alert.alert('Error', 'Failed to update bookmark');
+    }
+  };
+
+  if (loading) {
+    return (
+      <View style={[styles.container, styles.centered]}>
+        <ActivityIndicator size="large" color="#4169E1" />
+        <Text style={styles.loadingText}>Loading event...</Text>
+      </View>
+    );
+  }
 
   if (!event) {
     return (
-      <View style={styles.container}>
-        <Text>Event not found</Text>
+      <View style={[styles.container, styles.centered]}>
+        <Text style={styles.notFoundText}>Event not found</Text>
+        <TouchableOpacity 
+          style={styles.backToEventsButton}
+          onPress={() => router.back()}
+        >
+          <Text style={styles.backToEventsText}>Go Back</Text>
+        </TouchableOpacity>
       </View>
     );
   }
 
   const handleRegister = () => {
-    Alert.alert(
-      'Register for Event',
-      `Would you like to register for ${event.title}?`,
-      [
-        { text: 'Cancel', style: 'cancel' },
-        { 
-          text: 'Register', 
-          onPress: () => Alert.alert('Success!', 'You have been registered for this event. Check your email for confirmation.')
-        }
-      ]
-    );
+    router.push({
+      pathname: '/event-registration/[id]',
+      params: { id: eventId }
+    });
   };
 
   const handleShare = () => {
@@ -481,16 +683,20 @@ export default function EventDetailScreen() {
     }
   };
 
-  const toggleBookmark = () => {
-    setIsBookmarked(!isBookmarked);
-    Alert.alert(
-      isBookmarked ? 'Removed from Bookmarks' : 'Added to Bookmarks',
-      isBookmarked ? 'Event removed from your bookmarks' : 'Event saved to your bookmarks'
-    );
-  };
-
   const toggleInterest = () => {
-    setIsInterested(!isInterested);
+    const newInterestState = !isInterested;
+    setIsInterested(newInterestState);
+    
+    // Platform-specific success message
+    const isWeb = typeof window !== 'undefined';
+    
+    if (newInterestState) {
+      if (isWeb) {
+        window.alert('Great! We\'ll notify you about updates for this event.');
+      } else {
+        Alert.alert('Success', 'Great! We\'ll notify you about updates for this event.');
+      }
+    }
   };
 
   const attendancePercentage = event.capacity && event.registered 
@@ -987,5 +1193,31 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontWeight: '700',
     color: '#fff',
+  },
+  centered: {
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  loadingText: {
+    marginTop: 16,
+    fontSize: 16,
+    color: '#666',
+  },
+  notFoundText: {
+    fontSize: 18,
+    fontWeight: '600',
+    color: '#666',
+    marginBottom: 24,
+  },
+  backToEventsButton: {
+    paddingHorizontal: 24,
+    paddingVertical: 12,
+    backgroundColor: '#4169E1',
+    borderRadius: 12,
+  },
+  backToEventsText: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#FFFFFF',
   },
 });

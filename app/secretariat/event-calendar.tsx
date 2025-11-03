@@ -34,7 +34,7 @@ interface Event {
 
 const FILTER_CATEGORIES = ['All Events', 'Academic', 'Social', 'Sports', 'Cultural', 'Meeting', 'Ceremony'];
 
-const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+const MONTHS = ['All Months', 'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 
 // Sample Events Data
 const SAMPLE_EVENTS: Event[] = [
@@ -337,30 +337,60 @@ export default function EventCalendarScreen() {
   const router = useRouter();
   const { user } = useAuth();
   const [events, setEvents] = useState<Event[]>([]);
+  const [parsedUserEvents, setParsedUserEvents] = useState<Event[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedCategory, setSelectedCategory] = useState('All Events');
-  const [selectedMonth, setSelectedMonth] = useState<number>(new Date().getMonth());
-  const [selectedYear, setSelectedYear] = useState<number>(new Date().getFullYear());
+  const [selectedMonth, setSelectedMonth] = useState<number>(-1); // -1 = All Months, 0-11 = specific months
+  const [selectedYear, setSelectedYear] = useState<number>(-1); // -1 = All Years, else specific year
   const [searchQuery, setSearchQuery] = useState('');
   const [showFilters, setShowFilters] = useState(false);
   const [myEventsCount, setMyEventsCount] = useState(0);
   const [savedEventsCount, setSavedEventsCount] = useState(0);
+  const [newEventsCount, setNewEventsCount] = useState(0);
 
-  // Generate year options (current year ± 5 years)
+  // Generate year options: All Years + (current year ± 5 years)
   const currentYear = new Date().getFullYear();
-  const YEARS = Array.from({ length: 11 }, (_, i) => currentYear - 5 + i);
+  const YEARS = [-1, ...Array.from({ length: 11 }, (_, i) => currentYear - 5 + i)];
 
   useEffect(() => {
     loadEvents();
     loadMyCounts();
+    loadNewEventsCount();
   }, []);
 
   useFocusEffect(
     useCallback(() => {
-      loadEvents();
-      loadMyCounts();
-    }, [])
+      // Only load if user is available
+      if (user?.id) {
+        loadEvents();
+        loadMyCounts();
+        loadNewEventsCount();
+      }
+    }, [user?.id])
   );
+
+  const loadNewEventsCount = async () => {
+    try {
+      if (!user?.id) return;
+      
+      // Get events from last 7 days that were posted by others
+      const sevenDaysAgo = new Date();
+      sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+      
+      const { data, error } = await supabase
+        .from('secretariat_events')
+        .select('id')
+        .neq('user_id', user.id)
+        .eq('is_approved', true)
+        .gte('created_at', sevenDaysAgo.toISOString());
+
+      if (!error && data) {
+        setNewEventsCount(data.length);
+      }
+    } catch (error) {
+      console.error('Error loading new events count:', error);
+    }
+  };
 
   const loadMyCounts = async () => {
     if (!user) return;
@@ -368,16 +398,15 @@ export default function EventCalendarScreen() {
     try {
       // Count my created events
       const { data: myEvents, error: myError } = await supabase
-        .from('products_services')
+        .from('secretariat_events')
         .select('id', { count: 'exact' })
-        .eq('user_id', user.id)
-        .like('category_name', 'Event - %');
+        .eq('user_id', user.id);
 
       if (!myError && myEvents) {
         setMyEventsCount(myEvents.length);
       }
 
-      // Count saved events (bookmarks) - you'll need to create this table
+      // Count saved events (bookmarks)
       const { data: savedEvents, error: savedError } = await supabase
         .from('event_bookmarks')
         .select('id', { count: 'exact' })
@@ -395,56 +424,65 @@ export default function EventCalendarScreen() {
     try {
       setLoading(true);
       
-      // Load events from Supabase
+      console.log('[Event Calendar] Loading events for user:', user?.id);
+      
+      // Don't query if user is not loaded yet
+      if (!user?.id) {
+        console.log('[Event Calendar] User not loaded yet, skipping query');
+        setEvents(SAMPLE_EVENTS);
+        setParsedUserEvents([]);
+        setLoading(false);
+        return;
+      }
+      
+      // Load events from Supabase - show approved events AND user's own events
       const { data, error } = await supabase
-        .from('products_services')
+        .from('secretariat_events')
         .select('*')
-        .like('category_name', 'Event - %')
-        .eq('is_approved', true)
-        .order('created_at', { ascending: true });
+        .or(`is_approved.eq.true,user_id.eq.${user.id}`)
+        .order('created_at', { ascending: false});
+
+      console.log('[Event Calendar] Query result:', { data, error, count: data?.length });
 
       let parsedEvents: Event[] = [];
+      let userEvents: Event[] = [];
 
       if (!error && data && data.length > 0) {
         parsedEvents = data.map(event => {
-          try {
-            const eventData = JSON.parse(event.description);
-            return {
-              id: event.id,
-              title: event.title,
-              description: eventData.description || '',
-              date: eventData.date || 'TBA',
-              time: eventData.time || 'TBA',
-              location: eventData.location || 'TBA',
-              organizer: eventData.organizer || 'OAA Secretariat',
-              category: eventData.category || 'General',
-              attendees: Math.floor(Math.random() * 100) + 20,
-              capacity: eventData.capacity || '',
-              created_at: event.created_at,
-            };
-          } catch {
-            return {
-              id: event.id,
-              title: event.title,
-              description: '',
-              date: 'TBA',
-              time: 'TBA',
-              location: 'TBA',
-              organizer: 'OAA Secretariat',
-              category: 'General',
-              created_at: event.created_at,
-            };
+          const parsedEvent = {
+            id: event.id,
+            title: event.title,
+            description: event.description || '',
+            date: event.date || 'TBA',
+            time: event.time || 'TBA',
+            location: event.location || 'TBA',
+            organizer: event.organizer || 'OAA Secretariat',
+            category: event.category || 'General',
+            attendees: event.view_count || 0,
+            capacity: event.capacity ? event.capacity.toString() : '',
+            created_at: event.created_at,
+          };
+          
+          // Track user's own events separately
+          if (event.user_id === user.id) {
+            userEvents.push(parsedEvent);
           }
+          
+          return parsedEvent;
         });
       }
 
       // Combine with sample events
       const allEvents = [...SAMPLE_EVENTS, ...parsedEvents];
       setEvents(allEvents);
+      setParsedUserEvents(userEvents);
+      
+      console.log('[Event Calendar] User events count:', userEvents.length);
     } catch (error) {
       console.error('Error loading events:', error);
       // Fall back to sample events on error
       setEvents(SAMPLE_EVENTS);
+      setParsedUserEvents([]);
     } finally {
       setLoading(false);
     }
@@ -471,7 +509,23 @@ export default function EventCalendarScreen() {
     // Filter by selected month and year
     filtered = filtered.filter(event => {
       if (event.date === 'TBA') return true;
+      
+      // If "All Months" and "All Years" are selected, show all events
+      if (selectedMonth === -1 && selectedYear === -1) return true;
+      
       const eventDate = new Date(event.date);
+      
+      // If "All Months" selected but specific year, filter by year only
+      if (selectedMonth === -1 && selectedYear !== -1) {
+        return eventDate.getFullYear() === selectedYear;
+      }
+      
+      // If "All Years" selected but specific month, filter by month only
+      if (selectedMonth !== -1 && selectedYear === -1) {
+        return eventDate.getMonth() === selectedMonth;
+      }
+      
+      // Both month and year are specific
       return eventDate.getMonth() === selectedMonth && eventDate.getFullYear() === selectedYear;
     });
 
@@ -553,28 +607,41 @@ export default function EventCalendarScreen() {
             onPress={() => router.push('/secretariat/event-notifications' as any)}
           >
             <Bell size={24} color="#FFFFFF" />
-            <View style={styles.notificationDot} />
+            {newEventsCount > 0 && (
+              <View style={styles.notificationBadge}>
+                <Text style={styles.notificationBadgeText}>{newEventsCount}</Text>
+              </View>
+            )}
           </TouchableOpacity>
         </View>
 
         {/* Stats Bar */}
         <View style={styles.statsBar}>
-          <View style={styles.statItem}>
+          <TouchableOpacity 
+            style={styles.statItem}
+            onPress={() => router.push('/secretariat/all-events' as any)}
+          >
             <Text style={styles.statNumber}>{events.length}</Text>
             <Text style={styles.statLabel}>Total Events</Text>
-          </View>
+          </TouchableOpacity>
           <View style={styles.statDivider} />
-          <View style={styles.statItem}>
+          <TouchableOpacity 
+            style={styles.statItem}
+            onPress={() => router.push('/secretariat/this-month-events' as any)}
+          >
             <Text style={styles.statNumber}>{filteredEvents.length}</Text>
             <Text style={styles.statLabel}>This Month</Text>
-          </View>
+          </TouchableOpacity>
           <View style={styles.statDivider} />
-          <View style={styles.statItem}>
+          <TouchableOpacity 
+            style={styles.statItem}
+            onPress={() => router.push('/secretariat/upcoming-events' as any)}
+          >
             <Text style={styles.statNumber}>
               {events.filter(e => new Date(e.date) > new Date()).length}
             </Text>
             <Text style={styles.statLabel}>Upcoming</Text>
-          </View>
+          </TouchableOpacity>
         </View>
       </LinearGradient>
 
@@ -602,11 +669,6 @@ export default function EventCalendarScreen() {
           <View style={styles.quickActionOutline}>
             <Edit size={20} color="#4169E1" />
             <Text style={styles.quickActionOutlineText}>My Events</Text>
-            {myEventsCount > 0 && (
-              <View style={styles.countBadge}>
-                <Text style={styles.countBadgeText}>{myEventsCount}</Text>
-              </View>
-            )}
           </View>
         </TouchableOpacity>
 
@@ -617,11 +679,6 @@ export default function EventCalendarScreen() {
           <View style={styles.quickActionOutline}>
             <Bookmark size={20} color="#4169E1" />
             <Text style={styles.quickActionOutlineText}>Saved</Text>
-            {savedEventsCount > 0 && (
-              <View style={styles.countBadge}>
-                <Text style={styles.countBadgeText}>{savedEventsCount}</Text>
-              </View>
-            )}
           </View>
         </TouchableOpacity>
       </View>
@@ -661,23 +718,26 @@ export default function EventCalendarScreen() {
               showsHorizontalScrollIndicator={false}
               contentContainerStyle={styles.monthScrollContent}
             >
-              {MONTHS.map((month, index) => (
-                <TouchableOpacity
-                  key={month}
-                  style={[
-                    styles.monthButton,
-                    selectedMonth === index && styles.monthButtonActive
-                  ]}
-                  onPress={() => setSelectedMonth(index)}
-                >
-                  <Text style={[
-                    styles.monthButtonText,
-                    selectedMonth === index && styles.monthButtonTextActive
-                  ]}>
-                    {month}
-                  </Text>
-                </TouchableOpacity>
-              ))}
+              {MONTHS.map((month, index) => {
+                const monthValue = index - 1; // -1 for "All Months", 0-11 for Jan-Dec
+                return (
+                  <TouchableOpacity
+                    key={month}
+                    style={[
+                      styles.monthButton,
+                      selectedMonth === monthValue && styles.monthButtonActive
+                    ]}
+                    onPress={() => setSelectedMonth(monthValue)}
+                  >
+                    <Text style={[
+                      styles.monthButtonText,
+                      selectedMonth === monthValue && styles.monthButtonTextActive
+                    ]}>
+                      {month}
+                    </Text>
+                  </TouchableOpacity>
+                );
+              })}
             </ScrollView>
           </View>
 
@@ -701,7 +761,7 @@ export default function EventCalendarScreen() {
                     styles.filterButtonText,
                     selectedYear === year && styles.filterButtonTextActive
                   ]}>
-                    {year}
+                    {year === -1 ? 'All Years' : year}
                   </Text>
                 </TouchableOpacity>
               ))}
@@ -748,7 +808,7 @@ export default function EventCalendarScreen() {
             <CalendarIcon size={64} color="#CCCCCC" />
             <Text style={styles.emptyTitle}>No Events Found</Text>
             <Text style={styles.emptyText}>
-              No events scheduled for {MONTHS[selectedMonth]} {selectedYear} in the {selectedCategory.toLowerCase()} category.
+              No events found {selectedMonth === -1 ? '' : `in ${MONTHS[selectedMonth + 1]}`} {selectedYear === -1 ? '' : selectedYear} {selectedCategory !== 'All Events' ? `in the ${selectedCategory.toLowerCase()} category` : ''}.
             </Text>
           </View>
         ) : (
@@ -781,6 +841,10 @@ export default function EventCalendarScreen() {
                 <Text style={styles.eventTitle} numberOfLines={2}>{event.title}</Text>
 
                 <View style={styles.eventDetails}>
+                  <View style={styles.eventDetailRow}>
+                    <CalendarIcon size={16} color="#666" />
+                    <Text style={styles.eventDetailText}>{event.date}</Text>
+                  </View>
                   <View style={styles.eventDetailRow}>
                     <Clock size={16} color="#666" />
                     <Text style={styles.eventDetailText}>{event.time}</Text>
@@ -861,6 +925,23 @@ const styles = StyleSheet.create({
   notificationButton: {
     padding: 8,
     position: 'relative',
+  },
+  notificationBadge: {
+    position: 'absolute',
+    top: 4,
+    right: 4,
+    minWidth: 18,
+    height: 18,
+    borderRadius: 9,
+    backgroundColor: '#EF4444',
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 4,
+  },
+  notificationBadgeText: {
+    fontSize: 10,
+    fontWeight: '700',
+    color: '#FFFFFF',
   },
   notificationDot: {
     position: 'absolute',

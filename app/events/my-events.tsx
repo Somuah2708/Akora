@@ -39,14 +39,25 @@ export default function MyEventsScreen() {
     try {
       setLoading(true);
       const { data, error } = await supabase
-        .from('products_services')
+        .from('secretariat_events')
         .select('*')
         .eq('user_id', user?.id)
-        .like('category_name', 'Event - %')
         .order('created_at', { ascending: false });
 
       if (error) throw error;
-      setEvents(data || []);
+      
+      // Map to match interface
+      const mappedEvents = (data || []).map(event => ({
+        id: event.id,
+        title: event.title,
+        description: event.description,
+        image_url: event.image_url,
+        category_name: event.category,
+        created_at: event.created_at,
+        is_approved: event.is_approved,
+      }));
+      
+      setEvents(mappedEvents);
     } catch (error: any) {
       console.error('Error loading events:', error);
       Alert.alert('Error', 'Failed to load your events');
@@ -67,7 +78,7 @@ export default function MyEventsScreen() {
           onPress: async () => {
             try {
               const { error } = await supabase
-                .from('products_services')
+                .from('secretariat_events')
                 .delete()
                 .eq('id', eventId);
 
