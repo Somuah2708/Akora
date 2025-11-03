@@ -1,8 +1,8 @@
-import { View, Text, StyleSheet, ScrollView, Image, TouchableOpacity, Alert } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, Image, TouchableOpacity, Alert, Modal } from 'react-native';
 import { useFonts, Inter_400Regular, Inter_600SemiBold, Inter_700Bold } from '@expo-google-fonts/inter';
 import { useEffect, useState } from 'react';
 import { SplashScreen, useRouter, useFocusEffect } from 'expo-router';
-import { ArrowLeft, Edit2, Trash2, Package, PlusCircle } from 'lucide-react-native';
+import { ArrowLeft, Edit2, Trash2, Package, PlusCircle, AlertCircle, X } from 'lucide-react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useCallback } from 'react';
@@ -13,6 +13,8 @@ export default function MyPostedItemsScreen() {
   const router = useRouter();
   const [postedItems, setPostedItems] = useState<any[]>([]);
   const [currency, setCurrency] = useState<'USD' | 'GHS'>('USD');
+  const [deleteModalVisible, setDeleteModalVisible] = useState(false);
+  const [itemToDelete, setItemToDelete] = useState<{id: string, name: string} | null>(null);
 
   const [fontsLoaded] = useFonts({
     'Inter-Regular': Inter_400Regular,
@@ -22,9 +24,17 @@ export default function MyPostedItemsScreen() {
 
   const loadPostedItems = async () => {
     try {
+      console.log('Loading posted items...');
       const storedItems = await AsyncStorage.getItem('secretariat_posted_items');
+      console.log('Raw stored items:', storedItems);
       if (storedItems) {
-        setPostedItems(JSON.parse(storedItems));
+        const items = JSON.parse(storedItems);
+        console.log('Parsed items count:', items.length);
+        console.log('Items:', items);
+        setPostedItems(items);
+      } else {
+        console.log('No items found in storage');
+        setPostedItems([]);
       }
     } catch (error) {
       console.error('Error loading posted items:', error);
@@ -52,31 +62,28 @@ export default function MyPostedItemsScreen() {
   }
 
   const handleDelete = async (itemId: string, itemName: string) => {
-    Alert.alert(
-      'Delete Item',
-      `Are you sure you want to delete "${itemName}"? This action cannot be undone.`,
-      [
-        {
-          text: 'Cancel',
-          style: 'cancel',
-        },
-        {
-          text: 'Delete',
-          style: 'destructive',
-          onPress: async () => {
-            try {
-              const updatedItems = postedItems.filter(item => item.id !== itemId);
-              await AsyncStorage.setItem('secretariat_posted_items', JSON.stringify(updatedItems));
-              setPostedItems(updatedItems);
-              Alert.alert('Success', 'Item deleted successfully');
-            } catch (error) {
-              Alert.alert('Error', 'Failed to delete item');
-              console.error('Error deleting item:', error);
-            }
-          },
-        },
-      ]
-    );
+    console.log('Delete button clicked for:', itemId, itemName);
+    setItemToDelete({ id: itemId, name: itemName });
+    setDeleteModalVisible(true);
+  };
+
+  const confirmDelete = async () => {
+    if (!itemToDelete) return;
+    
+    try {
+      console.log('Deleting item:', itemToDelete.id);
+      console.log('Current items:', postedItems.length);
+      const updatedItems = postedItems.filter(item => item.id !== itemToDelete.id);
+      console.log('Updated items:', updatedItems.length);
+      await AsyncStorage.setItem('secretariat_posted_items', JSON.stringify(updatedItems));
+      setPostedItems(updatedItems);
+      console.log('Item deleted successfully');
+      setDeleteModalVisible(false);
+      setItemToDelete(null);
+    } catch (error) {
+      console.error('Error deleting item:', error);
+      alert('Failed to delete item');
+    }
   };
 
   const handleEdit = (item: any) => {
@@ -88,6 +95,46 @@ export default function MyPostedItemsScreen() {
 
   return (
     <View style={styles.container}>
+      {/* Delete Confirmation Modal */}
+      <Modal
+        visible={deleteModalVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setDeleteModalVisible(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <View style={styles.modalHeader}>
+              <AlertCircle size={48} color="#EF4444" />
+              <TouchableOpacity 
+                style={styles.modalClose}
+                onPress={() => setDeleteModalVisible(false)}
+              >
+                <X size={24} color="#666" />
+              </TouchableOpacity>
+            </View>
+            <Text style={styles.modalTitle}>Delete Item</Text>
+            <Text style={styles.modalMessage}>
+              Are you sure you want to delete "{itemToDelete?.name}"? This action cannot be undone.
+            </Text>
+            <View style={styles.modalActions}>
+              <TouchableOpacity 
+                style={styles.modalCancelButton}
+                onPress={() => setDeleteModalVisible(false)}
+              >
+                <Text style={styles.modalCancelText}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity 
+                style={styles.modalDeleteButton}
+                onPress={confirmDelete}
+              >
+                <Text style={styles.modalDeleteText}>Delete</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
       <LinearGradient
         colors={['#10B981', '#059669']}
         start={{ x: 0, y: 0 }}
@@ -154,13 +201,30 @@ export default function MyPostedItemsScreen() {
           </View>
         ) : (
           <View style={styles.itemsGrid}>
-            {postedItems.map((item) => (
-              <View key={item.id} style={styles.itemCard}>
-                <Image 
-                  source={{ uri: item.images[0] }} 
-                  style={styles.itemImage} 
-                />
-                <View style={styles.itemContent}>
+            {postedItems.map((item) => {
+              console.log('Rendering item:', item.id, 'Image:', item.images?.[0] || item.image);
+              const imageUri = item.images?.[0] || item.image;
+              const isHttpImage = imageUri?.startsWith('http');
+              
+              return (
+                <View key={item.id} style={styles.itemCard}>
+                  {isHttpImage ? (
+                    <Image 
+                      source={{ uri: imageUri }} 
+                      style={styles.itemImage}
+                      onError={(error) => console.log('Image load error:', error.nativeEvent.error)}
+                      onLoad={() => console.log('Image loaded successfully for item:', item.id)}
+                    />
+                  ) : (
+                    <View style={[styles.itemImage, styles.imagePlaceholder]}>
+                      <Package size={64} color="#CCCCCC" />
+                      <Text style={styles.placeholderText}>Image Preview</Text>
+                      <Text style={styles.placeholderSubtext}>
+                        (Web preview unavailable)
+                      </Text>
+                    </View>
+                  )}
+                  <View style={styles.itemContent}>
                   <Text style={styles.itemName} numberOfLines={2}>{item.name}</Text>
                   <Text style={styles.itemCategory}>{item.category}</Text>
                   <Text style={styles.itemDescription} numberOfLines={2}>{item.description}</Text>
@@ -187,14 +251,22 @@ export default function MyPostedItemsScreen() {
                   <View style={styles.itemActions}>
                     <TouchableOpacity 
                       style={styles.editButton}
-                      onPress={() => handleEdit(item)}
+                      onPress={() => {
+                        console.log('Edit button pressed for item:', item.id);
+                        handleEdit(item);
+                      }}
+                      activeOpacity={0.7}
                     >
                       <Edit2 size={16} color="#10B981" />
                       <Text style={styles.editButtonText}>Edit</Text>
                     </TouchableOpacity>
                     <TouchableOpacity 
                       style={styles.deleteButton}
-                      onPress={() => handleDelete(item.id, item.name)}
+                      onPress={() => {
+                        console.log('Delete button pressed for item:', item.id, item.name);
+                        handleDelete(item.id, item.name);
+                      }}
+                      activeOpacity={0.7}
                     >
                       <Trash2 size={16} color="#EF4444" />
                       <Text style={styles.deleteButtonText}>Delete</Text>
@@ -202,7 +274,8 @@ export default function MyPostedItemsScreen() {
                   </View>
                 </View>
               </View>
-            ))}
+              );
+            })}
           </View>
         )}
       </ScrollView>
@@ -340,6 +413,23 @@ const styles = StyleSheet.create({
     height: 200,
     resizeMode: 'cover',
   },
+  imagePlaceholder: {
+    backgroundColor: '#F3F4F6',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  placeholderText: {
+    fontSize: 16,
+    fontFamily: 'Inter-SemiBold',
+    color: '#999',
+    marginTop: 12,
+  },
+  placeholderSubtext: {
+    fontSize: 12,
+    fontFamily: 'Inter-Regular',
+    color: '#BBB',
+    marginTop: 4,
+  },
   itemContent: {
     padding: 16,
   },
@@ -445,5 +535,79 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontFamily: 'Inter-Bold',
     color: '#EF4444',
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 20,
+  },
+  modalContent: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 20,
+    padding: 24,
+    width: '100%',
+    maxWidth: 400,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 12,
+    elevation: 8,
+  },
+  modalHeader: {
+    alignItems: 'center',
+    marginBottom: 16,
+    position: 'relative',
+  },
+  modalClose: {
+    position: 'absolute',
+    top: -8,
+    right: -8,
+    padding: 8,
+  },
+  modalTitle: {
+    fontSize: 22,
+    fontFamily: 'Inter-Bold',
+    color: '#1A1A1A',
+    marginTop: 12,
+    marginBottom: 8,
+    textAlign: 'center',
+  },
+  modalMessage: {
+    fontSize: 15,
+    fontFamily: 'Inter-Regular',
+    color: '#666',
+    lineHeight: 22,
+    textAlign: 'center',
+    marginBottom: 24,
+  },
+  modalActions: {
+    flexDirection: 'row',
+    gap: 12,
+  },
+  modalCancelButton: {
+    flex: 1,
+    paddingVertical: 14,
+    borderRadius: 12,
+    backgroundColor: '#F3F4F6',
+    alignItems: 'center',
+  },
+  modalCancelText: {
+    fontSize: 16,
+    fontFamily: 'Inter-SemiBold',
+    color: '#666',
+  },
+  modalDeleteButton: {
+    flex: 1,
+    paddingVertical: 14,
+    borderRadius: 12,
+    backgroundColor: '#EF4444',
+    alignItems: 'center',
+  },
+  modalDeleteText: {
+    fontSize: 16,
+    fontFamily: 'Inter-SemiBold',
+    color: '#FFFFFF',
   },
 });

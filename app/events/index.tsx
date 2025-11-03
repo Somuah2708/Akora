@@ -35,67 +35,103 @@ export default function EventsScreen() {
 
   const featuredEvents: Event[] = [
     {
-      id: '1',
-      title: 'Annual Alumni Gala',
-      date: '2024-03-15',
-      time: '7:00 PM',
-      location: 'Grand Ballroom, Hotel Excellence',
-      description: 'Join us for an evening of networking, celebration, and reconnection with fellow alumni.',
-      organizer: 'Alumni Association',
-      imageUrl: 'https://images.pexels.com/photos/1190298/pexels-photo-1190298.jpeg',
+      id: 'sample-1',
+      title: 'Annual Alumni Homecoming 2025',
+      date: '2025-11-15',
+      time: '10:00 AM',
+      location: 'Main Campus Auditorium, Achimota',
+      description: 'Join us for the biggest reunion of the year! Reconnect with old friends, network with fellow alumni, and celebrate our shared legacy.',
+      organizer: 'OAA Secretariat',
+      imageUrl: 'https://images.unsplash.com/photo-1511795409834-ef04bbd61622?w=800&auto=format&fit=crop&q=60',
       isFeatured: true,
       category: 'Social'
     },
     {
-      id: '2',
-      title: 'Career Development Workshop',
-      date: '2024-03-20',
-      time: '2:00 PM',
-      location: 'Conference Center A',
-      description: 'Learn essential skills for career advancement and professional growth.',
-      organizer: 'Professional Development Committee',
-      imageUrl: 'https://images.pexels.com/photos/3184465/pexels-photo-3184465.jpeg',
+      id: 'sample-8',
+      title: 'End of Year Gala Dinner 2025',
+      date: '2025-12-20',
+      time: '7:00 PM',
+      location: 'Kempinski Hotel Gold Coast City',
+      description: 'A prestigious black-tie event to celebrate achievements and honor outstanding alumni. Featuring live music, awards, and gourmet dining.',
+      organizer: 'OAA Events Committee',
+      imageUrl: 'https://images.unsplash.com/photo-1519167758481-83f29da8c7d8?w=800&auto=format&fit=crop&q=60',
       isFeatured: true,
-      category: 'Professional'
+      category: 'Social'
+    },
+    {
+      id: 'sample-6',
+      title: 'Founder\'s Day Celebration 2025',
+      date: '2025-12-05',
+      time: '11:00 AM',
+      location: 'School Chapel and Main Grounds',
+      description: 'Honor the founding fathers and mothers of our institution. A solemn ceremony followed by grand celebration.',
+      organizer: 'OAA Secretariat',
+      imageUrl: 'https://images.unsplash.com/photo-1492684223066-81342ee5ff30?w=800&auto=format&fit=crop&q=60',
+      isFeatured: true,
+      category: 'Ceremony'
     }
   ];
 
   const upcomingEvents: Event[] = [
     {
-      id: '3',
-      title: 'Monthly Networking Mixer',
-      date: '2024-03-25',
-      time: '6:00 PM',
-      location: 'Sky Lounge, Downtown',
-      description: 'Connect with professionals from various industries in a relaxed setting.',
-      organizer: 'Networking Committee',
-      imageUrl: 'https://images.pexels.com/photos/1181406/pexels-photo-1181406.jpeg',
+      id: 'sample-2',
+      title: 'Career Development Workshop: Digital Skills',
+      date: '2025-11-08',
+      time: '2:00 PM',
+      location: 'Technology Hub, East Legon',
+      description: 'Enhance your career prospects with cutting-edge digital skills. Learn about AI, data analytics, and digital marketing from industry experts.',
+      organizer: 'Alumni Career Services',
+      imageUrl: 'https://images.unsplash.com/photo-1552664730-d307ca884978?w=800&auto=format&fit=crop&q=60',
       isFeatured: false,
-      category: 'Networking'
+      category: 'Academic'
     },
     {
-      id: '4',
-      title: 'Tech Innovation Summit',
-      date: '2024-04-02',
+      id: 'sample-5',
+      title: 'Board of Directors Meeting - Q4 2025',
+      date: '2025-11-12',
       time: '9:00 AM',
-      location: 'Innovation Hub',
-      description: 'Explore the latest trends in technology and innovation.',
-      organizer: 'Tech Committee',
-      imageUrl: 'https://images.pexels.com/photos/3184339/pexels-photo-3184339.jpeg',
+      location: 'Executive Boardroom, Achimota',
+      description: 'Quarterly board meeting to discuss strategic initiatives, financial reports, and upcoming projects for the alumni association.',
+      organizer: 'OAA Board of Directors',
+      imageUrl: 'https://images.unsplash.com/photo-1556761175-b413da4baf72?w=800&auto=format&fit=crop&q=60',
       isFeatured: false,
-      category: 'Technology'
+      category: 'Meeting'
     },
     {
-      id: '5',
-      title: 'Community Service Day',
-      date: '2024-04-10',
-      time: '8:00 AM',
-      location: 'Community Center',
-      description: 'Give back to the community through various volunteer activities.',
-      organizer: 'Community Service Committee',
-      imageUrl: 'https://images.pexels.com/photos/6646918/pexels-photo-6646918.jpeg',
+      id: 'sample-7',
+      title: 'Youth Mentorship Program Launch',
+      date: '2025-11-18',
+      time: '3:00 PM',
+      location: 'Student Center Auditorium',
+      description: 'Launch of the new mentorship initiative connecting alumni with current students. Be part of shaping the next generation.',
+      organizer: 'Alumni Mentorship Committee',
+      imageUrl: 'https://images.unsplash.com/photo-1523580494863-6f3031224c94?w=800&auto=format&fit=crop&q=60',
       isFeatured: false,
-      category: 'Community'
+      category: 'Academic'
+    },
+    {
+      id: 'sample-3',
+      title: 'Annual Inter-Alumni Sports Festival',
+      date: '2025-11-22',
+      time: '8:00 AM',
+      location: 'School Sports Complex',
+      description: 'Get ready for an action-packed day of sports! Football, basketball, volleyball, and more. Compete for the prestigious OAA Trophy.',
+      organizer: 'OAA Sports Committee',
+      imageUrl: 'https://images.unsplash.com/photo-1461896836934-ffe607ba8211?w=800&auto=format&fit=crop&q=60',
+      isFeatured: false,
+      category: 'Sports'
+    },
+    {
+      id: 'sample-4',
+      title: 'Cultural Night: Celebrating Our Heritage',
+      date: '2025-11-29',
+      time: '6:00 PM',
+      location: 'Grand Hall, Achimota',
+      description: 'An evening of traditional music, dance, and cuisine. Experience the rich cultural diversity of our alumni community.',
+      organizer: 'Cultural Affairs Committee',
+      imageUrl: 'https://images.unsplash.com/photo-1533174072545-7a4b6ad7a6c3?w=800&auto=format&fit=crop&q=60',
+      isFeatured: false,
+      category: 'Cultural'
     }
   ];
 
@@ -162,7 +198,11 @@ export default function EventsScreen() {
   };
 
   const renderEventCard = (event: Event) => (
-    <TouchableOpacity key={event.id} style={styles.eventCard}>
+    <TouchableOpacity 
+      key={event.id} 
+      style={styles.eventCard}
+      onPress={() => router.push(`/events/${event.id}` as any)}
+    >
       <Image source={{ uri: event.imageUrl }} style={styles.eventImage} />
       <View style={styles.eventContent}>
         <Text style={styles.eventTitle}>{event.title}</Text>

@@ -1,5 +1,4 @@
 import { View, Text, StyleSheet, ScrollView, Image, TextInput, Dimensions, TouchableOpacity } from 'react-native';
-import { Plus } from 'lucide-react-native';
 import { useFonts, Inter_400Regular, Inter_600SemiBold } from '@expo-google-fonts/inter';
 import { useEffect } from 'react';
 import { SplashScreen, useRouter } from 'expo-router';
@@ -231,37 +230,11 @@ export default function HubScreen() {
           </View>
         </View>
       </ScrollView>
-
-      {/* Floating Add Button */}
-      <TouchableOpacity
-        style={styles.addButton}
-        onPress={() => router.push('/create-post')}
-        activeOpacity={0.8}
-      >
-        <Plus size={28} color="#fff" />
-      </TouchableOpacity>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  addButton: {
-    position: 'absolute',
-    right: 24,
-    bottom: 36,
-    backgroundColor: '#007AFF',
-    borderRadius: 32,
-    width: 56,
-    height: 56,
-    alignItems: 'center',
-    justifyContent: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.2,
-    shadowRadius: 4,
-    elevation: 5,
-    zIndex: 100,
-  },
   container: {
     flex: 1,
     backgroundColor: '#FFFFFF',

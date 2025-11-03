@@ -111,8 +111,8 @@ export default function CartScreen() {
     return calculateSubtotal() + calculateTax();
   };
 
-  // Currency conversion rate (approximately 12 GHS = 1 USD)
-  const EXCHANGE_RATE = 12;
+  // Currency conversion rate (approximately 16.3 GHS = 1 USD as of November 2025)
+  const EXCHANGE_RATE = 16.3;
 
   const convertPrice = (price: number, fromCurrency: 'USD' | 'GHS', toCurrency: 'USD' | 'GHS') => {
     if (fromCurrency === toCurrency) return price;

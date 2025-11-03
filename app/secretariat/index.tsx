@@ -26,7 +26,7 @@ const QUICK_ACTIONS = [
     description: 'View upcoming events and activities',
     icon: Calendar,
     color: '#E4EAFF',
-    route: '/events',
+    route: '/secretariat/event-calendar',
   },
   {
     id: '3',
@@ -236,7 +236,7 @@ export default function SecretariatScreen() {
               <TouchableOpacity
                 key={action.id}
                 style={[styles.actionCard, { backgroundColor: action.color }]}
-                onPress={() => action.route && router.push(action.route)}
+                onPress={() => action.route && router.push(action.route as any)}
               >
                 <IconComponent size={24} color="#000000" strokeWidth={1.5} />
                 <Text style={styles.actionTitle}>{action.title}</Text>

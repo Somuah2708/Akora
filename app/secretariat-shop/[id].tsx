@@ -4,7 +4,8 @@ import { useEffect, useState } from 'react';
 import { SplashScreen, useRouter, useLocalSearchParams } from 'expo-router';
 import { ArrowLeft, ShoppingCart, Heart, Star, Package, Truck, Shield, Plus, Minus } from 'lucide-react-native';
 import { LinearGradient } from 'expo-linear-gradient';
-import { addToCart, getCartCount, resetCartViewedStatus } from '@/lib/secretariatCart';
+import { addToCart, getCartCount, resetCartViewedStatus, markCartAsViewed } from '@/lib/secretariatCart';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 SplashScreen.preventAutoHideAsync();
 
@@ -18,7 +19,7 @@ const SOUVENIR_PRODUCTS = [
     description: 'High-quality cotton polo with embroidered school logo',
     fullDescription: 'Premium quality cotton polo shirt featuring the official school emblem. Available in multiple sizes and colors. Perfect for casual wear or alumni events. Made from 100% breathable cotton for maximum comfort.',
     priceUSD: 35.99,
-    priceGHS: 430.00,
+    priceGHS: 395.63, // Updated: 1 USD = 10.99 GHS (1 GHS = 0.091 USD)
     image: 'https://images.unsplash.com/photo-1586363104862-3a5e2ab60d99?w=800&auto=format&fit=crop&q=60',
     images: [
       'https://images.unsplash.com/photo-1586363104862-3a5e2ab60d99?w=800&auto=format&fit=crop&q=60',
@@ -37,7 +38,7 @@ const SOUVENIR_PRODUCTS = [
     description: 'Ceramic mug featuring the school crest and motto',
     fullDescription: 'Beautiful ceramic mug with the school crest and motto printed in vibrant colors. Microwave and dishwasher safe. Perfect for your morning coffee or tea. Makes a great gift for fellow alumni.',
     priceUSD: 15.99,
-    priceGHS: 190.00,
+    priceGHS: 175.73, // Updated: 1 USD = 10.99 GHS (1 GHS = 0.091 USD)
     image: 'https://images.unsplash.com/photo-1514228742587-6b1558fcca3d?w=800&auto=format&fit=crop&q=60',
     images: [
       'https://images.unsplash.com/photo-1514228742587-6b1558fcca3d?w=800&auto=format&fit=crop&q=60',
@@ -55,7 +56,7 @@ const SOUVENIR_PRODUCTS = [
     description: 'Premium leather-bound notebook with embossed logo',
     fullDescription: 'Elegant leather-bound notebook with embossed school logo. Features 200 pages of high-quality paper suitable for writing or sketching. Perfect for meetings, journaling, or note-taking.',
     priceUSD: 24.99,
-    priceGHS: 300.00,
+    priceGHS: 274.63, // Updated: 1 USD = 10.99 GHS (1 GHS = 0.091 USD)
     image: 'https://images.unsplash.com/photo-1544816155-12df9643f363?w=800&auto=format&fit=crop&q=60',
     images: [
       'https://images.unsplash.com/photo-1544816155-12df9643f363?w=800&auto=format&fit=crop&q=60',
@@ -73,7 +74,7 @@ const SOUVENIR_PRODUCTS = [
     description: 'Special edition commemorating school milestones',
     fullDescription: 'Limited edition anniversary yearbook featuring the history and milestones of our prestigious institution. Includes historical photos, notable alumni profiles, and memorable events. A collector\'s item.',
     priceUSD: 49.99,
-    priceGHS: 600.00,
+    priceGHS: 549.39, // Updated: 1 USD = 10.99 GHS (1 GHS = 0.091 USD)
     image: 'https://images.unsplash.com/photo-1532012197267-da84d127e765?w=800&auto=format&fit=crop&q=60',
     images: [
       'https://images.unsplash.com/photo-1532012197267-da84d127e765?w=800&auto=format&fit=crop&q=60',
@@ -91,7 +92,7 @@ const SOUVENIR_PRODUCTS = [
     description: 'Elegant metal pin featuring the school crest',
     fullDescription: 'Beautifully crafted metal lapel pin featuring the official school crest. Perfect for formal occasions, reunions, or everyday wear. Comes with secure fastening mechanism.',
     priceUSD: 12.99,
-    priceGHS: 155.00,
+    priceGHS: 142.76, // Updated: 1 USD = 10.99 GHS (1 GHS = 0.091 USD)
     image: 'https://images.unsplash.com/photo-1601591219083-d9d11b6a8852?w=800&auto=format&fit=crop&q=60',
     images: [
       'https://images.unsplash.com/photo-1601591219083-d9d11b6a8852?w=800&auto=format&fit=crop&q=60',
@@ -109,7 +110,7 @@ const SOUVENIR_PRODUCTS = [
     description: 'Comfortable hoodie with school colors and logo',
     fullDescription: 'Cozy and stylish hoodie featuring school colors and embroidered logo. Made from soft cotton-polyester blend. Perfect for cooler weather and showing your school pride.',
     priceUSD: 45.99,
-    priceGHS: 550.00,
+    priceGHS: 505.43, // Updated: 1 USD = 10.99 GHS (1 GHS = 0.091 USD)
     image: 'https://images.unsplash.com/photo-1620799140408-edc6dcb6d633?w=800&auto=format&fit=crop&q=60',
     images: [
       'https://images.unsplash.com/photo-1620799140408-edc6dcb6d633?w=800&auto=format&fit=crop&q=60',
@@ -131,9 +132,10 @@ export default function ProductDetailScreen() {
   const [selectedImage, setSelectedImage] = useState(0);
   const [quantity, setQuantity] = useState(1);
   const [currency, setCurrency] = useState<'USD' | 'GHS'>('USD');
-  const [selectedSize, setSelectedSize] = useState('');
-  const [selectedColor, setSelectedColor] = useState('');
+  const [selectedSizes, setSelectedSizes] = useState<string[]>([]);
+  const [selectedColors, setSelectedColors] = useState<string[]>([]);
   const [cartCount, setCartCount] = useState(0);
+  const [product, setProduct] = useState<any>(null);
 
   const [fontsLoaded] = useFonts({
     'Inter-Regular': Inter_400Regular,
@@ -141,22 +143,68 @@ export default function ProductDetailScreen() {
     'Inter-Bold': Inter_700Bold,
   });
 
-  const product = SOUVENIR_PRODUCTS.find(p => p.id === productId);
+  // Load product from both sample products and posted items
+  const loadProduct = async () => {
+    // First check sample products
+    let foundProduct = SOUVENIR_PRODUCTS.find(p => p.id === productId);
+    
+    // If not found, check posted items
+    if (!foundProduct) {
+      const storedItems = await AsyncStorage.getItem('secretariat_posted_items');
+      if (storedItems) {
+        const postedItems = JSON.parse(storedItems);
+        foundProduct = postedItems.find((p: any) => p.id === productId);
+        
+        // Format posted item to match expected structure
+        if (foundProduct) {
+          foundProduct = {
+            ...foundProduct,
+            image: foundProduct.images?.[0] || foundProduct.image,
+            images: foundProduct.images || [foundProduct.image],
+            fullDescription: foundProduct.description,
+            rating: 0,
+            reviews: 0,
+            inStock: true,
+          };
+        }
+      }
+    }
+    
+    setProduct(foundProduct);
+    
+    if (foundProduct?.sizes && foundProduct.sizes.length > 0) {
+      setSelectedSizes([foundProduct.sizes[0]]);
+    }
+    if (foundProduct?.colors && foundProduct.colors.length > 0) {
+      setSelectedColors([foundProduct.colors[0]]);
+    }
+  };
 
   const loadCartCount = async () => {
     const count = await getCartCount();
     setCartCount(count);
   };
 
+  const toggleSize = (size: string) => {
+    setSelectedSizes(prev => 
+      prev.includes(size) 
+        ? prev.filter(s => s !== size)
+        : [...prev, size]
+    );
+  };
+
+  const toggleColor = (color: string) => {
+    setSelectedColors(prev => 
+      prev.includes(color) 
+        ? prev.filter(c => c !== color)
+        : [...prev, color]
+    );
+  };
+
   useEffect(() => {
+    loadProduct();
     loadCartCount();
-    if (product?.sizes && product.sizes.length > 0) {
-      setSelectedSize(product.sizes[0]);
-    }
-    if (product?.colors && product.colors.length > 0) {
-      setSelectedColor(product.colors[0]);
-    }
-  }, [product]);
+  }, [productId]);
 
   useEffect(() => {
     if (fontsLoaded) {
@@ -195,7 +243,13 @@ export default function ProductDetailScreen() {
         `${quantity} x ${product.name} has been added to your cart.`,
         [
           { text: 'Continue Shopping', style: 'cancel' },
-          { text: 'View Cart', onPress: () => router.push('/cart') },
+          { 
+            text: 'View Cart', 
+            onPress: async () => {
+              await markCartAsViewed();
+              router.push('/cart');
+            }
+          },
         ]
       );
     } catch (error) {
@@ -212,7 +266,10 @@ export default function ProductDetailScreen() {
         </TouchableOpacity>
         <TouchableOpacity
           style={styles.headerButton}
-          onPress={() => router.push('/cart')}
+          onPress={async () => {
+            await markCartAsViewed();
+            router.push('/cart');
+          }}
         >
           <ShoppingCart size={24} color="#000000" />
           {cartCount > 0 && (
@@ -226,17 +283,50 @@ export default function ProductDetailScreen() {
       <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
         {/* Image Gallery */}
         <View style={styles.imageSection}>
-          <Image
-            source={{ uri: product.images[selectedImage] }}
-            style={styles.mainImage}
-          />
+          <ScrollView
+            horizontal
+            pagingEnabled
+            showsHorizontalScrollIndicator={false}
+            onScroll={(event) => {
+              const slideIndex = Math.round(
+                event.nativeEvent.contentOffset.x / Dimensions.get('window').width
+              );
+              setSelectedImage(slideIndex);
+            }}
+            scrollEventThrottle={16}
+            style={styles.mainImageScroll}
+          >
+            {product.images.map((img: string, index: number) => (
+              <Image
+                key={index}
+                source={{ uri: img }}
+                style={styles.mainImage}
+              />
+            ))}
+          </ScrollView>
+          
+          {/* Pagination Dots */}
+          {product.images.length > 1 && (
+            <View style={styles.paginationDots}>
+              {product.images.map((_: any, index: number) => (
+                <View
+                  key={index}
+                  style={[
+                    styles.dot,
+                    selectedImage === index && styles.activeDot,
+                  ]}
+                />
+              ))}
+            </View>
+          )}
+          
           {product.images.length > 1 && (
             <ScrollView
               horizontal
               showsHorizontalScrollIndicator={false}
               style={styles.thumbnailScroll}
             >
-              {product.images.map((img, index) => (
+              {product.images.map((img: string, index: number) => (
                 <TouchableOpacity
                   key={index}
                   onPress={() => setSelectedImage(index)}
@@ -261,22 +351,31 @@ export default function ProductDetailScreen() {
 
           <Text style={styles.productName}>{product.name}</Text>
 
-          {/* Rating */}
-          <View style={styles.ratingRow}>
-            <View style={styles.stars}>
-              {[1, 2, 3, 4, 5].map((star) => (
-                <Star
-                  key={star}
-                  size={16}
-                  color="#FFC107"
-                  fill={star <= Math.floor(product.rating) ? '#FFC107' : 'none'}
-                />
-              ))}
+          {/* Rating - only show for products with ratings */}
+          {product.rating > 0 && (
+            <View style={styles.ratingRow}>
+              <View style={styles.stars}>
+                {[1, 2, 3, 4, 5].map((star) => (
+                  <Star
+                    key={star}
+                    size={16}
+                    color="#FFC107"
+                    fill={star <= Math.floor(product.rating) ? '#FFC107' : 'none'}
+                  />
+                ))}
+              </View>
+              <Text style={styles.ratingText}>
+                {product.rating} ({product.reviews} reviews)
+              </Text>
             </View>
-            <Text style={styles.ratingText}>
-              {product.rating} ({product.reviews} reviews)
-            </Text>
-          </View>
+          )}
+          
+          {/* User Posted Badge */}
+          {product.isUserPosted && (
+            <View style={styles.userPostedBadge}>
+              <Text style={styles.userPostedText}>Posted by Community Member</Text>
+            </View>
+          )}
 
           {/* Currency Toggle */}
           <View style={styles.currencySection}>
@@ -328,21 +427,21 @@ export default function ProductDetailScreen() {
           {/* Sizes */}
           {product.sizes && (
             <View style={styles.optionSection}>
-              <Text style={styles.sectionLabel}>Size</Text>
+              <Text style={styles.sectionLabel}>Size (Select one or more)</Text>
               <View style={styles.optionsRow}>
-                {product.sizes.map((size) => (
+                {product.sizes.map((size: string) => (
                   <TouchableOpacity
                     key={size}
                     style={[
                       styles.optionButton,
-                      selectedSize === size && styles.optionButtonActive,
+                      selectedSizes.includes(size) && styles.optionButtonActive,
                     ]}
-                    onPress={() => setSelectedSize(size)}
+                    onPress={() => toggleSize(size)}
                   >
                     <Text
                       style={[
                         styles.optionText,
-                        selectedSize === size && styles.optionTextActive,
+                        selectedSizes.includes(size) && styles.optionTextActive,
                       ]}
                     >
                       {size}
@@ -356,21 +455,21 @@ export default function ProductDetailScreen() {
           {/* Colors */}
           {product.colors && (
             <View style={styles.optionSection}>
-              <Text style={styles.sectionLabel}>Color</Text>
+              <Text style={styles.sectionLabel}>Color (Select one or more)</Text>
               <View style={styles.optionsRow}>
-                {product.colors.map((color) => (
+                {product.colors.map((color: string) => (
                   <TouchableOpacity
                     key={color}
                     style={[
                       styles.colorButton,
-                      selectedColor === color && styles.colorButtonActive,
+                      selectedColors.includes(color) && styles.colorButtonActive,
                     ]}
-                    onPress={() => setSelectedColor(color)}
+                    onPress={() => toggleColor(color)}
                   >
                     <Text
                       style={[
                         styles.colorText,
-                        selectedColor === color && styles.colorTextActive,
+                        selectedColors.includes(color) && styles.colorTextActive,
                       ]}
                     >
                       {color}
@@ -483,11 +582,33 @@ const styles = StyleSheet.create({
   },
   imageSection: {
     backgroundColor: '#F8F9FA',
+    position: 'relative',
+  },
+  mainImageScroll: {
+    width: width,
+    height: width,
   },
   mainImage: {
     width: width,
     height: width,
     resizeMode: 'cover',
+  },
+  paginationDots: {
+    flexDirection: 'row',
+    position: 'absolute',
+    bottom: 80,
+    alignSelf: 'center',
+    gap: 8,
+  },
+  dot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: 'rgba(255, 255, 255, 0.5)',
+  },
+  activeDot: {
+    backgroundColor: '#FFFFFF',
+    width: 24,
   },
   thumbnailScroll: {
     padding: 16,
@@ -662,6 +783,19 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontFamily: 'Inter-Regular',
     color: '#666666',
+  },
+  userPostedBadge: {
+    backgroundColor: '#E8F5E9',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 8,
+    alignSelf: 'flex-start',
+    marginTop: 8,
+  },
+  userPostedText: {
+    fontSize: 12,
+    fontFamily: 'Inter-SemiBold',
+    color: '#2E7D32',
   },
   bottomBar: {
     flexDirection: 'row',

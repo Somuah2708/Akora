@@ -36,7 +36,7 @@ export default function PickupScreen() {
 
   const handleDirections = () => {
     // Open Google Maps with the secretariat location
-    const address = 'University Campus, East Legon, Accra, Ghana';
+    const address = 'Achimota Senior High School, Accra, Ghana';
     const url = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(address)}`;
     Linking.openURL(url);
   };
@@ -124,7 +124,7 @@ export default function PickupScreen() {
                 <Text style={styles.contactValue}>
                   OAA Secretariat Office{'\n'}
                   Alumni Building, 2nd Floor{'\n'}
-                  University Campus, East Legon{'\n'}
+                  Achimota Senior High School{'\n'}
                   Accra, Ghana
                 </Text>
               </View>
