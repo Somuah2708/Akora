@@ -221,6 +221,7 @@ export default function HomeScreen() {
           post_comments(count),
           post_likes(count)
         `)
+        .eq('is_highlight_only', false)
         .order('created_at', { ascending: false });
 
       if (error) {
@@ -998,7 +999,7 @@ const styles = StyleSheet.create({
   },
   postImage: {
     width: width,
-    height: width * 0.75,
+    height: width, // keep posts square to avoid distortion across devices
     backgroundColor: '#F8F8F8',
   },
   carouselIndicator: {

@@ -11,6 +11,8 @@ type HighlightRow = {
   user_id: string;
   title: string | null;
   post_id: string | null;
+  slide_index?: number | null;
+  caption?: string | null;
 };
 
 type PostRow = {
@@ -25,7 +27,12 @@ export default function HighlightsViewer() {
   const [loading, setLoading] = useState(true);
   const [items, setItems] = useState<Array<HighlightRow & { thumb?: string | null }>>([]);
   const [current, setCurrent] = useState(0);
+  const [paused, setPaused] = useState(false);
+  const [progress, setProgress] = useState(0); // 0..1 for current item
   const scrollRef = useRef<ScrollView>(null);
+  const rafRef = useRef<number | null>(null);
+  const startRef = useRef<number>(0);
+  const durationMs = 4500; // per-image duration
 
   const title = useMemo(() => (t ? decodeURIComponent(String(t)) : null), [t]);
 
@@ -37,7 +44,7 @@ export default function HighlightsViewer() {
         // Fetch all visible highlights for user, optionally filter by title
         let query = supabase
           .from('profile_highlights')
-          .select('id,user_id,title,post_id')
+          .select('id,user_id,title,post_id,slide_index,caption')
           .eq('user_id', userId)
           .eq('visible', true)
           .order('pinned', { ascending: false })
@@ -63,11 +70,21 @@ export default function HighlightsViewer() {
             .in('id', postIds);
           if (pErr) throw pErr;
           (posts || []).forEach((p: PostRow) => {
-            const thumb = p.image_url || (Array.isArray(p.image_urls) && p.image_urls.length > 0 ? p.image_urls[0] : null);
-            thumbs[p.id] = thumb ?? null;
+            const first = p.image_url || (Array.isArray(p.image_urls) && p.image_urls.length > 0 ? p.image_urls[0] : null);
+            thumbs[p.id] = first ?? null;
           });
         }
-        const withThumbs = rows.map(r => ({ ...r, thumb: r.post_id ? thumbs[r.post_id] : null }));
+        const withThumbs = rows.map(r => ({
+          ...r,
+          thumb: r.post_id
+            ? (() => {
+                const base = thumbs[r.post_id!];
+                // Prefer the slide index if available by mapping onto image_urls later in render where we still only have thumb.
+                // For efficiency, re-fetch specific post here is overkill; we handle slide-specific image later by re-deriving.
+                return base ?? null;
+              })()
+            : null,
+        }));
         setItems(withThumbs);
 
         // Set initial index to the tapped item if provided
@@ -89,6 +106,33 @@ export default function HighlightsViewer() {
     };
     load();
   }, [userId, title, hid]);
+
+  // Animate progress and auto-advance
+  useEffect(() => {
+    if (loading || !items.length) return;
+    // reset progress when current changes
+    setProgress(0);
+    startRef.current = Date.now();
+
+    const tick = () => {
+      if (paused) {
+        rafRef.current = requestAnimationFrame(tick);
+        startRef.current = Date.now() - progress * durationMs; // keep elapsed frozen
+        return;
+      }
+      const elapsed = Date.now() - startRef.current;
+      const p = Math.min(1, elapsed / durationMs);
+      setProgress(p);
+      if (p >= 1) {
+        goNext();
+        return; // next effect will restart
+      }
+      rafRef.current = requestAnimationFrame(tick);
+    };
+    rafRef.current = requestAnimationFrame(tick);
+    return () => { if (rafRef.current) cancelAnimationFrame(rafRef.current); };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [current, paused, loading, items.length]);
 
   const goNext = () => {
     const next = current + 1;
@@ -144,7 +188,11 @@ export default function HighlightsViewer() {
       <View style={styles.progressRow}>
         {items.map((_, idx) => (
           <View key={idx} style={styles.progressTrack}>
-            <View style={[styles.progressFill, idx <= current && { width: '100%' }]} />
+            <View style={[
+              styles.progressFill,
+              idx < current && { width: '100%' },
+              idx === current && { width: `${Math.max(0, Math.min(100, progress * 100))}%` },
+            ]} />
           </View>
         ))}
       </View>
@@ -163,21 +211,54 @@ export default function HighlightsViewer() {
       >
         {items.map((it) => (
           <View key={it.id} style={{ width, height: height - 120, alignItems: 'center', justifyContent: 'center' }}>
-            {it.thumb ? (
-              <Image source={{ uri: it.thumb }} style={{ width, height: width }} resizeMode="cover" />
-            ) : (
-              <View style={{ width, height: width, backgroundColor: '#0B0F1A' }} />
-            )}
+            <StoryMedia postId={it.post_id} slideIndex={it.slide_index} fallbackThumb={it.thumb} />
+            {it.caption ? (
+              <View style={styles.captionBox}>
+                <Text style={styles.captionText} numberOfLines={2}>{it.caption}</Text>
+              </View>
+            ) : null}
           </View>
         ))}
       </ScrollView>
 
       {/* Tap zones */}
       <View style={styles.tapZones} pointerEvents="box-none">
-        <TouchableOpacity style={styles.leftZone} activeOpacity={0.6} onPress={goPrev} />
-        <TouchableOpacity style={styles.rightZone} activeOpacity={0.6} onPress={goNext} />
+        <TouchableOpacity style={styles.leftZone} activeOpacity={0.6} onPress={goPrev} onPressIn={() => setPaused(true)} onPressOut={() => setPaused(false)} />
+        <TouchableOpacity style={styles.rightZone} activeOpacity={0.6} onPress={goNext} onPressIn={() => setPaused(true)} onPressOut={() => setPaused(false)} />
       </View>
     </View>
+  );
+}
+
+function StoryMedia({ postId, slideIndex, fallbackThumb }: { postId: string | null; slideIndex?: number | null; fallbackThumb?: string | null }) {
+  const [uri, setUri] = useState<string | null>(fallbackThumb ?? null);
+  useEffect(() => {
+    (async () => {
+      if (!postId) return;
+      try {
+        const { data: post } = await supabase
+          .from('posts')
+          .select('id,image_url,image_urls')
+          .eq('id', postId)
+          .single();
+        if (post) {
+          let u = post.image_url as string | null;
+          if (Array.isArray(post.image_urls) && post.image_urls.length > 0) {
+            if (typeof slideIndex === 'number' && slideIndex >= 0 && slideIndex < post.image_urls.length) {
+              u = post.image_urls[slideIndex] as string;
+            } else {
+              u = post.image_urls[0] as string;
+            }
+          }
+          setUri(u || null);
+        }
+      } catch {}
+    })();
+  }, [postId, slideIndex]);
+  return uri ? (
+    <Image source={{ uri }} style={{ width, height: width }} resizeMode="cover" />
+  ) : (
+    <View style={{ width, height: width, backgroundColor: '#0B0F1A' }} />
   );
 }
 
@@ -193,4 +274,6 @@ const styles = StyleSheet.create({
   leftZone: { flex: 1 },
   rightZone: { flex: 1 },
   closeBtn: { position: 'absolute', top: 50, right: 16, width: 44, height: 44, borderRadius: 22, backgroundColor: '#FFFFFF', alignItems: 'center', justifyContent: 'center' },
+  captionBox: { position: 'absolute', bottom: 40, left: 16, right: 16, paddingVertical: 8, paddingHorizontal: 12, backgroundColor: 'rgba(0,0,0,0.5)', borderRadius: 10 },
+  captionText: { color: '#FFFFFF', fontSize: 14 },
 });

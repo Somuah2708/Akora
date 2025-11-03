@@ -1,9 +1,11 @@
-import { useEffect, useState } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, TextInput, Alert, ActivityIndicator, Modal, Pressable, Image, ScrollView } from 'react-native';
-import { useRouter } from 'expo-router';
+import { useEffect, useMemo, useState } from 'react';
+import { View, Text, StyleSheet, TouchableOpacity, TextInput, Alert, ActivityIndicator, Modal, Pressable, Image, ScrollView, Platform } from 'react-native';
+import * as ImagePicker from 'expo-image-picker';
+import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useAuth } from '@/hooks/useAuth';
 import { supabase } from '@/lib/supabase';
 import { ArrowLeft, Trash, Eye, EyeOff, Pin, PinOff, Star } from 'lucide-react-native';
+import { useToast } from '@/components/Toast';
 import DraggableFlatList, { RenderItemParams } from 'react-native-draggable-flatlist';
 
 // Data model mirrors DB table shape (subset)
@@ -20,19 +22,46 @@ type Highlight = {
   visible?: boolean | null;
   pinned?: boolean | null;
   post_id?: string | null;
+  caption?: string | null;
 };
 
 export default function ManageHighlightsScreen() {
   const router = useRouter();
+  const { t } = useLocalSearchParams<{ t?: string }>();
+  const groupTitle = useMemo(() => (t ? decodeURIComponent(String(t)) : null), [t]);
   const { user } = useAuth();
+  const toast = useToast();
   const [items, setItems] = useState<Highlight[]>([]);
   const [postPreview, setPostPreview] = useState<Record<string, { thumb?: string | null }>>({});
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
+  const [showRenameModal, setShowRenameModal] = useState(false);
+  const [coverUrl, setCoverUrl] = useState<string | null>(null);
+  const [coverBusy, setCoverBusy] = useState(false);
 
   // New item draft
-  const [draft, setDraft] = useState<Partial<Highlight>>({ title: '', visible: true, pinned: false });
+  const [draft, setDraft] = useState<Partial<Highlight>>({ title: '', visible: true, pinned: false, caption: '' });
+  const [renameTitle, setRenameTitle] = useState<string>(groupTitle || '');
+
+  // Cross-platform confirm helper (Alert on native, confirm on web)
+  const confirmAsync = (title: string, message: string): Promise<boolean> => {
+    if (Platform.OS === 'web') {
+      try {
+        // eslint-disable-next-line no-alert
+        const ok = typeof window !== 'undefined' ? window.confirm(`${title}\n\n${message}`) : false;
+        return Promise.resolve(!!ok);
+      } catch {
+        return Promise.resolve(false);
+      }
+    }
+    return new Promise((resolve) => {
+      Alert.alert(title, message, [
+        { text: 'Cancel', style: 'cancel', onPress: () => resolve(false) },
+        { text: 'Delete', style: 'destructive', onPress: () => resolve(true) },
+      ]);
+    });
+  };
 
   useEffect(() => {
     if (user?.id) {
@@ -44,12 +73,14 @@ export default function ManageHighlightsScreen() {
     if (!user?.id) return;
     try {
       setLoading(true);
-      const { data, error } = await supabase
+      let query = supabase
         .from('profile_highlights')
-        .select('id,user_id,title,order_index,visible,pinned,post_id')
+        .select('id,user_id,title,order_index,visible,pinned,post_id,slide_index,caption')
         .eq('user_id', user.id)
         .order('pinned', { ascending: false })
         .order('order_index', { ascending: true });
+      if (groupTitle) query = query.eq('title', groupTitle);
+      const { data, error } = await query;
       if (error) throw error;
       const rows = (data as Highlight[]) || [];
       setItems(rows);
@@ -68,6 +99,24 @@ export default function ManageHighlightsScreen() {
       } else {
         setPostPreview({});
       }
+
+      // Load custom cover for this group, if any
+      if (groupTitle) {
+        try {
+          const { data: coverRows, error: cErr } = await supabase
+            .from('profile_highlight_covers')
+            .select('cover_url')
+            .eq('user_id', user.id)
+            .eq('title', groupTitle);
+          if (!cErr && Array.isArray(coverRows) && coverRows.length > 0) {
+            setCoverUrl(coverRows[0]?.cover_url || null);
+          } else {
+            setCoverUrl(null);
+          }
+        } catch {}
+      } else {
+        setCoverUrl(null);
+      }
     } catch (e) {
       console.error(e);
       Alert.alert('Error', 'Failed to load highlights');
@@ -76,7 +125,7 @@ export default function ManageHighlightsScreen() {
     }
   };
 
-  const canAddMore = items.filter(i => i.visible).length < 12;
+  // No hard limit on visible highlights anymore
 
   const persistOrder = async (next: Highlight[]) => {
     try {
@@ -89,6 +138,7 @@ export default function ManageHighlightsScreen() {
       const results = await Promise.all(updates);
       const err = results.find(r => (r as any).error)?.error;
       if (err) throw err;
+      toast.show('Order saved', { type: 'success' });
     } catch (e) {
       console.error(e);
       Alert.alert('Error', 'Failed to save order');
@@ -98,17 +148,74 @@ export default function ManageHighlightsScreen() {
     }
   };
 
+  const pickAndSetCover = async () => {
+    try {
+      if (!user?.id || !groupTitle) return;
+      setCoverBusy(true);
+      const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (perm.status !== 'granted') {
+        Alert.alert('Permission needed', 'Please grant photo library access');
+        setCoverBusy(false);
+        return;
+      }
+      const res = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        quality: 0.9,
+        allowsMultipleSelection: false,
+      });
+      if (res.canceled || !res.assets?.length) { setCoverBusy(false); return; }
+      const asset = res.assets[0];
+      const uri = asset.uri;
+      const safeTitle = (groupTitle || 'highlight').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '');
+      const name = `cover_${user.id}_${safeTitle}_${Date.now()}.jpg`;
+      const filePath = `highlight_covers/${user.id}/${name}`;
+      const blob = await (await fetch(uri)).blob();
+      const { error: upErr } = await supabase.storage.from('media').upload(filePath, blob, { contentType: 'image/jpeg', upsert: true });
+      if (upErr) throw upErr;
+      const { data: pub } = supabase.storage.from('media').getPublicUrl(filePath);
+      const url = pub.publicUrl;
+      // Upsert cover row
+      const { error: upsertErr } = await supabase
+        .from('profile_highlight_covers')
+        .upsert({ user_id: user.id, title: groupTitle, cover_url: url }, { onConflict: 'user_id,title' } as any);
+      if (upsertErr) throw upsertErr;
+      setCoverUrl(url);
+      toast.show('Cover updated', { type: 'success' });
+    } catch (e) {
+      console.error(e);
+      Alert.alert('Error', 'Failed to set cover');
+    } finally {
+      setCoverBusy(false);
+    }
+  };
+
+  const clearCover = async () => {
+    if (!user?.id || !groupTitle) return;
+    try {
+      setCoverBusy(true);
+      const { error } = await supabase
+        .from('profile_highlight_covers')
+        .delete()
+        .eq('user_id', user.id)
+        .eq('title', groupTitle);
+      if (error) throw error;
+      setCoverUrl(null);
+      toast.show('Cover removed', { type: 'success' });
+    } catch (e) {
+      console.error(e);
+      Alert.alert('Error', 'Failed to remove cover');
+    } finally {
+      setCoverBusy(false);
+    }
+  };
+
   const toggleField = async (id: string, field: 'visible' | 'pinned') => {
     const idx = items.findIndex(i => i.id === id);
     if (idx === -1) return;
     const next = [...items];
     const current = next[idx];
     const newVal = !(current as any)[field];
-    // Enforce max visible=12
-    if (field === 'visible' && newVal && items.filter(i => i.visible).length >= 12) {
-      Alert.alert('Limit reached', 'You can only have up to 12 visible highlights. Hide one to show another.');
-      return;
-    }
+    // Allow unlimited visible items
     (next[idx] as any)[field] = newVal;
     setItems(next);
     try {
@@ -118,6 +225,7 @@ export default function ManageHighlightsScreen() {
         .update({ [field]: newVal })
         .eq('id', id);
       if (error) throw error;
+      toast.show(`${field === 'visible' ? 'Visibility' : 'Pin'} updated`, { type: 'success' });
     } catch (e) {
       console.error(e);
       Alert.alert('Error', 'Failed to update');
@@ -128,22 +236,20 @@ export default function ManageHighlightsScreen() {
   };
 
   const deleteItem = async (id: string) => {
-    Alert.alert('Delete highlight', 'This cannot be undone. Continue?', [
-      { text: 'Cancel', style: 'cancel' },
-      { text: 'Delete', style: 'destructive', onPress: async () => {
-        try {
-          setSaving(true);
-          const { error } = await supabase.from('profile_highlights').delete().eq('id', id);
-          if (error) throw error;
-          setItems(items.filter(i => i.id !== id));
-        } catch (e) {
-          console.error(e);
-          Alert.alert('Error', 'Failed to delete');
-        } finally {
-          setSaving(false);
-        }
-      }},
-    ]);
+    const ok = await confirmAsync('Delete highlight', 'This cannot be undone. Continue?');
+    if (!ok) return;
+    try {
+      setSaving(true);
+      const { error } = await supabase.from('profile_highlights').delete().eq('id', id);
+      if (error) throw error;
+      setItems(items.filter(i => i.id !== id));
+      toast.show('Highlight deleted', { type: 'success' });
+    } catch (e) {
+      console.error(e);
+      Alert.alert('Error', 'Failed to delete');
+    } finally {
+      setSaving(false);
+    }
   };
 
   // Creation happens from the post composer or post tile. Manage here focuses on reorder, edit title, toggles, and delete.
@@ -159,6 +265,7 @@ export default function ManageHighlightsScreen() {
         .single();
       if (error) throw error;
       setItems(items.map(i => i.id === id ? (data as Highlight) : i));
+      toast.show('Changes saved', { type: 'success' });
     } catch (e) {
       console.error(e);
       Alert.alert('Error', 'Failed to save changes');
@@ -173,8 +280,14 @@ export default function ManageHighlightsScreen() {
         <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
           <ArrowLeft size={22} color="#111827" />
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>Manage Highlights</Text>
-        <View style={{ width: 44 }} />
+        <Text style={styles.headerTitle}>{groupTitle ? `Manage: ${groupTitle}` : 'Manage Highlights'}</Text>
+        {groupTitle ? (
+          <TouchableOpacity style={styles.backButton} onPress={() => setShowRenameModal(true)}>
+            <Text style={{ fontSize: 12, color: '#111827' }}>Rename</Text>
+          </TouchableOpacity>
+        ) : (
+          <View style={{ width: 44 }} />
+        )}
       </View>
 
       {loading ? (
@@ -182,45 +295,96 @@ export default function ManageHighlightsScreen() {
           <ActivityIndicator color="#4169E1" />
         </View>
       ) : (
-        <View style={{ flex: 1, padding: 16 }}>
-          {/* Preview */}
-          <View style={styles.previewCard}>
-            <View style={styles.previewHeader}>
-              <Text style={styles.previewTitle}>Preview</Text>
-              <Text style={styles.previewHint}>This is how your Highlights appear on your profile</Text>
-            </View>
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.previewList}>
-              {items.filter(i => i.visible).map((h) => (
-                <View key={h.id} style={styles.previewItem}>
-                  <View style={[styles.previewImageContainer, h.color ? { borderColor: h.color } : null]}>
-                    {h.post_id && postPreview[h.post_id]?.thumb ? (
-                      <Image source={{ uri: postPreview[h.post_id]?.thumb as string }} style={styles.previewImage} />
-                    ) : (
-                      <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#F3F4F6' }}>
-                        <Star size={18} color="#0A84FF" />
-                      </View>
-                    )}
-                  </View>
-                  <Text style={styles.previewItemTitle} numberOfLines={1}>{h.title || 'Highlight'}</Text>
-                </View>
-              ))}
-              {items.filter(i => i.visible).length === 0 && (
-                <Text style={styles.emptyText}>No visible highlights yet</Text>
-              )}
-            </ScrollView>
-          </View>
-
-          <View style={{ height: 12 }} />
-          {/* Quick action to create a highlight from library */}
-          <TouchableOpacity
-            style={styles.addButton}
-            onPress={() => router.push('/create-post?highlight=1&autoPick=1')}
-          >
-            <Text style={styles.addButtonText}>Add from library</Text>
-          </TouchableOpacity>
-          <View style={{ height: 12 }} />
+        <View style={{ flex: 1 }}>
           <DraggableFlatList<Highlight>
-            contentContainerStyle={{ flexGrow: 1 }}
+            style={{ flex: 1 }}
+            contentContainerStyle={{ paddingBottom: 160 }}
+            stickyHeaderIndices={[0]}
+            ListHeaderComponent={(
+              <View style={{ padding: 16 }}>
+                {groupTitle ? (
+                  <View style={styles.previewCard}>
+                    <View style={styles.previewHeader}>
+                      <Text style={styles.previewTitle}>Cover</Text>
+                      <Text style={styles.previewHint}>Custom cover shown on your profile for “{groupTitle}”</Text>
+                    </View>
+                    <View style={{ paddingHorizontal: 12, paddingBottom: 10, gap: 10 }}>
+                      <View style={{ width: 96, height: 96, borderRadius: 14, overflow: 'hidden', borderWidth: 1, borderColor: '#DBDBDB', alignSelf: 'flex-start' }}>
+                        {coverUrl ? (
+                          <Image source={{ uri: coverUrl }} style={{ width: '100%', height: '100%' }} />
+                        ) : (
+                          <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#F3F4F6' }}>
+                            <Star size={18} color="#0A84FF" />
+                          </View>
+                        )}
+                      </View>
+                      <View style={{ flexDirection: 'row', gap: 8 }}>
+                        <TouchableOpacity style={[styles.addButton, { backgroundColor: '#111827', paddingHorizontal: 12 }]} disabled={coverBusy} onPress={pickAndSetCover}>
+                          <Text style={styles.addButtonText}>{coverBusy ? 'Updating…' : (coverUrl ? 'Change cover' : 'Set cover')}</Text>
+                        </TouchableOpacity>
+                        {coverUrl ? (
+                          <TouchableOpacity style={[styles.addButton, { backgroundColor: '#F3F4F6', paddingHorizontal: 12 }]} disabled={coverBusy} onPress={clearCover}>
+                            <Text style={[styles.addButtonText, { color: '#111827' }]}>Remove</Text>
+                          </TouchableOpacity>
+                        ) : null}
+                      </View>
+                    </View>
+                  </View>
+                ) : null}
+                {/* Preview */}
+                <View style={styles.previewCard}>
+                  <View style={styles.previewHeader}>
+                    <Text style={styles.previewTitle}>Preview</Text>
+                    <Text style={styles.previewHint}>This is how your Highlights appear on your profile</Text>
+                  </View>
+                  <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.previewList}>
+                    {items.filter(i => i.visible).map((h) => (
+                      <View key={h.id} style={styles.previewItem}>
+                        <View style={[styles.previewImageContainer, h.color ? { borderColor: h.color } : null]}>
+                          {h.post_id && postPreview[h.post_id]?.thumb ? (
+                            <Image source={{ uri: postPreview[h.post_id]?.thumb as string }} style={styles.previewImage} />
+                          ) : (
+                            <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#F3F4F6' }}>
+                              <Star size={18} color="#0A84FF" />
+                            </View>
+                          )}
+                        </View>
+                        <Text style={styles.previewItemTitle} numberOfLines={1}>{h.title || 'Highlight'}</Text>
+                      </View>
+                    ))}
+                    {items.filter(i => i.visible).length === 0 && (
+                      <Text style={styles.emptyText}>No visible highlights yet</Text>
+                    )}
+                  </ScrollView>
+                </View>
+
+                <View style={{ height: 12 }} />
+                {/* Quick action to add media into this group */}
+                <View style={{ flexDirection: 'row', gap: 8 }}>
+                  <TouchableOpacity
+                    style={[styles.addButton, { flex: 1 }]}
+                    onPress={() => {
+                      if (groupTitle) {
+                        router.push(`/profile/add-from-library?t=${encodeURIComponent(groupTitle)}` as any);
+                      } else {
+                        router.push(`/profile/add-from-library` as any);
+                      }
+                    }}
+                  >
+                    <Text style={styles.addButtonText}>Add from library</Text>
+                  </TouchableOpacity>
+                  {groupTitle ? (
+                    <TouchableOpacity
+                      style={[styles.addButton, { flex: 1, backgroundColor: '#0A84FF' }]}
+                      onPress={() => router.push(`/profile/add-to-highlight?t=${encodeURIComponent(groupTitle)}` as any)}
+                    >
+                      <Text style={styles.addButtonText}>Add from posts</Text>
+                    </TouchableOpacity>
+                  ) : null}
+                </View>
+                <View style={{ height: 12 }} />
+              </View>
+            )}
             data={items}
             keyExtractor={(item: Highlight) => item.id}
             onDragEnd={({ data }: { data: Highlight[] }) => { setItems(data); persistOrder(data); }}
@@ -233,6 +397,9 @@ export default function ManageHighlightsScreen() {
                 <View style={{ flex: 1 }}>
                   <Text style={styles.itemTitle} numberOfLines={1}>{h.title || 'Untitled'}</Text>
                   <Text style={styles.itemMeta}>{h.post_id ? 'Post highlight' : 'Highlight'}</Text>
+                  {h.caption ? (
+                    <Text style={[styles.itemMeta, { marginTop: 4 }]} numberOfLines={1}>{h.caption}</Text>
+                  ) : null}
                 </View>
                 <View style={styles.row}>
                   <TouchableOpacity style={styles.iconBtn} onPress={() => toggleField(h.id, 'visible')}>
@@ -241,7 +408,7 @@ export default function ManageHighlightsScreen() {
                   <TouchableOpacity style={styles.iconBtn} onPress={() => toggleField(h.id, 'pinned')}>
                     {h.pinned ? <Pin size={18} color="#111827" /> : <PinOff size={18} color="#111827" />}
                   </TouchableOpacity>
-                  <TouchableOpacity style={styles.editBtn} onPress={() => { setDraft({ id: h.id, title: h.title || '', visible: !!h.visible, pinned: !!h.pinned }); setShowEditModal(true); }}>
+                  <TouchableOpacity style={styles.editBtn} onPress={() => { setDraft({ id: h.id, title: h.title || '', visible: !!h.visible, pinned: !!h.pinned, caption: h.caption || '' }); setShowEditModal(true); }}>
                     <Text style={styles.editText}>Edit</Text>
                   </TouchableOpacity>
                   <TouchableOpacity style={styles.deleteBtn} onPress={() => deleteItem(h.id)}>
@@ -251,11 +418,9 @@ export default function ManageHighlightsScreen() {
               </TouchableOpacity>
             )}
           />
-          <View style={{ height: 8 }} />
-          <Text style={styles.noteText}>Add new highlights from your post grid (tap a post → Add to highlights) or when creating a post.</Text>
-          {!canAddMore && (
-            <Text style={styles.noteText}>You have 12 visible highlights. Hide one to make space for another visible highlight.</Text>
-          )}
+          <View style={{ paddingHorizontal: 16, paddingTop: 8 }}>
+            <Text style={styles.noteText}>Add new highlights from your post grid (tap a post → Add to highlights) or when creating a post.</Text>
+          </View>
         </View>
       )}
 
@@ -271,6 +436,14 @@ export default function ManageHighlightsScreen() {
               placeholder="e.g., Travel, Awards, Projects"
               value={draft.title as string}
               onChangeText={(t) => setDraft({ ...draft, title: t })}
+            />
+
+            <Text style={styles.label}>Caption</Text>
+            <TextInput
+              style={styles.input}
+              placeholder="Add a caption for this item (optional)"
+              value={(draft.caption as string) || ''}
+              onChangeText={(t) => setDraft({ ...draft, caption: t })}
             />
 
             <View style={styles.modalRow}>
@@ -289,10 +462,66 @@ export default function ManageHighlightsScreen() {
                 title: (draft.title || '') as string,
                 visible: draft.visible !== false,
                 pinned: !!draft.pinned,
+                caption: (draft.caption || '') as string,
               }); setShowEditModal(false); }}>
                 <Text style={styles.primaryBtnText}>Save</Text>
               </TouchableOpacity>
               <TouchableOpacity style={styles.secondaryBtn} onPress={() => setShowEditModal(false)}>
+                <Text style={styles.secondaryBtnText}>Cancel</Text>
+              </TouchableOpacity>
+            </View>
+          </Pressable>
+        </Pressable>
+      </Modal>
+
+      {/* Rename group modal */}
+      <Modal visible={showRenameModal} transparent animationType="fade" onRequestClose={() => setShowRenameModal(false)}>
+        <Pressable style={styles.modalOverlay} onPress={() => setShowRenameModal(false)}>
+          <Pressable style={styles.modalCard} onPress={(e) => e.stopPropagation()}>
+            <Text style={styles.modalTitle}>Rename highlight group</Text>
+            <Text style={styles.label}>New title</Text>
+            <TextInput
+              style={styles.input}
+              placeholder="e.g., Travel"
+              value={renameTitle}
+              onChangeText={setRenameTitle}
+            />
+            <View style={styles.modalActions}>
+              <TouchableOpacity
+                style={styles.primaryBtn}
+                onPress={async () => {
+                  if (!user?.id || !groupTitle) { setShowRenameModal(false); return; }
+                  try {
+                    setSaving(true);
+                    const { error } = await supabase
+                      .from('profile_highlights')
+                      .update({ title: renameTitle })
+                      .eq('user_id', user.id)
+                      .eq('title', groupTitle);
+                    if (error) throw error;
+                    // Also update custom cover title if present
+                    try {
+                      await supabase
+                        .from('profile_highlight_covers')
+                        .update({ title: renameTitle })
+                        .eq('user_id', user.id)
+                        .eq('title', groupTitle);
+                    } catch {}
+                    setShowRenameModal(false);
+                    // reload and update route
+                    await load();
+                    router.replace(`/profile/manage-highlights?t=${encodeURIComponent(renameTitle)}` as any);
+                    toast.show('Group renamed', { type: 'success' });
+                  } catch (e) {
+                    Alert.alert('Error', 'Failed to rename group');
+                  } finally {
+                    setSaving(false);
+                  }
+                }}
+              >
+                <Text style={styles.primaryBtnText}>Save</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.secondaryBtn} onPress={() => setShowRenameModal(false)}>
                 <Text style={styles.secondaryBtnText}>Cancel</Text>
               </TouchableOpacity>
             </View>

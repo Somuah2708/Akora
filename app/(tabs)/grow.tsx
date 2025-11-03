@@ -1,10 +1,10 @@
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Dimensions, Image, ActivityIndicator, Modal, Share, Alert } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Dimensions, Image, ActivityIndicator, Modal, Share, Alert, Platform } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Linking from 'expo-linking';
 import * as Clipboard from 'expo-clipboard';
 import { useFonts, Inter_400Regular, Inter_600SemiBold } from '@expo-google-fonts/inter';
-import { useState, useEffect } from 'react';
-import { useRouter } from 'expo-router';
+import { useState, useEffect, useMemo } from 'react';
+import { useRouter, useLocalSearchParams } from 'expo-router';
 import { 
   Grid3x3,
   Bookmark,
@@ -16,11 +16,15 @@ import {
   ChevronDown,
   ChevronUp,
   Star,
+  MoreHorizontal,
+  Trash,
 } from 'lucide-react-native';
 import type { LucideIcon } from 'lucide-react-native';
 import { useAuth } from '@/hooks/useAuth';
+import { useToast } from '@/components/Toast';
 import { supabase } from '@/lib/supabase';
 import { INTEREST_LIBRARY, type InterestOptionId } from '@/lib/interest-data';
+import VisitorActions from '@/components/VisitorActions';
 
 const { width, height } = Dimensions.get('window');
 const GRID_ITEM_SIZE = (width - 6) / 3;
@@ -63,7 +67,11 @@ const USER_STATS = {
 
 export default function ProfileScreen() {
   const router = useRouter();
-  const { user, profile, signOut } = useAuth();
+  const { user, profile: authProfile, signOut } = useAuth();
+  const { asUser, guest } = useLocalSearchParams<{ asUser?: string; guest?: string }>();
+  const viewingUserId = asUser || user?.id || '';
+  const isOwner = !!user && viewingUserId === user.id && guest !== '1';
+  const toast = useToast();
   const [activeTab, setActiveTab] = useState<'grid' | 'saved'>('grid');
   const [userPosts, setUserPosts] = useState<any[]>([]);
   const [savedPosts, setSavedPosts] = useState<any[]>([]);
@@ -83,8 +91,63 @@ export default function ProfileScreen() {
   const [expandInterests, setExpandInterests] = useState(true);
   const [highlights, setHighlights] = useState<Highlight[]>([]);
   const [postPreview, setPostPreview] = useState<Record<string, { thumb?: string | null }>>({});
+  const [coversByTitle, setCoversByTitle] = useState<Record<string, string | null>>({});
+  const [viewProfile, setViewProfile] = useState<any | null>(null);
+  const grouped = useMemo(() => {
+    const map = new Map<string, Highlight[]>();
+    highlights.forEach(h => {
+      const key = (h.title || 'Highlight').trim();
+      if (!map.has(key)) map.set(key, []);
+      map.get(key)!.push(h);
+    });
+    const groups = Array.from(map.entries()).map(([title, items]) => {
+      const sorted = items.slice().sort((a, b) => {
+        const pa = (a.pinned ? 0 : 1);
+        const pb = (b.pinned ? 0 : 1);
+        if (pa !== pb) return pa - pb;
+        const oa = a.order_index ?? 0;
+        const ob = b.order_index ?? 0;
+        return oa - ob;
+      });
+      const cover = sorted[0];
+      const derivedThumb = cover?.post_id ? postPreview[cover.post_id]?.thumb : undefined;
+      const custom = coversByTitle[title] || undefined;
+      const coverThumb = custom ?? derivedThumb;
+      return { title, count: items.length, hid: cover?.id, coverThumb };
+    });
+    return groups.sort((a, b) => a.title.localeCompare(b.title));
+  }, [highlights, postPreview, coversByTitle]);
   const [postSheetOpen, setPostSheetOpen] = useState(false);
   const [selectedPostId, setSelectedPostId] = useState<string | null>(null);
+  const [selectedFromTab, setSelectedFromTab] = useState<'grid' | 'saved' | null>(null);
+  // Use viewed profile (if provided) or authenticated profile for rendering
+  const profile = viewProfile || authProfile;
+  
+  // Ensure non-owners cannot remain on 'saved' tab if state changes
+  useEffect(() => {
+    if (!isOwner && activeTab === 'saved') {
+      setActiveTab('grid');
+    }
+  }, [isOwner, activeTab]);
+  
+  // Cross-platform confirm helper (Alert on native, confirm() on web)
+  const confirmAsync = (title: string, message: string): Promise<boolean> => {
+    if (Platform.OS === 'web') {
+      try {
+        // eslint-disable-next-line no-alert
+        const ok = typeof window !== 'undefined' ? window.confirm(`${title}\n\n${message}`) : false;
+        return Promise.resolve(!!ok);
+      } catch {
+        return Promise.resolve(false);
+      }
+    }
+    return new Promise((resolve) => {
+      Alert.alert(title, message, [
+        { text: 'Cancel', style: 'cancel', onPress: () => resolve(false) },
+        { text: 'Delete', style: 'destructive', onPress: () => resolve(true) },
+      ]);
+    });
+  };
   
   const [fontsLoaded] = useFonts({
     'Inter-Regular': Inter_400Regular,
@@ -92,24 +155,23 @@ export default function ProfileScreen() {
   });
 
   useEffect(() => {
-    if (user) {
+    if (viewingUserId) {
       fetchUserData();
     }
-  }, [user]);
+  }, [viewingUserId]);
 
   // Load profile highlights when user/profile is available
   useEffect(() => {
     (async () => {
       try {
-        if (!user?.id) return;
+        if (!viewingUserId) return;
         const { data, error } = await supabase
           .from('profile_highlights')
           .select('id,user_id,title,order_index,visible,pinned,post_id')
-          .eq('user_id', user.id)
+          .eq('user_id', viewingUserId)
           .eq('visible', true)
           .order('pinned', { ascending: false })
-          .order('order_index', { ascending: true })
-          .limit(12);
+          .order('order_index', { ascending: true });
         if (error) throw error;
         const rows = (data as Highlight[]) || [];
         setHighlights(rows);
@@ -129,11 +191,25 @@ export default function ProfileScreen() {
         } else {
           setPostPreview({});
         }
+        // fetch custom covers for this user
+        try {
+          const { data: covers, error: cErr } = await supabase
+            .from('profile_highlight_covers')
+            .select('title,cover_url')
+            .eq('user_id', viewingUserId);
+          if (!cErr && Array.isArray(covers)) {
+            const map: Record<string, string | null> = {};
+            covers.forEach((c: any) => { if (c?.title) map[String(c.title)] = c.cover_url || null; });
+            setCoversByTitle(map);
+          } else {
+            setCoversByTitle({});
+          }
+        } catch {}
       } catch (e) {
         // silently ignore for now
       }
     })();
-  }, [user?.id]);
+  }, [viewingUserId]);
 
   // Recompute completeness when profile or interests change
   useEffect(() => {
@@ -161,16 +237,31 @@ export default function ProfileScreen() {
   }, [profile, userInterests]);
 
   const fetchUserData = async () => {
-    if (!user) return;
+    if (!viewingUserId) return;
 
     try {
       setLoading(true);
+
+      // Load viewed profile if not owner
+      if (!isOwner) {
+        try {
+          const { data: vp } = await supabase
+            .from('profiles')
+            .select('*')
+            .eq('id', viewingUserId)
+            .single();
+          if (vp) setViewProfile(vp);
+        } catch {}
+      } else {
+        setViewProfile(null);
+      }
 
       // Fetch user's posts
       const { data: posts, error: postsError } = await supabase
         .from('posts')
         .select('*')
-        .eq('user_id', user.id)
+        .eq('user_id', viewingUserId)
+        .eq('is_highlight_only', false)
         .order('created_at', { ascending: false });
 
       if (postsError) throw postsError;
@@ -179,16 +270,21 @@ export default function ProfileScreen() {
       setStats(prev => ({ ...prev, posts: posts?.length || 0 }));
 
       // Fetch user's saved/bookmarked posts
-      const { data: bookmarks, error: bmError } = await supabase
-        .from('post_bookmarks')
-        .select('post_id, posts:post_id ( id, image_url, image_urls, created_at )')
-        .eq('user_id', user.id)
-        .order('created_at', { ascending: false });
-      if (!bmError && bookmarks) {
-        const mapped = bookmarks
-          .map((b: any) => Array.isArray(b.posts) ? b.posts[0] : b.posts)
-          .filter(Boolean);
-        setSavedPosts(mapped);
+      if (isOwner) {
+        const { data: bookmarks, error: bmError } = await supabase
+          .from('post_bookmarks')
+          .select('post_id, posts:post_id ( id, image_url, image_urls, created_at )')
+          .eq('user_id', viewingUserId)
+          .eq('posts.is_highlight_only', false)
+          .order('created_at', { ascending: false });
+        if (!bmError && bookmarks) {
+          const mapped = bookmarks
+            .map((b: any) => Array.isArray(b.posts) ? b.posts[0] : b.posts)
+            .filter(Boolean);
+          setSavedPosts(mapped);
+        } else {
+          setSavedPosts([]);
+        }
       } else {
         setSavedPosts([]);
       }
@@ -198,13 +294,13 @@ export default function ProfileScreen() {
       const { data: friendsList, error: friendsError } = await supabase
         .from('friends')
         .select('*')
-        .or(`user_id.eq.${user.id},friend_id.eq.${user.id}`);
+        .or(`user_id.eq.${viewingUserId},friend_id.eq.${viewingUserId}`);
 
       if (!friendsError && friendsList) {
         // Remove duplicates by creating a set of unique friend IDs
         const uniqueFriends = new Set<string>();
         friendsList.forEach((friendship: any) => {
-          const friendId = friendship.user_id === user.id 
+          const friendId = friendship.user_id === viewingUserId 
             ? friendship.friend_id 
             : friendship.user_id;
           uniqueFriends.add(friendId);
@@ -216,7 +312,7 @@ export default function ProfileScreen() {
       const { data: interests, error: interestsError } = await supabase
         .from('user_interests')
         .select('category')
-        .eq('user_id', user.id);
+        .eq('user_id', viewingUserId);
       if (!interestsError && interests) {
         setUserInterests(new Set(interests.map((r: any) => r.category as InterestOptionId)));
       }
@@ -282,7 +378,7 @@ export default function ProfileScreen() {
 
   const buildProfileLink = () => {
     // Prefer deep link; if you later host a web URL, swap here
-    return Linking.createURL(`/user-profile/${user?.id ?? ''}`);
+    return Linking.createURL(`/user-profile/${viewingUserId ?? ''}`);
   };
 
   const copyProfileLink = async () => {
@@ -303,7 +399,7 @@ export default function ProfileScreen() {
 
   const viewAsGuest = () => {
     if (!user?.id) return;
-    router.push(`/user-profile/${user.id}`);
+    router.push(`/user-profile/${user.id}?guest=1`);
     setShareSheetVisible(false);
   };
 
@@ -345,7 +441,7 @@ export default function ProfileScreen() {
     );
   }
 
-  const isSelf = true; // This screen shows the current user's profile. Keep for future external profiles.
+  const isSelf = isOwner;
 
   // Build interest lookup to render icons and labels
   type InterestMeta = { label: string; icon: LucideIcon; parentId?: string };
@@ -414,9 +510,11 @@ export default function ProfileScreen() {
             <TouchableOpacity style={styles.sheetAction} onPress={copyProfileLink}>
               <Text style={styles.sheetActionText}>Copy link</Text>
             </TouchableOpacity>
-            <TouchableOpacity style={styles.sheetAction} onPress={viewAsGuest}>
-              <Text style={styles.sheetActionText}>View as guest</Text>
-            </TouchableOpacity>
+            {isOwner && (
+              <TouchableOpacity style={styles.sheetAction} onPress={viewAsGuest}>
+                <Text style={styles.sheetActionText}>View as guest</Text>
+              </TouchableOpacity>
+            )}
             <TouchableOpacity style={styles.sheetAction} onPress={showQr}>
               <Text style={styles.sheetActionText}>Show QR code</Text>
             </TouchableOpacity>
@@ -455,10 +553,11 @@ export default function ProfileScreen() {
             )}
           </View>
           <View style={styles.headerIcons}>
-            <TouchableOpacity style={styles.headerIcon} onPress={handleSignOut}>
-              <LogOut size={24} color="#000000" strokeWidth={2} />
-            </TouchableOpacity>
-            {/* Removed More button; consolidated actions under Share */}
+            {isOwner && (
+              <TouchableOpacity style={styles.headerIcon} onPress={handleSignOut}>
+                <LogOut size={24} color="#000000" strokeWidth={2} />
+              </TouchableOpacity>
+            )}
           </View>
         </View>
 
@@ -705,25 +804,33 @@ export default function ProfileScreen() {
           ) : null}
         </View>
 
-        <View style={styles.actionButtons}>
-          <TouchableOpacity 
-            style={styles.editButton}
-            onPress={() => router.push('/profile/edit')}
-          >
-            <Text style={styles.editButtonText}>Edit Profile</Text>
-          </TouchableOpacity>
-          <TouchableOpacity style={styles.shareButton} onPress={() => setShareSheetVisible(true)}>
-            <Text style={styles.shareButtonText}>Share Profile</Text>
-          </TouchableOpacity>
-        </View>
+        {isOwner ? (
+          <View style={styles.actionButtons}>
+            <TouchableOpacity 
+              style={styles.editButton}
+              onPress={() => router.push('/profile/edit')}
+            >
+              <Text style={styles.editButtonText}>Edit Profile</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.shareButton} onPress={() => setShareSheetVisible(true)}>
+              <Text style={styles.shareButtonText}>Share Profile</Text>
+            </TouchableOpacity>
+          </View>
+        ) : (
+          <VisitorActions 
+            onMessage={() => router.push(`/chat/${viewingUserId}` as any)}
+          />
+        )}
 
         {highlights.length > 0 && (
           <>
             <View style={{ paddingHorizontal: 16, paddingTop: 4, paddingBottom: 8, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
               <Text style={styles.cardTitle}>Highlights</Text>
-              <TouchableOpacity onPress={() => router.push('/profile/manage-highlights' as any)}>
-                <Text style={styles.linkText}>Manage</Text>
-              </TouchableOpacity>
+              {isOwner && (
+                <TouchableOpacity onPress={() => router.push('/profile/manage-highlights-home' as any)}>
+                  <Text style={styles.linkText}>Manage</Text>
+                </TouchableOpacity>
+              )}
             </View>
             <ScrollView 
               horizontal 
@@ -731,32 +838,26 @@ export default function ProfileScreen() {
               style={styles.highlightsContainer}
               contentContainerStyle={styles.highlightsContent}
             >
-              {highlights.map((h) => (
+              {grouped.map((g) => (
                 <TouchableOpacity 
-                  key={h.id} 
+                  key={g.title} 
                   style={styles.highlightItem}
                   onPress={() => {
-                    const title = encodeURIComponent(h.title || 'Highlight');
-                    router.push(`/highlights/${user.id}?t=${title}&hid=${h.id}` as any);
+                    const title = encodeURIComponent(g.title || 'Highlight');
+                    router.push(`/highlights/${viewingUserId}?t=${title}` as any);
                   }}
                   activeOpacity={0.8}
                 >
-                  <View style={[styles.highlightImageContainer, h.color ? { borderColor: h.color } : null]}>
-                    {h.post_id && postPreview[h.post_id]?.thumb ? (
-                      <Image source={{ uri: postPreview[h.post_id]?.thumb as string }} style={styles.highlightImage} />
-                    ) : h.media_url ? (
-                      <Image source={{ uri: h.media_url }} style={styles.highlightImage} />
+                  <View style={[styles.highlightImageContainer]}>
+                    {g.coverThumb ? (
+                      <Image source={{ uri: g.coverThumb as string }} style={styles.highlightImage} />
                     ) : (
                       <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#F3F4F6' }}>
-                        {h.emoji ? (
-                          <Text style={{ fontSize: 20 }}>{h.emoji}</Text>
-                        ) : (
-                          <Star size={18} color="#0A84FF" />
-                        )}
+                        <Star size={18} color="#0A84FF" />
                       </View>
                     )}
                   </View>
-                  <Text style={styles.highlightTitle} numberOfLines={1}>{h.title || 'Highlight'}</Text>
+                  <Text style={styles.highlightTitle} numberOfLines={1}>{g.title || 'Highlight'}</Text>
                 </TouchableOpacity>
               ))}
             </ScrollView>
@@ -766,14 +867,18 @@ export default function ProfileScreen() {
           <View style={styles.card}>
             <View style={styles.cardHeaderRow}>
               <Text style={styles.cardTitle}>Highlights</Text>
-              <TouchableOpacity onPress={() => router.push('/profile/manage-highlights' as any)}>
-                <Text style={styles.linkText}>Manage</Text>
-              </TouchableOpacity>
+              {isOwner && (
+                <TouchableOpacity onPress={() => router.push('/profile/manage-highlights-home' as any)}>
+                  <Text style={styles.linkText}>Manage</Text>
+                </TouchableOpacity>
+              )}
             </View>
             <Text style={styles.cardBodyText}>No highlights yet</Text>
-            <TouchableOpacity style={styles.pickButton} onPress={() => router.push('/profile/manage-highlights' as any)}>
-              <Text style={styles.pickButtonText}>Add highlight</Text>
-            </TouchableOpacity>
+            {isOwner && (
+              <TouchableOpacity style={styles.pickButton} onPress={() => router.push('/profile/manage-highlights-home' as any)}>
+                <Text style={styles.pickButtonText}>Add highlight</Text>
+              </TouchableOpacity>
+            )}
           </View>
         )}
       </View>
@@ -785,19 +890,22 @@ export default function ProfileScreen() {
         >
           <Grid3x3 size={24} color={activeTab === 'grid' ? '#000000' : '#8E8E8E'} />
         </TouchableOpacity>
-        <TouchableOpacity
-          style={[styles.tab, activeTab === 'saved' && styles.activeTab]}
-          onPress={() => setActiveTab('saved')}
-        >
-          <Bookmark size={24} color={activeTab === 'saved' ? '#000000' : '#8E8E8E'} />
-        </TouchableOpacity>
+        {isOwner && (
+          <TouchableOpacity
+            style={[styles.tab, activeTab === 'saved' && styles.activeTab]}
+            onPress={() => setActiveTab('saved')}
+          >
+            <Bookmark size={24} color={activeTab === 'saved' ? '#000000' : '#8E8E8E'} />
+          </TouchableOpacity>
+        )}
       </View>
 
       {activeTab === 'grid' ? (
         <View style={styles.postsGrid}>
           {userPosts.length > 0 ? (
             userPosts.map((post) => (
-              <TouchableOpacity key={post.id} style={styles.gridItem} onPress={() => router.push(`/post/${post.id}`)}>
+              <View key={post.id} style={styles.gridItem}>
+                <TouchableOpacity style={{ flex: 1 }} onPress={() => router.push(`/post/${post.id}`)}>
                 {post.image_url ? (
                   <Image source={{ uri: post.image_url }} style={styles.gridImage} />
                 ) : Array.isArray(post.image_urls) && post.image_urls.length > 0 ? (
@@ -807,7 +915,16 @@ export default function ProfileScreen() {
                     <Text style={styles.gridPlaceholderText}>No Image</Text>
                   </View>
                 )}
-              </TouchableOpacity>
+                </TouchableOpacity>
+                {isOwner && (
+                  <TouchableOpacity
+                    style={styles.gridMoreBtn}
+                    onPress={() => { setSelectedPostId(post.id); setSelectedFromTab('grid'); setPostSheetOpen(true); }}
+                  >
+                    <MoreHorizontal size={18} color="#111827" />
+                  </TouchableOpacity>
+                )}
+              </View>
             ))
           ) : (
             <View style={styles.emptyState}>
@@ -819,7 +936,8 @@ export default function ProfileScreen() {
         <View style={styles.postsGrid}>
           {savedPosts.length > 0 ? (
             savedPosts.map((post) => (
-              <TouchableOpacity key={post.id} style={styles.gridItem} onPress={() => router.push(`/post/${post.id}`)}>
+              <View key={post.id} style={styles.gridItem}>
+                <TouchableOpacity style={{ flex: 1 }} onPress={() => router.push(`/post/${post.id}`)}>
                 {post.image_url ? (
                   <Image source={{ uri: post.image_url }} style={styles.gridImage} />
                 ) : Array.isArray(post.image_urls) && post.image_urls.length > 0 ? (
@@ -829,7 +947,16 @@ export default function ProfileScreen() {
                     <Text style={styles.gridPlaceholderText}>No Image</Text>
                   </View>
                 )}
-              </TouchableOpacity>
+                </TouchableOpacity>
+                {isOwner && (
+                  <TouchableOpacity
+                    style={styles.gridMoreBtn}
+                    onPress={() => { setSelectedPostId(post.id); setSelectedFromTab('saved'); setPostSheetOpen(true); }}
+                  >
+                    <MoreHorizontal size={18} color="#111827" />
+                  </TouchableOpacity>
+                )}
+              </View>
             ))
           ) : (
             <View style={styles.emptyState}>
@@ -852,35 +979,79 @@ export default function ProfileScreen() {
             <Text style={styles.sheetTitle}>Post actions</Text>
             <TouchableOpacity
               style={styles.sheetAction}
-              onPress={async () => {
-                try {
-                  if (!user?.id || !selectedPostId) return;
-                  await supabase.from('profile_highlights').insert({
-                    user_id: user.id,
-                    title: 'Highlight',
-                    visible: true,
-                    pinned: false,
-                    post_id: selectedPostId,
-                  });
-                  Alert.alert('Added', 'Post added to highlights');
-                  setPostSheetOpen(false);
-                  // reload highlights
-                  const { data } = await supabase
-                    .from('profile_highlights')
-                    .select('id,user_id,title,order_index,visible,pinned,post_id')
-                    .eq('user_id', user.id)
-                    .eq('visible', true)
-                    .order('pinned', { ascending: false })
-                    .order('order_index', { ascending: true })
-                    .limit(12);
-                  setHighlights((data as any) || []);
-                } catch (e) {
-                  Alert.alert('Error', 'Failed to add to highlights');
-                }
+              onPress={() => {
+                if (!selectedPostId) return;
+                setPostSheetOpen(false);
+                router.push(`/post/${selectedPostId}`);
+              }}
+            >
+              <Text style={styles.sheetActionText}>View post</Text>
+            </TouchableOpacity>
+            {isOwner && (
+            <TouchableOpacity
+              style={styles.sheetAction}
+              onPress={() => {
+                if (!selectedPostId) return;
+                setPostSheetOpen(false);
+                router.push(`/profile/add-from-post-slides?postId=${encodeURIComponent(selectedPostId)}` as any);
               }}
             >
               <Text style={styles.sheetActionText}>Add to highlights</Text>
             </TouchableOpacity>
+            )}
+            {isOwner && selectedFromTab === 'saved' && (
+              <TouchableOpacity
+                style={styles.sheetAction}
+                onPress={async () => {
+                  try {
+                    if (!user?.id || !selectedPostId) return;
+                    const { error } = await supabase
+                      .from('post_bookmarks')
+                      .delete()
+                      .eq('post_id', selectedPostId)
+                      .eq('user_id', user.id);
+                    if (error) throw error;
+                    setSavedPosts(prev => prev.filter(p => p.id !== selectedPostId));
+                    toast.show('Removed from saved');
+                    setPostSheetOpen(false);
+                  } catch (e) {
+                    Alert.alert('Error', 'Failed to remove from saved');
+                  }
+                }}
+              >
+                <Text style={[styles.sheetActionText, { color: '#111827' }]}>Remove from saved</Text>
+              </TouchableOpacity>
+            )}
+            {isOwner && selectedFromTab === 'grid' && (
+              <TouchableOpacity
+                style={[styles.sheetAction, { flexDirection: 'row', alignItems: 'center', gap: 8 }]}
+                onPress={async () => {
+                  if (!selectedPostId || !user?.id) {
+                    toast.show('No post selected', { type: 'error' });
+                    return;
+                  }
+                  const ok = await confirmAsync('Delete post?', 'This will permanently delete your post. Continue?');
+                  if (!ok) return;
+                  try {
+                    const { error } = await supabase
+                      .from('posts')
+                      .delete()
+                      .eq('id', selectedPostId)
+                      .eq('user_id', user.id);
+                    if (error) throw error;
+                    setUserPosts(prev => prev.filter(p => p.id !== selectedPostId));
+                    setSavedPosts(prev => prev.filter(p => p.id !== selectedPostId));
+                    toast.show('Post deleted', { type: 'success' });
+                    setPostSheetOpen(false);
+                  } catch (e) {
+                    toast.show('Failed to delete post', { type: 'error' });
+                  }
+                }}
+              >
+                <Trash size={16} color="#FF3B30" />
+                <Text style={[styles.sheetActionText, { color: '#FF3B30' }]}>Delete post</Text>
+              </TouchableOpacity>
+            )}
             <TouchableOpacity style={styles.sheetCancel} onPress={() => setPostSheetOpen(false)}>
               <Text style={styles.sheetCancelText}>Cancel</Text>
             </TouchableOpacity>
@@ -1179,6 +1350,21 @@ const styles = StyleSheet.create({
   gridPlaceholderText: {
     fontSize: 12,
     color: '#9CA3AF',
+  },
+  gridMoreBtn: {
+    position: 'absolute',
+    right: 4,
+    top: 4,
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: 'rgba(255,255,255,0.9)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: '#000',
+    shadowOpacity: 0.1,
+    shadowRadius: 3,
+    shadowOffset: { width: 0, height: 2 },
   },
   emptyState: {
     flex: 1,

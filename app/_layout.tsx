@@ -11,6 +11,7 @@ import { Stack, useRouter, useSegments } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { useFrameworkReady } from '@/hooks/useFrameworkReady';
 import { useAuth } from '@/hooks/useAuth';
+import { ToastProvider } from '@/components/Toast';
 
 export default function RootLayout() {
   useFrameworkReady();
@@ -92,7 +93,7 @@ export default function RootLayout() {
   }
   
   return (
-    <>
+    <ToastProvider>
       <Stack screenOptions={{ headerShown: false }}>
         <Stack.Screen name="(tabs)" />
         <Stack.Screen name="auth" />
@@ -101,6 +102,6 @@ export default function RootLayout() {
         <Stack.Screen name="+not-found" options={{ headerShown: true }} />
       </Stack>
       <StatusBar style="auto" />
-    </>
+    </ToastProvider>
   );
 }
