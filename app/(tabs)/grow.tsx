@@ -68,9 +68,8 @@ const USER_STATS = {
 export default function ProfileScreen() {
   const router = useRouter();
   const { user, profile: authProfile, signOut } = useAuth();
-  const { asUser, guest } = useLocalSearchParams<{ asUser?: string; guest?: string }>();
-  const viewingUserId = asUser || user?.id || '';
-  const isOwner = !!user && viewingUserId === user.id && guest !== '1';
+  const viewingUserId = user?.id || '';
+  const isOwner = true; // Always viewing own profile in this tab
   const toast = useToast();
   const [activeTab, setActiveTab] = useState<'grid' | 'saved'>('grid');
   const [userPosts, setUserPosts] = useState<any[]>([]);
@@ -242,19 +241,8 @@ export default function ProfileScreen() {
     try {
       setLoading(true);
 
-      // Load viewed profile if not owner
-      if (!isOwner) {
-        try {
-          const { data: vp } = await supabase
-            .from('profiles')
-            .select('*')
-            .eq('id', viewingUserId)
-            .single();
-          if (vp) setViewProfile(vp);
-        } catch {}
-      } else {
-        setViewProfile(null);
-      }
+      // Always showing own profile in this tab, no need to fetch viewProfile
+      setViewProfile(null);
 
       // Fetch user's posts
       const { data: posts, error: postsError } = await supabase
@@ -553,11 +541,9 @@ export default function ProfileScreen() {
             )}
           </View>
           <View style={styles.headerIcons}>
-            {isOwner && (
-              <TouchableOpacity style={styles.headerIcon} onPress={handleSignOut}>
-                <LogOut size={24} color="#000000" strokeWidth={2} />
-              </TouchableOpacity>
-            )}
+            <TouchableOpacity style={styles.headerIcon} onPress={handleSignOut}>
+              <LogOut size={24} color="#000000" strokeWidth={2} />
+            </TouchableOpacity>
           </View>
         </View>
 

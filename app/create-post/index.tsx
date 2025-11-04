@@ -332,7 +332,7 @@ export default function CreatePostScreen() {
         console.warn('Failed to add to highlights:', e);
       }
 
-      Alert.alert('Success', 'Post created successfully', [
+      Alert.alert('Success', 'Post added successfully', [
         { text: 'OK', onPress: () => router.back() }
       ]);
     } catch (error: any) {

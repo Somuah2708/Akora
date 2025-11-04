@@ -3,7 +3,7 @@ import { useFonts, Inter_400Regular, Inter_600SemiBold } from '@expo-google-font
 import { useEffect, useState, useCallback } from 'react';
 import { SplashScreen, useRouter, useFocusEffect } from 'expo-router';
 import { Heart, MessageCircle, Send, Bookmark, MoreHorizontal, Plus, BookOpen, PartyPopper, Calendar, TrendingUp, Users, Newspaper, Search, User, Edit3, Trash2, Play } from 'lucide-react-native';
-import { supabase, type Post, type Profile } from '@/lib/supabase';
+import { supabase, type Post, type Profile, type HomeFeaturedItem, type HomeCategoryTab } from '@/lib/supabase';
 import { useAuth } from '@/hooks/useAuth';
 import { Video, ResizeMode } from 'expo-av';
 import YouTubePlayer from '@/components/YouTubePlayer';
@@ -14,78 +14,36 @@ SplashScreen.preventAutoHideAsync();
 const { width } = Dimensions.get('window');
 const CARD_WIDTH = width - 48;
 
-// Featured items for horizontal scroll
-const FEATURED_ITEMS = [
+// Default featured items (fallback)
+const DEFAULT_FEATURED_ITEMS = [
   {
     id: 'featured1',
     title: 'Upcoming Alumni Meet',
     description: 'Join us for the annual gathering',
-    image: 'https://images.unsplash.com/photo-1523580494863-6f3031224c94?w=800&auto=format&fit=crop&q=60',
+    image_url: 'https://images.unsplash.com/photo-1523580494863-6f3031224c94?w=800&auto=format&fit=crop&q=60',
   },
   {
     id: 'featured2',
     title: 'Scholarship Program 2024',
     description: 'Applications now open',
-    image: 'https://images.unsplash.com/photo-1524178232363-1fb2b075b655?w=800&auto=format&fit=crop&q=60',
+    image_url: 'https://images.unsplash.com/photo-1524178232363-1fb2b075b655?w=800&auto=format&fit=crop&q=60',
   },
   {
     id: 'featured3',
     title: 'Career Development Workshop',
     description: 'Enhance your professional skills',
-    image: 'https://images.unsplash.com/photo-1552664730-d307ca884978?w=800&auto=format&fit=crop&q=60',
+    image_url: 'https://images.unsplash.com/photo-1552664730-d307ca884978?w=800&auto=format&fit=crop&q=60',
   },
 ];
 
-// Category tabs data
-const CATEGORY_TABS = [
-  {
-    id: '1',
-    title: 'History',
-    icon: BookOpen,
-    color: '#FF6B6B',
-    image: 'https://images.unsplash.com/photo-1524178232363-1fb2b075b655?w=400&auto=format&fit=crop&q=60',
-    route: '/heritage',
-  },
-  {
-    id: '2',
-    title: 'Centenary',
-    icon: PartyPopper,
-    color: '#4ECDC4',
-    image: 'https://images.unsplash.com/photo-1492684223066-81342ee5ff30?w=400&auto=format&fit=crop&q=60',
-    route: '/events',
-  },
-  {
-    id: '3',
-    title: 'Calendar',
-    icon: Calendar,
-    color: '#45B7D1',
-    image: 'https://images.unsplash.com/photo-1506784983877-45594efa4cbe?w=400&auto=format&fit=crop&q=60',
-    route: '/calendar',
-  },
-  {
-    id: '4',
-    title: 'Trending',
-    icon: TrendingUp,
-    color: '#F7B731',
-    image: 'https://images.unsplash.com/photo-1552664730-d307ca884978?w=400&auto=format&fit=crop&q=60',
-    route: '/news',
-  },
-  {
-    id: '5',
-    title: 'Community',
-    icon: Users,
-    color: '#A55EEA',
-    image: 'https://images.unsplash.com/photo-1529156069898-49953e39b3ac?w=400&auto=format&fit=crop&q=60',
-    route: '/circles',
-  },
-  {
-    id: '6',
-    title: 'News',
-    icon: Newspaper,
-    color: '#26DE81',
-    image: 'https://images.unsplash.com/photo-1504711434969-e33886168f5c?w=400&auto=format&fit=crop&q=60',
-    route: '/news',
-  },
+// Default category tabs (fallback)
+const DEFAULT_CATEGORY_TABS = [
+  { id: '1', title: 'History', icon_name: 'BookOpen', color: '#FF6B6B', image_url: 'https://images.unsplash.com/photo-1524178232363-1fb2b075b655?w=400&auto=format&fit=crop&q=60', route: '/heritage' },
+  { id: '2', title: 'Centenary', icon_name: 'PartyPopper', color: '#4ECDC4', image_url: 'https://images.unsplash.com/photo-1492684223066-81342ee5ff30?w=400&auto=format&fit=crop&q=60', route: '/events' },
+  { id: '3', title: 'Calendar', icon_name: 'Calendar', color: '#45B7D1', image_url: 'https://images.unsplash.com/photo-1506784983877-45594efa4cbe?w=400&auto=format&fit=crop&q=60', route: '/calendar' },
+  { id: '4', title: 'Trending', icon_name: 'TrendingUp', color: '#F7B731', image_url: 'https://images.unsplash.com/photo-1552664730-d307ca884978?w=400&auto=format&fit=crop&q=60', route: '/news' },
+  { id: '5', title: 'Community', icon_name: 'Users', color: '#A55EEA', image_url: 'https://images.unsplash.com/photo-1529156069898-49953e39b3ac?w=400&auto=format&fit=crop&q=60', route: '/circles' },
+  { id: '6', title: 'News', icon_name: 'Newspaper', color: '#26DE81', image_url: 'https://images.unsplash.com/photo-1504711434969-e33886168f5c?w=400&auto=format&fit=crop&q=60', route: '/news' },
 ];
 
 // Placeholder posts for when there's no data
@@ -188,11 +146,13 @@ interface PostWithUser extends Post {
 
 export default function HomeScreen() {
   const router = useRouter();
-  const { user } = useAuth();
+  const { user, profile } = useAuth();
   const [posts, setPosts] = useState<PostWithUser[]>([]);
   const [loading, setLoading] = useState(true);
   const [carouselIndices, setCarouselIndices] = useState<{ [key: string]: number }>({});
   const [activeCategoryId, setActiveCategoryId] = useState<string | null>(null);
+  const [featured, setFeatured] = useState<HomeFeaturedItem[]>([]);
+  const [categoryTabs, setCategoryTabs] = useState<HomeCategoryTab[]>([]);
 
   const [fontsLoaded] = useFonts({
     'Inter-Regular': Inter_400Regular,
@@ -209,19 +169,25 @@ export default function HomeScreen() {
           content,
           image_url,
           image_urls,
+          video_url,
+          video_urls,
+          youtube_url,
+          youtube_urls,
           created_at,
           user_id,
-          profiles:user_id (
+          profiles:user_id!inner (
             id,
             username,
             full_name,
             avatar_url,
-            is_admin
+            is_admin,
+            role
           ),
           post_comments(count),
           post_likes(count)
         `)
-        .eq('is_highlight_only', false)
+  .eq('is_highlight_only', false)
+  .or('is_admin.eq.true,role.eq.admin', { foreignTable: 'profiles' })
         .order('created_at', { ascending: false });
 
       if (error) {
@@ -243,19 +209,27 @@ export default function HomeScreen() {
         if (bmsRes.data) userBookmarks = new Set(bmsRes.data.map(b => b.post_id));
       }
       
-      // Log image URLs for debugging
+      // Log media fields for debugging
       data?.forEach((post, index) => {
         console.log(`Post ${index + 1}:`, {
           id: post.id,
           image_url: post.image_url,
           image_urls: post.image_urls,
+          video_url: (post as any).video_url,
+          video_urls: (post as any).video_urls,
+          youtube_url: (post as any).youtube_url,
+          youtube_urls: (post as any).youtube_urls,
           has_single_image: !!post.image_url,
           has_multiple_images: !!post.image_urls && post.image_urls.length > 0,
+          has_single_video: !!(post as any).video_url,
+          has_multiple_videos: !!(post as any).video_urls && (post as any).video_urls.length > 0,
+          has_single_youtube: !!(post as any).youtube_url,
+          has_multiple_youtube: !!(post as any).youtube_urls && (post as any).youtube_urls.length > 0,
         });
       });
 
             // Format the data to match our expected structure
-      const formattedPosts = data.map(post => {
+      const formattedPosts = (data || []).map(post => {
         const rawProfile = (Array.isArray(post.profiles) ? post.profiles[0] : post.profiles) as Partial<Profile> | undefined;
         const safeProfile: Profile = {
           id: rawProfile?.id ?? post.user_id,
@@ -268,6 +242,7 @@ export default function HomeScreen() {
           house: rawProfile?.house,
           created_at: rawProfile?.created_at,
           is_admin: (rawProfile as any)?.is_admin ?? false,
+          role: (rawProfile as any)?.role,
         };
 
         return {
@@ -276,6 +251,10 @@ export default function HomeScreen() {
           content: post.content,
           image_url: post.image_url,
           image_urls: post.image_urls,
+          video_url: (post as any).video_url,
+          video_urls: (post as any).video_urls,
+          youtube_url: (post as any).youtube_url,
+          youtube_urls: (post as any).youtube_urls,
           created_at: post.created_at,
           user: safeProfile,
           likes: Array.isArray(post.post_likes) ? post.post_likes.length : 0,
@@ -285,11 +264,10 @@ export default function HomeScreen() {
         } as PostWithUser;
       });
 
-  // Only show admin posts on Home
-  const adminOnly = formattedPosts.filter(p => (p.user as any)?.is_admin === true);
+      // Only show posts authored by admins on Home
+      const adminOnlyPosts = formattedPosts.filter(p => (p.user?.is_admin === true) || (p.user?.role === 'admin'));
 
-  // If none, fall back to placeholders
-  setPosts(adminOnly.length > 0 ? adminOnly : PLACEHOLDER_POSTS as any);
+      setPosts(adminOnlyPosts.length > 0 ? adminOnlyPosts : [] as any);
     } catch (error) {
       console.error('Error fetching posts:', error);
       // On error, show placeholder posts
@@ -310,6 +288,34 @@ export default function HomeScreen() {
       fetchPosts();
     }
   }, [fetchPosts, user]);
+
+  const loadHomeConfig = useCallback(async () => {
+    try {
+      const [featRes, tabsRes] = await Promise.all([
+        supabase
+          .from('home_featured_items')
+          .select('*')
+          .eq('is_active', true)
+          .order('order_index', { ascending: true }),
+        supabase
+          .from('home_category_tabs')
+          .select('*')
+          .eq('is_active', true)
+          .order('order_index', { ascending: true }),
+      ]);
+
+      setFeatured((featRes.data as HomeFeaturedItem[]) || []);
+      setCategoryTabs((tabsRes.data as HomeCategoryTab[]) || []);
+    } catch (e) {
+      console.warn('Failed to load home config, using defaults', e);
+      setFeatured([]);
+      setCategoryTabs([]);
+    }
+  }, []);
+
+  useEffect(() => {
+    loadHomeConfig();
+  }, [loadHomeConfig]);
 
   // Refresh posts when screen comes into focus (e.g., after creating a post)
   useFocusEffect(
@@ -497,6 +503,11 @@ export default function HomeScreen() {
         <View style={styles.header}>
         <Text style={styles.logoText}>Akora</Text>
         <View style={styles.headerIcons}>
+          {(profile?.role === 'admin' || profile?.is_admin) && (
+            <TouchableOpacity style={styles.headerIcon} onPress={() => Alert.alert('Manage Home', 'Admins can manage Home elements in Supabase tables:\n- home_featured_items\n- home_category_tabs\n\nAn in-app management UI is coming soon.') }>
+              <Edit3 size={24} color="#000000" strokeWidth={2} />
+            </TouchableOpacity>
+          )}
           <TouchableOpacity style={styles.headerIcon}>
             <Heart size={24} color="#000000" strokeWidth={2} />
           </TouchableOpacity>
@@ -516,12 +527,14 @@ export default function HomeScreen() {
         style={styles.featuredScroll}
         contentContainerStyle={styles.featuredContent}
       >
-        {FEATURED_ITEMS.map((item) => (
+        {(featured.length > 0 ? featured : DEFAULT_FEATURED_ITEMS).map((item) => (
           <TouchableOpacity key={item.id} style={styles.featuredItem}>
-            <Image source={{ uri: item.image }} style={styles.featuredImage} />
+            <Image source={{ uri: (item as any).image_url }} style={styles.featuredImage} />
             <View style={styles.featuredOverlay}>
               <Text style={styles.featuredTitle}>{item.title}</Text>
-              <Text style={styles.featuredDescription}>{item.description}</Text>
+              {!!(item as any).description && (
+                <Text style={styles.featuredDescription}>{(item as any).description}</Text>
+              )}
             </View>
           </TouchableOpacity>
         ))}
@@ -534,8 +547,8 @@ export default function HomeScreen() {
         style={styles.categoriesContainer}
         contentContainerStyle={styles.categoriesContent}
       >
-        {CATEGORY_TABS.map((category) => {
-          const IconComponent = category.icon;
+        {(() => { const ICON_MAP: any = { BookOpen, PartyPopper, Calendar, TrendingUp, Users, Newspaper }; return (categoryTabs.length > 0 ? categoryTabs : DEFAULT_CATEGORY_TABS).map((category) => {
+          const IconComponent = ICON_MAP[(category as any).icon_name] || Users;
           const isActiveCategory = activeCategoryId === category.id;
           return (
             <TouchableOpacity 
@@ -544,16 +557,16 @@ export default function HomeScreen() {
               activeOpacity={0.85}
               onPress={() => {
                 setActiveCategoryId(category.id);
-                if (category.route) {
-                  router.push(category.route as any);
+                if ((category as any).route) {
+                  router.push(((category as any).route) as any);
                 }
               }}
             >
-              <Image source={{ uri: category.image }} style={styles.categoryImage} />
+              <Image source={{ uri: (category as any).image_url }} style={styles.categoryImage} />
               <View
                 style={[
                   styles.categoryOverlay,
-                  { backgroundColor: category.color + '95' },
+                  { backgroundColor: (category as any).color + '95' },
                   isActiveCategory && styles.categoryOverlayActive,
                 ]}
               >
@@ -562,7 +575,7 @@ export default function HomeScreen() {
               </View>
             </TouchableOpacity>
           );
-        })}
+        }); })()}
       </ScrollView>
 
       {/* Search Bar */}
@@ -579,7 +592,7 @@ export default function HomeScreen() {
       ) : posts.length === 0 ? (
         <View style={styles.emptyContainer}>
           <Text style={styles.emptyText}>No posts yet</Text>
-          {user?.is_admin && (
+          {(profile?.role === 'admin' || profile?.is_admin) && (
             <TouchableOpacity 
               style={styles.createFirstPostButton}
               onPress={() => router.push('/create-post')}
@@ -717,7 +730,7 @@ export default function HomeScreen() {
                         key={index}
                         source={{ uri: imageUrl }} 
                         style={styles.postImage}
-                        resizeMode="cover"
+                        resizeMode="contain"
                       />
                     ))}
                   </ScrollView>
@@ -747,7 +760,7 @@ export default function HomeScreen() {
                   <Image 
                     source={{ uri: post.image_url }} 
                     style={styles.postImage}
-                    resizeMode="cover"
+                    resizeMode="contain"
                   />
                 </TouchableOpacity>
               ) : null}
@@ -804,7 +817,7 @@ export default function HomeScreen() {
       </ScrollView>
 
       {/* Floating Action Button for Creating Posts */}
-      {user && (
+      {(profile?.role === 'admin' || profile?.is_admin) && (
         <TouchableOpacity 
           style={styles.fabButton}
           onPress={() => router.push('/create-post')}
@@ -999,7 +1012,7 @@ const styles = StyleSheet.create({
   },
   postImage: {
     width: width,
-    height: width, // keep posts square to avoid distortion across devices
+    height: width * 0.75, // 4:3 aspect ratio for better proportions
     backgroundColor: '#F8F8F8',
   },
   carouselIndicator: {

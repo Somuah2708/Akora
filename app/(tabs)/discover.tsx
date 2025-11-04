@@ -2,12 +2,15 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { View, Text, StyleSheet, ScrollView, Image, TouchableOpacity, Dimensions, ActivityIndicator, RefreshControl, Modal, TextInput } from 'react-native';
 import { useFonts, Inter_400Regular, Inter_600SemiBold } from '@expo-google-fonts/inter';
 import { useRouter, useLocalSearchParams } from 'expo-router';
-import { Sparkles, Heart, MessageCircle, Bookmark, Lightbulb, SlidersHorizontal, Check, X, ChevronDown, Users } from 'lucide-react-native';
+import { Sparkles, Heart, MessageCircle, Bookmark, Lightbulb, SlidersHorizontal, Check, X, ChevronDown, Users, Camera } from 'lucide-react-native';
+import { LinearGradient } from 'expo-linear-gradient';
 import type { LucideIcon } from 'lucide-react-native';
 import { useAuth } from '@/hooks/useAuth';
 import { supabase } from '@/lib/supabase';
 import { fetchDiscoverFeed, type DiscoverItem } from '@/lib/discover';
 import { INTEREST_LIBRARY, type InterestCategoryDefinition, type InterestOptionId } from '@/lib/interest-data';
+import { Video, ResizeMode } from 'expo-av';
+import YouTubePlayer from '@/components/YouTubePlayer';
 
 const { width } = Dimensions.get('window');
 
@@ -213,16 +216,32 @@ export default function DiscoverScreen() {
           ]);
           const liked = new Set((likesRes.data || []).map((r: any) => r.post_id));
           const saved = new Set((bmsRes.data || []).map((r: any) => r.post_id));
-          setDiscoverFeed(feed.map((f) =>
+          const enriched = feed.map((f) =>
             f.type === 'post' && f.sourceId
               ? { ...f, isLiked: liked.has(String(f.sourceId)), saved: saved.has(String(f.sourceId)) ? 1 : 0, isBookmarked: saved.has(String(f.sourceId)) }
               : f
-          ));
+          );
+          const sorted = enriched.slice().sort((a, b) => {
+            const ad = a.created_at || (a as any).date || '';
+            const bd = b.created_at || (b as any).date || '';
+            return new Date(bd).getTime() - new Date(ad).getTime();
+          });
+          setDiscoverFeed(sorted);
         } else {
-          setDiscoverFeed(feed);
+          const sorted = feed.slice().sort((a, b) => {
+            const ad = a.created_at || (a as any).date || '';
+            const bd = b.created_at || (b as any).date || '';
+            return new Date(bd).getTime() - new Date(ad).getTime();
+          });
+          setDiscoverFeed(sorted);
         }
       } else {
-        setDiscoverFeed(feed);
+        const sorted = feed.slice().sort((a, b) => {
+          const ad = a.created_at || (a as any).date || '';
+          const bd = b.created_at || (b as any).date || '';
+          return new Date(bd).getTime() - new Date(ad).getTime();
+        });
+        setDiscoverFeed(sorted);
       }
     } catch (e) {
       console.error('Error loading discover feed', e);
@@ -719,21 +738,40 @@ export default function DiscoverScreen() {
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
       >
         {/* Header */}
-        <View style={styles.header}>
-          <View>
-            <Text style={styles.logoText}>Discover</Text>
-            <Text style={styles.headerSubtitle}>Handpicked for your Akora journey</Text>
-          </View>
-          <TouchableOpacity
-            style={styles.manageInterestsButton}
-            onPress={openInterestModal}
-            activeOpacity={0.85}
+        <View style={styles.headerWrapper}>
+          <LinearGradient
+            colors={["#0EA5E9", "#6366F1"]}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 1 }}
+            style={styles.headerGradient}
           >
-            <SlidersHorizontal size={16} color="#0A84FF" strokeWidth={2} />
-            <Text style={styles.manageInterestsText}>
-              {userInterests.size ? `Personalize (${userInterests.size})` : 'Pick interests'}
-            </Text>
-          </TouchableOpacity>
+            <View style={styles.headerRow}>
+              <View style={styles.headerTextCol}>
+                <Text style={styles.headerTitle}>Discover</Text>
+                <Text style={styles.headerSubtitleAlt} numberOfLines={3} ellipsizeMode="tail">See what your friends are up to and posts from people who share your interests</Text>
+              </View>
+              <View style={styles.headerActions}>
+                <TouchableOpacity
+                  style={styles.headerIconButton}
+                  onPress={() => router.push('/create-post?autoPick=1' as any)}
+                  activeOpacity={0.9}
+                  accessibilityLabel="Open camera to create a post"
+                >
+                  <Camera size={18} color="#111827" strokeWidth={2} />
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={styles.headerGhostButton}
+                  onPress={openInterestModal}
+                  activeOpacity={0.9}
+                >
+                  <SlidersHorizontal size={16} color="#FFFFFF" strokeWidth={2} />
+                  <Text style={styles.headerGhostText}>
+                    {userInterests.size ? `Interests (${userInterests.size})` : 'Interests'}
+                  </Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          </LinearGradient>
         </View>
 
         {/* Filter Tabs */}
@@ -794,8 +832,125 @@ export default function DiscoverScreen() {
                 </View>
               </View>
 
-              {/* Post Image */}
-              {item.image && (
+              {/* Post Media (Images/Videos/YouTube Carousel) */}
+              {item.youtube_urls && item.youtube_urls.length > 0 ? (
+                <View style={styles.carouselContainer}>
+                  <ScrollView
+                    horizontal
+                    pagingEnabled
+                    nestedScrollEnabled
+                    showsHorizontalScrollIndicator={false}
+                    style={styles.carousel}
+                    onScroll={(event) => {
+                      const scrollX = event.nativeEvent.contentOffset.x;
+                      const currentIndex = Math.round(scrollX / width);
+                      setCarouselIndices({
+                        ...carouselIndices,
+                        [item.id]: currentIndex,
+                      });
+                    }}
+                    scrollEventThrottle={16}
+                  >
+                    {item.youtube_urls.map((youtubeUrl, index) => (
+                      <YouTubePlayer key={index} url={youtubeUrl} />
+                    ))}
+                  </ScrollView>
+                  {item.youtube_urls.length > 1 && (
+                    <View style={styles.carouselIndicator}>
+                      <Text style={styles.carouselIndicatorText}>
+                        {(carouselIndices[item.id] ?? 0) + 1}/{item.youtube_urls.length}
+                      </Text>
+                    </View>
+                  )}
+                </View>
+              ) : item.video_urls && item.video_urls.length > 0 ? (
+                <View style={styles.carouselContainer}>
+                  <ScrollView
+                    horizontal
+                    pagingEnabled
+                    nestedScrollEnabled
+                    showsHorizontalScrollIndicator={false}
+                    style={styles.carousel}
+                    onScroll={(event) => {
+                      const scrollX = event.nativeEvent.contentOffset.x;
+                      const currentIndex = Math.round(scrollX / width);
+                      setCarouselIndices({
+                        ...carouselIndices,
+                        [item.id]: currentIndex,
+                      });
+                    }}
+                    scrollEventThrottle={16}
+                  >
+                    {item.video_urls.map((videoUrl, index) => (
+                      <View key={index} style={styles.videoContainer}>
+                        <Video
+                          source={{ uri: videoUrl }}
+                          style={styles.postImage}
+                          useNativeControls
+                          resizeMode={ResizeMode.COVER}
+                          isLooping
+                        />
+                      </View>
+                    ))}
+                  </ScrollView>
+                  {item.video_urls.length > 1 && (
+                    <View style={styles.carouselIndicator}>
+                      <Text style={styles.carouselIndicatorText}>
+                        {(carouselIndices[item.id] ?? 0) + 1}/{item.video_urls.length}
+                      </Text>
+                    </View>
+                  )}
+                </View>
+              ) : item.image_urls && item.image_urls.length > 0 ? (
+                <TouchableOpacity activeOpacity={0.85} onPress={() => item.sourceId && router.push(`/post/${item.sourceId}`)}>
+                  <View style={styles.carouselContainer}>
+                    <ScrollView
+                      horizontal
+                      pagingEnabled
+                      nestedScrollEnabled
+                      showsHorizontalScrollIndicator={false}
+                      style={styles.carousel}
+                      onScroll={(event) => {
+                        const scrollX = event.nativeEvent.contentOffset.x;
+                        const currentIndex = Math.round(scrollX / width);
+                        setCarouselIndices({
+                          ...carouselIndices,
+                          [item.id]: currentIndex,
+                        });
+                      }}
+                      scrollEventThrottle={16}
+                    >
+                      {item.image_urls.map((imageUrl, index) => (
+                        <Image 
+                          key={index}
+                          source={{ uri: imageUrl }} 
+                          style={styles.postImage}
+                          resizeMode="cover"
+                        />
+                      ))}
+                    </ScrollView>
+                    {item.image_urls.length > 1 && (
+                      <View style={styles.carouselIndicator}>
+                        <Text style={styles.carouselIndicatorText}>
+                          {(carouselIndices[item.id] ?? 0) + 1}/{item.image_urls.length}
+                        </Text>
+                      </View>
+                    )}
+                  </View>
+                </TouchableOpacity>
+              ) : item.youtube_url ? (
+                <YouTubePlayer url={item.youtube_url} />
+              ) : item.video_url ? (
+                <View style={styles.videoContainer}>
+                  <Video
+                    source={{ uri: item.video_url }}
+                    style={styles.postImage}
+                    useNativeControls
+                    resizeMode={ResizeMode.COVER}
+                    isLooping
+                  />
+                </View>
+              ) : item.image ? (
                 <TouchableOpacity activeOpacity={0.85} onPress={() => item.sourceId && router.push(`/post/${item.sourceId}`)}>
                   <Image 
                     source={{ uri: item.image }} 
@@ -803,7 +958,7 @@ export default function DiscoverScreen() {
                     resizeMode="cover"
                   />
                 </TouchableOpacity>
-              )}
+              ) : null}
 
               {/* Post Actions */}
               <View style={styles.postActions}>
@@ -878,43 +1033,70 @@ const styles = StyleSheet.create({
   scrollView: {
     flex: 1,
   },
-  header: {
+  headerWrapper: {
+    backgroundColor: '#FFFFFF',
+  },
+  headerGradient: {
+    paddingHorizontal: 16,
+    paddingTop: 56,
+    paddingBottom: 16,
+    borderBottomLeftRadius: 20,
+    borderBottomRightRadius: 20,
+  },
+  headerRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingHorizontal: 16,
-    paddingTop: 60,
-    paddingBottom: 10,
-    backgroundColor: '#FFFFFF',
-    borderBottomWidth: 0.5,
-    borderBottomColor: '#DBDBDB',
   },
-  logoText: {
+  headerTextCol: {
+    flex: 1,
+    flexShrink: 1,
+    paddingRight: 12,
+  },
+  headerTitle: {
     fontSize: 28,
     fontFamily: 'Inter-SemiBold',
-    color: '#000000',
+    color: '#FFFFFF',
   },
-  headerSubtitle: {
+  headerSubtitleAlt: {
     marginTop: 6,
     fontSize: 13,
     fontFamily: 'Inter-Regular',
-    color: '#6B7280',
+    color: 'rgba(255,255,255,0.85)',
   },
-  manageInterestsButton: {
+  headerActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    flexShrink: 0,
+  },
+  headerIconButton: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: '#FFFFFF',
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: '#000000',
+    shadowOpacity: 0.08,
+    shadowRadius: 6,
+    shadowOffset: { width: 0, height: 3 },
+  },
+  headerGhostButton: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
-    paddingHorizontal: 14,
-    paddingVertical: 8,
+    paddingHorizontal: 12,
+    height: 36,
     borderRadius: 18,
-    backgroundColor: '#EFF6FF',
     borderWidth: 1,
-    borderColor: '#BFDBFE',
+    borderColor: 'rgba(255,255,255,0.6)',
+    backgroundColor: 'rgba(255,255,255,0.08)',
   },
-  manageInterestsText: {
+  headerGhostText: {
     fontSize: 12,
     fontFamily: 'Inter-SemiBold',
-    color: '#0A84FF',
+    color: '#FFFFFF',
   },
   modalOverlay: {
     flex: 1,
@@ -1262,6 +1444,31 @@ const styles = StyleSheet.create({
     width: '100%',
     height: width,
     backgroundColor: '#F3F4F6',
+  },
+  carouselContainer: {
+    position: 'relative',
+  },
+  carousel: {
+    width: width,
+  },
+  carouselIndicator: {
+    position: 'absolute',
+    top: 12,
+    right: 12,
+    backgroundColor: 'rgba(0, 0, 0, 0.6)',
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 12,
+  },
+  carouselIndicatorText: {
+    color: '#FFFFFF',
+    fontSize: 12,
+    fontFamily: 'Inter-SemiBold',
+  },
+  videoContainer: {
+    width: width,
+    height: width,
+    backgroundColor: '#000000',
   },
   postActions: {
     flexDirection: 'row',

@@ -89,6 +89,7 @@ export type Profile = {
   house?: string;
   created_at?: string;
   is_admin?: boolean;
+  role?: 'admin' | 'user';
   receives_notifications?: boolean;
   theme_preference?: 'light' | 'dark';
   is_class_public?: boolean;
@@ -190,6 +191,28 @@ export type QuickAction = {
   route: string;
   order_index: number;
   created_at?: string;
+};
+
+export type HomeFeaturedItem = {
+  id: string;
+  title: string;
+  description?: string;
+  image_url: string;
+  order_index: number;
+  is_active: boolean;
+  created_at: string;
+};
+
+export type HomeCategoryTab = {
+  id: string;
+  title: string;
+  icon_name: string; // lucide icon name
+  color: string;
+  image_url: string;
+  route: string;
+  order_index: number;
+  is_active: boolean;
+  created_at: string;
 };
 
 export type ProductService = {

@@ -8,6 +8,11 @@ export interface DiscoverItem {
   title: string;
   description: string;
   image: string | null;
+  image_urls?: string[];
+  video_url?: string | null;
+  video_urls?: string[];
+  youtube_url?: string | null;
+  youtube_urls?: string[];
   author?: {
     id: string;
     username: string;
@@ -69,7 +74,13 @@ export async function fetchDiscoverFeed(
               category: post.category || 'social',
               title: post.content.substring(0, 60) + (post.content.length > 60 ? '...' : ''),
               description: post.content,
-              image: post.image_url,
+              image: post.image_url || (Array.isArray(post.image_urls) ? post.image_urls[0] : null),
+              image_urls: post.image_urls || undefined,
+              video_url: post.video_url || null,
+              video_urls: post.video_urls || undefined,
+              youtube_url: post.youtube_url || null,
+              youtube_urls: post.youtube_urls || undefined,
+              created_at: post.created_at,
               author: post.user
                 ? {
                     id: post.user.id,
@@ -104,7 +115,13 @@ export async function fetchDiscoverFeed(
             category: post.category || 'social',
             title: post.content.substring(0, 60) + (post.content.length > 60 ? '...' : ''),
             description: post.content,
-            image: post.image_url,
+            image: post.image_url || (Array.isArray(post.image_urls) ? post.image_urls[0] : null),
+            image_urls: post.image_urls || undefined,
+            video_url: post.video_url || null,
+            video_urls: post.video_urls || undefined,
+            youtube_url: post.youtube_url || null,
+            youtube_urls: post.youtube_urls || undefined,
+            created_at: post.created_at,
             author: post.user
               ? {
                   id: post.user.id,

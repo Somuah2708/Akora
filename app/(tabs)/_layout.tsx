@@ -65,6 +65,9 @@ export default function TabLayout() {
         name="grow"
         options={{
           title: 'Profile',
+          // Unmount on blur so visiting a friend's profile (with params)
+          // doesn't persist when leaving and returning to the Profile tab
+          unmountOnBlur: true,
           tabBarIcon: ({ color, size }) => <User size={24} color={color} strokeWidth={2.5} />,
         }}
       />
