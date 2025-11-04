@@ -9,8 +9,9 @@ import { useAuth } from '@/hooks/useAuth';
 import { supabase } from '@/lib/supabase';
 import { fetchDiscoverFeed, type DiscoverItem } from '@/lib/discover';
 import { INTEREST_LIBRARY, type InterestCategoryDefinition, type InterestOptionId } from '@/lib/interest-data';
-import { Video, ResizeMode } from 'expo-av';
+import { Video, ResizeMode, Audio } from 'expo-av';
 import YouTubePlayer from '@/components/YouTubePlayer';
+// Using the same simple horizontal ScrollView pattern as the Post detail screen
 
 const { width } = Dimensions.get('window');
 
@@ -206,7 +207,7 @@ export default function DiscoverScreen() {
         user?.id,
         activeFilter === 'all' || activeFilter === 'friends' ? undefined : activeFilter
       );
-      // Enrich with like/save state for current user
+      // Enrich with like/save state for current user (counts already come from fetchDiscoverFeed)
       if (user?.id) {
         const postIds = feed.filter((f) => f.type === 'post' && f.sourceId).map((f) => String(f.sourceId));
         if (postIds.length > 0) {
@@ -216,11 +217,21 @@ export default function DiscoverScreen() {
           ]);
           const liked = new Set((likesRes.data || []).map((r: any) => r.post_id));
           const saved = new Set((bmsRes.data || []).map((r: any) => r.post_id));
-          const enriched = feed.map((f) =>
-            f.type === 'post' && f.sourceId
-              ? { ...f, isLiked: liked.has(String(f.sourceId)), saved: saved.has(String(f.sourceId)) ? 1 : 0, isBookmarked: saved.has(String(f.sourceId)) }
-              : f
-          );
+          
+          const enriched = feed.map((f) => {
+            if (f.type === 'post' && f.sourceId) {
+              return {
+                ...f,
+                isLiked: liked.has(String(f.sourceId)),
+                saved: saved.has(String(f.sourceId)) ? 1 : 0,
+                isBookmarked: saved.has(String(f.sourceId)),
+                // Keep the accurate likes and comments counts from fetchDiscoverFeed
+                likes: f.likes ?? 0,
+                comments: f.comments ?? 0,
+              };
+            }
+            return f;
+          });
           const sorted = enriched.slice().sort((a, b) => {
             const ad = a.created_at || (a as any).date || '';
             const bd = b.created_at || (b as any).date || '';
@@ -259,6 +270,118 @@ export default function DiscoverScreen() {
   useEffect(() => {
     loadDiscoverFeed();
   }, [loadDiscoverFeed]);
+
+  // Real-time subscriptions for likes and comments
+  useEffect(() => {
+    if (!user?.id) return;
+
+    const postIds = discoverFeed
+      .filter((f) => f.type === 'post' && f.sourceId)
+      .map((f) => String(f.sourceId));
+
+    if (postIds.length === 0) return;
+
+    // Subscribe to likes changes
+    const likesChannel = supabase
+      .channel('post_likes_changes')
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'post_likes',
+          filter: `post_id=in.(${postIds.join(',')})`,
+        },
+        async (payload) => {
+          console.log('Like change detected:', payload);
+          // Refetch counts for affected post
+          const postId = (payload.new as any)?.post_id || (payload.old as any)?.post_id;
+          if (postId) {
+            const { data } = await supabase
+              .from('posts')
+              .select('id, post_likes(count)')
+              .eq('id', postId)
+              .single();
+            
+            if (data) {
+              const likesCount = Array.isArray((data as any).post_likes) ? (data as any).post_likes.length : 0;
+              
+              // Check if current user liked this post
+              const { data: userLike } = await supabase
+                .from('post_likes')
+                .select('id')
+                .eq('post_id', postId)
+                .eq('user_id', user.id)
+                .maybeSingle();
+              
+              setDiscoverFeed((prev) =>
+                prev.map((item) =>
+                  item.sourceId === postId
+                    ? { ...item, likes: likesCount, isLiked: !!userLike }
+                    : item
+                )
+              );
+            }
+          }
+        }
+      )
+      .subscribe();
+
+    // Subscribe to comments changes
+    const commentsChannel = supabase
+      .channel('post_comments_changes')
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'post_comments',
+          filter: `post_id=in.(${postIds.join(',')})`,
+        },
+        async (payload) => {
+          console.log('Comment change detected:', payload);
+          // Refetch counts for affected post
+          const postId = (payload.new as any)?.post_id || (payload.old as any)?.post_id;
+          if (postId) {
+            const { data } = await supabase
+              .from('posts')
+              .select('id, post_comments(count)')
+              .eq('id', postId)
+              .single();
+            
+            if (data) {
+              const commentsCount = Array.isArray((data as any).post_comments) ? (data as any).post_comments.length : 0;
+              setDiscoverFeed((prev) =>
+                prev.map((item) =>
+                  item.sourceId === postId ? { ...item, comments: commentsCount } : item
+                )
+              );
+            }
+          }
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(likesChannel);
+      supabase.removeChannel(commentsChannel);
+    };
+  }, [user?.id, discoverFeed.map((f) => f.sourceId).join(',')]);
+
+  // Ensure videos play even when iPhone is in silent mode
+  useEffect(() => {
+    (async () => {
+      try {
+        await Audio.setAudioModeAsync({
+          playsInSilentModeIOS: true,
+          staysActiveInBackground: false,
+          allowsRecordingIOS: false,
+        });
+      } catch (e) {
+        console.warn('Failed to set audio mode', e);
+      }
+    })();
+  }, []);
 
   // If routed with ?openInterestModal=1, open the interests modal on mount
   useEffect(() => {
@@ -474,35 +597,72 @@ export default function DiscoverScreen() {
     if (!user?.id) return;
 
     const item = discoverFeed.find((i) => i.id === itemId);
-    if (!item) return;
+    if (!item || item.type !== 'post' || !item.sourceId) return;
 
     const isLiked = item.isLiked || false;
-    const newLikeCount = isLiked ? (item.likes || 0) - 1 : (item.likes || 0) + 1;
 
     // Optimistically update UI
     setDiscoverFeed((prev) =>
       prev.map((i) =>
         i.id === itemId
-          ? { ...i, isLiked: !isLiked, likes: newLikeCount }
+          ? { ...i, isLiked: !isLiked, likes: isLiked ? Math.max(0, (i.likes || 0) - 1) : (i.likes || 0) + 1 }
           : i
       )
     );
 
-    // Update database
-    if (item.type === 'post' && item.sourceId) {
+    try {
+      // Update database
       if (isLiked) {
         const { error } = await supabase
           .from('post_likes')
           .delete()
           .eq('post_id', item.sourceId)
           .eq('user_id', user.id);
-        if (error) console.error('Error unliking post:', error);
+        if (error) throw error;
       } else {
         const { error } = await supabase
           .from('post_likes')
           .insert({ post_id: item.sourceId, user_id: user.id });
-        if (error) console.error('Error liking post:', error);
+        if (error) throw error;
       }
+
+      // Fetch accurate count after toggle
+      const { data } = await supabase
+        .from('posts')
+        .select('id, post_likes(count)')
+        .eq('id', item.sourceId)
+        .single();
+      
+      if (data) {
+        const actualLikesCount = Array.isArray((data as any).post_likes) ? (data as any).post_likes.length : 0;
+        
+        // Check current user's like status
+        const { data: userLike } = await supabase
+          .from('post_likes')
+          .select('id')
+          .eq('post_id', item.sourceId)
+          .eq('user_id', user.id)
+          .maybeSingle();
+        
+        // Update with accurate count
+        setDiscoverFeed((prev) =>
+          prev.map((i) =>
+            i.id === itemId
+              ? { ...i, isLiked: !!userLike, likes: actualLikesCount }
+              : i
+          )
+        );
+      }
+    } catch (error) {
+      console.error('Error toggling like:', error);
+      // Revert on error
+      setDiscoverFeed((prev) =>
+        prev.map((i) =>
+          i.id === itemId
+            ? { ...i, isLiked: isLiked, likes: item.likes || 0 }
+            : i
+        )
+      );
     }
   };
 
@@ -838,125 +998,96 @@ export default function DiscoverScreen() {
                   <ScrollView
                     horizontal
                     pagingEnabled
-                    nestedScrollEnabled
                     showsHorizontalScrollIndicator={false}
+                    removeClippedSubviews={false}
                     style={styles.carousel}
-                    onScroll={(event) => {
-                      const scrollX = event.nativeEvent.contentOffset.x;
-                      const currentIndex = Math.round(scrollX / width);
-                      setCarouselIndices({
-                        ...carouselIndices,
-                        [item.id]: currentIndex,
-                      });
-                    }}
-                    scrollEventThrottle={16}
                   >
                     {item.youtube_urls.map((youtubeUrl, index) => (
-                      <YouTubePlayer key={index} url={youtubeUrl} />
+                      <View key={index} style={styles.mediaPage}>
+                        <YouTubePlayer url={youtubeUrl} />
+                      </View>
                     ))}
                   </ScrollView>
-                  {item.youtube_urls.length > 1 && (
-                    <View style={styles.carouselIndicator}>
-                      <Text style={styles.carouselIndicatorText}>
-                        {(carouselIndices[item.id] ?? 0) + 1}/{item.youtube_urls.length}
-                      </Text>
-                    </View>
-                  )}
                 </View>
               ) : item.video_urls && item.video_urls.length > 0 ? (
                 <View style={styles.carouselContainer}>
                   <ScrollView
                     horizontal
                     pagingEnabled
-                    nestedScrollEnabled
                     showsHorizontalScrollIndicator={false}
+                    removeClippedSubviews={false}
                     style={styles.carousel}
-                    onScroll={(event) => {
-                      const scrollX = event.nativeEvent.contentOffset.x;
-                      const currentIndex = Math.round(scrollX / width);
-                      setCarouselIndices({
-                        ...carouselIndices,
-                        [item.id]: currentIndex,
-                      });
-                    }}
-                    scrollEventThrottle={16}
                   >
                     {item.video_urls.map((videoUrl, index) => (
-                      <View key={index} style={styles.videoContainer}>
+                      <View key={index} style={styles.mediaPage}>
                         <Video
                           source={{ uri: videoUrl }}
                           style={styles.postImage}
                           useNativeControls
                           resizeMode={ResizeMode.COVER}
-                          isLooping
+                          isLooping={false}
+                          isMuted={false}
+                          volume={1.0}
+                          onError={(err) => console.warn('Video play error (carousel item)', err)}
                         />
                       </View>
                     ))}
                   </ScrollView>
-                  {item.video_urls.length > 1 && (
-                    <View style={styles.carouselIndicator}>
-                      <Text style={styles.carouselIndicatorText}>
-                        {(carouselIndices[item.id] ?? 0) + 1}/{item.video_urls.length}
-                      </Text>
-                    </View>
-                  )}
                 </View>
               ) : item.image_urls && item.image_urls.length > 0 ? (
-                <TouchableOpacity activeOpacity={0.85} onPress={() => item.sourceId && router.push(`/post/${item.sourceId}`)}>
-                  <View style={styles.carouselContainer}>
-                    <ScrollView
-                      horizontal
-                      pagingEnabled
-                      nestedScrollEnabled
-                      showsHorizontalScrollIndicator={false}
-                      style={styles.carousel}
-                      onScroll={(event) => {
-                        const scrollX = event.nativeEvent.contentOffset.x;
-                        const currentIndex = Math.round(scrollX / width);
-                        setCarouselIndices({
-                          ...carouselIndices,
-                          [item.id]: currentIndex,
-                        });
-                      }}
-                      scrollEventThrottle={16}
-                    >
-                      {item.image_urls.map((imageUrl, index) => (
-                        <Image 
-                          key={index}
-                          source={{ uri: imageUrl }} 
+                <View style={styles.carouselContainer}>
+                  <ScrollView
+                    horizontal
+                    pagingEnabled
+                    showsHorizontalScrollIndicator={false}
+                    removeClippedSubviews={false}
+                    style={styles.carousel}
+                    scrollEventThrottle={16}
+                  >
+                    {item.image_urls.map((imageUrl, index) => (
+                      <TouchableOpacity 
+                        key={index} 
+                        style={styles.mediaPage}
+                        activeOpacity={0.95}
+                        onPress={() => item.sourceId && router.push(`/post/${item.sourceId}`)}
+                      >
+                        <Image
+                          source={{ uri: imageUrl }}
                           style={styles.postImage}
                           resizeMode="cover"
+                          onError={(e) => console.warn('Image load error', imageUrl, e.nativeEvent?.error)}
                         />
-                      ))}
-                    </ScrollView>
-                    {item.image_urls.length > 1 && (
-                      <View style={styles.carouselIndicator}>
-                        <Text style={styles.carouselIndicatorText}>
-                          {(carouselIndices[item.id] ?? 0) + 1}/{item.image_urls.length}
-                        </Text>
-                      </View>
-                    )}
-                  </View>
-                </TouchableOpacity>
+                      </TouchableOpacity>
+                    ))}
+                  </ScrollView>
+                </View>
               ) : item.youtube_url ? (
-                <YouTubePlayer url={item.youtube_url} />
+                <View style={styles.mediaPage}>
+                  <YouTubePlayer url={item.youtube_url} />
+                </View>
               ) : item.video_url ? (
-                <View style={styles.videoContainer}>
+                <View style={styles.mediaPage}>
                   <Video
                     source={{ uri: item.video_url }}
                     style={styles.postImage}
                     useNativeControls
                     resizeMode={ResizeMode.COVER}
-                    isLooping
+                    isLooping={false}
+                    isMuted={false}
+                    volume={1.0}
+                    onError={(err) => console.warn('Video play error (single)', err)}
                   />
                 </View>
               ) : item.image ? (
                 <TouchableOpacity activeOpacity={0.85} onPress={() => item.sourceId && router.push(`/post/${item.sourceId}`)}>
-                  <Image 
-                    source={{ uri: item.image }} 
-                    style={styles.postImage}
-                    resizeMode="cover"
-                  />
+                  <View style={styles.mediaPage}>
+                    <Image 
+                      source={{ uri: item.image }} 
+                      style={styles.postImage}
+                      resizeMode="cover"
+                      onError={(e) => console.warn('Image load error', item.image, e.nativeEvent.error)}
+                    />
+                  </View>
                 </TouchableOpacity>
               ) : null}
 
@@ -987,7 +1118,7 @@ export default function DiscoverScreen() {
               </View>
 
               {/* Post Likes */}
-              <Text style={styles.postLikes}>{item.likes || 0} likes</Text>
+              <Text style={styles.postLikes}>{item.likes || 0} {item.likes === 1 ? 'like' : 'likes'}</Text>
 
               {/* Post Caption */}
               <View style={styles.postCaption}>
@@ -999,11 +1130,17 @@ export default function DiscoverScreen() {
                 </Text>
               </View>
 
-              {/* Post Comments */}
-              {item.comments && item.comments > 0 && (
+              {/* Post Comments Count */}
+              {item.comments !== undefined && item.comments > 0 ? (
                 <TouchableOpacity onPress={() => item.sourceId && router.push(`/post-comments/${item.sourceId}`)}>
                   <Text style={styles.viewComments}>
                     View all {item.comments} {item.comments === 1 ? 'comment' : 'comments'}
+                  </Text>
+                </TouchableOpacity>
+              ) : (
+                <TouchableOpacity onPress={() => item.sourceId && router.push(`/post-comments/${item.sourceId}`)}>
+                  <Text style={styles.viewComments}>
+                    Be the first to comment
                   </Text>
                 </TouchableOpacity>
               )}
@@ -1450,6 +1587,12 @@ const styles = StyleSheet.create({
   },
   carousel: {
     width: width,
+  },
+  mediaPage: {
+    width: width,
+    height: width,
+    backgroundColor: '#F3F4F6',
+    overflow: 'hidden',
   },
   carouselIndicator: {
     position: 'absolute',

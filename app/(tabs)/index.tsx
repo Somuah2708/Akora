@@ -5,7 +5,7 @@ import { SplashScreen, useRouter, useFocusEffect } from 'expo-router';
 import { Heart, MessageCircle, Send, Bookmark, MoreHorizontal, Plus, BookOpen, PartyPopper, Calendar, TrendingUp, Users, Newspaper, Search, User, Edit3, Trash2, Play } from 'lucide-react-native';
 import { supabase, type Post, type Profile, type HomeFeaturedItem, type HomeCategoryTab } from '@/lib/supabase';
 import { useAuth } from '@/hooks/useAuth';
-import { Video, ResizeMode } from 'expo-av';
+import { Video, ResizeMode, Audio } from 'expo-av';
 import YouTubePlayer from '@/components/YouTubePlayer';
 import { isYouTubeUrl, getYouTubeThumbnail, extractYouTubeVideoId } from '@/lib/youtube';
 
@@ -283,11 +283,113 @@ export default function HomeScreen() {
     }
   }, [fontsLoaded]);
 
+  // Ensure video playback works in iOS silent mode as well
+  useEffect(() => {
+    (async () => {
+      try {
+        await Audio.setAudioModeAsync({ playsInSilentModeIOS: true });
+      } catch (e) {
+        console.warn('Audio mode setup failed', e);
+      }
+    })();
+  }, []);
+
   useEffect(() => {
     if (user) {
       fetchPosts();
     }
   }, [fetchPosts, user]);
+
+  // Real-time subscriptions for likes and comments on Home
+  useEffect(() => {
+    if (!user?.id || posts.length === 0) return;
+
+    const postIds = posts.map((p) => p.id);
+
+    // Subscribe to likes changes
+    const likesChannel = supabase
+      .channel('home_post_likes_changes')
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'post_likes',
+          filter: `post_id=in.(${postIds.join(',')})`,
+        },
+        async (payload) => {
+          console.log('Like change detected on Home:', payload);
+          const postId = (payload.new as any)?.post_id || (payload.old as any)?.post_id;
+          if (postId) {
+            const { data } = await supabase
+              .from('posts')
+              .select('id, post_likes(count)')
+              .eq('id', postId)
+              .single();
+            
+            if (data) {
+              const likesCount = Array.isArray((data as any).post_likes) ? (data as any).post_likes.length : 0;
+              
+              // Check if current user liked this post
+              const { data: userLike } = await supabase
+                .from('post_likes')
+                .select('id')
+                .eq('post_id', postId)
+                .eq('user_id', user.id)
+                .maybeSingle();
+              
+              setPosts((prev) =>
+                prev.map((post) =>
+                  post.id === postId
+                    ? { ...post, likes: likesCount, isLiked: !!userLike }
+                    : post
+                )
+              );
+            }
+          }
+        }
+      )
+      .subscribe();
+
+    // Subscribe to comments changes
+    const commentsChannel = supabase
+      .channel('home_post_comments_changes')
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'post_comments',
+          filter: `post_id=in.(${postIds.join(',')})`,
+        },
+        async (payload) => {
+          console.log('Comment change detected on Home:', payload);
+          const postId = (payload.new as any)?.post_id || (payload.old as any)?.post_id;
+          if (postId) {
+            const { data } = await supabase
+              .from('posts')
+              .select('id, post_comments(count)')
+              .eq('id', postId)
+              .single();
+            
+            if (data) {
+              const commentsCount = Array.isArray((data as any).post_comments) ? (data as any).post_comments.length : 0;
+              setPosts((prev) =>
+                prev.map((post) =>
+                  post.id === postId ? { ...post, comments_count: commentsCount } : post
+                )
+              );
+            }
+          }
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(likesChannel);
+      supabase.removeChannel(commentsChannel);
+    };
+  }, [user?.id, posts.map((p) => p.id).join(',')]);
 
   const loadHomeConfig = useCallback(async () => {
     try {
@@ -648,6 +750,10 @@ export default function HomeScreen() {
                     pagingEnabled
                     showsHorizontalScrollIndicator={false}
                     style={styles.carousel}
+                    directionalLockEnabled
+                    bounces={false}
+                    snapToInterval={width}
+                    decelerationRate="fast"
                     onScroll={(event) => {
                       const scrollX = event.nativeEvent.contentOffset.x;
                       const currentIndex = Math.round(scrollX / width);
@@ -677,6 +783,10 @@ export default function HomeScreen() {
                     pagingEnabled
                     showsHorizontalScrollIndicator={false}
                     style={styles.carousel}
+                    directionalLockEnabled
+                    bounces={false}
+                    snapToInterval={width}
+                    decelerationRate="fast"
                     onScroll={(event) => {
                       const scrollX = event.nativeEvent.contentOffset.x;
                       const currentIndex = Math.round(scrollX / width);
@@ -695,6 +805,9 @@ export default function HomeScreen() {
                           useNativeControls
                           resizeMode={ResizeMode.COVER}
                           isLooping
+                          isMuted={false}
+                          volume={1.0}
+                          onError={(err) => console.warn('Video play error (carousel item)', err)}
                         />
                       </View>
                     ))}
@@ -715,6 +828,10 @@ export default function HomeScreen() {
                     pagingEnabled
                     showsHorizontalScrollIndicator={false}
                     style={styles.carousel}
+                    directionalLockEnabled
+                    bounces={false}
+                    snapToInterval={width}
+                    decelerationRate="fast"
                     onScroll={(event) => {
                       const scrollX = event.nativeEvent.contentOffset.x;
                       const currentIndex = Math.round(scrollX / width);
@@ -753,6 +870,9 @@ export default function HomeScreen() {
                     useNativeControls
                     resizeMode={ResizeMode.COVER}
                     isLooping
+                    isMuted={false}
+                    volume={1.0}
+                    onError={(err) => console.warn('Video play error (single)', err)}
                   />
                 </View>
               ) : post.image_url ? (
@@ -792,7 +912,7 @@ export default function HomeScreen() {
               </View>
 
               {/* Post Likes */}
-              <Text style={styles.postLikes}>{post.likes} likes</Text>
+              <Text style={styles.postLikes}>{post.likes || 0} {post.likes === 1 ? 'like' : 'likes'}</Text>
 
               {/* Post Caption */}
               <View style={styles.postCaption}>
@@ -802,11 +922,17 @@ export default function HomeScreen() {
                 </Text>
               </View>
 
-              {/* Post Comments */}
-              {post.comments_count !== undefined && post.comments_count > 0 && (
+              {/* Post Comments Count */}
+              {post.comments_count !== undefined && post.comments_count > 0 ? (
                 <TouchableOpacity onPress={() => router.push(`/post-comments/${post.id}`)}>
                   <Text style={styles.viewComments}>
                     View all {post.comments_count} {post.comments_count === 1 ? 'comment' : 'comments'}
+                  </Text>
+                </TouchableOpacity>
+              ) : (
+                <TouchableOpacity onPress={() => router.push(`/post-comments/${post.id}`)}>
+                  <Text style={styles.viewComments}>
+                    Be the first to comment
                   </Text>
                 </TouchableOpacity>
               )}

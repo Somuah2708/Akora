@@ -135,7 +135,9 @@ export default function CreatePostScreen() {
       allowsMultipleSelection: true,
       quality: 0.8,
       selectionLimit: 20 - media.length,
-    });
+      // Prefer smaller, stream-friendly videos to improve upload/playback reliability
+      videoExportPreset: (ImagePicker as any).VideoExportPreset?.MediumQuality || undefined,
+    } as any);
 
     if (!result.canceled) {
       const newMedia: MediaItem[] = result.assets.map(asset => ({
@@ -187,22 +189,45 @@ export default function CreatePostScreen() {
         throw new Error(`Failed to fetch media: ${response.status}`);
       }
       
-      const blob = await response.blob();
-      console.log('📦 Blob created, size:', blob.size, 'type:', blob.type);
+      const arrayBuffer = await response.arrayBuffer();
+      const arrayBufferSize = arrayBuffer.byteLength;
+      console.log('📦 ArrayBuffer created, size:', arrayBufferSize);
+
+      // Basic guard: avoid extremely large uploads that are likely to fail
+      if (type === 'video' && arrayBufferSize > 80 * 1024 * 1024) { // 80MB
+        Alert.alert(
+          'Video Too Large',
+          'Please select a shorter or smaller video (under ~80MB). Try recording in a lower quality or trimming duration.'
+        );
+        return null;
+      }
       
-      const fileExt = uri.split('.').pop() || (type === 'video' ? 'mp4' : 'jpg');
+  const fileExt = uri.split('.').pop() || (type === 'video' ? 'mp4' : 'jpg');
       const fileName = `${user?.id}-${Date.now()}.${fileExt}`;
       const filePath = `posts/${fileName}`;
       
       console.log('📁 Uploading to path:', filePath);
 
-      const contentType = type === 'video' 
-        ? (blob.type || 'video/mp4')
-        : (blob.type || 'image/jpeg');
+      const inferContentType = (ext: string, t: 'image' | 'video') => {
+        const e = (ext || '').toLowerCase();
+        if (t === 'video') {
+          if (e.includes('mp4') || e.includes('m4v')) return 'video/mp4';
+          if (e.includes('mov')) return 'video/quicktime';
+          if (e.includes('webm')) return 'video/webm';
+          return 'video/mp4';
+        }
+        // image
+        if (e.includes('png')) return 'image/png';
+        if (e.includes('webp')) return 'image/webp';
+        if (e.includes('jpeg') || e.includes('jpg')) return 'image/jpeg';
+        return 'image/jpeg';
+      };
+
+      const contentType = inferContentType(fileExt, type);
 
       const { data: uploadData, error: uploadError } = await supabase.storage
         .from('media')
-        .upload(filePath, blob, {
+        .upload(filePath, arrayBuffer, {
           contentType,
           cacheControl: '3600',
           upsert: false

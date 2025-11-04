@@ -1,3 +1,4 @@
+import 'react-native-gesture-handler';
 import 'react-native-url-polyfill/auto';
 
 // Fix for network requests in web environment
@@ -7,6 +8,7 @@ if (typeof window !== 'undefined') {
 }
 
 import { useEffect, useRef } from 'react';
+import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { Stack, useRouter, useSegments } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { useFrameworkReady } from '@/hooks/useFrameworkReady';
@@ -93,15 +95,17 @@ export default function RootLayout() {
   }
   
   return (
-    <ToastProvider>
-      <Stack screenOptions={{ headerShown: false }}>
-        <Stack.Screen name="(tabs)" />
-        <Stack.Screen name="auth" />
-        {/* Ensure non-tab stacks (e.g., chat, user-profile, etc.) also have no header */}
-        <Stack.Screen name="chat" />
-        <Stack.Screen name="+not-found" options={{ headerShown: true }} />
-      </Stack>
-      <StatusBar style="auto" />
-    </ToastProvider>
+    <GestureHandlerRootView style={{ flex: 1 }}>
+      <ToastProvider>
+        <Stack screenOptions={{ headerShown: false }}>
+          <Stack.Screen name="(tabs)" />
+          <Stack.Screen name="auth" />
+          {/* Ensure non-tab stacks (e.g., chat, user-profile, etc.) also have no header */}
+          <Stack.Screen name="chat" />
+          <Stack.Screen name="+not-found" options={{ headerShown: true }} />
+        </Stack>
+        <StatusBar style="auto" />
+      </ToastProvider>
+    </GestureHandlerRootView>
   );
 }

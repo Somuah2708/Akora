@@ -67,33 +67,53 @@ export async function fetchDiscoverFeed(
         if (postsWithProfiles) {
           // Filter out admin-authored posts for Discover
           const nonAdminPosts = postsWithProfiles.filter((post: any) => !post.user?.is_admin);
+          
+          // Fetch accurate likes and comments counts for all posts
+          const postIdsForCounts = nonAdminPosts.map((p: any) => p.id);
+          const { data: countsData } = await supabase
+            .from('posts')
+            .select('id, post_likes(count), post_comments(count)')
+            .in('id', postIdsForCounts);
+          
+          const countsMap = new Map<string, { likes: number; comments: number }>();
+          (countsData || []).forEach((p: any) => {
+            const likesCount = Array.isArray(p.post_likes) ? p.post_likes.length : 0;
+            const commentsCount = Array.isArray(p.post_comments) ? p.post_comments.length : 0;
+            countsMap.set(p.id, { likes: likesCount, comments: commentsCount });
+          });
+          
           items.push(
-            ...nonAdminPosts.map((post) => ({
-              id: `post-${post.id}`,
-              type: 'post' as const,
-              category: post.category || 'social',
-              title: post.content.substring(0, 60) + (post.content.length > 60 ? '...' : ''),
-              description: post.content,
-              image: post.image_url || (Array.isArray(post.image_urls) ? post.image_urls[0] : null),
-              image_urls: post.image_urls || undefined,
-              video_url: post.video_url || null,
-              video_urls: post.video_urls || undefined,
-              youtube_url: post.youtube_url || null,
-              youtube_urls: post.youtube_urls || undefined,
-              created_at: post.created_at,
-              author: post.user
-                ? {
-                    id: post.user.id,
-                    username: post.user.username || '',
-                    full_name: post.user.full_name || '',
-                    avatar_url: post.user.avatar_url || '',
-                  }
-                : undefined,
-              sourceId: post.id,
-              sourceTable: 'posts',
-              matchScore: post.user_id === userId ? 100 : 85, // Higher score for own posts
-              tags: post.category ? [post.category] : [],
-            }))
+            ...nonAdminPosts.map((post) => {
+              const counts = countsMap.get(post.id) || { likes: 0, comments: 0 };
+              return {
+                id: `post-${post.id}`,
+                type: 'post' as const,
+                category: post.category || 'social',
+                title: post.content.substring(0, 60) + (post.content.length > 60 ? '...' : ''),
+                description: post.content,
+                image: post.image_url || (Array.isArray(post.image_urls) ? post.image_urls[0] : null),
+                image_urls: post.image_urls || undefined,
+                video_url: post.video_url || null,
+                video_urls: post.video_urls || undefined,
+                youtube_url: post.youtube_url || null,
+                youtube_urls: post.youtube_urls || undefined,
+                created_at: post.created_at,
+                likes: counts.likes,
+                comments: counts.comments,
+                author: post.user
+                  ? {
+                      id: post.user.id,
+                      username: post.user.username || '',
+                      full_name: post.user.full_name || '',
+                      avatar_url: post.user.avatar_url || '',
+                    }
+                  : undefined,
+                sourceId: post.id,
+                sourceTable: 'posts',
+                matchScore: post.user_id === userId ? 100 : 85, // Higher score for own posts
+                tags: post.category ? [post.category] : [],
+              };
+            })
           );
         }
       }
@@ -108,33 +128,53 @@ export async function fetchDiscoverFeed(
 
       if (posts) {
         const nonAdminPosts = posts.filter((post: any) => !post.user?.is_admin);
+        
+        // Fetch accurate likes and comments counts
+        const postIdsForCounts = nonAdminPosts.map((p: any) => p.id);
+        const { data: countsData } = await supabase
+          .from('posts')
+          .select('id, post_likes(count), post_comments(count)')
+          .in('id', postIdsForCounts);
+        
+        const countsMap = new Map<string, { likes: number; comments: number }>();
+        (countsData || []).forEach((p: any) => {
+          const likesCount = Array.isArray(p.post_likes) ? p.post_likes.length : 0;
+          const commentsCount = Array.isArray(p.post_comments) ? p.post_comments.length : 0;
+          countsMap.set(p.id, { likes: likesCount, comments: commentsCount });
+        });
+        
         items.push(
-          ...nonAdminPosts.map((post) => ({
-            id: `post-${post.id}`,
-            type: 'post' as const,
-            category: post.category || 'social',
-            title: post.content.substring(0, 60) + (post.content.length > 60 ? '...' : ''),
-            description: post.content,
-            image: post.image_url || (Array.isArray(post.image_urls) ? post.image_urls[0] : null),
-            image_urls: post.image_urls || undefined,
-            video_url: post.video_url || null,
-            video_urls: post.video_urls || undefined,
-            youtube_url: post.youtube_url || null,
-            youtube_urls: post.youtube_urls || undefined,
-            created_at: post.created_at,
-            author: post.user
-              ? {
-                  id: post.user.id,
-                  username: post.user.username || '',
-                  full_name: post.user.full_name || '',
-                  avatar_url: post.user.avatar_url || '',
-                }
-              : undefined,
-            sourceId: post.id,
-            sourceTable: 'posts',
-            matchScore: 75,
-            tags: post.category ? [post.category] : [],
-          }))
+          ...nonAdminPosts.map((post) => {
+            const counts = countsMap.get(post.id) || { likes: 0, comments: 0 };
+            return {
+              id: `post-${post.id}`,
+              type: 'post' as const,
+              category: post.category || 'social',
+              title: post.content.substring(0, 60) + (post.content.length > 60 ? '...' : ''),
+              description: post.content,
+              image: post.image_url || (Array.isArray(post.image_urls) ? post.image_urls[0] : null),
+              image_urls: post.image_urls || undefined,
+              video_url: post.video_url || null,
+              video_urls: post.video_urls || undefined,
+              youtube_url: post.youtube_url || null,
+              youtube_urls: post.youtube_urls || undefined,
+              created_at: post.created_at,
+              likes: counts.likes,
+              comments: counts.comments,
+              author: post.user
+                ? {
+                    id: post.user.id,
+                    username: post.user.username || '',
+                    full_name: post.user.full_name || '',
+                    avatar_url: post.user.avatar_url || '',
+                  }
+                : undefined,
+              sourceId: post.id,
+              sourceTable: 'posts',
+              matchScore: 75,
+              tags: post.category ? [post.category] : [],
+            };
+          })
         );
       }
     }
