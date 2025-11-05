@@ -70,16 +70,39 @@ export async function fetchDiscoverFeed(
           
           // Fetch accurate likes and comments counts for all posts
           const postIdsForCounts = nonAdminPosts.map((p: any) => p.id);
-          const { data: countsData } = await supabase
-            .from('posts')
-            .select('id, post_likes(count), post_comments(count)')
-            .in('id', postIdsForCounts);
+          
+          // Fetch likes counts
+          const { data: likesData } = await supabase
+            .from('post_likes')
+            .select('post_id')
+            .in('post_id', postIdsForCounts);
+          
+          // Fetch comments counts
+          const { data: commentsData } = await supabase
+            .from('post_comments')
+            .select('post_id')
+            .in('post_id', postIdsForCounts);
+          
+          // Count likes per post
+          const likesCountMap = new Map<string, number>();
+          (likesData || []).forEach((like: any) => {
+            const count = likesCountMap.get(like.post_id) || 0;
+            likesCountMap.set(like.post_id, count + 1);
+          });
+          
+          // Count comments per post
+          const commentsCountMap = new Map<string, number>();
+          (commentsData || []).forEach((comment: any) => {
+            const count = commentsCountMap.get(comment.post_id) || 0;
+            commentsCountMap.set(comment.post_id, count + 1);
+          });
           
           const countsMap = new Map<string, { likes: number; comments: number }>();
-          (countsData || []).forEach((p: any) => {
-            const likesCount = Array.isArray(p.post_likes) ? p.post_likes.length : 0;
-            const commentsCount = Array.isArray(p.post_comments) ? p.post_comments.length : 0;
-            countsMap.set(p.id, { likes: likesCount, comments: commentsCount });
+          postIdsForCounts.forEach((postId: string) => {
+            countsMap.set(postId, {
+              likes: likesCountMap.get(postId) || 0,
+              comments: commentsCountMap.get(postId) || 0,
+            });
           });
           
           items.push(
@@ -131,16 +154,39 @@ export async function fetchDiscoverFeed(
         
         // Fetch accurate likes and comments counts
         const postIdsForCounts = nonAdminPosts.map((p: any) => p.id);
-        const { data: countsData } = await supabase
-          .from('posts')
-          .select('id, post_likes(count), post_comments(count)')
-          .in('id', postIdsForCounts);
+        
+        // Fetch likes counts
+        const { data: likesData } = await supabase
+          .from('post_likes')
+          .select('post_id')
+          .in('post_id', postIdsForCounts);
+        
+        // Fetch comments counts
+        const { data: commentsData } = await supabase
+          .from('post_comments')
+          .select('post_id')
+          .in('post_id', postIdsForCounts);
+        
+        // Count likes per post
+        const likesCountMap = new Map<string, number>();
+        (likesData || []).forEach((like: any) => {
+          const count = likesCountMap.get(like.post_id) || 0;
+          likesCountMap.set(like.post_id, count + 1);
+        });
+        
+        // Count comments per post
+        const commentsCountMap = new Map<string, number>();
+        (commentsData || []).forEach((comment: any) => {
+          const count = commentsCountMap.get(comment.post_id) || 0;
+          commentsCountMap.set(comment.post_id, count + 1);
+        });
         
         const countsMap = new Map<string, { likes: number; comments: number }>();
-        (countsData || []).forEach((p: any) => {
-          const likesCount = Array.isArray(p.post_likes) ? p.post_likes.length : 0;
-          const commentsCount = Array.isArray(p.post_comments) ? p.post_comments.length : 0;
-          countsMap.set(p.id, { likes: likesCount, comments: commentsCount });
+        postIdsForCounts.forEach((postId: string) => {
+          countsMap.set(postId, {
+            likes: likesCountMap.get(postId) || 0,
+            comments: commentsCountMap.get(postId) || 0,
+          });
         });
         
         items.push(

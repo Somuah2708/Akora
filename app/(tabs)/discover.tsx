@@ -2,7 +2,7 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { View, Text, StyleSheet, ScrollView, Image, TouchableOpacity, Dimensions, ActivityIndicator, RefreshControl, Modal, TextInput } from 'react-native';
 import { useFonts, Inter_400Regular, Inter_600SemiBold } from '@expo-google-fonts/inter';
 import { useRouter, useLocalSearchParams } from 'expo-router';
-import { Sparkles, Heart, MessageCircle, Bookmark, Lightbulb, SlidersHorizontal, Check, X, ChevronDown, Users, Camera } from 'lucide-react-native';
+import { Sparkles, Heart, MessageCircle, Bookmark, Lightbulb, SlidersHorizontal, Check, X, ChevronDown, Users, Camera, Send } from 'lucide-react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import type { LucideIcon } from 'lucide-react-native';
 import { useAuth } from '@/hooks/useAuth';
@@ -95,6 +95,10 @@ export default function DiscoverScreen() {
   const [interestModalVisible, setInterestModalVisible] = useState(false);
   const [interestSearch, setInterestSearch] = useState('');
   const [expandedCategories, setExpandedCategories] = useState<Set<string>>(new Set());
+  const [shareModalVisible, setShareModalVisible] = useState(false);
+  const [selectedPostForShare, setSelectedPostForShare] = useState<DiscoverItem | null>(null);
+  const [friendsList, setFriendsList] = useState<any[]>([]);
+  const [searchFriends, setSearchFriends] = useState('');
 
   const interestKey = useMemo(
     () => Array.from(userInterests).sort().join(','),
@@ -275,98 +279,97 @@ export default function DiscoverScreen() {
   useEffect(() => {
     if (!user?.id) return;
 
-    const postIds = discoverFeed
-      .filter((f) => f.type === 'post' && f.sourceId)
-      .map((f) => String(f.sourceId));
-
-    if (postIds.length === 0) return;
-
-    // Subscribe to likes changes
+    // Subscribe to ALL post likes (not just current feed)
+    // This way we don't need to recreate subscriptions when feed changes
     const likesChannel = supabase
-      .channel('post_likes_changes')
+      .channel(`discover_likes_${user.id}_${Date.now()}`)
       .on(
         'postgres_changes',
         {
           event: '*',
           schema: 'public',
           table: 'post_likes',
-          filter: `post_id=in.(${postIds.join(',')})`,
         },
         async (payload) => {
-          console.log('Like change detected:', payload);
+          console.log('🔥 Real-time like change detected:', payload.eventType);
           // Refetch counts for affected post
           const postId = (payload.new as any)?.post_id || (payload.old as any)?.post_id;
           if (postId) {
-            const { data } = await supabase
-              .from('posts')
-              .select('id, post_likes(count)')
-              .eq('id', postId)
-              .single();
+            // Get accurate count by counting all likes for this post
+            const { count } = await supabase
+              .from('post_likes')
+              .select('*', { count: 'exact', head: true })
+              .eq('post_id', postId);
             
-            if (data) {
-              const likesCount = Array.isArray((data as any).post_likes) ? (data as any).post_likes.length : 0;
-              
-              // Check if current user liked this post
-              const { data: userLike } = await supabase
-                .from('post_likes')
-                .select('id')
-                .eq('post_id', postId)
-                .eq('user_id', user.id)
-                .maybeSingle();
-              
-              setDiscoverFeed((prev) =>
-                prev.map((item) =>
-                  item.sourceId === postId
-                    ? { ...item, likes: likesCount, isLiked: !!userLike }
-                    : item
-                )
-              );
-            }
+            const likesCount = count || 0;
+            
+            // Check if current user liked this post
+            const { data: userLike } = await supabase
+              .from('post_likes')
+              .select('id')
+              .eq('post_id', postId)
+              .eq('user_id', user.id)
+              .maybeSingle();
+            
+            console.log(`✅ Updated post ${postId}: ${likesCount} likes`);
+            
+            setDiscoverFeed((prev) =>
+              prev.map((item) =>
+                item.sourceId === postId
+                  ? { ...item, likes: likesCount, isLiked: !!userLike }
+                  : item
+              )
+            );
           }
         }
       )
-      .subscribe();
+      .subscribe((status) => {
+        console.log('📡 Likes subscription status:', status);
+      });
 
-    // Subscribe to comments changes
+    // Subscribe to ALL post comments
     const commentsChannel = supabase
-      .channel('post_comments_changes')
+      .channel(`discover_comments_${user.id}_${Date.now()}`)
       .on(
         'postgres_changes',
         {
           event: '*',
           schema: 'public',
           table: 'post_comments',
-          filter: `post_id=in.(${postIds.join(',')})`,
         },
         async (payload) => {
-          console.log('Comment change detected:', payload);
+          console.log('🔥 Real-time comment change detected:', payload.eventType);
           // Refetch counts for affected post
           const postId = (payload.new as any)?.post_id || (payload.old as any)?.post_id;
           if (postId) {
-            const { data } = await supabase
-              .from('posts')
-              .select('id, post_comments(count)')
-              .eq('id', postId)
-              .single();
+            // Get accurate count by counting all comments for this post
+            const { count } = await supabase
+              .from('post_comments')
+              .select('*', { count: 'exact', head: true })
+              .eq('post_id', postId);
             
-            if (data) {
-              const commentsCount = Array.isArray((data as any).post_comments) ? (data as any).post_comments.length : 0;
-              setDiscoverFeed((prev) =>
-                prev.map((item) =>
-                  item.sourceId === postId ? { ...item, comments: commentsCount } : item
-                )
-              );
-            }
+            const commentsCount = count || 0;
+            
+            console.log(`✅ Updated post ${postId}: ${commentsCount} comments`);
+            
+            setDiscoverFeed((prev) =>
+              prev.map((item) =>
+                item.sourceId === postId ? { ...item, comments: commentsCount } : item
+              )
+            );
           }
         }
       )
-      .subscribe();
+      .subscribe((status) => {
+        console.log('📡 Comments subscription status:', status);
+      });
 
     return () => {
+      console.log('🔌 Unsubscribing from real-time channels');
       supabase.removeChannel(likesChannel);
       supabase.removeChannel(commentsChannel);
     };
-  }, [user?.id, discoverFeed.map((f) => f.sourceId).join(',')]);
+  }, [user?.id]); // Only recreate when user changes, not when feed changes
 
   // Ensure videos play even when iPhone is in silent mode
   useEffect(() => {
@@ -627,32 +630,29 @@ export default function DiscoverScreen() {
       }
 
       // Fetch accurate count after toggle
-      const { data } = await supabase
-        .from('posts')
-        .select('id, post_likes(count)')
-        .eq('id', item.sourceId)
-        .single();
+      const { data: likesData, count } = await supabase
+        .from('post_likes')
+        .select('*', { count: 'exact' })
+        .eq('post_id', item.sourceId);
       
-      if (data) {
-        const actualLikesCount = Array.isArray((data as any).post_likes) ? (data as any).post_likes.length : 0;
-        
-        // Check current user's like status
-        const { data: userLike } = await supabase
-          .from('post_likes')
-          .select('id')
-          .eq('post_id', item.sourceId)
-          .eq('user_id', user.id)
-          .maybeSingle();
-        
-        // Update with accurate count
-        setDiscoverFeed((prev) =>
-          prev.map((i) =>
-            i.id === itemId
-              ? { ...i, isLiked: !!userLike, likes: actualLikesCount }
-              : i
-          )
-        );
-      }
+      const actualLikesCount = count || 0;
+      
+      // Check current user's like status
+      const { data: userLike } = await supabase
+        .from('post_likes')
+        .select('id')
+        .eq('post_id', item.sourceId)
+        .eq('user_id', user.id)
+        .maybeSingle();
+      
+      // Update with accurate count
+      setDiscoverFeed((prev) =>
+        prev.map((i) =>
+          i.id === itemId
+            ? { ...i, isLiked: !!userLike, likes: actualLikesCount }
+            : i
+        )
+      );
     } catch (error) {
       console.error('Error toggling like:', error);
       // Revert on error
@@ -671,18 +671,128 @@ export default function DiscoverScreen() {
     const item = discoverFeed.find((i) => i.id === itemId);
     if (!item || item.type !== 'post' || !item.sourceId) return;
     const wasSaved = (item as any).isBookmarked === true || (item as any).saved === 1;
-    // Optimistic
+    // Optimistic update
     setDiscoverFeed(prev => prev.map(i => i.id === itemId ? { ...i, isBookmarked: !wasSaved, saved: !wasSaved ? 1 : 0 } : i));
+    
     try {
       if (wasSaved) {
         const { error } = await supabase.from('post_bookmarks').delete().eq('post_id', item.sourceId).eq('user_id', user.id);
         if (error) throw error;
+        console.log('✅ Post unsaved successfully');
       } else {
         const { error } = await supabase.from('post_bookmarks').insert({ post_id: item.sourceId, user_id: user.id });
         if (error) throw error;
+        console.log('✅ Post saved successfully - visible in Profile → Saved tab');
       }
     } catch (e) {
+      console.error('Error toggling bookmark:', e);
+      // Revert on error
       setDiscoverFeed(prev => prev.map(i => i.id === itemId ? { ...i, isBookmarked: wasSaved, saved: wasSaved ? 1 : 0 } : i));
+    }
+  };
+
+  const handleSharePress = async (item: DiscoverItem) => {
+    if (!user?.id) return;
+    setSelectedPostForShare(item);
+    
+    // Fetch friends list
+    try {
+      const { data: friendsData, error } = await supabase
+        .from('friends')
+        .select(`
+          friend_id,
+          friend:profiles!friends_friend_id_fkey(id, username, full_name, avatar_url)
+        `)
+        .eq('user_id', user.id);
+      
+      if (error) throw error;
+      
+      // Also get reverse friendships
+      const { data: reverseFriendsData } = await supabase
+        .from('friends')
+        .select(`
+          user_id,
+          friend:profiles!friends_user_id_fkey(id, username, full_name, avatar_url)
+        `)
+        .eq('friend_id', user.id);
+      
+      const allFriends = [
+        ...(friendsData || []).map((f: any) => f.friend).filter(Boolean),
+        ...(reverseFriendsData || []).map((f: any) => f.friend).filter(Boolean)
+      ];
+      
+      // Remove duplicates
+      const uniqueFriends = Array.from(new Map(allFriends.map(f => [f.id, f])).values());
+      
+      setFriendsList(uniqueFriends);
+      setShareModalVisible(true);
+    } catch (error) {
+      console.error('Error fetching friends:', error);
+    }
+  };
+
+  const handleSendToFriend = async (friendId: string) => {
+    if (!user?.id || !selectedPostForShare?.sourceId) return;
+    
+    try {
+      // Create or get existing chat with this friend
+      const { data: existingChat } = await supabase
+        .from('chats')
+        .select('id')
+        .or(`and(user1_id.eq.${user.id},user2_id.eq.${friendId}),and(user1_id.eq.${friendId},user2_id.eq.${user.id})`)
+        .maybeSingle();
+      
+      let chatId = existingChat?.id;
+      
+      if (!chatId) {
+        // Create new chat
+        const { data: newChat, error: chatError } = await supabase
+          .from('chats')
+          .insert({
+            user1_id: user.id,
+            user2_id: friendId,
+          })
+          .select('id')
+          .single();
+        
+        if (chatError) throw chatError;
+        chatId = newChat.id;
+      }
+      
+      // Send message with post link
+      const postUrl = `akora://post/${selectedPostForShare.sourceId}`;
+      const messageText = `Check out this post: ${selectedPostForShare.title || selectedPostForShare.description.substring(0, 50)}... ${postUrl}`;
+      
+      const { error: messageError } = await supabase
+        .from('messages')
+        .insert({
+          chat_id: chatId,
+          sender_id: user.id,
+          content: messageText,
+          post_id: selectedPostForShare.sourceId, // Store post reference
+        });
+      
+      if (messageError) throw messageError;
+      
+      // Increment share count
+      const { error: shareError } = await supabase
+        .from('post_shares')
+        .insert({
+          post_id: selectedPostForShare.sourceId,
+          user_id: user.id,
+        });
+      
+      if (shareError) console.error('Error tracking share:', shareError);
+      
+      console.log('✅ Post shared successfully');
+      
+      // Show success feedback
+      const friend = friendsList.find(f => f.id === friendId);
+      alert(`Sent to ${friend?.full_name || 'friend'}!`);
+      
+    } catch (error) {
+      console.error('Error sharing post:', error);
+      alert('Failed to send post. Please try again.');
     }
   };
 
@@ -888,6 +998,89 @@ export default function DiscoverScreen() {
             >
               <Text style={styles.modalPrimaryButtonText}>Save interests</Text>
             </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Share Modal (Instagram-style) */}
+      <Modal
+        visible={shareModalVisible}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setShareModalVisible(false)}
+      >
+        <View style={styles.shareModalOverlay}>
+          <View style={styles.shareModalContent}>
+            {/* Header */}
+            <View style={styles.shareModalHeader}>
+              <TouchableOpacity onPress={() => setShareModalVisible(false)}>
+                <X size={24} color="#111827" strokeWidth={2} />
+              </TouchableOpacity>
+              <Text style={styles.shareModalTitle}>Share</Text>
+              <View style={{ width: 24 }} />
+            </View>
+
+            {/* Search */}
+            <View style={styles.shareSearchContainer}>
+              <TextInput
+                style={styles.shareSearchInput}
+                placeholder="Search friends..."
+                value={searchFriends}
+                onChangeText={setSearchFriends}
+                placeholderTextColor="#9CA3AF"
+              />
+            </View>
+
+            {/* Friends List */}
+            <ScrollView style={styles.shareFriendsList} showsVerticalScrollIndicator={false}>
+              {friendsList.length === 0 ? (
+                <View style={styles.shareEmptyState}>
+                  <Users size={48} color="#D1D5DB" strokeWidth={2} />
+                  <Text style={styles.shareEmptyText}>No friends yet</Text>
+                  <Text style={styles.shareEmptySubtext}>Add friends to share posts with them</Text>
+                </View>
+              ) : (
+                friendsList
+                  .filter(friend => 
+                    searchFriends === '' || 
+                    friend.full_name?.toLowerCase().includes(searchFriends.toLowerCase()) ||
+                    friend.username?.toLowerCase().includes(searchFriends.toLowerCase())
+                  )
+                  .map((friend) => (
+                    <TouchableOpacity
+                      key={friend.id}
+                      style={styles.shareFriendItem}
+                      onPress={() => {
+                        handleSendToFriend(friend.id);
+                        setShareModalVisible(false);
+                        setSearchFriends('');
+                      }}
+                      activeOpacity={0.7}
+                    >
+                      <View style={styles.shareFriendLeft}>
+                        {friend.avatar_url ? (
+                          <Image source={{ uri: friend.avatar_url }} style={styles.shareFriendAvatar} />
+                        ) : (
+                          <View style={[styles.shareFriendAvatar, styles.shareFriendAvatarPlaceholder]}>
+                            <Text style={styles.shareFriendAvatarText}>
+                              {friend.full_name?.[0]?.toUpperCase() || 'U'}
+                            </Text>
+                          </View>
+                        )}
+                        <View style={styles.shareFriendInfo}>
+                          <Text style={styles.shareFriendName}>{friend.full_name || 'Unknown'}</Text>
+                          {friend.username && (
+                            <Text style={styles.shareFriendUsername}>@{friend.username}</Text>
+                          )}
+                        </View>
+                      </View>
+                      <View style={styles.shareSendButton}>
+                        <Send size={20} color="#0EA5E9" strokeWidth={2} />
+                      </View>
+                    </TouchableOpacity>
+                  ))
+              )}
+            </ScrollView>
           </View>
         </View>
       </Modal>
@@ -1110,6 +1303,12 @@ export default function DiscoverScreen() {
                     onPress={() => item.sourceId && router.push(`/post-comments/${item.sourceId}`)}
                   >
                     <MessageCircle size={26} color="#000000" strokeWidth={2} />
+                  </TouchableOpacity>
+                  <TouchableOpacity 
+                    style={styles.actionButton}
+                    onPress={() => handleSharePress(item)}
+                  >
+                    <Send size={26} color="#000000" strokeWidth={2} />
                   </TouchableOpacity>
                 </View>
                 <TouchableOpacity style={styles.actionButton} onPress={() => handleBookmarkToggle(item.id)}>
@@ -1685,5 +1884,117 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontFamily: 'Inter-Regular',
     color: '#92400E',
+  },
+  // Share Modal Styles (Instagram-style)
+  shareModalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'flex-end',
+  },
+  shareModalContent: {
+    backgroundColor: '#FFFFFF',
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    maxHeight: '80%',
+    paddingBottom: 40,
+  },
+  shareModalHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 20,
+    paddingVertical: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: '#F3F4F6',
+  },
+  shareModalTitle: {
+    fontSize: 18,
+    fontFamily: 'Inter-SemiBold',
+    color: '#111827',
+  },
+  shareSearchContainer: {
+    paddingHorizontal: 20,
+    paddingVertical: 12,
+  },
+  shareSearchInput: {
+    backgroundColor: '#F3F4F6',
+    borderRadius: 10,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    fontSize: 16,
+    fontFamily: 'Inter-Regular',
+    color: '#111827',
+  },
+  shareFriendsList: {
+    flex: 1,
+  },
+  shareFriendItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 20,
+    paddingVertical: 12,
+  },
+  shareFriendLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
+  },
+  shareFriendAvatar: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    marginRight: 12,
+  },
+  shareFriendAvatarPlaceholder: {
+    backgroundColor: '#E5E7EB',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  shareFriendAvatarText: {
+    fontSize: 18,
+    fontFamily: 'Inter-SemiBold',
+    color: '#6B7280',
+  },
+  shareFriendInfo: {
+    flex: 1,
+  },
+  shareFriendName: {
+    fontSize: 16,
+    fontFamily: 'Inter-SemiBold',
+    color: '#111827',
+  },
+  shareFriendUsername: {
+    fontSize: 14,
+    fontFamily: 'Inter-Regular',
+    color: '#6B7280',
+    marginTop: 2,
+  },
+  shareSendButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: '#EFF6FF',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  shareEmptyState: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 60,
+    paddingHorizontal: 40,
+  },
+  shareEmptyText: {
+    fontSize: 18,
+    fontFamily: 'Inter-SemiBold',
+    color: '#6B7280',
+    marginTop: 16,
+  },
+  shareEmptySubtext: {
+    fontSize: 14,
+    fontFamily: 'Inter-Regular',
+    color: '#9CA3AF',
+    marginTop: 8,
+    textAlign: 'center',
   },
 });
