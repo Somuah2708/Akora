@@ -1,10 +1,12 @@
-import { View, Text, StyleSheet, ScrollView, Image, TouchableOpacity, TextInput, Modal, FlatList, Alert } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, Image, TouchableOpacity, TextInput, Modal, FlatList, Alert, RefreshControl } from 'react-native';
 import { Search, Plus, MoveVertical as MoreVertical, X, MessageCircle, UserPlus, Check, CheckCheck, Users } from 'lucide-react-native';
 import { useFonts, Inter_400Regular, Inter_600SemiBold } from '@expo-google-fonts/inter';
 import { useEffect, useState } from 'react';
 import { SplashScreen, useRouter } from 'expo-router';
 import { getConversationList, searchUsers as searchUsersHelper, getUserOnlineStatus, subscribeToUserPresence } from '@/lib/friends';
+import { pinChat, getSettingsForUser, markDirectConversationRead, markGroupConversationRead } from '@/lib/chatSettings';
 import { useAuth } from '@/hooks/useAuth';
+import { formatProfileSubtitle } from '@/lib/display';
 import { supabase } from '@/lib/supabase';
 import { formatChatListTime } from '@/lib/timeUtils';
 import type { Profile } from '@/lib/supabase';
@@ -38,6 +40,16 @@ export default function ChatScreen() {
   const [searchResults, setSearchResults] = useState<Profile[]>([]);
   const [searchLoading, setSearchLoading] = useState(false);
   const [onlineUsers, setOnlineUsers] = useState<Set<string>>(new Set());
+  const [refreshing, setRefreshing] = useState(false);
+  const [pinnedDirectIds, setPinnedDirectIds] = useState<Set<string>>(new Set());
+  const [pinnedGroupIds, setPinnedGroupIds] = useState<Set<string>>(new Set());
+  const [typingFriendIds, setTypingFriendIds] = useState<Set<string>>(new Set());
+  const typingChannelsRef = useState<any[]>([])[0];
+  const [actionSheet, setActionSheet] = useState<
+    | { type: 'direct'; friendId: string; unreadCount: number; pinned: boolean }
+    | { type: 'group'; groupId: string; unreadCount: number; pinned: boolean }
+    | null
+  >(null);
 
   const [fontsLoaded] = useFonts({
     'Inter-Regular': Inter_400Regular,
@@ -69,6 +81,7 @@ export default function ChatScreen() {
       // Initial fetch shows loading once
       fetchConversations(true);
       fetchGroups(true);
+      loadPinnedSettings();
       
       // Subscribe to real-time updates for direct messages
       const messageSubscription = supabase
@@ -234,9 +247,45 @@ export default function ChatScreen() {
         messageSubscription.unsubscribe();
         profileSubscription.unsubscribe();
         groupMessageSub.unsubscribe();
+        // Cleanup typing channels
+        try { typingChannelsRef.forEach((ch) => supabase.removeChannel(ch)); } catch {}
       };
     }
   }, [user]);
+
+  // Subscribe to typing presence for top 5 most recent direct chats
+  useEffect(() => {
+    if (!user) return;
+    // cleanup old channels
+    try { typingChannelsRef.forEach((ch) => supabase.removeChannel(ch)); } catch {}
+    typingChannelsRef.length = 0;
+    const sorted = [...conversations].sort((a, b) => {
+      const at = new Date(a.latestMessage?.created_at || 0).getTime();
+      const bt = new Date(b.latestMessage?.created_at || 0).getTime();
+      return bt - at;
+    });
+    const top = sorted.slice(0, 5);
+    top.forEach((c) => {
+      const f = Array.isArray(c.friend) ? c.friend[0] : c.friend;
+      if (!f?.id) return;
+      const conversationId = [user.id, f.id].sort().join('-');
+      const channel = supabase.channel(`typing:${conversationId}`, { config: { presence: { key: user.id } } });
+      channel.on('presence', { event: 'sync' }, () => {
+        const state = channel.presenceState();
+        const friendPresence = state[f.id];
+        setTypingFriendIds((prev) => {
+          const next = new Set(prev);
+          if (friendPresence && (friendPresence[0] as any)?.typing) next.add(f.id); else next.delete(f.id);
+          return next;
+        });
+      }).subscribe();
+      typingChannelsRef.push(channel);
+    });
+    return () => {
+      try { typingChannelsRef.forEach((ch) => supabase.removeChannel(ch)); } catch {}
+      typingChannelsRef.length = 0;
+    };
+  }, [user, conversations.length]);
 
   const fetchConversations = async (showLoading = false) => {
     if (!user) return;
@@ -244,6 +293,8 @@ export default function ChatScreen() {
       if (showLoading) setLoading(true);
       const convos = await getConversationList(user.id);
       setConversations(convos);
+  // After loading conversations, refresh typing subscriptions
+  // handled by effect watching conversations.length
       
       // Load online status for all friends
       const friendIds = convos.map(c => {
@@ -271,6 +322,70 @@ export default function ChatScreen() {
     }
   };
 
+  const loadPinnedSettings = async () => {
+    if (!user) return;
+    try {
+      const settings = await getSettingsForUser(user.id);
+      const pDirect = new Set<string>();
+      const pGroup = new Set<string>();
+      settings.forEach((s) => {
+        if (s.pinned) {
+          if (s.peer_user_id) pDirect.add(s.peer_user_id);
+          if (s.group_id) pGroup.add(s.group_id);
+        }
+      });
+      setPinnedDirectIds(pDirect);
+      setPinnedGroupIds(pGroup);
+    } catch (e) {
+      console.log('Failed to load chat settings', e);
+    }
+  };
+
+  const onPinToggle = async (kind: 'direct' | 'group', id: string, willPin: boolean) => {
+    if (!user) return;
+    try {
+      await pinChat(user.id, kind === 'direct' ? { peerUserId: id } : { groupId: id }, willPin);
+      if (kind === 'direct') {
+        setPinnedDirectIds((prev) => {
+          const next = new Set(prev);
+          if (willPin) next.add(id); else next.delete(id);
+          return next;
+        });
+      } else {
+        setPinnedGroupIds((prev) => {
+          const next = new Set(prev);
+          if (willPin) next.add(id); else next.delete(id);
+          return next;
+        });
+      }
+    } catch (e) {
+      Alert.alert('Error', 'Failed to update pin');
+    } finally {
+      setActionSheet(null);
+    }
+  };
+
+  const onMarkRead = async (kind: 'direct' | 'group', id: string) => {
+    if (!user) return;
+    try {
+      if (kind === 'direct') {
+        await markDirectConversationRead(user.id, id);
+        setConversations((prev) => prev.map((c) => {
+          const f = Array.isArray(c.friend) ? c.friend[0] : c.friend;
+          if (f?.id === id) return { ...c, unreadCount: 0 } as Conversation;
+          return c;
+        }));
+      } else {
+        await markGroupConversationRead(id, user.id);
+        setGroups((prev) => prev.map((g) => g.group.id === id ? { ...g, unreadCount: 0 } : g));
+      }
+    } catch (e) {
+      Alert.alert('Error', 'Failed to mark as read');
+    } finally {
+      setActionSheet(null);
+    }
+  };
+
   const searchUsers = async (query: string) => {
     if (!query.trim() || !user) return;
     try {
@@ -282,6 +397,16 @@ export default function ChatScreen() {
       Alert.alert('Error', 'Failed to search users');
     } finally {
       setSearchLoading(false);
+    }
+  };
+
+  const onRefresh = async () => {
+    if (!user) return;
+    try {
+      setRefreshing(true);
+      await Promise.all([fetchConversations(false), fetchGroups(false)]);
+    } finally {
+      setRefreshing(false);
     }
   };
 
@@ -297,7 +422,12 @@ export default function ChatScreen() {
       const groupList = (memberships || []).map((m: any) => m.groups).filter(Boolean);
       // Compose base items
       const base: GroupItem[] = groupList.map((g: any) => ({ group: { id: g.id, name: g.name, avatar_url: g.avatar_url }, lastMessage: null, unreadCount: 0 }));
-      // Fetch last message per group (N calls; OK for small N)
+      // Fetch unread counts for all groups in one call
+      const { data: unreadRows } = await supabase.rpc('group_unread_counts', { p_user_id: user.id });
+      const unreadMap = new Map<string, number>();
+      (unreadRows || []).forEach((r: any) => unreadMap.set(r.group_id, r.unread));
+
+      // Fetch last message per group (N calls; acceptable; can be optimized later)
       await Promise.all(
         base.map(async (item) => {
           const { data: last } = await supabase
@@ -308,13 +438,7 @@ export default function ChatScreen() {
             .limit(1)
             .maybeSingle();
           item.lastMessage = last || null;
-          // Unread count
-          const { count } = await supabase
-            .from('group_messages')
-            .select('*', { count: 'exact', head: true })
-            .eq('group_id', item.group.id)
-            .not('read_by', 'cs', `["${user.id}"]` as any);
-          item.unreadCount = count || 0;
+          item.unreadCount = unreadMap.get(item.group.id) || 0;
         })
       );
       base.sort((a, b) => new Date(b.lastMessage?.created_at || 0).getTime() - new Date(a.lastMessage?.created_at || 0).getTime());
@@ -387,142 +511,309 @@ export default function ChatScreen() {
 
   return (
     <View style={styles.container}>
+      {/* Modern Header with Gradient Effect */}
       <View style={styles.header}>
-        <Text style={styles.title}>Chats</Text>
-        <View style={styles.headerActions}>
-          <TouchableOpacity 
-            style={styles.iconButton}
-            onPress={() => router.push('/friends')}
-          >
-            <UserPlus size={24} color="#1A1A1A" />
-          </TouchableOpacity>
-          <TouchableOpacity style={styles.iconButton} onPress={() => router.push('/create-group' as any)}>
-            <Users size={24} color="#1A1A1A" />
-          </TouchableOpacity>
-          <TouchableOpacity style={styles.iconButton}>
-            <MoreVertical size={24} color="#1A1A1A" />
-          </TouchableOpacity>
+        <View style={styles.headerTop}>
+          <Text style={styles.title}>Akora Chats</Text>
+          <View style={styles.headerActions}>
+            <TouchableOpacity 
+              style={styles.iconButton}
+              onPress={() => router.push('/friends')}
+            >
+              <UserPlus size={20} color="#1E293B" strokeWidth={2.5} />
+            </TouchableOpacity>
+            <TouchableOpacity 
+              style={styles.iconButton} 
+              onPress={() => router.push('/create-group' as any)}
+            >
+              <Users size={20} color="#1E293B" strokeWidth={2.5} />
+            </TouchableOpacity>
+          </View>
         </View>
-      </View>
 
-      <View style={styles.searchContainer}>
-        <View style={styles.searchInputContainer}>
-          <Search size={20} color="#64748B" />
-          <TextInput
-            style={styles.searchInput}
-            placeholder="Search chats"
-            placeholderTextColor="#64748B"
-          />
+        {/* Search Bar */}
+        <View style={styles.searchContainer}>
+          <TouchableOpacity
+            activeOpacity={0.8}
+            style={styles.searchInputContainer}
+            onPress={() => {
+              setSearchModalVisible(true);
+              // focus happens inside modal
+            }}
+          >
+            <Search size={18} color="#64748B" strokeWidth={2.5} />
+            <Text style={[styles.searchInput, { paddingVertical: 12, color: '#64748B' }]}>Search chats…</Text>
+          </TouchableOpacity>
         </View>
       </View>
 
       {loading ? (
-        <View style={styles.loadingContainer}>
-          <Text style={styles.loadingText}>Loading chats...</Text>
-        </View>
-      ) : (
-        <ScrollView style={styles.chatList}>
-          {conversations.length === 0 ? (
-            <View style={styles.emptyState}>
-              <MessageCircle size={64} color="#666666" />
-              <Text style={styles.emptyStateTitle}>No chats yet</Text>
-              <Text style={styles.emptyStateText}>
-                Add friends to start chatting with them
-              </Text>
+        <ScrollView style={styles.chatList} contentContainerStyle={{ paddingTop: 12 }}>
+          {[...Array(6)].map((_, i) => (
+            <View key={i} style={styles.skeletonItem}>
+              <View style={styles.skeletonAvatar} />
+              <View style={styles.skeletonMeta}>
+                <View style={styles.skeletonLinePrimary} />
+                <View style={styles.skeletonLineSecondary} />
+              </View>
             </View>
-          ) : (
-            conversations.map((conversation) => (
-              <TouchableOpacity 
-                key={conversation.friend.id} 
-                style={styles.chatItem}
-                onPress={() => router.push(`/chat/direct/${conversation.friend.id}`)}
-              >
-                <TouchableOpacity onPress={() => router.push(`/user-profile/${conversation.friend.id}`)}>
-                  <View style={styles.avatarContainer}>
-                    <Image 
-                      source={{ 
-                        uri: conversation.friend.avatar_url || 'https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?w=400&auto=format&fit=crop&q=60' 
-                      }} 
-                      style={styles.avatar} 
-                    />
-                    {onlineUsers.has(conversation.friend.id) && (
-                      <View style={styles.onlineIndicator} />
-                    )}
-                  </View>
-                </TouchableOpacity>
-                <View style={styles.chatInfo}>
-                  <View style={styles.chatHeader}>
-                    <Text style={styles.chatName}>
-                      {conversation.friend.full_name || conversation.friend.username || 'Unknown'}
-                    </Text>
-                    {conversation.latestMessage && (
-                      <Text style={styles.chatTime}>
-                        {formatTime(conversation.latestMessage.created_at)}
-                      </Text>
-                    )}
-                  </View>
-                  <View style={styles.chatFooter}>
-                    <Text 
-                      style={[
-                        styles.lastMessage,
-                        conversation.unreadCount > 0 && styles.unreadMessage
-                      ]} 
-                      numberOfLines={1}
-                    >
-                      {conversation.latestMessage 
-                        ? getMessagePreview(conversation.latestMessage)
-                        : 'No messages yet'}
-                    </Text>
-                    {conversation.unreadCount > 0 && (
-                      <View style={styles.unreadBadge}>
-                        <Text style={styles.unreadCount}>{conversation.unreadCount}</Text>
-                      </View>
-                    )}
-                  </View>
-                </View>
-              </TouchableOpacity>
-            ))
-          )}
-
-          {/* Groups Section */}
-          <View style={{ height: 10 }} />
-          <Text style={{ paddingHorizontal: 16, paddingVertical: 8, color: '#64748B', fontFamily: 'Inter-SemiBold' }}>Groups</Text>
-          {groupsLoading && (
-            <View style={styles.loadingContainer}><Text style={styles.loadingText}>Loading groups...</Text></View>
-          )}
-          {groups.map((g) => (
-            <TouchableOpacity key={g.group.id} style={styles.chatItem} onPress={() => router.push(`/chat/group/${g.group.id}`)}>
-              <View style={styles.avatarContainer}>
-                <Image 
-                  source={{ uri: g.group.avatar_url || 'https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?w=400&auto=format&fit=crop&q=60' }} 
-                  style={styles.avatar} 
-                />
-              </View>
-              <View style={styles.chatInfo}>
-                <View style={styles.chatHeader}>
-                  <Text style={styles.chatName}>{g.group.name}</Text>
-                  {!!g.lastMessage && (
-                    <Text style={styles.chatTime}>{formatTime(g.lastMessage.created_at)}</Text>
-                  )}
-                </View>
-                <View style={styles.chatFooter}>
-                  <Text 
-                    style={[styles.lastMessage, g.unreadCount > 0 && styles.unreadMessage]} 
-                    numberOfLines={1}
-                  >
-                    {g.lastMessage ? getMessagePreview(g.lastMessage) : 'No messages yet'}
-                  </Text>
-                  {g.unreadCount > 0 && (
-                    <View style={styles.unreadBadge}>
-                      <Text style={styles.unreadCount}>{g.unreadCount}</Text>
-                    </View>
-                  )}
-                </View>
-              </View>
-            </TouchableOpacity>
           ))}
         </ScrollView>
+      ) : (
+        <ScrollView 
+          style={styles.chatList}
+          showsVerticalScrollIndicator={false}
+          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#64748B" />}
+        >
+          {conversations.length === 0 && groups.length === 0 ? (
+            <View style={styles.emptyState}>
+              <View style={styles.emptyIconContainer}>
+                <MessageCircle size={56} color="#CBD5E1" strokeWidth={1.5} />
+              </View>
+              <Text style={styles.emptyStateTitle}>No conversations yet</Text>
+              <Text style={styles.emptyStateText}>
+                Start a new chat or create a group to begin messaging
+              </Text>
+              <TouchableOpacity 
+                style={styles.emptyActionButton}
+                onPress={() => router.push('/friends')}
+              >
+                <UserPlus size={18} color="#FFFFFF" strokeWidth={2.5} />
+                <Text style={styles.emptyActionText}>Find Friends</Text>
+              </TouchableOpacity>
+            </View>
+          ) : (
+            <>
+              {/* Direct Messages Section with Pinned */}
+              {conversations.length > 0 && (
+                <View style={styles.section}>
+                  <Text style={styles.sectionTitle}>DIRECT MESSAGES</Text>
+                  {(() => {
+                    const withFriend = (c: Conversation) => Array.isArray(c.friend) ? c.friend[0] : c.friend;
+                    const pinned = conversations.filter((c) => pinnedDirectIds.has(withFriend(c)?.id));
+                    const others = conversations.filter((c) => !pinnedDirectIds.has(withFriend(c)?.id));
+                    const renderRow = (conversation: Conversation) => {
+                      const friend = Array.isArray(conversation.friend) 
+                        ? conversation.friend[0] 
+                        : conversation.friend;
+                      const isOnline = onlineUsers.has(friend?.id);
+                      const isTyping = typingFriendIds.has(friend?.id);
+                      const isPinned = pinnedDirectIds.has(friend?.id);
+                      return (
+                        <TouchableOpacity 
+                          key={friend?.id} 
+                          style={styles.chatItem}
+                          onPress={() => router.push(`/chat/direct/${friend?.id}`)}
+                          onLongPress={() => setActionSheet({ type: 'direct', friendId: friend?.id, unreadCount: conversation.unreadCount, pinned: isPinned })}
+                          activeOpacity={0.7}
+                        >
+                          <View style={styles.avatarContainer}>
+                            <Image 
+                              source={{ 
+                                uri: friend?.avatar_url || 'https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?w=400&auto=format&fit=crop&q=60' 
+                              }} 
+                              style={styles.avatar} 
+                            />
+                            {isOnline && (
+                              <View style={styles.onlineIndicator} />
+                            )}
+                          </View>
+                          <View style={styles.chatInfo}>
+                            <View style={styles.chatHeader}>
+                              <View style={{ flexDirection: 'row', alignItems: 'center', flex: 1 }}>
+                                <Text style={styles.chatName} numberOfLines={1}>
+                                  {friend?.full_name || 'Unknown'}{isPinned ? '  •  Pinned' : ''}
+                                </Text>
+                                {(friend as any)?.is_admin && (
+                                  <View style={styles.adminBadge}>
+                                    <Text style={styles.adminBadgeText}>Admin</Text>
+                                  </View>
+                                )}
+                              </View>
+                              {conversation.latestMessage && (
+                                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                                  <Text style={styles.chatTime}>
+                                    {formatTime(conversation.latestMessage.created_at)}
+                                  </Text>
+                                  {/* Outgoing status ticks (approximate): show only for my last message */}
+                                  {conversation.latestMessage.sender_id === user.id && (
+                                    conversation.latestMessage.is_read ? (
+                                      <CheckCheck size={14} color="#94A3B8" />
+                                    ) : (
+                                      <Check size={14} color="#94A3B8" />
+                                    )
+                                  )}
+                                </View>
+                              )}
+                            </View>
+                            <View style={styles.chatFooter}>
+                              <Text 
+                                style={[
+                                  styles.lastMessage,
+                                  conversation.unreadCount > 0 && styles.unreadMessage
+                                ]} 
+                                numberOfLines={1}
+                              >
+                                {isTyping ? 'Typing…' : (conversation.latestMessage 
+                                  ? getMessagePreview(conversation.latestMessage)
+                                  : 'Tap to start chatting')}
+                              </Text>
+                              {conversation.unreadCount > 0 && (
+                                <View style={styles.unreadBadge}>
+                                  <Text style={styles.unreadCount}>
+                                    {conversation.unreadCount > 99 ? '99+' : conversation.unreadCount}
+                                  </Text>
+                                </View>
+                              )}
+                            </View>
+                          </View>
+                        </TouchableOpacity>
+                      );
+                    };
+                    return (
+                      <>
+                        {pinned.length > 0 && (
+                          <View style={{ marginBottom: 4 }}>
+                            {pinned.map(renderRow)}
+                          </View>
+                        )}
+                        {others.map(renderRow)}
+                      </>
+                    );
+                  })()}
+                </View>
+              )}
+
+              {/* Groups Section with Pinned */}
+              {groups.length > 0 && (
+                <View style={styles.section}>
+                  <Text style={styles.sectionTitle}>GROUPS</Text>
+                  {groupsLoading ? (
+                    <View style={styles.sectionLoading}>
+                      <Text style={styles.loadingText}>Loading groups...</Text>
+                    </View>
+                  ) : (
+                    (() => {
+                      const pinned = groups.filter((g) => pinnedGroupIds.has(g.group.id));
+                      const others = groups.filter((g) => !pinnedGroupIds.has(g.group.id));
+                      const renderRow = (g: GroupItem) => {
+                        const isPinned = pinnedGroupIds.has(g.group.id);
+                        return (
+                          <TouchableOpacity 
+                            key={g.group.id} 
+                            style={styles.chatItem} 
+                            onPress={() => router.push(`/chat/group/${g.group.id}`)}
+                            onLongPress={() => setActionSheet({ type: 'group', groupId: g.group.id, unreadCount: g.unreadCount, pinned: isPinned })}
+                            activeOpacity={0.7}
+                          >
+                            <View style={styles.avatarContainer}>
+                              <Image 
+                                source={{ 
+                                  uri: g.group.avatar_url || 'https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?w=400&auto=format&fit=crop&q=60' 
+                                }} 
+                                style={styles.avatar} 
+                              />
+                              <View style={styles.groupBadge}>
+                                <Users size={14} color="#FFFFFF" strokeWidth={2.5} />
+                              </View>
+                            </View>
+                            <View style={styles.chatInfo}>
+                              <View style={styles.chatHeader}>
+                                <Text style={styles.chatName} numberOfLines={1}>
+                                  {g.group.name}{isPinned ? '  •  Pinned' : ''}
+                                </Text>
+                                {g.lastMessage && (
+                                  <Text style={styles.chatTime}>
+                                    {formatTime(g.lastMessage.created_at)}
+                                  </Text>
+                                )}
+                              </View>
+                              <View style={styles.chatFooter}>
+                                <Text 
+                                  style={[
+                                    styles.lastMessage, 
+                                    g.unreadCount > 0 && styles.unreadMessage
+                                  ]} 
+                                  numberOfLines={1}
+                                >
+                                  {g.lastMessage ? getMessagePreview(g.lastMessage) : 'No messages yet'}
+                                </Text>
+                                {g.unreadCount > 0 && (
+                                  <View style={styles.unreadBadge}>
+                                    <Text style={styles.unreadCount}>
+                                      {g.unreadCount > 99 ? '99+' : g.unreadCount}
+                                    </Text>
+                                  </View>
+                                )}
+                              </View>
+                            </View>
+                          </TouchableOpacity>
+                        );
+                      };
+                      return (
+                        <>
+                          {pinned.length > 0 && (
+                            <View style={{ marginBottom: 4 }}>
+                              {pinned.map(renderRow)}
+                            </View>
+                          )}
+                          {others.map(renderRow)}
+                        </>
+                      );
+                    })()
+                  )}
+                </View>
+              )}
+            </>
+          )}
+        </ScrollView>
       )}
+
+      {/* Action Sheet */}
+      <Modal
+        visible={!!actionSheet}
+        animationType="fade"
+        transparent
+        onRequestClose={() => setActionSheet(null)}
+      >
+        <View style={styles.sheetOverlay}>
+          <View style={styles.sheetContainer}>
+            <Text style={styles.sheetTitle}>Chat actions</Text>
+            {!!actionSheet && (
+              <>
+                <TouchableOpacity
+                  style={styles.sheetAction}
+                  onPress={() =>
+                    onPinToggle(
+                      actionSheet.type,
+                      actionSheet.type === 'direct' ? actionSheet.friendId : actionSheet.groupId,
+                      !actionSheet.pinned
+                    )
+                  }
+                >
+                  <Text style={styles.sheetActionText}>{actionSheet.pinned ? 'Unpin' : 'Pin'} conversation</Text>
+                </TouchableOpacity>
+                {actionSheet.unreadCount > 0 && (
+                  <TouchableOpacity
+                    style={styles.sheetAction}
+                    onPress={() =>
+                      onMarkRead(
+                        actionSheet.type,
+                        actionSheet.type === 'direct' ? actionSheet.friendId : actionSheet.groupId
+                      )
+                    }
+                  >
+                    <Text style={styles.sheetActionText}>Mark as read</Text>
+                  </TouchableOpacity>
+                )}
+                <TouchableOpacity style={[styles.sheetAction, styles.sheetCancel]} onPress={() => setActionSheet(null)}>
+                  <Text style={[styles.sheetActionText, { color: '#111827' }]}>Cancel</Text>
+                </TouchableOpacity>
+              </>
+            )}
+          </View>
+        </View>
+      </Modal>
 
       {/* Search Modal */}
       <Modal
@@ -548,7 +839,7 @@ export default function ChatScreen() {
                 <Search size={20} color="#64748B" />
                 <TextInput
                   style={styles.searchInput}
-                  placeholder="Search by name or username"
+                  placeholder="Search by name..."
                   placeholderTextColor="#64748B"
                   value={searchQuery}
                   onChangeText={(text) => {
@@ -575,8 +866,17 @@ export default function ChatScreen() {
                     style={styles.userAvatar} 
                   />
                   <View style={styles.userInfo}>
-                    <Text style={styles.userName}>{item.full_name || item.username}</Text>
-                    <Text style={styles.userUsername}>@{item.username}</Text>
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                      <Text style={styles.userName}>{item.full_name || 'Unknown'}</Text>
+                      {(item as any)?.is_admin && (
+                        <View style={styles.adminBadge}>
+                          <Text style={styles.adminBadgeText}>Admin</Text>
+                        </View>
+                      )}
+                    </View>
+                    {!!formatProfileSubtitle(item) && (
+                      <Text style={styles.userUsername}>{formatProfileSubtitle(item)}</Text>
+                    )}
                   </View>
                 </TouchableOpacity>
               )}
@@ -606,87 +906,189 @@ export default function ChatScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#F8F9FA',
+    backgroundColor: '#F8FAFC',
   },
   header: {
+    backgroundColor: '#E2E8F0',
+    paddingTop: 60,
+    paddingBottom: 20,
+    paddingHorizontal: 20,
+    borderBottomLeftRadius: 24,
+    borderBottomRightRadius: 24,
+    shadowColor: '#000000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.08,
+    shadowRadius: 12,
+    elevation: 8,
+  },
+  headerTop: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingHorizontal: 16,
-    paddingTop: 60,
-    paddingBottom: 16,
-    backgroundColor: '#FFFFFF',
+    marginBottom: 20,
   },
   title: {
-    fontSize: 28,
+    fontSize: 32,
     fontFamily: 'Inter-SemiBold',
-    color: '#1A1A1A',
+    color: '#1E293B',
+    fontWeight: '700',
+    letterSpacing: 0.5,
   },
   headerActions: {
     flexDirection: 'row',
-    gap: 12,
+    gap: 10,
   },
   iconButton: {
     width: 40,
     height: 40,
     borderRadius: 20,
-    backgroundColor: '#F1F5F9',
+    backgroundColor: '#FFFFFF',
     justifyContent: 'center',
     alignItems: 'center',
+    borderWidth: 1,
+    borderColor: '#CBD5E1',
+    shadowColor: '#000000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 4,
+    elevation: 2,
   },
   searchContainer: {
-    padding: 16,
-    backgroundColor: '#FFFFFF',
-    borderBottomWidth: 1,
-    borderBottomColor: '#E2E8F0',
+    marginTop: 4,
   },
   searchInputContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#F1F5F9',
-    borderRadius: 12,
-    paddingHorizontal: 12,
-    height: 44,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 16,
+    paddingHorizontal: 16,
+    height: 48,
+    borderWidth: 1,
+    borderColor: '#CBD5E1',
   },
   searchInput: {
     flex: 1,
-    marginLeft: 8,
-    fontSize: 16,
+    marginLeft: 10,
+    fontSize: 15,
     fontFamily: 'Inter-Regular',
-    color: '#1A1A1A',
+    color: '#1E293B',
   },
   loadingContainer: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
+    backgroundColor: '#F8FAFC',
+  },
+  loadingSpinner: {
+    alignItems: 'center',
+    gap: 16,
   },
   loadingText: {
-    fontSize: 16,
+    fontSize: 15,
     fontFamily: 'Inter-Regular',
-    color: '#666666',
+    color: '#64748B',
+    marginTop: 8,
+  },
+  skeletonItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 14,
+    paddingHorizontal: 20,
+    backgroundColor: '#FFFFFF',
+    marginBottom: 1,
+  },
+  skeletonAvatar: {
+    width: 60,
+    height: 60,
+    borderRadius: 30,
+    backgroundColor: '#E5E7EB',
+    marginRight: 14,
+  },
+  skeletonMeta: {
+    flex: 1,
+    gap: 10,
+  },
+  skeletonLinePrimary: {
+    width: '50%',
+    height: 16,
+    borderRadius: 8,
+    backgroundColor: '#E5E7EB',
+  },
+  skeletonLineSecondary: {
+    width: '80%',
+    height: 12,
+    borderRadius: 8,
+    backgroundColor: '#E5E7EB',
   },
   chatList: {
     flex: 1,
+  },
+  section: {
+    marginTop: 20,
+  },
+  sectionTitle: {
+    fontSize: 12,
+    fontFamily: 'Inter-SemiBold',
+    color: '#64748B',
+    letterSpacing: 1,
+    paddingHorizontal: 20,
+    paddingBottom: 8,
+    fontWeight: '600',
+  },
+  sectionLoading: {
+    padding: 20,
+    alignItems: 'center',
   },
   emptyState: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
     paddingHorizontal: 32,
-    paddingTop: 100,
+    paddingTop: 80,
+  },
+  emptyIconContainer: {
+    width: 100,
+    height: 100,
+    borderRadius: 50,
+    backgroundColor: '#F1F5F9',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 24,
   },
   emptyStateTitle: {
-    fontSize: 20,
+    fontSize: 22,
     fontFamily: 'Inter-SemiBold',
-    color: '#1A1A1A',
-    marginTop: 16,
+    color: '#1E293B',
     marginBottom: 8,
+    fontWeight: '600',
   },
   emptyStateText: {
-    fontSize: 16,
+    fontSize: 15,
     fontFamily: 'Inter-Regular',
-    color: '#666666',
+    color: '#64748B',
     textAlign: 'center',
+    lineHeight: 22,
+    marginBottom: 32,
+  },
+  emptyActionButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    backgroundColor: '#475569',
+    paddingHorizontal: 24,
+    paddingVertical: 14,
+    borderRadius: 12,
+    shadowColor: '#475569',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 4,
+  },
+  emptyActionText: {
+    fontSize: 16,
+    fontFamily: 'Inter-SemiBold',
+    color: '#FFFFFF',
+    fontWeight: '600',
   },
   authPrompt: {
     flex: 1,
@@ -695,43 +1097,60 @@ const styles = StyleSheet.create({
     paddingHorizontal: 32,
   },
   authPromptTitle: {
-    fontSize: 20,
+    fontSize: 22,
     fontFamily: 'Inter-SemiBold',
-    color: '#1A1A1A',
+    color: '#1E293B',
     marginTop: 16,
     marginBottom: 8,
+    fontWeight: '600',
   },
   authPromptText: {
-    fontSize: 16,
+    fontSize: 15,
     fontFamily: 'Inter-Regular',
-    color: '#666666',
+    color: '#64748B',
     textAlign: 'center',
+    lineHeight: 22,
   },
   chatItem: {
     flexDirection: 'row',
     alignItems: 'center',
-    padding: 16,
+    paddingVertical: 14,
+    paddingHorizontal: 20,
     backgroundColor: '#FFFFFF',
-    borderBottomWidth: 1,
-    borderBottomColor: '#E2E8F0',
+    marginBottom: 1,
   },
   avatarContainer: {
     position: 'relative',
-    marginRight: 12,
+    marginRight: 14,
   },
   avatar: {
-    width: 56,
-    height: 56,
-    borderRadius: 28,
+    width: 60,
+    height: 60,
+    borderRadius: 30,
+    borderWidth: 2,
+    borderColor: '#F1F5F9',
   },
   onlineIndicator: {
     position: 'absolute',
-    bottom: 2,
-    right: 2,
-    width: 14,
-    height: 14,
-    borderRadius: 7,
-    backgroundColor: '#10B981',
+    bottom: 0,
+    right: 0,
+    width: 16,
+    height: 16,
+    borderRadius: 8,
+    backgroundColor: '#22C55E',
+    borderWidth: 3,
+    borderColor: '#FFFFFF',
+  },
+  groupBadge: {
+    position: 'absolute',
+    bottom: 0,
+    right: 0,
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+    backgroundColor: '#64748B',
+    justifyContent: 'center',
+    alignItems: 'center',
     borderWidth: 2,
     borderColor: '#FFFFFF',
   },
@@ -742,17 +1161,20 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 4,
+    marginBottom: 6,
   },
   chatName: {
-    fontSize: 16,
+    flex: 1,
+    fontSize: 17,
     fontFamily: 'Inter-SemiBold',
-    color: '#1A1A1A',
+    color: '#1E293B',
+    fontWeight: '600',
+    marginRight: 8,
   },
   chatTime: {
     fontSize: 12,
     fontFamily: 'Inter-Regular',
-    color: '#64748B',
+    color: '#94A3B8',
   },
   chatFooter: {
     flexDirection: 'row',
@@ -765,24 +1187,62 @@ const styles = StyleSheet.create({
     fontFamily: 'Inter-Regular',
     color: '#64748B',
     marginRight: 8,
+    lineHeight: 20,
   },
   unreadMessage: {
-    color: '#1A1A1A',
+    color: '#1E293B',
     fontFamily: 'Inter-SemiBold',
+    fontWeight: '600',
   },
   unreadBadge: {
-    backgroundColor: '#4169E1',
-    borderRadius: 12,
-    minWidth: 24,
-    height: 24,
+    backgroundColor: '#475569',
+    borderRadius: 14,
+    minWidth: 26,
+    height: 26,
     justifyContent: 'center',
     alignItems: 'center',
     paddingHorizontal: 8,
+    shadowColor: '#475569',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.3,
+    shadowRadius: 4,
+    elevation: 3,
   },
   unreadCount: {
     color: '#FFFFFF',
     fontSize: 12,
     fontFamily: 'Inter-SemiBold',
+    fontWeight: '700',
+  },
+  sheetOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.4)',
+    justifyContent: 'flex-end',
+  },
+  sheetContainer: {
+    backgroundColor: '#FFFFFF',
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    padding: 16,
+  },
+  sheetTitle: {
+    fontSize: 16,
+    fontFamily: 'Inter-SemiBold',
+    color: '#111827',
+    marginBottom: 8,
+  },
+  sheetAction: {
+    paddingVertical: 14,
+    borderBottomWidth: 1,
+    borderBottomColor: '#F3F4F6',
+  },
+  sheetCancel: {
+    borderBottomWidth: 0,
+  },
+  sheetActionText: {
+    fontSize: 15,
+    color: '#1F2937',
+    fontFamily: 'Inter-Regular',
   },
   modalContainer: {
     flex: 1,
@@ -855,5 +1315,19 @@ const styles = StyleSheet.create({
     fontFamily: 'Inter-Regular',
     color: '#666666',
     textAlign: 'center',
+  },
+  adminBadge: {
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 999,
+    backgroundColor: '#EEF6FF',
+    borderWidth: 1,
+    borderColor: '#CDE3FF',
+    marginLeft: 6,
+  },
+  adminBadgeText: {
+    color: '#0A84FF',
+    fontSize: 11,
+    fontFamily: 'Inter-SemiBold',
   },
 });

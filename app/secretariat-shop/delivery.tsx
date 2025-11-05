@@ -142,7 +142,7 @@ export default function HomeDeliveryScreen() {
                 <Text style={styles.contactLabel}>Address</Text>
                 <Text style={styles.contactValue}>
                   Alumni Secretariat{'\n'}
-                  University Campus, East Legon{'\n'}
+                  Achimota Senior High School{'\n'}
                   Accra, Ghana
                 </Text>
               </View>

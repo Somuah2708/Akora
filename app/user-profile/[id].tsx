@@ -1,24 +1,100 @@
-import { View, Text, StyleSheet, ScrollView, Image, TouchableOpacity, Alert, ActivityIndicator } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Dimensions, Image, ActivityIndicator, Modal, Share, Alert, Platform } from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import * as Linking from 'expo-linking';
+import * as Clipboard from 'expo-clipboard';
 import { useFonts, Inter_400Regular, Inter_600SemiBold } from '@expo-google-fonts/inter';
-import { useEffect, useState } from 'react';
-import { SplashScreen, useRouter, useLocalSearchParams } from 'expo-router';
-import { ArrowLeft, Mail, GraduationCap, Calendar, MapPin, MessageCircle, UserPlus, UserCheck, UserMinus, Users } from 'lucide-react-native';
-import { supabase } from '@/lib/supabase';
+import { useState, useEffect, useMemo } from 'react';
+import { useRouter, useLocalSearchParams, Stack } from 'expo-router';
+import { 
+  Grid3x3,
+  Bookmark,
+  UserPlus,
+  Menu,
+  Heart,
+  Link as LinkIcon,
+  ChevronDown,
+  ChevronUp,
+  Star,
+  MoreHorizontal,
+  Trash,
+  ArrowLeft,
+} from 'lucide-react-native';
+import type { LucideIcon } from 'lucide-react-native';
 import { useAuth } from '@/hooks/useAuth';
-import { checkFriendshipStatus, sendFriendRequest, unfriend, getMutualFriendsCount } from '@/lib/friends';
-import type { Profile } from '@/lib/supabase';
+import { useToast } from '@/components/Toast';
+import { supabase } from '@/lib/supabase';
+import { INTEREST_LIBRARY, type InterestOptionId } from '@/lib/interest-data';
+import VisitorActions from '@/components/VisitorActions';
 
-SplashScreen.preventAutoHideAsync();
+const { width, height } = Dimensions.get('window');
+const GRID_ITEM_SIZE = (width - 6) / 3;
 
+type Highlight = {
+  id: string;
+  user_id: string;
+  title?: string | null;
+  subtitle?: string | null;
+  media_url?: string | null;
+  action_url?: string | null;
+  emoji?: string | null;
+  color?: string | null;
+  order_index?: number | null;
+  visible?: boolean | null;
+  pinned?: boolean | null;
+  post_id?: string | null;
+};
+
+// Standalone user profile screen (Instagram-style - no bottom tabs, just back button)
 export default function UserProfileScreen() {
   const router = useRouter();
   const { id } = useLocalSearchParams<{ id: string }>();
   const { user } = useAuth();
-  const [userProfile, setUserProfile] = useState<Profile | null>(null);
+  const toast = useToast();
+  const [activeTab, setActiveTab] = useState<'grid' | 'saved'>('grid');
+  const [userPosts, setUserPosts] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
-  const [friendshipStatus, setFriendshipStatus] = useState<'friends' | 'request_sent' | 'request_received' | 'none' | null>(null);
-  const [mutualFriendsCount, setMutualFriendsCount] = useState(0);
-  const [actionLoading, setActionLoading] = useState(false);
+  const [stats, setStats] = useState({ posts: 0, friends: 0 });
+  const [userInterests, setUserInterests] = useState<Set<InterestOptionId>>(new Set());
+  const [avatarPreviewVisible, setAvatarPreviewVisible] = useState(false);
+  const [shareSheetVisible, setShareSheetVisible] = useState(false);
+  const [qrVisible, setQrVisible] = useState(false);
+  const [expandBio, setExpandBio] = useState(true);
+  const [expandAbout, setExpandAbout] = useState(true);
+  const [expandInterests, setExpandInterests] = useState(true);
+  const [highlights, setHighlights] = useState<Highlight[]>([]);
+  const [postPreview, setPostPreview] = useState<Record<string, { thumb?: string | null }>>({});
+  const [coversByTitle, setCoversByTitle] = useState<Record<string, string | null>>({});
+  const [viewProfile, setViewProfile] = useState<any | null>(null);
+  const [postSheetOpen, setPostSheetOpen] = useState(false);
+  const [selectedPostId, setSelectedPostId] = useState<string | null>(null);
+
+  const viewingUserId = id || '';
+  const isOwner = !!user && viewingUserId === user.id;
+
+  const grouped = useMemo(() => {
+    const map = new Map<string, Highlight[]>();
+    highlights.forEach(h => {
+      const key = (h.title || 'Highlight').trim();
+      if (!map.has(key)) map.set(key, []);
+      map.get(key)!.push(h);
+    });
+    const groups = Array.from(map.entries()).map(([title, items]) => {
+      const sorted = items.slice().sort((a, b) => {
+        const pa = (a.pinned ? 0 : 1);
+        const pb = (b.pinned ? 0 : 1);
+        if (pa !== pb) return pa - pb;
+        const oa = a.order_index ?? 0;
+        const ob = b.order_index ?? 0;
+        return oa - ob;
+      });
+      const cover = sorted[0];
+      const derivedThumb = cover?.post_id ? postPreview[cover.post_id]?.thumb : undefined;
+      const custom = coversByTitle[title] || undefined;
+      const coverThumb = custom ?? derivedThumb;
+      return { title, count: items.length, hid: cover?.id, coverThumb };
+    });
+    return groups.sort((a, b) => a.title.localeCompare(b.title));
+  }, [highlights, postPreview, coversByTitle]);
 
   const [fontsLoaded] = useFonts({
     'Inter-Regular': Inter_400Regular,
@@ -26,410 +102,640 @@ export default function UserProfileScreen() {
   });
 
   useEffect(() => {
-    if (fontsLoaded) {
-      SplashScreen.hideAsync();
+    if (viewingUserId) {
+      fetchUserData();
     }
-  }, [fontsLoaded]);
+  }, [viewingUserId]);
 
   useEffect(() => {
-    if (id && user) {
-      fetchUserProfile();
-      checkFriendship();
-      fetchMutualFriends();
-    }
-  }, [id, user]);
-
-  // Subscribe to real-time profile updates
-  useEffect(() => {
-    if (!id) return;
-
-    const subscription = supabase
-      .channel(`profile_${id}`)
-      .on('postgres_changes',
-        {
-          event: 'UPDATE',
-          schema: 'public',
-          table: 'profiles',
-          filter: `id=eq.${id}`
-        },
-        (payload) => {
-          setUserProfile(payload.new as Profile);
+    (async () => {
+      try {
+        if (!viewingUserId) return;
+        const { data, error } = await supabase
+          .from('profile_highlights')
+          .select('id,user_id,title,order_index,visible,pinned,post_id')
+          .eq('user_id', viewingUserId)
+          .eq('visible', true)
+          .order('pinned', { ascending: false })
+          .order('order_index', { ascending: true });
+        if (error) throw error;
+        const rows = (data as Highlight[]) || [];
+        setHighlights(rows);
+        const postIds = rows.map(r => r.post_id).filter(Boolean) as string[];
+        if (postIds.length) {
+          const { data: posts } = await supabase
+            .from('posts')
+            .select('id,image_url,image_urls,video_urls')
+            .in('id', postIds);
+          const map: Record<string, { thumb?: string | null }> = {};
+          (posts || []).forEach((p: any) => {
+            const thumb = p.image_url || (Array.isArray(p.image_urls) && p.image_urls.length > 0 ? p.image_urls[0] : null);
+            map[p.id] = { thumb };
+          });
+          setPostPreview(map);
+        } else {
+          setPostPreview({});
         }
-      )
-      .subscribe();
+        try {
+          const { data: covers, error: cErr } = await supabase
+            .from('profile_highlight_covers')
+            .select('title,cover_url')
+            .eq('user_id', viewingUserId);
+          if (!cErr && Array.isArray(covers)) {
+            const map: Record<string, string | null> = {};
+            covers.forEach((c: any) => { if (c?.title) map[String(c.title)] = c.cover_url || null; });
+            setCoversByTitle(map);
+          } else {
+            setCoversByTitle({});
+          }
+        } catch {}
+      } catch (e) {}
+    })();
+  }, [viewingUserId]);
 
-    return () => {
-      subscription.unsubscribe();
-    };
-  }, [id]);
-
-  // Subscribe to friendship changes
-  useEffect(() => {
-    if (!id || !user) return;
-
-    const subscription = supabase
-      .channel('friendship_changes')
-      .on('postgres_changes',
-        {
-          event: '*',
-          schema: 'public',
-          table: 'friends',
-        },
-        () => {
-          checkFriendship();
-          fetchMutualFriends();
-        }
-      )
-      .on('postgres_changes',
-        {
-          event: '*',
-          schema: 'public',
-          table: 'friend_requests',
-        },
-        () => {
-          checkFriendship();
-        }
-      )
-      .subscribe();
-
-    return () => {
-      subscription.unsubscribe();
-    };
-  }, [id, user]);
-
-  const fetchUserProfile = async () => {
-    if (!id) return;
+  const fetchUserData = async () => {
+    if (!viewingUserId) return;
 
     try {
       setLoading(true);
-      const { data, error } = await supabase
-        .from('profiles')
-        .select('*')
-        .eq('id', id)
-        .single();
 
-      if (error) throw error;
-      setUserProfile(data);
+      // Load the viewed user's profile
+      try {
+        const { data: vp } = await supabase
+          .from('profiles')
+          .select('*')
+          .eq('id', viewingUserId)
+          .single();
+        if (vp) setViewProfile(vp);
+      } catch {}
+
+      // Fetch user's posts
+      const { data: posts, error: postsError } = await supabase
+        .from('posts')
+        .select('*')
+        .eq('user_id', viewingUserId)
+        .eq('is_highlight_only', false)
+        .order('created_at', { ascending: false });
+
+      if (postsError) throw postsError;
+
+      setUserPosts(posts || []);
+      setStats(prev => ({ ...prev, posts: posts?.length || 0 }));
+
+      // Fetch friends count
+      const { data: friendsList, error: friendsError } = await supabase
+        .from('friends')
+        .select('*')
+        .or(`user_id.eq.${viewingUserId},friend_id.eq.${viewingUserId}`);
+
+      if (!friendsError && friendsList) {
+        const uniqueFriends = new Set<string>();
+        friendsList.forEach((friendship: any) => {
+          const friendId = friendship.user_id === viewingUserId 
+            ? friendship.friend_id 
+            : friendship.user_id;
+          uniqueFriends.add(friendId);
+        });
+        setStats(prev => ({ ...prev, friends: uniqueFriends.size }));
+      }
+
+      // Fetch user's selected interests
+      const { data: interests, error: interestsError } = await supabase
+        .from('user_interests')
+        .select('category')
+        .eq('user_id', viewingUserId);
+      if (!interestsError && interests) {
+        setUserInterests(new Set(interests.map((r: any) => r.category as InterestOptionId)));
+      }
+
     } catch (error) {
-      console.error('Error fetching user profile:', error);
-      Alert.alert('Error', 'Failed to load user profile');
+      console.error('Error fetching user data:', error);
     } finally {
       setLoading(false);
     }
   };
 
-  const checkFriendship = async () => {
-    if (!user || !id || user.id === id) return;
+  const buildProfileLink = () => {
+    return Linking.createURL(`/user-profile/${viewingUserId ?? ''}`);
+  };
 
+  const copyProfileLink = async () => {
+    const url = buildProfileLink();
     try {
-      const status = await checkFriendshipStatus(user.id, id);
-      setFriendshipStatus(status);
-    } catch (error) {
-      console.error('Error checking friendship status:', error);
-    }
+      await Clipboard.setStringAsync(url);
+      Alert.alert('Copied', 'Profile link copied to clipboard');
+    } catch (e) {}
   };
 
-  const fetchMutualFriends = async () => {
-    if (!user || !id || user.id === id) return;
-
+  const shareSystem = async () => {
+    const url = buildProfileLink();
+    const message = `${viewProfile?.full_name ?? 'My'} Akora profile\n${url}`;
     try {
-      const count = await getMutualFriendsCount(user.id, id);
-      setMutualFriendsCount(count);
-    } catch (error) {
-      console.error('Error fetching mutual friends:', error);
+      await Share.share({ message, url });
+    } catch (e) {}
+  };
+
+  const formatOccupation = (s?: string | null) => {
+    switch (s) {
+      case 'student': return 'Student';
+      case 'employed': return 'Employed';
+      case 'self_employed': return 'Self-Employed';
+      case 'unemployed': return 'Unemployed';
+      case 'other': return 'Other';
+      default: return s ? s.charAt(0).toUpperCase() + s.slice(1) : '';
     }
   };
 
-  const handleAddFriend = async () => {
-    if (!user || !id) return;
-
-    try {
-      setActionLoading(true);
-      await sendFriendRequest(id, user.id);
-      Alert.alert('Success', 'Friend request sent!');
-      checkFriendship();
-    } catch (error) {
-      console.error('Error sending friend request:', error);
-      Alert.alert('Error', 'Failed to send friend request');
-    } finally {
-      setActionLoading(false);
-    }
-  };
-
-  const handleUnfriend = async () => {
-    if (!user || !id) return;
-
-    Alert.alert(
-      'Unfriend',
-      `Are you sure you want to remove ${userProfile?.full_name || userProfile?.username} from your friends?`,
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Unfriend',
-          style: 'destructive',
-          onPress: async () => {
-            try {
-              setActionLoading(true);
-              await unfriend(id);
-              Alert.alert('Success', 'Friend removed');
-              checkFriendship();
-            } catch (error) {
-              console.error('Error unfriending:', error);
-              Alert.alert('Error', 'Failed to remove friend');
-            } finally {
-              setActionLoading(false);
-            }
-          },
-        },
-      ]
-    );
-  };
-
-  const handleMessage = () => {
-    if (!id) return;
-    router.push(`/chat/direct/${id}`);
-  };
-
-  const renderActionButton = () => {
-    if (!user || user.id === id) return null;
-
-    if (actionLoading) {
-      return (
-        <View style={styles.actionButton}>
-          <ActivityIndicator color="#FFFFFF" />
-        </View>
-      );
-    }
-
-    switch (friendshipStatus) {
-      case 'friends':
-        return (
-          <View style={styles.buttonRow}>
-            <TouchableOpacity
-              style={[styles.actionButton, styles.messageButton]}
-              onPress={handleMessage}
-            >
-              <MessageCircle size={20} color="#FFFFFF" />
-              <Text style={styles.actionButtonText}>Message</Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={[styles.actionButton, styles.unfriendButton]}
-              onPress={handleUnfriend}
-            >
-              <UserMinus size={20} color="#FF3B30" />
-            </TouchableOpacity>
-          </View>
-        );
-
-      case 'request_sent':
-        return (
-          <TouchableOpacity style={[styles.actionButton, styles.disabledButton]} disabled>
-            <UserCheck size={20} color="#666666" />
-            <Text style={[styles.actionButtonText, styles.disabledButtonText]}>Request Sent</Text>
-          </TouchableOpacity>
-        );
-
-      case 'request_received':
-        return (
-          <TouchableOpacity
-            style={[styles.actionButton, styles.acceptButton]}
-            onPress={() => router.push('/friends')}
-          >
-            <UserPlus size={20} color="#FFFFFF" />
-            <Text style={styles.actionButtonText}>View Request</Text>
-          </TouchableOpacity>
-        );
-
-      default:
-        return (
-          <TouchableOpacity
-            style={[styles.actionButton, styles.addFriendButton]}
-            onPress={handleAddFriend}
-          >
-            <UserPlus size={20} color="#FFFFFF" />
-            <Text style={styles.actionButtonText}>Add Friend</Text>
-          </TouchableOpacity>
-        );
-    }
+  const showQr = () => {
+    setQrVisible(true);
+    setShareSheetVisible(false);
   };
 
   if (!fontsLoaded || loading) {
     return (
       <View style={styles.loadingContainer}>
         <ActivityIndicator size="large" color="#4169E1" />
-        <Text style={styles.loadingText}>Loading profile...</Text>
       </View>
     );
   }
 
-  if (!userProfile) {
+  if (!viewProfile) {
     return (
-      <View style={styles.container}>
-        <View style={styles.header}>
-          <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
-            <ArrowLeft size={24} color="#000000" />
-          </TouchableOpacity>
-          <Text style={styles.headerTitle}>Profile</Text>
-          <View style={styles.placeholder} />
-        </View>
-        <View style={styles.errorContainer}>
-          <Text style={styles.errorText}>User not found</Text>
-        </View>
+      <View style={styles.loadingContainer}>
+        <Text style={styles.errorText}>Profile not found</Text>
       </View>
     );
   }
+
+  const profile = viewProfile;
+
+  // Build interest lookup
+  type InterestMeta = { label: string; icon: LucideIcon; parentId?: string };
+  const INTEREST_LOOKUP: Record<string, InterestMeta> = {};
+  const SUBCATEGORY_IDS_BY_PARENT = new Map<string, string[]>();
+  const PARENT_BY_ID: Record<string, string | undefined> = {};
+  INTEREST_LIBRARY.forEach((cat) => {
+    INTEREST_LOOKUP[cat.id] = { label: cat.label, icon: cat.icon };
+    if (cat.subcategories?.length) {
+      SUBCATEGORY_IDS_BY_PARENT.set(cat.id, cat.subcategories.map((s) => s.id));
+      cat.subcategories.forEach((s) => {
+        INTEREST_LOOKUP[s.id] = { label: s.label, icon: cat.icon, parentId: cat.id };
+        PARENT_BY_ID[s.id] = cat.id;
+      });
+    }
+  });
+
+  const visibleInterestIds = (() => {
+    const selected = Array.from(userInterests);
+    const selectedSet = new Set(selected);
+    return selected.filter((id) => {
+      const subs = SUBCATEGORY_IDS_BY_PARENT.get(id) || [];
+      const hasSelectedChild = subs.some((sid) => selectedSet.has(sid));
+      if (hasSelectedChild) return false;
+      return true;
+    });
+  })();
 
   return (
-    <View style={styles.container}>
-      {/* Header */}
-      <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
-          <ArrowLeft size={24} color="#FFFFFF" />
-        </TouchableOpacity>
-        <Text style={styles.headerTitle}>Profile</Text>
-        <View style={styles.placeholder} />
-      </View>
+    <>
+      <Stack.Screen options={{ headerShown: false }} />
+      <ScrollView style={styles.container} showsVerticalScrollIndicator={false}>
+        {/* Avatar Preview Modal */}
+        <Modal
+          transparent
+          visible={avatarPreviewVisible}
+          animationType="fade"
+          onRequestClose={() => setAvatarPreviewVisible(false)}
+        >
+          <TouchableOpacity style={styles.imageFullOverlay} activeOpacity={1} onPress={() => setAvatarPreviewVisible(false)}>
+            {profile.avatar_url ? (
+              <Image
+                source={{ uri: profile.avatar_url }}
+                style={{ width, height }}
+                resizeMode="contain"
+              />
+            ) : (
+              <View style={[{ width, height }, styles.avatarPlaceholder]} />
+            )}
+          </TouchableOpacity>
+        </Modal>
 
-      <ScrollView style={styles.scrollView} showsVerticalScrollIndicator={false}>
-        {/* Cover Photo & Avatar */}
-        <View style={styles.coverSection}>
-          <View style={styles.coverPhoto}>
-            {/* Placeholder gradient cover - can be replaced with actual cover_photo_url field */}
-            <View style={styles.coverGradient} />
+        {/* Share Sheet */}
+        <Modal
+          transparent
+          visible={shareSheetVisible}
+          animationType="fade"
+          onRequestClose={() => setShareSheetVisible(false)}
+        >
+          <View style={styles.bottomSheetOverlay}>
+            <TouchableOpacity style={{ flex: 1 }} activeOpacity={1} onPress={() => setShareSheetVisible(false)} />
+            <View style={styles.bottomSheet}>
+              <Text style={styles.sheetTitle}>Share profile</Text>
+              <TouchableOpacity style={styles.sheetAction} onPress={shareSystem}>
+                <Text style={styles.sheetActionText}>Share…</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.sheetAction} onPress={copyProfileLink}>
+                <Text style={styles.sheetActionText}>Copy link</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.sheetAction} onPress={showQr}>
+                <Text style={styles.sheetActionText}>Show QR code</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.sheetAction} onPress={() => { Linking.openURL(buildProfileLink()); setShareSheetVisible(false); }}>
+                <Text style={styles.sheetActionText}>Open profile link</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.sheetCancel} onPress={() => setShareSheetVisible(false)}>
+                <Text style={styles.sheetCancelText}>Cancel</Text>
+              </TouchableOpacity>
+            </View>
           </View>
-          <View style={styles.avatarContainer}>
+        </Modal>
+
+        {/* QR Modal */}
+        <Modal
+          transparent
+          visible={qrVisible}
+          animationType="fade"
+          onRequestClose={() => setQrVisible(false)}
+        >
+          <TouchableOpacity style={styles.qrFullOverlay} activeOpacity={1} onPress={() => setQrVisible(false)}>
             <Image
-              source={{
-                uri: userProfile.avatar_url || 'https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?w=400&auto=format&fit=crop&q=60',
-              }}
-              style={styles.avatar}
+              source={{ uri: `https://api.qrserver.com/v1/create-qr-code/?size=${Math.min(width, height) * 2}x${Math.min(width, height) * 2}&data=${encodeURIComponent(buildProfileLink())}` }}
+              style={{ width, height: width }}
+              resizeMode="contain"
             />
+          </TouchableOpacity>
+        </Modal>
+
+        <View style={styles.header}>
+          <View style={styles.headerTop}>
+            <View style={styles.headerLeftRow}>
+              <TouchableOpacity style={styles.backButton} onPress={() => router.back()}>
+                <ArrowLeft size={24} color="#000000" strokeWidth={2} />
+              </TouchableOpacity>
+              <View style={styles.nameRow}>
+                <Text style={styles.username}>{profile.full_name || 'User'}</Text>
+                {profile.is_admin && (
+                  <View style={styles.adminBadge}>
+                    <Text style={styles.adminBadgeText}>Admin</Text>
+                  </View>
+                )}
+              </View>
+            </View>
+            <TouchableOpacity style={styles.headerIcon} onPress={() => setShareSheetVisible(true)}>
+              <MoreHorizontal size={24} color="#000000" strokeWidth={2} />
+            </TouchableOpacity>
+          </View>
+
+          <View style={styles.profileSection}>
+            <TouchableOpacity onPress={() => profile.avatar_url && setAvatarPreviewVisible(true)}>
+              {profile.avatar_url ? (
+                <Image source={{ uri: profile.avatar_url }} style={styles.avatar} />
+              ) : (
+                <View style={[styles.avatar, styles.avatarPlaceholder]}>
+                  <Text style={styles.avatarText}>
+                    {profile.full_name?.[0]?.toUpperCase() || 'U'}
+                  </Text>
+                </View>
+              )}
+            </TouchableOpacity>
+
+            <View style={styles.statsRow}>
+              <TouchableOpacity style={styles.statItem}>
+                <Text style={styles.statNumber}>{stats.posts}</Text>
+                <Text style={styles.statLabel}>Posts</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.statItem}>
+                <Text style={styles.statNumber}>{stats.friends}</Text>
+                <Text style={styles.statLabel}>Friends</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+
+          <View style={styles.bioSection}>
+            <Text style={styles.displayName}>{profile.full_name || 'User'}</Text>
+
+            {/* Bio Card */}
+            {profile.bio && (
+              <View style={styles.card}>
+                <TouchableOpacity style={styles.cardHeader} onPress={() => setExpandBio(!expandBio)}>
+                  <View style={styles.cardTitleRow}>
+                    <Heart size={16} color="#4169E1" fill="#4169E1" />
+                    <Text style={styles.cardTitle}>Bio</Text>
+                  </View>
+                  {expandBio ? <ChevronUp size={18} color="#666" /> : <ChevronDown size={18} color="#666" />}
+                </TouchableOpacity>
+                {expandBio && <Text style={styles.cardBodyText}>{profile.bio}</Text>}
+              </View>
+            )}
+
+            {/* About Card */}
+            <View style={styles.card}>
+              <TouchableOpacity style={styles.cardHeader} onPress={() => setExpandAbout(!expandAbout)}>
+                <View style={styles.cardTitleRow}>
+                  <Star size={16} color="#4169E1" fill="#4169E1" />
+                  <Text style={styles.cardTitle}>About</Text>
+                </View>
+                {expandAbout ? <ChevronUp size={18} color="#666" /> : <ChevronDown size={18} color="#666" />}
+              </TouchableOpacity>
+              {expandAbout && (
+                <View style={styles.cardBody}>
+                  {(profile as any).occupation_status && (
+                    <View style={styles.aboutRow}>
+                      <Text style={styles.aboutLabel}>Status</Text>
+                      <Text style={styles.aboutValue}>{formatOccupation((profile as any).occupation_status)}</Text>
+                    </View>
+                  )}
+                  {profile.year_group && (
+                    <View style={styles.aboutRow}>
+                      <Text style={styles.aboutLabel}>Year Group</Text>
+                      <Text style={styles.aboutValue}>{profile.year_group}</Text>
+                    </View>
+                  )}
+                  {profile.class && (
+                    <View style={styles.aboutRow}>
+                      <Text style={styles.aboutLabel}>Class</Text>
+                      <Text style={styles.aboutValue}>{profile.class}</Text>
+                    </View>
+                  )}
+                  {profile.house && (
+                    <View style={styles.aboutRow}>
+                      <Text style={styles.aboutLabel}>House</Text>
+                      <Text style={styles.aboutValue}>{profile.house}</Text>
+                    </View>
+                  )}
+                  {(profile as any).location && (
+                    <View style={styles.aboutRow}>
+                      <Text style={styles.aboutLabel}>Location</Text>
+                      <Text style={styles.aboutValue}>{(profile as any).location}</Text>
+                    </View>
+                  )}
+                  {(profile as any).phone && (
+                    <View style={styles.aboutRow}>
+                      <Text style={styles.aboutLabel}>Phone</Text>
+                      <Text style={styles.aboutValue}>{(profile as any).phone}</Text>
+                    </View>
+                  )}
+                  {(profile as any).email && (
+                    <View style={styles.aboutRow}>
+                      <Text style={styles.aboutLabel}>Email</Text>
+                      <Text style={styles.aboutValue}>{(profile as any).email}</Text>
+                    </View>
+                  )}
+                  {((profile as any).job_title || (profile as any).company_name) && (
+                    <View style={styles.aboutRow}>
+                      <Text style={styles.aboutLabel}>Occupation</Text>
+                      <Text style={styles.aboutValue}>
+                        {[(profile as any).job_title, (profile as any).company_name].filter(Boolean).join(' @ ')}
+                      </Text>
+                    </View>
+                  )}
+                  {((profile as any).institution_name || (profile as any).program_of_study || (profile as any).graduation_year || (profile as any).current_study_year) && (
+                    <View style={styles.aboutRow}>
+                      <Text style={styles.aboutLabel}>Education</Text>
+                      <Text style={styles.aboutValue}>
+                        {[
+                          (profile as any).institution_name,
+                          (profile as any).program_of_study,
+                          (profile as any).current_study_year ? `Year ${String((profile as any).current_study_year)}` : undefined,
+                          (profile as any).graduation_year ? `Class of ${String((profile as any).graduation_year)}` : undefined,
+                        ].filter(Boolean).join(' • ')}
+                      </Text>
+                    </View>
+                  )}
+                </View>
+              )}
+            </View>
+
+            {/* Interests Card */}
+            {visibleInterestIds.length > 0 && (
+              <View style={styles.card}>
+                <TouchableOpacity style={styles.cardHeader} onPress={() => setExpandInterests(!expandInterests)}>
+                  <View style={styles.cardTitleRow}>
+                    <Star size={16} color="#4169E1" fill="#4169E1" />
+                    <Text style={styles.cardTitle}>Interests</Text>
+                  </View>
+                  {expandInterests ? <ChevronUp size={18} color="#666" /> : <ChevronDown size={18} color="#666" />}
+                </TouchableOpacity>
+                {expandInterests && (
+                  <View style={styles.interestTags}>
+                    {visibleInterestIds.map((iid) => {
+                      const meta = INTEREST_LOOKUP[iid];
+                      if (!meta) return null;
+                      const IconComponent = meta.icon;
+                      return (
+                        <View key={iid} style={styles.interestTag}>
+                          <IconComponent size={14} color="#4169E1" strokeWidth={2} />
+                          <Text style={styles.interestTagText}>{meta.label}</Text>
+                        </View>
+                      );
+                    })}
+                  </View>
+                )}
+              </View>
+            )}
+
+            {/* Links Card */}
+            {((profile as any).website_url || (profile as any).linkedin_url || (profile as any).twitter_url || (profile as any).instagram_url || (profile as any).facebook_url) && (
+              <View style={styles.card}>
+                <Text style={styles.cardTitle}>Links</Text>
+                <View style={styles.linksRow}>
+                  {(profile as any).website_url && (
+                    <TouchableOpacity style={styles.linkPill} onPress={() => Linking.openURL(String((profile as any).website_url))}>
+                      <Text style={styles.linkPillText}>Website</Text>
+                    </TouchableOpacity>
+                  )}
+                  {(profile as any).linkedin_url && (
+                    <TouchableOpacity style={styles.linkPill} onPress={() => Linking.openURL(String((profile as any).linkedin_url))}>
+                      <Text style={styles.linkPillText}>LinkedIn</Text>
+                    </TouchableOpacity>
+                  )}
+                  {(profile as any).twitter_url && (
+                    <TouchableOpacity style={styles.linkPill} onPress={() => Linking.openURL(String((profile as any).twitter_url))}>
+                      <Text style={styles.linkPillText}>Twitter</Text>
+                    </TouchableOpacity>
+                  )}
+                  {(profile as any).instagram_url && (
+                    <TouchableOpacity style={styles.linkPill} onPress={() => Linking.openURL(String((profile as any).instagram_url))}>
+                      <Text style={styles.linkPillText}>Instagram</Text>
+                    </TouchableOpacity>
+                  )}
+                  {(profile as any).facebook_url && (
+                    <TouchableOpacity style={styles.linkPill} onPress={() => Linking.openURL(String((profile as any).facebook_url))}>
+                      <Text style={styles.linkPillText}>Facebook</Text>
+                    </TouchableOpacity>
+                  )}
+                </View>
+              </View>
+            )}
           </View>
         </View>
 
-        {/* User Info */}
-        <View style={styles.userInfo}>
-          <Text style={styles.fullName}>
-            {userProfile.full_name || userProfile.username || 'Unknown User'}
-          </Text>
-          {userProfile.username && (
-            <Text style={styles.username}>@{userProfile.username}</Text>
-          )}
-          {userProfile.bio && (
-            <Text style={styles.bio}>{userProfile.bio}</Text>
-          )}
-          
-          {/* Mutual Friends */}
-          {user && user.id !== id && mutualFriendsCount > 0 && (
-            <View style={styles.mutualFriendsContainer}>
-              <Users size={16} color="#666666" />
-              <Text style={styles.mutualFriendsText}>
-                {mutualFriendsCount} mutual friend{mutualFriendsCount > 1 ? 's' : ''}
-              </Text>
-            </View>
-          )}
+        {/* Visitor Actions (Follow/Message buttons) - placed after bio section */}
+        {!isOwner && (
+          <VisitorActions userId={viewingUserId} />
+        )}
+
+        {/* Highlights Section */}
+        {grouped.length > 0 && (
+          <View style={styles.highlightsSection}>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.highlightScroll}>
+              {grouped.map((g) => (
+                <TouchableOpacity
+                  key={g.title}
+                  style={styles.highlightItem}
+                  onPress={() => router.push(`/highlights/${viewingUserId}?title=${encodeURIComponent(g.title)}`)}
+                >
+                  {g.coverThumb ? (
+                    <Image source={{ uri: g.coverThumb }} style={styles.highlightThumb} />
+                  ) : (
+                    <View style={[styles.highlightThumb, styles.highlightPlaceholder]}>
+                      <Star size={20} color="#999" />
+                    </View>
+                  )}
+                  <Text style={styles.highlightTitle} numberOfLines={1}>{g.title}</Text>
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
+          </View>
+        )}
+
+        {/* Tabs */}
+        <View style={styles.tabsContainer}>
+          <TouchableOpacity
+            style={[styles.tab, activeTab === 'grid' && styles.tabActive]}
+            onPress={() => setActiveTab('grid')}
+          >
+            <Grid3x3 size={24} color={activeTab === 'grid' ? '#000000' : '#999999'} strokeWidth={2} />
+          </TouchableOpacity>
         </View>
 
-        {/* Action Button */}
-        <View style={styles.actionSection}>
-          {renderActionButton()}
-        </View>
-
-        {/* About Section */}
-        <View style={styles.aboutSection}>
-          <Text style={styles.sectionTitle}>About</Text>
-
-          {userProfile.email && (
-            <View style={styles.infoRow}>
-              <View style={styles.iconContainer}>
-                <Mail size={20} color="#4169E1" />
-              </View>
-              <View style={styles.infoContent}>
-                <Text style={styles.infoLabel}>Email</Text>
-                <Text style={styles.infoValue}>{userProfile.email}</Text>
-              </View>
-            </View>
-          )}
-
-          {userProfile.year_group && (
-            <View style={styles.infoRow}>
-              <View style={styles.iconContainer}>
-                <Calendar size={20} color="#4169E1" />
-              </View>
-              <View style={styles.infoContent}>
-                <Text style={styles.infoLabel}>Year Group</Text>
-                <Text style={styles.infoValue}>{userProfile.year_group}</Text>
-              </View>
-            </View>
-          )}
-
-          {userProfile.class && (
-            <View style={styles.infoRow}>
-              <View style={styles.iconContainer}>
-                <GraduationCap size={20} color="#4169E1" />
-              </View>
-              <View style={styles.infoContent}>
-                <Text style={styles.infoLabel}>Class</Text>
-                <Text style={styles.infoValue}>{userProfile.class}</Text>
-              </View>
-            </View>
-          )}
-
-          {userProfile.house && (
-            <View style={styles.infoRow}>
-              <View style={styles.iconContainer}>
-                <GraduationCap size={20} color="#4169E1" />
-              </View>
-              <View style={styles.infoContent}>
-                <Text style={styles.infoLabel}>House</Text>
-                <Text style={styles.infoValue}>{userProfile.house}</Text>
-              </View>
-            </View>
-          )}
-
-          {userProfile.location && (
-            <View style={styles.infoRow}>
-              <View style={styles.iconContainer}>
-                <MapPin size={20} color="#4169E1" />
-              </View>
-              <View style={styles.infoContent}>
-                <Text style={styles.infoLabel}>Location</Text>
-                <Text style={styles.infoValue}>{userProfile.location}</Text>
-              </View>
-            </View>
-          )}
-
-          {userProfile.phone && (
-            <View style={styles.infoRow}>
-              <View style={styles.iconContainer}>
-                <Mail size={20} color="#4169E1" />
-              </View>
-              <View style={styles.infoContent}>
-                <Text style={styles.infoLabel}>Phone</Text>
-                <Text style={styles.infoValue}>{userProfile.phone}</Text>
-              </View>
-            </View>
-          )}
-
-          {/* Show empty state if no info available */}
-          {!userProfile.email && 
-           !userProfile.year_group && 
-           !userProfile.class && 
-           !userProfile.house && 
-           !userProfile.location && 
-           !userProfile.phone && (
-            <Text style={styles.emptyText}>No additional information available</Text>
-          )}
+        {/* Posts Grid */}
+        <View style={styles.grid}>
+          {userPosts.map((post) => {
+            const thumb = post.image_url || (post.image_urls?.[0]);
+            return (
+              <TouchableOpacity
+                key={post.id}
+                style={styles.gridItem}
+                onPress={() => router.push(`/post/${post.id}`)}
+              >
+                {thumb ? (
+                  <Image source={{ uri: thumb }} style={styles.gridImage} />
+                ) : (
+                  <View style={[styles.gridImage, { backgroundColor: '#F0F0F0' }]} />
+                )}
+              </TouchableOpacity>
+            );
+          })}
         </View>
       </ScrollView>
-    </View>
+    </>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#F5F5F5',
+    backgroundColor: '#FFFFFF',
+  },
+  header: {
+    paddingTop: 60,
+    backgroundColor: '#FFFFFF',
+  },
+  headerTop: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingBottom: 16,
+  },
+  headerLeftRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  username: {
+    fontSize: 22,
+    fontFamily: 'Inter-SemiBold',
+    color: '#000000',
+  },
+  backButton: {
+    padding: 4,
+    marginRight: 4,
+  },
+  headerIcon: {
+    padding: 4,
+  },
+  profileSection: {
+    paddingHorizontal: 16,
+    marginBottom: 12,
+  },
+  avatar: {
+    width: 86,
+    height: 86,
+    borderRadius: 43,
+    marginBottom: 16,
+  },
+  statsRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-around',
+    marginTop: -60,
+    marginLeft: 100,
+  },
+  statItem: {
+    alignItems: 'center',
+    minWidth: 70,
+  },
+  statNumber: {
+    fontSize: 18,
+    fontFamily: 'Inter-SemiBold',
+    color: '#000000',
+  },
+  statLabel: {
+    fontSize: 14,
+    fontFamily: 'Inter-Regular',
+    color: '#000000',
+    marginTop: 2,
+  },
+  bioSection: {
+    paddingHorizontal: 16,
+    marginBottom: 12,
+  },
+  displayName: {
+    fontSize: 14,
+    fontFamily: 'Inter-SemiBold',
+    color: '#000000',
+    marginBottom: 4,
+  },
+  tabsContainer: {
+    flexDirection: 'row',
+    borderTopWidth: 1,
+    borderTopColor: '#DBDBDB',
+    marginTop: 8,
+  },
+  tab: {
+    flex: 1,
+    paddingVertical: 12,
+    alignItems: 'center',
+    borderBottomWidth: 1,
+    borderBottomColor: 'transparent',
+  },
+  tabActive: {
+    borderBottomColor: '#000000',
+  },
+  grid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 2,
+  },
+  gridItem: {
+    width: GRID_ITEM_SIZE,
+    height: GRID_ITEM_SIZE,
+    position: 'relative',
+  },
+  gridImage: {
+    width: '100%',
+    height: '100%',
   },
   loadingContainer: {
     flex: 1,
@@ -437,210 +743,214 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     backgroundColor: '#FFFFFF',
   },
-  loadingText: {
-    fontFamily: 'Inter-Regular',
+  errorText: {
     fontSize: 16,
-    color: '#666666',
-    marginTop: 16,
+    fontFamily: 'Inter-Regular',
+    color: '#6B7280',
   },
-  errorContainer: {
-    flex: 1,
+  avatarPlaceholder: {
+    backgroundColor: '#4169E1',
     justifyContent: 'center',
     alignItems: 'center',
   },
-  errorText: {
-    fontFamily: 'Inter-Regular',
-    fontSize: 16,
-    color: '#666666',
+  avatarText: {
+    fontSize: 32,
+    fontWeight: '600',
+    color: '#FFFFFF',
   },
-  header: {
+  imageFullOverlay: {
+    flex: 1,
+    backgroundColor: 'black',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  qrFullOverlay: {
+    flex: 1,
+    backgroundColor: 'black',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  bottomSheetOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.4)',
+    justifyContent: 'flex-end',
+  },
+  bottomSheet: {
+    backgroundColor: '#FFFFFF',
+    borderTopLeftRadius: 16,
+    borderTopRightRadius: 16,
+    padding: 16,
+  },
+  sheetTitle: {
+    fontSize: 16,
+    fontFamily: 'Inter-SemiBold',
+    color: '#111827',
+    marginBottom: 12,
+    textAlign: 'center',
+  },
+  sheetAction: {
+    paddingVertical: 14,
+  },
+  sheetActionText: {
+    fontSize: 16,
+    fontFamily: 'Inter-Regular',
+    color: '#111827',
+    textAlign: 'center',
+  },
+  sheetCancel: {
+    marginTop: 8,
+    backgroundColor: '#F3F4F6',
+    borderRadius: 12,
+    paddingVertical: 12,
+  },
+  sheetCancelText: {
+    fontSize: 16,
+    fontFamily: 'Inter-SemiBold',
+    textAlign: 'center',
+    color: '#111827',
+  },
+  card: {
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+    borderRadius: 12,
+    padding: 12,
+    marginTop: 8,
+  },
+  cardHeader: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: 16,
-    paddingTop: 60,
-    paddingBottom: 16,
-    backgroundColor: 'transparent',
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    zIndex: 10,
   },
-  backButton: {
-    padding: 8,
-    backgroundColor: 'rgba(0, 0, 0, 0.3)',
-    borderRadius: 20,
-  },
-  headerTitle: {
-    fontFamily: 'Inter-SemiBold',
-    fontSize: 18,
-    color: '#FFFFFF',
-  },
-  placeholder: {
-    width: 40,
-  },
-  scrollView: {
-    flex: 1,
-  },
-  coverSection: {
-    position: 'relative',
-    height: 200,
-  },
-  coverPhoto: {
-    width: '100%',
-    height: 200,
-    backgroundColor: '#E0E0E0',
-  },
-  coverGradient: {
-    flex: 1,
-    backgroundColor: '#4169E1',
-    opacity: 0.8,
-  },
-  avatarContainer: {
-    position: 'absolute',
-    bottom: -50,
-    left: 20,
-    borderWidth: 4,
-    borderColor: '#FFFFFF',
-    borderRadius: 60,
-  },
-  avatar: {
-    width: 120,
-    height: 120,
-    borderRadius: 60,
-    backgroundColor: '#E0E0E0',
-  },
-  userInfo: {
-    paddingHorizontal: 20,
-    paddingTop: 60,
-    paddingBottom: 20,
-    backgroundColor: '#FFFFFF',
-  },
-  fullName: {
-    fontFamily: 'Inter-SemiBold',
-    fontSize: 24,
-    color: '#000000',
-    marginBottom: 4,
-  },
-  username: {
-    fontFamily: 'Inter-Regular',
-    fontSize: 16,
-    color: '#666666',
-    marginBottom: 12,
-  },
-  bio: {
-    fontFamily: 'Inter-Regular',
-    fontSize: 15,
-    color: '#333333',
-    lineHeight: 22,
-    marginTop: 8,
-  },
-  mutualFriendsContainer: {
+  cardTitleRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginTop: 12,
-    paddingTop: 12,
-    borderTopWidth: 1,
-    borderTopColor: '#F0F0F0',
-  },
-  mutualFriendsText: {
-    fontFamily: 'Inter-Regular',
-    fontSize: 14,
-    color: '#666666',
-    marginLeft: 8,
-  },
-  actionSection: {
-    paddingHorizontal: 20,
-    paddingVertical: 16,
-    backgroundColor: '#FFFFFF',
-    borderTopWidth: 1,
-    borderTopColor: '#F0F0F0',
-  },
-  buttonRow: {
-    flexDirection: 'row',
-    gap: 12,
-  },
-  actionButton: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: 12,
-    borderRadius: 8,
     gap: 8,
   },
-  addFriendButton: {
-    backgroundColor: '#4169E1',
+  cardTitle: {
+    fontSize: 14,
+    fontFamily: 'Inter-SemiBold',
+    color: '#111827',
   },
-  messageButton: {
-    backgroundColor: '#4169E1',
+  cardBodyText: {
+    fontSize: 13,
+    fontFamily: 'Inter-Regular',
+    color: '#374151',
+    lineHeight: 18,
+    marginTop: 8,
   },
-  acceptButton: {
-    backgroundColor: '#34C759',
+  cardBody: {
+    marginTop: 8,
+    gap: 8,
   },
-  unfriendButton: {
-    backgroundColor: '#F0F0F0',
-    flex: 0,
+  aboutRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  aboutLabel: {
+    fontSize: 12,
+    fontFamily: 'Inter-Regular',
+    color: '#6B7280',
+  },
+  aboutValue: {
+    fontSize: 13,
+    fontFamily: 'Inter-SemiBold',
+    color: '#111827',
+  },
+  nameRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  adminBadge: {
+    marginLeft: 6,
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 999,
+    backgroundColor: '#EEF6FF',
+    borderWidth: 1,
+    borderColor: '#CDE3FF',
+  },
+  adminBadgeText: {
+    fontSize: 12,
+    color: '#0A84FF',
+    fontFamily: 'Inter-SemiBold',
+  },
+  interestTags: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+    marginTop: 8,
+  },
+  interestTag: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 16,
+    backgroundColor: '#F3F4F6',
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+  },
+  interestTagText: {
+    fontSize: 12,
+    fontFamily: 'Inter-SemiBold',
+    color: '#374151',
+  },
+  highlightScroll: {
+    marginTop: 12,
+    marginHorizontal: -16,
     paddingHorizontal: 16,
   },
-  disabledButton: {
-    backgroundColor: '#F0F0F0',
-  },
-  actionButtonText: {
-    fontFamily: 'Inter-SemiBold',
-    fontSize: 16,
-    color: '#FFFFFF',
-  },
-  disabledButtonText: {
-    color: '#666666',
-  },
-  aboutSection: {
-    marginTop: 12,
-    backgroundColor: '#FFFFFF',
-    paddingHorizontal: 20,
-    paddingVertical: 20,
-  },
-  sectionTitle: {
-    fontFamily: 'Inter-SemiBold',
-    fontSize: 20,
-    color: '#000000',
-    marginBottom: 20,
-  },
-  infoRow: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    marginBottom: 20,
-  },
-  iconContainer: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: '#F0F5FF',
+  highlightItem: {
     alignItems: 'center',
-    justifyContent: 'center',
+    width: 70,
     marginRight: 12,
   },
-  infoContent: {
-    flex: 1,
+  highlightThumb: {
+    width: 64,
+    height: 64,
+    borderRadius: 12,
+    marginBottom: 6,
+    borderWidth: 1,
+    borderColor: '#DBDBDB',
+  },
+  highlightPlaceholder: {
+    backgroundColor: '#F3F4F6',
     justifyContent: 'center',
+    alignItems: 'center',
   },
-  infoLabel: {
+  highlightTitle: {
+    fontSize: 12,
     fontFamily: 'Inter-Regular',
-    fontSize: 13,
-    color: '#666666',
-    marginBottom: 2,
-  },
-  infoValue: {
-    fontFamily: 'Inter-SemiBold',
-    fontSize: 16,
     color: '#000000',
-  },
-  emptyText: {
-    fontFamily: 'Inter-Regular',
-    fontSize: 15,
-    color: '#999999',
     textAlign: 'center',
-    paddingVertical: 20,
+  },
+  linksRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+    marginTop: 8,
+  },
+  linkPill: {
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    backgroundColor: '#F2F3F5',
+    borderRadius: 999,
+  },
+  linkPillText: {
+    fontSize: 13,
+    color: '#111827',
+    fontFamily: 'Inter-SemiBold',
+  },
+  actionButtonsContainer: {
+    paddingHorizontal: 16,
+    marginTop: 8,
+    marginBottom: 12,
+  },
+  highlightsSection: {
+    marginBottom: 12,
   },
 });

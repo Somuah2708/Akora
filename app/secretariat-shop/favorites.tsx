@@ -3,7 +3,7 @@ import { useFonts, Inter_400Regular, Inter_600SemiBold, Inter_700Bold } from '@e
 import { useEffect, useState, useCallback } from 'react';
 import { SplashScreen, useRouter, useFocusEffect } from 'expo-router';
 import { ArrowLeft, Heart, ShoppingCart, Plus } from 'lucide-react-native';
-import { getFavorites, toggleFavorite, addToCart, resetCartViewedStatus, getCartCount } from '@/lib/secretariatCart';
+import { getFavorites, toggleFavorite, addToCart, resetCartViewedStatus, getCartCount, markCartAsViewed } from '@/lib/secretariatCart';
 import { LinearGradient } from 'expo-linear-gradient';
 
 SplashScreen.preventAutoHideAsync();
@@ -14,7 +14,7 @@ const SOUVENIR_PRODUCTS = [
     name: 'Alumni Branded Polo Shirt',
     description: 'High-quality cotton polo with embroidered school logo',
     priceUSD: 35.99,
-    priceGHS: 430.00,
+    priceGHS: 395.63, // Updated: 1 USD = 10.99 GHS (1 GHS = 0.091 USD)
     image: 'https://images.unsplash.com/photo-1586363104862-3a5e2ab60d99?w=800&auto=format&fit=crop&q=60',
     category: 'Clothing',
     sizes: ['S', 'M', 'L', 'XL', 'XXL'],
@@ -24,7 +24,7 @@ const SOUVENIR_PRODUCTS = [
     name: 'Commemorative Mug',
     description: 'Ceramic mug featuring the school crest and motto',
     priceUSD: 15.99,
-    priceGHS: 190.00,
+    priceGHS: 175.73, // Updated: 1 USD = 10.99 GHS (1 GHS = 0.091 USD)
     image: 'https://images.unsplash.com/photo-1514228742587-6b1558fcca3d?w=800&auto=format&fit=crop&q=60',
     category: 'Homeware',
     sizes: ['One Size'],
@@ -34,7 +34,7 @@ const SOUVENIR_PRODUCTS = [
     name: 'Leather Notebook',
     description: 'Premium leather-bound notebook with embossed logo',
     priceUSD: 24.99,
-    priceGHS: 300.00,
+    priceGHS: 274.63, // Updated: 1 USD = 10.99 GHS (1 GHS = 0.091 USD)
     image: 'https://images.unsplash.com/photo-1544816155-12df9643f363?w=800&auto=format&fit=crop&q=60',
     category: 'Stationery',
     sizes: ['A5', 'A4'],
@@ -44,7 +44,7 @@ const SOUVENIR_PRODUCTS = [
     name: 'Anniversary Yearbook',
     description: 'Special edition commemorating school milestones',
     priceUSD: 49.99,
-    priceGHS: 600.00,
+    priceGHS: 549.39, // Updated: 1 USD = 10.99 GHS (1 GHS = 0.091 USD)
     image: 'https://images.unsplash.com/photo-1532012197267-da84d127e765?w=800&auto=format&fit=crop&q=60',
     category: 'Books',
     sizes: ['Standard'],
@@ -54,7 +54,7 @@ const SOUVENIR_PRODUCTS = [
     name: 'School Crest Lapel Pin',
     description: 'Elegant metal pin featuring the school crest',
     priceUSD: 12.99,
-    priceGHS: 155.00,
+    priceGHS: 142.76, // Updated: 1 USD = 10.99 GHS (1 GHS = 0.091 USD)
     image: 'https://images.unsplash.com/photo-1601591219083-d9d11b6a8852?w=800&auto=format&fit=crop&q=60',
     category: 'Accessories',
     sizes: ['One Size'],
@@ -64,7 +64,7 @@ const SOUVENIR_PRODUCTS = [
     name: 'Alumni Hoodie',
     description: 'Comfortable hoodie with school colors and logo',
     priceUSD: 45.99,
-    priceGHS: 550.00,
+    priceGHS: 505.43, // Updated: 1 USD = 10.99 GHS (1 GHS = 0.091 USD)
     image: 'https://images.unsplash.com/photo-1620799140408-edc6dcb6d633?w=800&auto=format&fit=crop&q=60',
     category: 'Clothing',
     sizes: ['S', 'M', 'L', 'XL', 'XXL'],
@@ -138,7 +138,13 @@ export default function FavoritesScreen() {
         `${product.name} has been added to your cart.`,
         [
           { text: 'Continue', style: 'cancel' },
-          { text: 'View Cart', onPress: () => router.push('/cart') },
+          { 
+            text: 'View Cart', 
+            onPress: async () => {
+              await markCartAsViewed();
+              router.push('/cart');
+            }
+          },
         ]
       );
     } catch (error) {

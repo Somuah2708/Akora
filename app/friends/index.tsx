@@ -1,7 +1,8 @@
 import { View, Text, StyleSheet, TouchableOpacity, FlatList, Image, TextInput, ActivityIndicator, Alert } from 'react-native';
 import { useState, useEffect } from 'react';
 import { useRouter } from 'expo-router';
-import { Search, UserPlus, Check, X, MessageCircle } from 'lucide-react-native';
+import { formatProfileSubtitle } from '@/lib/display';
+import { Search, UserPlus, Check, X, MessageCircle, ArrowLeft } from 'lucide-react-native';
 import { useAuth } from '@/hooks/useAuth';
 import {
   searchUsers,
@@ -136,8 +137,17 @@ export default function FriendsScreen() {
           </View>
         )}
         <View style={styles.userDetails}>
-          <Text style={styles.userName}>{item.friend?.full_name}</Text>
-          <Text style={styles.userHandle}>@{item.friend?.username}</Text>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+            <Text style={styles.userName}>{item.friend?.full_name}</Text>
+            {(item.friend as any)?.is_admin && (
+              <View style={styles.adminBadge}>
+                <Text style={styles.adminBadgeText}>Admin</Text>
+              </View>
+            )}
+          </View>
+          {!!formatProfileSubtitle(item.friend) && (
+            <Text style={styles.userHandle}>{formatProfileSubtitle(item.friend)}</Text>
+          )}
         </View>
       </TouchableOpacity>
       <TouchableOpacity
@@ -165,8 +175,17 @@ export default function FriendsScreen() {
           </View>
         )}
         <View style={styles.userDetails}>
-          <Text style={styles.userName}>{item.sender?.full_name}</Text>
-          <Text style={styles.userHandle}>@{item.sender?.username}</Text>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+            <Text style={styles.userName}>{item.sender?.full_name}</Text>
+              {(item.sender as any)?.is_admin && (
+              <View style={styles.adminBadge}>
+                <Text style={styles.adminBadgeText}>Admin</Text>
+              </View>
+            )}
+          </View>
+          {!!formatProfileSubtitle(item.sender) && (
+            <Text style={styles.userHandle}>{formatProfileSubtitle(item.sender)}</Text>
+          )}
         </View>
       </TouchableOpacity>
       <View style={styles.requestActions}>
@@ -218,8 +237,14 @@ export default function FriendsScreen() {
             </View>
           )}
           <View style={styles.userDetails}>
-            <Text style={styles.userName}>{item.full_name}</Text>
-            <Text style={styles.userHandle}>@{item.username}</Text>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+              <Text style={styles.userName}>{item.full_name}</Text>
+              {item.is_admin && (
+                <View style={styles.adminBadge}>
+                  <Text style={styles.adminBadgeText}>Admin</Text>
+                </View>
+              )}
+            </View>
           </View>
         </TouchableOpacity>
         <TouchableOpacity
@@ -241,7 +266,14 @@ export default function FriendsScreen() {
     <View style={styles.container}>
       {/* Header */}
       <View style={styles.header}>
+        <TouchableOpacity 
+          style={styles.backButton}
+          onPress={() => router.back()}
+        >
+          <ArrowLeft size={24} color="#000000" />
+        </TouchableOpacity>
         <Text style={styles.headerTitle}>Friends</Text>
+        <View style={styles.headerRight} />
       </View>
 
       {/* Tabs */}
@@ -285,7 +317,7 @@ export default function FriendsScreen() {
           <Search size={20} color="#94A3B8" style={styles.searchIcon} />
           <TextInput
             style={styles.searchInput}
-            placeholder="Search by name or username..."
+            placeholder="Search by name..."
             placeholderTextColor="#94A3B8"
             value={searchQuery}
             onChangeText={handleSearch}
@@ -341,7 +373,10 @@ export default function FriendsScreen() {
                     data={sentRequests}
                     renderItem={({ item }) => (
                       <View style={styles.listItem}>
-                        <View style={styles.userInfo}>
+                        <TouchableOpacity
+                          style={styles.userInfo}
+                          onPress={() => router.push(`/user-profile/${item.receiver_id}`)}
+                        >
                           {item.receiver?.avatar_url ? (
                             <Image source={{ uri: item.receiver.avatar_url }} style={styles.avatar} />
                           ) : (
@@ -353,11 +388,16 @@ export default function FriendsScreen() {
                           )}
                           <View style={styles.userDetails}>
                             <Text style={styles.userName}>{item.receiver?.full_name}</Text>
-                            <Text style={styles.userHandle}>@{item.receiver?.username}</Text>
+                            {!!formatProfileSubtitle(item.receiver) && (
+                              <Text style={styles.userHandle}>{formatProfileSubtitle(item.receiver)}</Text>
+                            )}
                           </View>
-                        </View>
+                        </TouchableOpacity>
                         <View style={styles.pendingBadge}>
                           <Text style={styles.pendingText}>Pending</Text>
+                          {!!formatProfileSubtitle(item) && (
+                            <Text style={styles.userHandle}>{formatProfileSubtitle(item)}</Text>
+                          )}
                         </View>
                       </View>
                     )}
@@ -394,7 +434,7 @@ export default function FriendsScreen() {
                     <Search size={64} color="#E5E7EB" />
                     <Text style={styles.emptyTitle}>Search for friends</Text>
                     <Text style={styles.emptyText}>
-                      Enter a name or username to find people
+                      Enter a name to find people
                     </Text>
                   </View>
                 )
@@ -413,16 +453,28 @@ const styles = StyleSheet.create({
     backgroundColor: '#FFFFFF',
   },
   header: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
     paddingHorizontal: 20,
     paddingTop: 60,
     paddingBottom: 16,
     borderBottomWidth: 1,
     borderBottomColor: '#F3F4F6',
   },
+  backButton: {
+    padding: 4,
+  },
   headerTitle: {
     fontSize: 28,
     fontWeight: '700',
     color: '#1F2937',
+    flex: 1,
+    textAlign: 'center',
+    marginLeft: -28,
+  },
+  headerRight: {
+    width: 32,
   },
   tabContainer: {
     flexDirection: 'row',
@@ -532,6 +584,19 @@ const styles = StyleSheet.create({
   userHandle: {
     fontSize: 14,
     color: '#6B7280',
+  },
+  adminBadge: {
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 999,
+    backgroundColor: '#EEF6FF',
+    borderWidth: 1,
+    borderColor: '#CDE3FF',
+  },
+  adminBadgeText: {
+    color: '#0A84FF',
+    fontSize: 11,
+    fontWeight: '700',
   },
   messageButton: {
     width: 40,

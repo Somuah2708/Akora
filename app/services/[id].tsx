@@ -288,7 +288,6 @@ export default function ProductDetailScreen() {
               />
               <View style={styles.sellerInfo}>
                 <Text style={styles.sellerName}>{product.user?.full_name || 'Anonymous'}</Text>
-                <Text style={styles.sellerUsername}>@{product.user?.username || 'user'}</Text>
                 <View style={styles.sellerStats}>
                   <View style={styles.statItem}>
                     <Star size={14} color="#FFB800" fill="#FFB800" />

@@ -13,10 +13,11 @@ import {
   Alert,
   Pressable,
   Animated,
+  Linking,
 } from 'react-native';
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { ArrowLeft, Send, Smile, Image as ImageIcon, Mic, Camera, X, Play, Pause, Check, CheckCheck } from 'lucide-react-native';
+import { ArrowLeft, Send, Smile, Image as ImageIcon, Mic, Camera, X, Play, Pause, Check, CheckCheck, FileText } from 'lucide-react-native';
 import { useAuth } from '@/hooks/useAuth';
 import {
   getDirectMessages,
@@ -30,7 +31,7 @@ import {
   subscribeToUserPresence,
   type DirectMessage,
 } from '@/lib/friends';
-import { pickMedia, takeMedia, uploadMedia, startRecording, stopRecording, cancelRecording } from '@/lib/media';
+import { pickMedia, takeMedia, uploadMedia, startRecording, stopRecording, cancelRecording, pickDocument, uploadDocument } from '@/lib/media';
 import { formatMessageTime, formatLastSeen, groupMessagesByDay } from '@/lib/timeUtils';
 import { supabase } from '@/lib/supabase';
 import EmojiSelector from 'react-native-emoji-selector';
@@ -55,6 +56,7 @@ export default function DirectMessageScreen() {
   const [isTyping, setIsTyping] = useState(false);
   const [friendIsOnline, setFriendIsOnline] = useState(false);
   const [friendLastSeen, setFriendLastSeen] = useState<string | null>(null);
+  const [firstUnreadIndex, setFirstUnreadIndex] = useState<number | null>(null);
   const flatListRef = useRef<FlatList>(null);
   const soundObjects = useRef<{ [key: string]: Audio.Sound }>({});
   const typingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -160,6 +162,15 @@ export default function DirectMessageScreen() {
         }
         // Mark as offline when leaving
         updateOnlineStatus(user.id, false);
+        // Cleanup audio
+        Object.values(soundObjects.current).forEach(async (sound) => {
+          try {
+            await sound.stopAsync();
+            await sound.unloadAsync();
+          } catch (e) {
+            console.log('Error cleaning up sound:', e);
+          }
+        });
       };
     }
   }, [user, friendId]);
@@ -170,6 +181,9 @@ export default function DirectMessageScreen() {
     try {
       if (!skipSpinner) setLoading(true);
       const msgs = await getDirectMessages(user.id, friendId);
+      // Determine first unread index before marking as read
+      const idx = msgs.findIndex((m) => m.receiver_id === user.id && !m.is_read);
+      setFirstUnreadIndex(idx >= 0 ? idx : null);
       setMessages(msgs);
       // Persist to cache
       setCachedThread(user.id, friendId, msgs, friendProfile);
@@ -423,6 +437,95 @@ export default function DirectMessageScreen() {
     }
   };
 
+  const handleDocumentPick = async () => {
+    setShowMediaOptions(false);
+    const doc = await pickDocument();
+    if (doc && user && friendId) {
+      try {
+        setUploadingMedia(true);
+        setUploadingProgress(10);
+        
+        // Simulate progress while uploading
+        let progress = 10;
+        const progressInterval = setInterval(() => {
+          progress = Math.min(progress + 15, 85);
+          setUploadingProgress(progress);
+        }, 400);
+        
+        const docUrl = await uploadDocument(
+          doc.uri,
+          user.id,
+          doc.name,
+          doc.mimeType
+        );
+
+        clearInterval(progressInterval);
+
+        if (docUrl) {
+          console.log('Document uploaded successfully, sending message...');
+          setUploadingProgress(90);
+          
+          try {
+            const newMessage = await sendDirectMessage(
+              user.id,
+              friendId,
+              `📄 ${doc.name}`,
+              'document',
+              docUrl
+            );
+            
+            console.log('Document message sent:', newMessage);
+            
+            if (newMessage) {
+              setMessages((prev) => {
+                const next = upsertMessage(prev, newMessage);
+                setCachedThread(user.id, friendId, next, friendProfile);
+                return next;
+              });
+              
+              setTimeout(() => {
+                flatListRef.current?.scrollToEnd({ animated: true });
+              }, 100);
+              setUploadingProgress(100);
+            } else {
+              console.error('sendDirectMessage returned null');
+              Alert.alert('Error', 'Failed to send document message to database.');
+            }
+          } catch (sendError: any) {
+            console.error('Error calling sendDirectMessage:', sendError);
+            const errorMessage = sendError?.message || 'Unknown error';
+            
+            // Check if it's a constraint violation (migration not run)
+            if (errorMessage.includes('violates check constraint') || 
+                errorMessage.includes('message_type_check')) {
+              Alert.alert(
+                'Database Update Required',
+                'The document message feature requires a database migration. Please run the migration file: 20251230000005_add_document_message_type.sql in your Supabase dashboard.',
+                [{ text: 'OK' }]
+              );
+            } else {
+              Alert.alert('Error', `Failed to send document: ${errorMessage}`);
+            }
+          }
+        } else {
+          clearInterval(progressInterval);
+          console.log('Document upload returned null URL');
+          Alert.alert('Upload Failed', 'Could not upload document. Please try again.');
+        }
+      } catch (error) {
+        console.error('Error sending document:', error);
+        Alert.alert('Error', `Failed to send document: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      } finally {
+        setUploadingMedia(false);
+        setTimeout(() => setUploadingProgress(0), 600);
+      }
+    } else if (!doc) {
+      // User cancelled document picker
+      setUploadingMedia(false);
+      setUploadingProgress(0);
+    }
+  };
+
   const handleStartRecording = async () => {
     const success = await startRecording();
     if (success) {
@@ -509,6 +612,14 @@ export default function DirectMessageScreen() {
 
     return (
       <>
+        {/* New messages separator */}
+        {firstUnreadIndex !== null && index === firstUnreadIndex && (
+          <View style={styles.newMessagesDivider}>
+            <View style={styles.newMessagesLine} />
+            <Text style={styles.newMessagesText}>New messages</Text>
+            <View style={styles.newMessagesLine} />
+          </View>
+        )}
         {/* Date Divider */}
         {showDateDivider && (
           <View style={styles.dateDivider}>
@@ -600,8 +711,47 @@ export default function DirectMessageScreen() {
               </TouchableOpacity>
             )}
 
+            {/* Document Message */}
+            {item.message_type === 'document' && item.media_url && (
+              <TouchableOpacity 
+                style={styles.documentContainer}
+                onPress={() => {
+                  if (item.media_url) {
+                    Linking.openURL(item.media_url).catch(err => {
+                      console.error('Error opening document:', err);
+                      Alert.alert('Error', 'Could not open document');
+                    });
+                  }
+                }}
+                activeOpacity={0.7}
+              >
+                <View style={styles.documentIcon}>
+                  <FileText size={24} color={isMyMessage ? '#FFFFFF' : '#4169E1'} />
+                </View>
+                <View style={styles.documentInfo}>
+                  <Text 
+                    style={[
+                      styles.documentName,
+                      { color: isMyMessage ? '#FFFFFF' : '#1F2937' }
+                    ]}
+                    numberOfLines={1}
+                  >
+                    {item.message?.replace('📄 ', '') || 'Document'}
+                  </Text>
+                  <Text 
+                    style={[
+                      styles.documentSize,
+                      { color: isMyMessage ? 'rgba(255, 255, 255, 0.7)' : '#6B7280' }
+                    ]}
+                  >
+                    Tap to open
+                  </Text>
+                </View>
+              </TouchableOpacity>
+            )}
+
             {/* Text / Caption (only for text messages or non-empty captions) */}
-            {(item.message_type === 'text' || (item.message_type !== 'voice' && item.message)) && (
+            {(item.message_type === 'text' || (item.message_type !== 'voice' && item.message_type !== 'document' && item.message)) && (
               <Text
                 style={[
                   styles.messageText,
@@ -688,7 +838,16 @@ export default function DirectMessageScreen() {
     >
       {/* Header */}
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
+        <TouchableOpacity 
+          onPress={() => {
+            if (router.canGoBack()) {
+              router.back();
+            } else {
+              router.push('/(tabs)/chat');
+            }
+          }} 
+          style={styles.backButton}
+        >
           <ArrowLeft size={24} color="#1F2937" />
         </TouchableOpacity>
 
@@ -865,6 +1024,13 @@ export default function DirectMessageScreen() {
               <Camera size={28} color="#4169E1" />
               <Text style={styles.mediaOptionText}>Camera</Text>
             </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.mediaOption}
+              onPress={handleDocumentPick}
+            >
+              <FileText size={28} color="#4169E1" />
+              <Text style={styles.mediaOptionText}>Document</Text>
+            </TouchableOpacity>
           </View>
         </Pressable>
       </Modal>
@@ -1003,6 +1169,26 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginVertical: 20,
     paddingHorizontal: 4,
+  },
+  newMessagesDivider: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 8,
+    marginBottom: 8,
+    paddingHorizontal: 4,
+  },
+  newMessagesLine: {
+    flex: 1,
+    height: 1,
+    backgroundColor: '#F59E0B',
+  },
+  newMessagesText: {
+    paddingHorizontal: 10,
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#F59E0B',
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
   },
   dateDividerLine: {
     flex: 1,
@@ -1210,6 +1396,35 @@ const styles = StyleSheet.create({
   waveformBar: {
     width: 3,
     borderRadius: 2,
+  },
+  documentContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 12,
+    gap: 12,
+    backgroundColor: 'rgba(255, 255, 255, 0.1)',
+    borderRadius: 12,
+    minWidth: 220,
+  },
+  documentIcon: {
+    width: 42,
+    height: 42,
+    borderRadius: 21,
+    backgroundColor: 'rgba(255, 255, 255, 0.15)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  documentInfo: {
+    flex: 1,
+    gap: 2,
+  },
+  documentName: {
+    fontSize: 14,
+    fontWeight: '600',
+    letterSpacing: -0.2,
+  },
+  documentSize: {
+    fontSize: 12,
   },
   modalContainer: {
     flex: 1,

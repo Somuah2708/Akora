@@ -2,7 +2,7 @@ import { View, Text, StyleSheet, ScrollView, TextInput, TouchableOpacity, Image,
 import { useFonts, Inter_400Regular, Inter_600SemiBold, Inter_700Bold } from '@expo-google-fonts/inter';
 import { useEffect, useState } from 'react';
 import { SplashScreen, useRouter, useLocalSearchParams } from 'expo-router';
-import { ArrowLeft, DollarSign, Tag, X, Image as ImageIcon, Save } from 'lucide-react-native';
+import { ArrowLeft, DollarSign, Tag, X, Image as ImageIcon, Save, Package } from 'lucide-react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import * as ImagePicker from 'expo-image-picker';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -42,6 +42,10 @@ const COLORS = [
 ];
 
 const MAX_IMAGES = 20;
+
+// Currency conversion rate: 1 GHS = 0.091 USD (inverse: 1 USD = 10.99 GHS)
+const GHS_TO_USD = 0.091;
+const USD_TO_GHS = 10.99;
 
 export default function EditPostedItemScreen() {
   const router = useRouter();
@@ -107,6 +111,24 @@ export default function EditPostedItemScreen() {
   if (!fontsLoaded || loading) {
     return null;
   }
+
+  const handlePriceUSDChange = (value: string) => {
+    setPriceUSD(value);
+    // Auto-calculate GHS price
+    if (value && !isNaN(parseFloat(value))) {
+      const ghsPrice = (parseFloat(value) * USD_TO_GHS).toFixed(2);
+      setPriceGHS(ghsPrice);
+    }
+  };
+
+  const handlePriceGHSChange = (value: string) => {
+    setPriceGHS(value);
+    // Auto-calculate USD price
+    if (value && !isNaN(parseFloat(value))) {
+      const usdPrice = (parseFloat(value) * GHS_TO_USD).toFixed(2);
+      setPriceUSD(usdPrice);
+    }
+  };
 
   const pickImages = async () => {
     if (imageUris.length >= MAX_IMAGES) {
@@ -219,21 +241,16 @@ export default function EditPostedItemScreen() {
         // Save back to storage
         await AsyncStorage.setItem('secretariat_posted_items', JSON.stringify(postedItems));
 
-        // Success notification
-        Alert.alert(
-          '✓ Updated!',
-          'Your item has been updated successfully!',
-          [
-            {
-              text: 'OK',
-              onPress: () => router.back(),
-            },
-          ]
-        );
+        console.log('Item updated successfully');
+
+        // Navigate back to my posted items
+        router.replace('/secretariat-shop/my-posted-items');
+      } else {
+        Alert.alert('Error', 'Item not found');
       }
     } catch (error) {
-      Alert.alert('Error', 'Failed to update item. Please try again.');
       console.error('Error updating item:', error);
+      Alert.alert('Error', 'Failed to update item. Please try again.');
     }
   };
 
@@ -264,17 +281,27 @@ export default function EditPostedItemScreen() {
           <Text style={styles.sectionHint}>Upload {imageUris.length}/{MAX_IMAGES} images</Text>
           
           <View style={styles.imageGrid}>
-            {imageUris.map((uri, index) => (
-              <View key={index} style={styles.imageItem}>
-                <Image source={{ uri }} style={styles.uploadedImage} />
-                <TouchableOpacity 
-                  style={styles.removeImageButton}
-                  onPress={() => removeImage(index)}
-                >
-                  <X size={16} color="#FFFFFF" />
-                </TouchableOpacity>
-              </View>
-            ))}
+            {imageUris.map((uri, index) => {
+              const isHttpImage = uri?.startsWith('http');
+              return (
+                <View key={index} style={styles.imageItem}>
+                  {isHttpImage ? (
+                    <Image source={{ uri }} style={styles.uploadedImage} />
+                  ) : (
+                    <View style={[styles.uploadedImage, styles.imagePlaceholder]}>
+                      <Package size={32} color="#10B981" />
+                      <Text style={styles.placeholderText}>Image {index + 1}</Text>
+                    </View>
+                  )}
+                  <TouchableOpacity 
+                    style={styles.removeImageButton}
+                    onPress={() => removeImage(index)}
+                  >
+                    <X size={16} color="#FFFFFF" />
+                  </TouchableOpacity>
+                </View>
+              );
+            })}
             
             {imageUris.length < MAX_IMAGES && (
               <TouchableOpacity style={styles.addImageButton} onPress={pickImages}>
@@ -331,7 +358,7 @@ export default function EditPostedItemScreen() {
                   placeholder="0.00"
                   placeholderTextColor="#999"
                   value={priceUSD}
-                  onChangeText={setPriceUSD}
+                  onChangeText={handlePriceUSDChange}
                   keyboardType="decimal-pad"
                 />
               </View>
@@ -346,7 +373,7 @@ export default function EditPostedItemScreen() {
                   placeholder="0.00"
                   placeholderTextColor="#999"
                   value={priceGHS}
-                  onChangeText={setPriceGHS}
+                  onChangeText={handlePriceGHSChange}
                   keyboardType="decimal-pad"
                 />
               </View>
@@ -577,6 +604,17 @@ const styles = StyleSheet.create({
     width: '100%',
     height: '100%',
     resizeMode: 'cover',
+  },
+  imagePlaceholder: {
+    backgroundColor: '#F3F4F6',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  placeholderText: {
+    fontSize: 10,
+    fontFamily: 'Inter-SemiBold',
+    color: '#10B981',
+    marginTop: 4,
   },
   removeImageButton: {
     position: 'absolute',

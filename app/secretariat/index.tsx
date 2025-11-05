@@ -2,7 +2,7 @@ import { View, Text, StyleSheet, ScrollView, Image, TouchableOpacity, TextInput,
 import { useFonts, Inter_400Regular, Inter_600SemiBold } from '@expo-google-fonts/inter';
 import { useEffect, useState, useCallback } from 'react';
 import { SplashScreen, useRouter, useFocusEffect } from 'expo-router';
-import { ArrowLeft, Building2, ShoppingBag, Calendar, FileText, Mail, Phone, Globe, MessageCircle, ChevronRight, Bell, Megaphone, BookOpen, History, Award, Heart } from 'lucide-react-native';
+import { ArrowLeft, Building2, ShoppingBag, Calendar, FileText, Mail, Phone, Globe, MessageCircle, ChevronRight, Bell, Megaphone, BookOpen, History, Award, Heart, Plus } from 'lucide-react-native';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/hooks/useAuth';
 
@@ -26,7 +26,7 @@ const QUICK_ACTIONS = [
     description: 'View upcoming events and activities',
     icon: Calendar,
     color: '#E4EAFF',
-    route: '/events',
+    route: '/secretariat/event-calendar',
   },
   {
     id: '3',
@@ -34,7 +34,7 @@ const QUICK_ACTIONS = [
     description: 'Access forms and official documents',
     icon: FileText,
     color: '#E4FFF4',
-    route: '/documents',
+    route: '/secretariat/documents',
   },
   {
     id: '4',
@@ -42,7 +42,7 @@ const QUICK_ACTIONS = [
     description: 'Get assistance and resources',
     icon: Heart,
     color: '#FFF4E4',
-    route: '/support',
+    route: '/alumni-center',
   },
 ];
 
@@ -121,23 +121,47 @@ export default function SecretariatScreen() {
       const lastViewed = viewData?.last_viewed_at;
       setLastViewedAt(lastViewed);
 
-      // Fetch announcements (you can replace this with actual database query)
-      // For now, using static data with timestamps
-      const announcementsData = ANNOUNCEMENTS.map((ann, index) => ({
-        ...ann,
-        created_at: new Date(Date.now() - (index * 24 * 60 * 60 * 1000)).toISOString()
-      }));
+      // Fetch real announcements from database
+      const { data: dbAnnouncements, error } = await supabase
+        .from('secretariat_announcements')
+        .select('*')
+        .eq('is_published', true)
+        .eq('is_approved', true)
+        .order('created_at', { ascending: false })
+        .limit(2);
 
-      setAnnouncements(announcementsData);
-
-      // Count unread announcements
-      if (lastViewed) {
-        const unread = announcementsData.filter(
-          ann => new Date(ann.created_at) > new Date(lastViewed)
-        ).length;
-        setUnreadCount(unread);
+      if (error) {
+        console.error('[Secretariat Homepage] Error fetching announcements:', error);
+        // Fallback to empty array if error
+        setAnnouncements([]);
       } else {
-        setUnreadCount(announcementsData.length);
+        // Map database announcements to display format
+        const announcementsData = (dbAnnouncements || []).map((ann) => ({
+          id: ann.id,
+          title: ann.title,
+          date: new Date(ann.created_at).toLocaleDateString('en-US', { 
+            year: 'numeric', 
+            month: 'long', 
+            day: 'numeric' 
+          }),
+          type: ann.category || 'Announcement',
+          image: ann.images && Array.isArray(ann.images) && ann.images.length > 0 
+            ? ann.images[0].url 
+            : ann.image_url || 'https://images.unsplash.com/photo-1542744173-8e7e53415bb0?w=800&auto=format&fit=crop&q=60',
+          created_at: ann.created_at
+        }));
+
+        setAnnouncements(announcementsData);
+
+        // Count unread announcements
+        if (lastViewed) {
+          const unread = announcementsData.filter(
+            (ann: any) => new Date(ann.created_at) > new Date(lastViewed)
+          ).length;
+          setUnreadCount(unread);
+        } else {
+          setUnreadCount(announcementsData.length);
+        }
       }
 
     } catch (error) {
@@ -236,7 +260,7 @@ export default function SecretariatScreen() {
               <TouchableOpacity
                 key={action.id}
                 style={[styles.actionCard, { backgroundColor: action.color }]}
-                onPress={() => action.route && router.push(action.route)}
+                onPress={() => action.route && router.push(action.route as any)}
               >
                 <IconComponent size={24} color="#000000" strokeWidth={1.5} />
                 <Text style={styles.actionTitle}>{action.title}</Text>
@@ -250,7 +274,10 @@ export default function SecretariatScreen() {
       <View style={styles.section}>
         <View style={styles.sectionHeader}>
           <Text style={styles.sectionTitle}>Latest Announcements</Text>
-          <TouchableOpacity style={styles.seeAllButton}>
+          <TouchableOpacity 
+            style={styles.seeAllButton}
+            onPress={() => router.push('/secretariat/announcements')}
+          >
             <Text style={styles.seeAllText}>See All</Text>
             <ChevronRight size={16} color="#666666" />
           </TouchableOpacity>
@@ -266,7 +293,11 @@ export default function SecretariatScreen() {
               : true;
             
             return (
-              <TouchableOpacity key={announcement.id} style={styles.announcementCard}>
+              <TouchableOpacity 
+                key={announcement.id} 
+                style={styles.announcementCard}
+                onPress={() => router.push(`/secretariat/announcements/${announcement.id}` as any)}
+              >
                 <Image source={{ uri: announcement.image }} style={styles.announcementImage} />
                 <View style={styles.announcementContent}>
                   <View style={styles.announcementBadgeContainer}>
@@ -332,6 +363,14 @@ export default function SecretariatScreen() {
           );
         })}
       </View>
+
+      {/* Floating Action Button */}
+      <TouchableOpacity
+        style={styles.fab}
+        onPress={() => router.push('/secretariat/announcements/create')}
+      >
+        <Plus size={24} color="#FFFFFF" />
+      </TouchableOpacity>
     </ScrollView>
   );
 }
@@ -591,5 +630,24 @@ const styles = StyleSheet.create({
     padding: 40,
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  fab: {
+    position: 'absolute',
+    right: 20,
+    bottom: 20,
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    backgroundColor: '#4169E1',
+    justifyContent: 'center',
+    alignItems: 'center',
+    shadowColor: '#000000',
+    shadowOffset: {
+      width: 0,
+      height: 4,
+    },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 8,
   },
 });

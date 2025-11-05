@@ -1,4 +1,5 @@
 import { createClient } from '@supabase/supabase-js';
+import type { InterestOptionId } from './interest-data';
 import { Platform } from 'react-native';
 
 const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL;
@@ -32,7 +33,7 @@ const createWebStorage = () => {
           return value;
         }
       } catch (error) {
-        console.error('[Storage] Error getting item:', error);
+        console.warn('[Storage] getItem error:', error);
       }
       return null;
     },
@@ -40,22 +41,22 @@ const createWebStorage = () => {
       try {
         if (typeof window !== 'undefined' && window.localStorage) {
           window.localStorage.setItem(key, value);
-          console.log('[Storage] setItem:', key, 'saved successfully');
+          console.log('[Storage] setItem:', key);
         }
       } catch (error) {
-        console.error('[Storage] Error setting item:', error);
+        console.warn('[Storage] setItem error:', error);
       }
     },
     removeItem: async (key: string): Promise<void> => {
       try {
         if (typeof window !== 'undefined' && window.localStorage) {
           window.localStorage.removeItem(key);
-          console.log('[Storage] removeItem:', key, 'removed successfully');
+          console.log('[Storage] removeItem:', key);
         }
       } catch (error) {
-        console.error('[Storage] Error removing item:', error);
+        console.warn('[Storage] removeItem error:', error);
       }
-    },
+    }
   };
 };
 
@@ -65,11 +66,13 @@ export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
     persistSession: true,
     autoRefreshToken: true,
     detectSessionInUrl: false,
-    storageKey: 'sb-auth-token',
   },
 });
 
 console.log('Supabase client initialized successfully');
+
+// Storage buckets
+export const AVATAR_BUCKET = process.env.EXPO_PUBLIC_SUPABASE_AVATAR_BUCKET || 'avatars';
 
 // Types for our database
 export type Profile = {
@@ -86,6 +89,7 @@ export type Profile = {
   house?: string;
   created_at?: string;
   is_admin?: boolean;
+  role?: 'admin' | 'user';
   receives_notifications?: boolean;
   theme_preference?: 'light' | 'dark';
   is_class_public?: boolean;
@@ -94,6 +98,17 @@ export type Profile = {
   is_contact_public?: boolean;
   phone?: string;
   location?: string;
+  // Occupation fields
+  occupation_status?: 'student' | 'employed' | 'self_employed' | 'unemployed' | 'other';
+  job_title?: string;
+  company_name?: string;
+  // Education fields
+  education_level?: 'high_school' | 'undergraduate' | 'postgraduate' | 'doctorate' | 'other';
+  institution_name?: string;
+  program_of_study?: string;
+  graduation_year?: number;
+  is_occupation_public?: boolean;
+  is_education_public?: boolean;
 };
 
 export type Chat = {
@@ -104,26 +119,11 @@ export type Chat = {
   created_at: string;
 };
 
-export type ChatParticipant = {
-  chat_id: string;
-  user_id: string;
-  joined_at: string;
-};
-
-export type Message = {
+export type UserInterest = {
   id: string;
-  chat_id: string;
-  sender_id: string;
-  content: string;
+  user_id: string;
+  category: InterestOptionId;
   created_at: string;
-  sender?: Profile;
-};
-
-export type ChatWithDetails = Chat & {
-  participants: (ChatParticipant & { profiles: Profile })[];
-  messages: Message[];
-  last_message?: Message;
-  unread_count?: number;
 };
 
 export type Post = {
@@ -131,6 +131,13 @@ export type Post = {
   user_id: string;
   content: string;
   image_url?: string;
+  image_urls?: string[]; // Multiple images support
+  video_url?: string;
+  video_urls?: string[]; // Multiple videos support
+  youtube_url?: string; // Single YouTube video
+  youtube_urls?: string[]; // Multiple YouTube videos
+  category?: InterestOptionId;
+  visibility?: 'public' | 'friends_only' | 'private';
   created_at: string;
   user?: Profile;
 };
@@ -184,6 +191,28 @@ export type QuickAction = {
   route: string;
   order_index: number;
   created_at?: string;
+};
+
+export type HomeFeaturedItem = {
+  id: string;
+  title: string;
+  description?: string;
+  image_url: string;
+  order_index: number;
+  is_active: boolean;
+  created_at: string;
+};
+
+export type HomeCategoryTab = {
+  id: string;
+  title: string;
+  icon_name: string; // lucide icon name
+  color: string;
+  image_url: string;
+  route: string;
+  order_index: number;
+  is_active: boolean;
+  created_at: string;
 };
 
 export type ProductService = {

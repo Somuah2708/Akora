@@ -1,10 +1,12 @@
 import { supabase } from './supabase';
 import * as ImagePicker from 'expo-image-picker';
+import * as DocumentPicker from 'expo-document-picker';
 import { Audio } from 'expo-av';
 import { Platform, Alert } from 'react-native';
 
 const IMAGE_MAX_BYTES = 5 * 1024 * 1024; // 5MB
 const VIDEO_MAX_BYTES = 25 * 1024 * 1024; // 25MB
+const DOCUMENT_MAX_BYTES = 10 * 1024 * 1024; // 10MB
 
 // Request permissions
 export async function requestMediaPermissions() {
@@ -83,6 +85,44 @@ export async function takeMedia(): Promise<ImagePicker.ImagePickerAsset | null> 
   }
 }
 
+// Pick document from device
+export async function pickDocument(): Promise<{
+  uri: string;
+  name: string;
+  size: number;
+  mimeType: string;
+} | null> {
+  try {
+    const result = await DocumentPicker.getDocumentAsync({
+      type: '*/*',
+      copyToCacheDirectory: true,
+    });
+
+    if (result.canceled || !result.assets || result.assets.length === 0) {
+      return null;
+    }
+
+    const doc = result.assets[0];
+
+    // Check file size
+    if (doc.size && doc.size > DOCUMENT_MAX_BYTES) {
+      Alert.alert('File Too Large', `Maximum file size is ${DOCUMENT_MAX_BYTES / (1024 * 1024)}MB`);
+      return null;
+    }
+
+    return {
+      uri: doc.uri,
+      name: doc.name,
+      size: doc.size || 0,
+      mimeType: doc.mimeType || 'application/octet-stream',
+    };
+  } catch (error) {
+    console.error('Error picking document:', error);
+    Alert.alert('Error', 'Failed to pick document');
+    return null;
+  }
+}
+
 // Upload media to Supabase Storage
 export async function uploadMedia(
   uri: string,
@@ -157,6 +197,72 @@ export async function uploadMedia(
       Alert.alert('Storage bucket missing', 'The chat-media bucket does not exist yet. Please run the storage migration.');
     } else {
       Alert.alert('Error', 'Failed to upload media');
+    }
+    return null;
+  }
+}
+
+// Upload document to Supabase Storage
+export async function uploadDocument(
+  uri: string,
+  userId: string,
+  fileName: string,
+  mimeType: string
+): Promise<string | null> {
+  try {
+    console.log('Starting document upload:', { fileName, mimeType, uri });
+    const timestamp = Date.now();
+    const sanitizedFileName = fileName.replace(/[^a-zA-Z0-9._-]/g, '_');
+    const filePath = `messages/documents/${userId}/${timestamp}_${sanitizedFileName}`;
+
+    // Fetch the file
+    console.log('Fetching file from URI...');
+    const response = await fetch(uri);
+    const blob = await response.blob();
+    console.log('File fetched, size:', blob.size, 'bytes');
+
+    // Size guard
+    const size = blob.size;
+    if (size > DOCUMENT_MAX_BYTES) {
+      console.log('File too large:', size, '>', DOCUMENT_MAX_BYTES);
+      Alert.alert(
+        'File too large',
+        `Document exceeds the ${Math.round(DOCUMENT_MAX_BYTES / (1024*1024))}MB limit.`
+      );
+      return null;
+    }
+
+    // Upload to Supabase Storage
+    console.log('Uploading to Supabase Storage:', filePath);
+    const { data, error } = await supabase.storage
+      .from('chat-media')
+      .upload(filePath, blob, {
+        contentType: mimeType,
+        upsert: false,
+      });
+
+    if (error) {
+      console.error('Supabase upload error:', error);
+      throw error;
+    }
+
+    console.log('Upload successful, getting public URL...');
+    // Get public URL
+    const { data: urlData } = supabase.storage
+      .from('chat-media')
+      .getPublicUrl(filePath);
+
+    console.log('Public URL obtained:', urlData.publicUrl);
+    return urlData.publicUrl;
+  } catch (error: any) {
+    console.error('Error uploading document:', error);
+    const message = typeof error?.message === 'string' ? error.message : '';
+    if (message.toLowerCase().includes('payload too large')) {
+      Alert.alert('File too large', 'The selected document exceeds the maximum allowed size.');
+    } else if (message.toLowerCase().includes('bucket not found')) {
+      Alert.alert('Storage Error', 'The chat-media storage bucket does not exist. Please contact support.');
+    } else {
+      Alert.alert('Upload Error', `Failed to upload document: ${message || 'Unknown error'}`);
     }
     return null;
   }

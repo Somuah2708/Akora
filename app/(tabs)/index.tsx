@@ -1,65 +1,49 @@
-import { View, Text, StyleSheet, ScrollView, Image, TouchableOpacity, FlatList, Dimensions } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, Image, TouchableOpacity, FlatList, Dimensions, Alert, Modal } from 'react-native';
 import { useFonts, Inter_400Regular, Inter_600SemiBold } from '@expo-google-fonts/inter';
 import { useEffect, useState, useCallback } from 'react';
-import { SplashScreen, useRouter } from 'expo-router';
-import { Heart, MessageCircle, Send, Bookmark, MoreHorizontal, Plus, BookOpen, PartyPopper, Calendar, TrendingUp, Users, Newspaper, Search, User } from 'lucide-react-native';
-import { supabase, type Post, type Profile } from '@/lib/supabase';
+import { SplashScreen, useRouter, useFocusEffect } from 'expo-router';
+import { Heart, MessageCircle, Send, Bookmark, MoreHorizontal, Plus, BookOpen, PartyPopper, Calendar, TrendingUp, Users, Newspaper, Search, User, Edit3, Trash2, Play } from 'lucide-react-native';
+import { supabase, type Post, type Profile, type HomeFeaturedItem, type HomeCategoryTab } from '@/lib/supabase';
 import { useAuth } from '@/hooks/useAuth';
+import { Video, ResizeMode, Audio } from 'expo-av';
+import YouTubePlayer from '@/components/YouTubePlayer';
+import { isYouTubeUrl, getYouTubeThumbnail, extractYouTubeVideoId } from '@/lib/youtube';
 
 SplashScreen.preventAutoHideAsync();
 
 const { width } = Dimensions.get('window');
+const CARD_WIDTH = width - 48;
 
-// Category tabs data
-const CATEGORY_TABS = [
+// Default featured items (fallback)
+const DEFAULT_FEATURED_ITEMS = [
   {
-    id: '1',
-    title: 'History',
-    icon: BookOpen,
-    color: '#FF6B6B',
-    image: 'https://images.unsplash.com/photo-1524178232363-1fb2b075b655?w=400&auto=format&fit=crop&q=60',
-    route: '/heritage',
+    id: 'featured1',
+    title: 'Upcoming Alumni Meet',
+    description: 'Join us for the annual gathering',
+    image_url: 'https://images.unsplash.com/photo-1523580494863-6f3031224c94?w=800&auto=format&fit=crop&q=60',
   },
   {
-    id: '2',
-    title: 'Centenary',
-    icon: PartyPopper,
-    color: '#4ECDC4',
-    image: 'https://images.unsplash.com/photo-1492684223066-81342ee5ff30?w=400&auto=format&fit=crop&q=60',
-    route: '/events',
+    id: 'featured2',
+    title: 'Scholarship Program 2024',
+    description: 'Applications now open',
+    image_url: 'https://images.unsplash.com/photo-1524178232363-1fb2b075b655?w=800&auto=format&fit=crop&q=60',
   },
   {
-    id: '3',
-    title: 'Calendar',
-    icon: Calendar,
-    color: '#45B7D1',
-    image: 'https://images.unsplash.com/photo-1506784983877-45594efa4cbe?w=400&auto=format&fit=crop&q=60',
-    route: '/calendar',
+    id: 'featured3',
+    title: 'Career Development Workshop',
+    description: 'Enhance your professional skills',
+    image_url: 'https://images.unsplash.com/photo-1552664730-d307ca884978?w=800&auto=format&fit=crop&q=60',
   },
-  {
-    id: '4',
-    title: 'Trending',
-    icon: TrendingUp,
-    color: '#F7B731',
-    image: 'https://images.unsplash.com/photo-1552664730-d307ca884978?w=400&auto=format&fit=crop&q=60',
-    route: '/news',
-  },
-  {
-    id: '5',
-    title: 'Community',
-    icon: Users,
-    color: '#A55EEA',
-    image: 'https://images.unsplash.com/photo-1529156069898-49953e39b3ac?w=400&auto=format&fit=crop&q=60',
-    route: '/circles',
-  },
-  {
-    id: '6',
-    title: 'News',
-    icon: Newspaper,
-    color: '#26DE81',
-    image: 'https://images.unsplash.com/photo-1504711434969-e33886168f5c?w=400&auto=format&fit=crop&q=60',
-    route: '/news',
-  },
+];
+
+// Default category tabs (fallback)
+const DEFAULT_CATEGORY_TABS = [
+  { id: '1', title: 'History', icon_name: 'BookOpen', color: '#FF6B6B', image_url: 'https://images.unsplash.com/photo-1524178232363-1fb2b075b655?w=400&auto=format&fit=crop&q=60', route: '/heritage' },
+  { id: '2', title: 'Centenary', icon_name: 'PartyPopper', color: '#4ECDC4', image_url: 'https://images.unsplash.com/photo-1492684223066-81342ee5ff30?w=400&auto=format&fit=crop&q=60', route: '/events' },
+  { id: '3', title: 'Calendar', icon_name: 'Calendar', color: '#45B7D1', image_url: 'https://images.unsplash.com/photo-1506784983877-45594efa4cbe?w=400&auto=format&fit=crop&q=60', route: '/calendar' },
+  { id: '4', title: 'Trending', icon_name: 'TrendingUp', color: '#F7B731', image_url: 'https://images.unsplash.com/photo-1552664730-d307ca884978?w=400&auto=format&fit=crop&q=60', route: '/news' },
+  { id: '5', title: 'Community', icon_name: 'Users', color: '#A55EEA', image_url: 'https://images.unsplash.com/photo-1529156069898-49953e39b3ac?w=400&auto=format&fit=crop&q=60', route: '/circles' },
+  { id: '6', title: 'News', icon_name: 'Newspaper', color: '#26DE81', image_url: 'https://images.unsplash.com/photo-1504711434969-e33886168f5c?w=400&auto=format&fit=crop&q=60', route: '/news' },
 ];
 
 // Placeholder posts for when there's no data
@@ -154,13 +138,21 @@ const PLACEHOLDER_POSTS = [
 interface PostWithUser extends Post {
   user: Profile;
   isLiked?: boolean;
+  isBookmarked?: boolean;
+  comments_count?: number;
+  likes?: number;
+  comments?: number;
 }
 
 export default function HomeScreen() {
   const router = useRouter();
-  const { user } = useAuth();
+  const { user, profile } = useAuth();
   const [posts, setPosts] = useState<PostWithUser[]>([]);
   const [loading, setLoading] = useState(true);
+  const [carouselIndices, setCarouselIndices] = useState<{ [key: string]: number }>({});
+  const [activeCategoryId, setActiveCategoryId] = useState<string | null>(null);
+  const [featured, setFeatured] = useState<HomeFeaturedItem[]>([]);
+  const [categoryTabs, setCategoryTabs] = useState<HomeCategoryTab[]>([]);
 
   const [fontsLoaded] = useFonts({
     'Inter-Regular': Inter_400Regular,
@@ -176,35 +168,106 @@ export default function HomeScreen() {
           id,
           content,
           image_url,
+          image_urls,
+          video_url,
+          video_urls,
+          youtube_url,
+          youtube_urls,
           created_at,
           user_id,
-          profiles:user_id (
+          profiles:user_id!inner (
             id,
             username,
             full_name,
-            avatar_url
-          )
+            avatar_url,
+            is_admin,
+            role
+          ),
+          post_comments(count),
+          post_likes(count)
         `)
+  .eq('is_highlight_only', false)
+  .or('is_admin.eq.true,role.eq.admin', { foreignTable: 'profiles' })
         .order('created_at', { ascending: false });
 
-      if (error) throw error;
+      if (error) {
+        console.error('Error fetching posts:', error);
+        throw error;
+      }
 
-      // Format the data to match our expected structure
-      const formattedPosts = data.map(post => ({
-        id: post.id,
-        user_id: post.user_id,
-        content: post.content,
-        image_url: post.image_url,
-        created_at: post.created_at,
-        user: post.profiles as Profile,
-        isLiked: false,
-        // Mock data for likes and comments since we don't have those tables yet
-        likes: Math.floor(Math.random() * 200) + 50,
-        comments: Math.floor(Math.random() * 50) + 5,
-      }));
+      console.log('Fetched posts:', data?.length || 0);
+      
+      // Get user's liked and bookmarked posts if logged in
+      let userLikes: Set<string> = new Set();
+      let userBookmarks: Set<string> = new Set();
+      if (user) {
+        const [likesRes, bmsRes] = await Promise.all([
+          supabase.from('post_likes').select('post_id').eq('user_id', user.id),
+          supabase.from('post_bookmarks').select('post_id').eq('user_id', user.id),
+        ]);
+        if (likesRes.data) userLikes = new Set(likesRes.data.map(l => l.post_id));
+        if (bmsRes.data) userBookmarks = new Set(bmsRes.data.map(b => b.post_id));
+      }
+      
+      // Log media fields for debugging
+      data?.forEach((post, index) => {
+        console.log(`Post ${index + 1}:`, {
+          id: post.id,
+          image_url: post.image_url,
+          image_urls: post.image_urls,
+          video_url: (post as any).video_url,
+          video_urls: (post as any).video_urls,
+          youtube_url: (post as any).youtube_url,
+          youtube_urls: (post as any).youtube_urls,
+          has_single_image: !!post.image_url,
+          has_multiple_images: !!post.image_urls && post.image_urls.length > 0,
+          has_single_video: !!(post as any).video_url,
+          has_multiple_videos: !!(post as any).video_urls && (post as any).video_urls.length > 0,
+          has_single_youtube: !!(post as any).youtube_url,
+          has_multiple_youtube: !!(post as any).youtube_urls && (post as any).youtube_urls.length > 0,
+        });
+      });
 
-      // If no posts from database, use placeholder posts
-      setPosts(formattedPosts.length > 0 ? formattedPosts : PLACEHOLDER_POSTS as any);
+            // Format the data to match our expected structure
+      const formattedPosts = (data || []).map(post => {
+        const rawProfile = (Array.isArray(post.profiles) ? post.profiles[0] : post.profiles) as Partial<Profile> | undefined;
+        const safeProfile: Profile = {
+          id: rawProfile?.id ?? post.user_id,
+          username: rawProfile?.username ?? 'akora_member',
+          full_name: rawProfile?.full_name ?? 'Akora Member',
+          avatar_url: rawProfile?.avatar_url,
+          bio: rawProfile?.bio,
+          class: rawProfile?.class,
+          year_group: rawProfile?.year_group,
+          house: rawProfile?.house,
+          created_at: rawProfile?.created_at,
+          is_admin: (rawProfile as any)?.is_admin ?? false,
+          role: (rawProfile as any)?.role,
+        };
+
+        return {
+          id: post.id,
+          user_id: post.user_id,
+          content: post.content,
+          image_url: post.image_url,
+          image_urls: post.image_urls,
+          video_url: (post as any).video_url,
+          video_urls: (post as any).video_urls,
+          youtube_url: (post as any).youtube_url,
+          youtube_urls: (post as any).youtube_urls,
+          created_at: post.created_at,
+          user: safeProfile,
+          likes: Array.isArray(post.post_likes) ? post.post_likes.length : 0,
+          isLiked: userLikes.has(post.id),
+          isBookmarked: userBookmarks.has(post.id),
+          comments_count: Array.isArray(post.post_comments) ? post.post_comments.length : 0,
+        } as PostWithUser;
+      });
+
+      // Only show posts authored by admins on Home
+      const adminOnlyPosts = formattedPosts.filter(p => (p.user?.is_admin === true) || (p.user?.role === 'admin'));
+
+      setPosts(adminOnlyPosts.length > 0 ? adminOnlyPosts : [] as any);
     } catch (error) {
       console.error('Error fetching posts:', error);
       // On error, show placeholder posts
@@ -212,7 +275,7 @@ export default function HomeScreen() {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [user]);
 
   useEffect(() => {
     if (fontsLoaded) {
@@ -220,23 +283,299 @@ export default function HomeScreen() {
     }
   }, [fontsLoaded]);
 
+  // Ensure video playback works in iOS silent mode as well
+  useEffect(() => {
+    (async () => {
+      try {
+        await Audio.setAudioModeAsync({ playsInSilentModeIOS: true });
+      } catch (e) {
+        console.warn('Audio mode setup failed', e);
+      }
+    })();
+  }, []);
+
   useEffect(() => {
     if (user) {
       fetchPosts();
     }
   }, [fetchPosts, user]);
 
-  const handleLikeToggle = (postId: string) => {
-    setPosts(prevPosts =>
-      prevPosts.map(post =>
-        post.id === postId
-          ? {
-              ...post,
-              isLiked: !post.isLiked,
-              likes: post.isLiked ? post.likes - 1 : post.likes + 1,
+  // Real-time subscriptions for likes and comments on Home
+  useEffect(() => {
+    if (!user?.id || posts.length === 0) return;
+
+    const postIds = posts.map((p) => p.id);
+
+    // Subscribe to likes changes
+    const likesChannel = supabase
+      .channel('home_post_likes_changes')
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'post_likes',
+          filter: `post_id=in.(${postIds.join(',')})`,
+        },
+        async (payload) => {
+          console.log('Like change detected on Home:', payload);
+          const postId = (payload.new as any)?.post_id || (payload.old as any)?.post_id;
+          if (postId) {
+            const { data } = await supabase
+              .from('posts')
+              .select('id, post_likes(count)')
+              .eq('id', postId)
+              .single();
+            
+            if (data) {
+              const likesCount = Array.isArray((data as any).post_likes) ? (data as any).post_likes.length : 0;
+              
+              // Check if current user liked this post
+              const { data: userLike } = await supabase
+                .from('post_likes')
+                .select('id')
+                .eq('post_id', postId)
+                .eq('user_id', user.id)
+                .maybeSingle();
+              
+              setPosts((prev) =>
+                prev.map((post) =>
+                  post.id === postId
+                    ? { ...post, likes: likesCount, isLiked: !!userLike }
+                    : post
+                )
+              );
             }
-          : post
+          }
+        }
       )
+      .subscribe();
+
+    // Subscribe to comments changes
+    const commentsChannel = supabase
+      .channel('home_post_comments_changes')
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'post_comments',
+          filter: `post_id=in.(${postIds.join(',')})`,
+        },
+        async (payload) => {
+          console.log('Comment change detected on Home:', payload);
+          const postId = (payload.new as any)?.post_id || (payload.old as any)?.post_id;
+          if (postId) {
+            const { data } = await supabase
+              .from('posts')
+              .select('id, post_comments(count)')
+              .eq('id', postId)
+              .single();
+            
+            if (data) {
+              const commentsCount = Array.isArray((data as any).post_comments) ? (data as any).post_comments.length : 0;
+              setPosts((prev) =>
+                prev.map((post) =>
+                  post.id === postId ? { ...post, comments_count: commentsCount } : post
+                )
+              );
+            }
+          }
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(likesChannel);
+      supabase.removeChannel(commentsChannel);
+    };
+  }, [user?.id, posts.map((p) => p.id).join(',')]);
+
+  const loadHomeConfig = useCallback(async () => {
+    try {
+      const [featRes, tabsRes] = await Promise.all([
+        supabase
+          .from('home_featured_items')
+          .select('*')
+          .eq('is_active', true)
+          .order('order_index', { ascending: true }),
+        supabase
+          .from('home_category_tabs')
+          .select('*')
+          .eq('is_active', true)
+          .order('order_index', { ascending: true }),
+      ]);
+
+      setFeatured((featRes.data as HomeFeaturedItem[]) || []);
+      setCategoryTabs((tabsRes.data as HomeCategoryTab[]) || []);
+    } catch (e) {
+      console.warn('Failed to load home config, using defaults', e);
+      setFeatured([]);
+      setCategoryTabs([]);
+    }
+  }, []);
+
+  useEffect(() => {
+    loadHomeConfig();
+  }, [loadHomeConfig]);
+
+  // Refresh posts when screen comes into focus (e.g., after creating a post)
+  useFocusEffect(
+    useCallback(() => {
+      if (user) {
+        fetchPosts();
+      }
+    }, [user])
+  );
+
+  const handleLikeToggle = async (postId: string) => {
+    if (!user) {
+      Alert.alert('Error', 'You must be logged in to like posts');
+      return;
+    }
+
+    const post = posts.find(p => p.id === postId);
+    if (!post) return;
+
+    const wasLiked = post.isLiked;
+    const originalLikes = post.likes ?? 0;
+
+    // Optimistic update
+      setPosts(prevPosts => prevPosts.map(p => {
+        if (p.id !== postId) return p;
+
+        const currentLikes = p.likes ?? 0;
+        const nextLikes = p.isLiked ? Math.max(0, currentLikes - 1) : currentLikes + 1;
+
+        return {
+          ...p,
+          isLiked: !p.isLiked,
+          likes: nextLikes,
+        };
+      }));
+
+    try {
+      if (wasLiked) {
+        // Unlike: Delete the like
+        const { error } = await supabase
+          .from('post_likes')
+          .delete()
+          .eq('post_id', postId)
+          .eq('user_id', user.id);
+
+        if (error) throw error;
+      } else {
+        // Like: Insert a new like
+        const { error } = await supabase
+          .from('post_likes')
+          .insert({
+            post_id: postId,
+            user_id: user.id,
+          });
+
+        if (error) throw error;
+      }
+    } catch (error: any) {
+      console.error('Error toggling like:', error);
+      
+      // Revert optimistic update on error
+      setPosts(prevPosts => prevPosts.map(p => {
+        if (p.id !== postId) return p;
+
+        return {
+          ...p,
+          isLiked: wasLiked,
+          likes: originalLikes,
+        };
+      }));
+      
+      Alert.alert('Error', 'Failed to update like');
+    }
+  };
+
+  const handleBookmarkToggle = async (postId: string) => {
+    if (!user) {
+      Alert.alert('Error', 'You must be logged in to save posts');
+      return;
+    }
+    const post = posts.find(p => p.id === postId);
+    if (!post) return;
+    const wasSaved = (post as any).isBookmarked === true;
+    // Optimistic update
+    setPosts(prev => prev.map(p => p.id === postId ? { ...p, isBookmarked: !wasSaved } as any : p));
+    try {
+      if (wasSaved) {
+        const { error } = await supabase.from('post_bookmarks').delete().eq('post_id', postId).eq('user_id', user.id);
+        if (error) throw error;
+      } else {
+        const { error } = await supabase.from('post_bookmarks').insert({ post_id: postId, user_id: user.id });
+        if (error) throw error;
+      }
+    } catch (e) {
+      // Revert
+      setPosts(prev => prev.map(p => p.id === postId ? { ...p, isBookmarked: wasSaved } as any : p));
+      Alert.alert('Error', 'Failed to update saved');
+    }
+  };
+
+  const handleEditPost = (postId: string) => {
+    console.log('Edit post clicked:', postId);
+    router.push(`/edit-post/${postId}`);
+  };
+
+  const handleDeletePost = (postId: string) => {
+    console.log('Delete post clicked:', postId);
+    Alert.alert(
+      'Delete Post',
+      'Are you sure you want to delete this post? This action cannot be undone.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              const { error } = await supabase
+                .from('posts')
+                .delete()
+                .eq('id', postId)
+                .eq('user_id', user?.id); // Ensure user owns the post
+
+              if (error) throw error;
+
+              // Remove from local state
+              setPosts(prevPosts => prevPosts.filter(post => post.id !== postId));
+              Alert.alert('Success', 'Post deleted successfully');
+            } catch (error: any) {
+              console.error('Error deleting post:', error);
+              Alert.alert('Error', 'Failed to delete post');
+            }
+          },
+        },
+      ]
+    );
+  };
+
+  const showPostMenu = (postId: string) => {
+    console.log('Show post menu for:', postId);
+    Alert.alert(
+      'Post Actions',
+      'Choose an action',
+      [
+        {
+          text: 'Edit Post',
+          onPress: () => handleEditPost(postId),
+        },
+        {
+          text: 'Delete Post',
+          style: 'destructive',
+          onPress: () => handleDeletePost(postId),
+        },
+        {
+          text: 'Cancel',
+          style: 'cancel',
+        },
+      ]
     );
   };
 
@@ -256,28 +595,23 @@ export default function HomeScreen() {
   };
 
   return (
-    <ScrollView 
-      style={styles.container}
-      showsVerticalScrollIndicator={false}
-      stickyHeaderIndices={[]}
-    >
-      {/* Header */}
-      <View style={styles.header}>
+    <View style={styles.container}>
+      <ScrollView 
+        style={styles.scrollView}
+        showsVerticalScrollIndicator={false}
+        stickyHeaderIndices={[]}
+      >
+        {/* Header */}
+        <View style={styles.header}>
         <Text style={styles.logoText}>Akora</Text>
         <View style={styles.headerIcons}>
-          {user?.is_admin && (
-            <TouchableOpacity 
-              style={styles.headerIcon}
-              onPress={() => router.push('/create-post')}
-            >
-              <Plus size={24} color="#000000" strokeWidth={2} />
+          {(profile?.role === 'admin' || profile?.is_admin) && (
+            <TouchableOpacity style={styles.headerIcon} onPress={() => Alert.alert('Manage Home', 'Admins can manage Home elements in Supabase tables:\n- home_featured_items\n- home_category_tabs\n\nAn in-app management UI is coming soon.') }>
+              <Edit3 size={24} color="#000000" strokeWidth={2} />
             </TouchableOpacity>
           )}
           <TouchableOpacity style={styles.headerIcon}>
             <Heart size={24} color="#000000" strokeWidth={2} />
-          </TouchableOpacity>
-          <TouchableOpacity style={styles.headerIcon}>
-            <Send size={24} color="#000000" strokeWidth={2} />
           </TouchableOpacity>
           <TouchableOpacity 
             style={styles.headerIcon}
@@ -288,6 +622,26 @@ export default function HomeScreen() {
         </View>
       </View>
 
+      {/* Featured Items */}
+      <ScrollView 
+        horizontal 
+        showsHorizontalScrollIndicator={false} 
+        style={styles.featuredScroll}
+        contentContainerStyle={styles.featuredContent}
+      >
+        {(featured.length > 0 ? featured : DEFAULT_FEATURED_ITEMS).map((item) => (
+          <TouchableOpacity key={item.id} style={styles.featuredItem}>
+            <Image source={{ uri: (item as any).image_url }} style={styles.featuredImage} />
+            <View style={styles.featuredOverlay}>
+              <Text style={styles.featuredTitle}>{item.title}</Text>
+              {!!(item as any).description && (
+                <Text style={styles.featuredDescription}>{(item as any).description}</Text>
+              )}
+            </View>
+          </TouchableOpacity>
+        ))}
+      </ScrollView>
+
       {/* Category Tabs */}
       <ScrollView 
         horizontal 
@@ -295,22 +649,35 @@ export default function HomeScreen() {
         style={styles.categoriesContainer}
         contentContainerStyle={styles.categoriesContent}
       >
-        {CATEGORY_TABS.map((category) => {
-          const IconComponent = category.icon;
+        {(() => { const ICON_MAP: any = { BookOpen, PartyPopper, Calendar, TrendingUp, Users, Newspaper }; return (categoryTabs.length > 0 ? categoryTabs : DEFAULT_CATEGORY_TABS).map((category) => {
+          const IconComponent = ICON_MAP[(category as any).icon_name] || Users;
+          const isActiveCategory = activeCategoryId === category.id;
           return (
             <TouchableOpacity 
               key={category.id} 
-              style={styles.categoryTab}
-              onPress={() => category.route && router.push(category.route as any)}
+              style={[styles.categoryTab, isActiveCategory && styles.categoryTabActive]}
+              activeOpacity={0.85}
+              onPress={() => {
+                setActiveCategoryId(category.id);
+                if ((category as any).route) {
+                  router.push(((category as any).route) as any);
+                }
+              }}
             >
-              <Image source={{ uri: category.image }} style={styles.categoryImage} />
-              <View style={[styles.categoryOverlay, { backgroundColor: category.color + '95' }]}>
-                <IconComponent size={24} color="#FFFFFF" strokeWidth={2.5} />
+              <Image source={{ uri: (category as any).image_url }} style={styles.categoryImage} />
+              <View
+                style={[
+                  styles.categoryOverlay,
+                  { backgroundColor: (category as any).color + '95' },
+                  isActiveCategory && styles.categoryOverlayActive,
+                ]}
+              >
+                <IconComponent size={16} color="#FFFFFF" strokeWidth={2} />
                 <Text style={styles.categoryTitle}>{category.title}</Text>
               </View>
             </TouchableOpacity>
           );
-        })}
+        }); })()}
       </ScrollView>
 
       {/* Search Bar */}
@@ -327,7 +694,7 @@ export default function HomeScreen() {
       ) : posts.length === 0 ? (
         <View style={styles.emptyContainer}>
           <Text style={styles.emptyText}>No posts yet</Text>
-          {user?.is_admin && (
+          {(profile?.role === 'admin' || profile?.is_admin) && (
             <TouchableOpacity 
               style={styles.createFirstPostButton}
               onPress={() => router.push('/create-post')}
@@ -349,23 +716,174 @@ export default function HomeScreen() {
                     style={styles.postUserAvatar} 
                   />
                   <View>
-                    <Text style={styles.postUsername}>{post.user.username}</Text>
+                    <Text style={styles.postUsername}>{post.user.full_name}</Text>
                     <Text style={styles.postTime}>{getTimeAgo(post.created_at)}</Text>
                   </View>
                 </View>
-                <TouchableOpacity>
-                  <MoreHorizontal size={20} color="#000000" />
+                <TouchableOpacity 
+                  onPress={() => {
+                    console.log('=== THREE DOT BUTTON CLICKED ===');
+                    console.log('Post ID:', post.id);
+                    console.log('Post user_id:', post.user_id);
+                    console.log('Current user id:', user?.id);
+                    console.log('Are they equal?', post.user_id === user?.id);
+                    
+                    if (post.user_id === user?.id) {
+                      showPostMenu(post.id);
+                    } else {
+                      Alert.alert('Info', 'You can only edit your own posts');
+                    }
+                  }}
+                  hitSlop={{ top: 20, bottom: 20, left: 20, right: 20 }}
+                  style={styles.moreButton}
+                  activeOpacity={0.6}
+                >
+                  <MoreHorizontal size={24} color="#64748B" strokeWidth={2} />
                 </TouchableOpacity>
               </View>
 
-              {/* Post Image */}
-              {post.image_url && (
-                <Image 
-                  source={{ uri: post.image_url }} 
-                  style={styles.postImage}
-                  resizeMode="cover"
-                />
-              )}
+              {/* Post Media (Images/Videos/YouTube Carousel) */}
+              {post.youtube_urls && post.youtube_urls.length > 0 ? (
+                <View style={styles.carouselContainer}>
+                  <ScrollView
+                    horizontal
+                    pagingEnabled
+                    showsHorizontalScrollIndicator={false}
+                    style={styles.carousel}
+                    directionalLockEnabled
+                    bounces={false}
+                    snapToInterval={width}
+                    decelerationRate="fast"
+                    onScroll={(event) => {
+                      const scrollX = event.nativeEvent.contentOffset.x;
+                      const currentIndex = Math.round(scrollX / width);
+                      setCarouselIndices({
+                        ...carouselIndices,
+                        [post.id]: currentIndex,
+                      });
+                    }}
+                    scrollEventThrottle={16}
+                  >
+                    {post.youtube_urls.map((youtubeUrl, index) => (
+                      <YouTubePlayer key={index} url={youtubeUrl} />
+                    ))}
+                  </ScrollView>
+                  {post.youtube_urls.length > 1 && (
+                    <View style={styles.carouselIndicator}>
+                      <Text style={styles.carouselIndicatorText}>
+                        {(carouselIndices[post.id] ?? 0) + 1}/{post.youtube_urls.length}
+                      </Text>
+                    </View>
+                  )}
+                </View>
+              ) : post.video_urls && post.video_urls.length > 0 ? (
+                <View style={styles.carouselContainer}>
+                  <ScrollView
+                    horizontal
+                    pagingEnabled
+                    showsHorizontalScrollIndicator={false}
+                    style={styles.carousel}
+                    directionalLockEnabled
+                    bounces={false}
+                    snapToInterval={width}
+                    decelerationRate="fast"
+                    onScroll={(event) => {
+                      const scrollX = event.nativeEvent.contentOffset.x;
+                      const currentIndex = Math.round(scrollX / width);
+                      setCarouselIndices({
+                        ...carouselIndices,
+                        [post.id]: currentIndex,
+                      });
+                    }}
+                    scrollEventThrottle={16}
+                  >
+                    {post.video_urls.map((videoUrl, index) => (
+                      <View key={index} style={styles.videoContainer}>
+                        <Video
+                          source={{ uri: videoUrl }}
+                          style={styles.postImage}
+                          useNativeControls
+                          resizeMode={ResizeMode.COVER}
+                          isLooping
+                          isMuted={false}
+                          volume={1.0}
+                          onError={(err) => console.warn('Video play error (carousel item)', err)}
+                        />
+                      </View>
+                    ))}
+                  </ScrollView>
+                  {post.video_urls.length > 1 && (
+                    <View style={styles.carouselIndicator}>
+                      <Text style={styles.carouselIndicatorText}>
+                        {(carouselIndices[post.id] ?? 0) + 1}/{post.video_urls.length}
+                      </Text>
+                    </View>
+                  )}
+                </View>
+              ) : post.image_urls && post.image_urls.length > 0 ? (
+                <TouchableOpacity activeOpacity={0.85} onPress={() => router.push(`/post/${post.id}`)}>
+                <View style={styles.carouselContainer}>
+                  <ScrollView
+                    horizontal
+                    pagingEnabled
+                    showsHorizontalScrollIndicator={false}
+                    style={styles.carousel}
+                    directionalLockEnabled
+                    bounces={false}
+                    snapToInterval={width}
+                    decelerationRate="fast"
+                    onScroll={(event) => {
+                      const scrollX = event.nativeEvent.contentOffset.x;
+                      const currentIndex = Math.round(scrollX / width);
+                      setCarouselIndices({
+                        ...carouselIndices,
+                        [post.id]: currentIndex,
+                      });
+                    }}
+                    scrollEventThrottle={16}
+                  >
+                    {post.image_urls.map((imageUrl, index) => (
+                      <Image 
+                        key={index}
+                        source={{ uri: imageUrl }} 
+                        style={styles.postImage}
+                        resizeMode="contain"
+                      />
+                    ))}
+                  </ScrollView>
+                  {post.image_urls.length > 1 && (
+                    <View style={styles.carouselIndicator}>
+                      <Text style={styles.carouselIndicatorText}>
+                        {(carouselIndices[post.id] ?? 0) + 1}/{post.image_urls.length}
+                      </Text>
+                    </View>
+                  )}
+                </View>
+                </TouchableOpacity>
+              ) : post.youtube_url ? (
+                <YouTubePlayer url={post.youtube_url} />
+              ) : post.video_url ? (
+                <View style={styles.videoContainer}>
+                  <Video
+                    source={{ uri: post.video_url }}
+                    style={styles.postImage}
+                    useNativeControls
+                    resizeMode={ResizeMode.COVER}
+                    isLooping
+                    isMuted={false}
+                    volume={1.0}
+                    onError={(err) => console.warn('Video play error (single)', err)}
+                  />
+                </View>
+              ) : post.image_url ? (
+                <TouchableOpacity activeOpacity={0.85} onPress={() => router.push(`/post/${post.id}`)}>
+                  <Image 
+                    source={{ uri: post.image_url }} 
+                    style={styles.postImage}
+                    resizeMode="contain"
+                  />
+                </TouchableOpacity>
+              ) : null}
 
               {/* Post Actions */}
               <View style={styles.postActions}>
@@ -381,41 +899,60 @@ export default function HomeScreen() {
                       strokeWidth={2}
                     />
                   </TouchableOpacity>
-                  <TouchableOpacity style={styles.actionButton}>
+                  <TouchableOpacity 
+                    style={styles.actionButton}
+                    onPress={() => router.push(`/post-comments/${post.id}`)}
+                  >
                     <MessageCircle size={26} color="#000000" strokeWidth={2} />
                   </TouchableOpacity>
-                  <TouchableOpacity style={styles.actionButton}>
-                    <Send size={24} color="#000000" strokeWidth={2} />
-                  </TouchableOpacity>
                 </View>
-                <TouchableOpacity>
-                  <Bookmark size={24} color="#000000" strokeWidth={2} />
+                <TouchableOpacity style={styles.actionButton} onPress={() => handleBookmarkToggle(post.id)}>
+                  <Bookmark size={26} color={post.isBookmarked ? '#111827' : '#000000'} fill={post.isBookmarked ? '#111827' : 'none'} strokeWidth={2} />
                 </TouchableOpacity>
               </View>
 
               {/* Post Likes */}
-              <Text style={styles.postLikes}>{post.likes} likes</Text>
+              <Text style={styles.postLikes}>{post.likes || 0} {post.likes === 1 ? 'like' : 'likes'}</Text>
 
               {/* Post Caption */}
               <View style={styles.postCaption}>
                 <Text style={styles.postCaptionText}>
-                  <Text style={styles.postCaptionUsername}>{post.user.username}</Text>
+                  <Text style={styles.postCaptionUsername}>{post.user.full_name}</Text>
                   {' '}{post.content}
                 </Text>
               </View>
 
-              {/* Post Comments */}
-              {post.comments > 0 && (
-                <TouchableOpacity>
+              {/* Post Comments Count */}
+              {post.comments_count !== undefined && post.comments_count > 0 ? (
+                <TouchableOpacity onPress={() => router.push(`/post-comments/${post.id}`)}>
                   <Text style={styles.viewComments}>
-                    View all {post.comments} comments
+                    View all {post.comments_count} {post.comments_count === 1 ? 'comment' : 'comments'}
+                  </Text>
+                </TouchableOpacity>
+              ) : (
+                <TouchableOpacity onPress={() => router.push(`/post-comments/${post.id}`)}>
+                  <Text style={styles.viewComments}>
+                    Be the first to comment
                   </Text>
                 </TouchableOpacity>
               )}
             </View>
           ))
         )}
-    </ScrollView>
+
+      </ScrollView>
+
+      {/* Floating Action Button for Creating Posts */}
+      {(profile?.role === 'admin' || profile?.is_admin) && (
+        <TouchableOpacity 
+          style={styles.fabButton}
+          onPress={() => router.push('/create-post')}
+          activeOpacity={0.8}
+        >
+          <Plus size={28} color="#FFFFFF" strokeWidth={2.5} />
+        </TouchableOpacity>
+      )}
+    </View>
   );
 }
 
@@ -423,6 +960,9 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#FFFFFF',
+  },
+  scrollView: {
+    flex: 1,
   },
   header: {
     flexDirection: 'row',
@@ -447,6 +987,44 @@ const styles = StyleSheet.create({
   headerIcon: {
     padding: 4,
   },
+  featuredScroll: {
+    marginBottom: 0,
+  },
+  featuredContent: {
+    paddingHorizontal: 24,
+    paddingVertical: 16,
+    gap: 16,
+  },
+  featuredItem: {
+    width: CARD_WIDTH,
+    height: 200,
+    borderRadius: 16,
+    overflow: 'hidden',
+  },
+  featuredImage: {
+    width: '100%',
+    height: '100%',
+  },
+  featuredOverlay: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    padding: 20,
+    backgroundColor: 'rgba(0,0,0,0.4)',
+  },
+  featuredTitle: {
+    fontSize: 20,
+    fontFamily: 'Inter-SemiBold',
+    color: '#FFFFFF',
+    marginBottom: 4,
+  },
+  featuredDescription: {
+    fontSize: 14,
+    fontFamily: 'Inter-Regular',
+    color: '#FFFFFF',
+    opacity: 0.8,
+  },
   categoriesContainer: {
     borderBottomWidth: 0,
     borderBottomColor: '#DBDBDB',
@@ -459,11 +1037,15 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   categoryTab: {
-    width: 140,
-    height: 100,
-    borderRadius: 12,
+    width: 80,
+    height: 60,
+    borderRadius: 8,
     overflow: 'hidden',
     position: 'relative',
+  },
+  categoryTabActive: {
+    borderColor: '#0095F6',
+    borderWidth: 2,
   },
   categoryImage: {
     width: '100%',
@@ -477,10 +1059,13 @@ const styles = StyleSheet.create({
     bottom: 0,
     justifyContent: 'center',
     alignItems: 'center',
-    gap: 8,
+    gap: 4,
+  },
+  categoryOverlayActive: {
+    backgroundColor: '#0095F6',
   },
   categoryTitle: {
-    fontSize: 14,
+    fontSize: 10,
     fontFamily: 'Inter-SemiBold',
     color: '#FFFFFF',
     textAlign: 'center',
@@ -518,11 +1103,17 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingHorizontal: 16,
     paddingVertical: 12,
+    zIndex: 10,
   },
   postHeaderLeft: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 12,
+    flex: 1,
+  },
+  moreButton: {
+    padding: 8,
+    zIndex: 100,
   },
   postUserAvatar: {
     width: 32,
@@ -539,10 +1130,35 @@ const styles = StyleSheet.create({
     fontFamily: 'Inter-Regular',
     color: '#8E8E8E',
   },
+  carouselContainer: {
+    position: 'relative',
+  },
+  carousel: {
+    width: width,
+  },
   postImage: {
     width: width,
-    height: width * 0.75,
+    height: width * 0.75, // 4:3 aspect ratio for better proportions
     backgroundColor: '#F8F8F8',
+  },
+  carouselIndicator: {
+    position: 'absolute',
+    top: 12,
+    right: 12,
+    backgroundColor: 'rgba(0, 0, 0, 0.6)',
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 12,
+  },
+  carouselIndicatorText: {
+    color: '#FFFFFF',
+    fontSize: 12,
+    fontFamily: 'Inter-SemiBold',
+  },
+  videoContainer: {
+    width: width,
+    height: width,
+    backgroundColor: '#000000',
   },
   postActions: {
     flexDirection: 'row',
@@ -619,4 +1235,61 @@ const styles = StyleSheet.create({
     fontFamily: 'Inter-SemiBold',
     color: '#FFFFFF',
   },
-});
+  fabButton: {
+    position: 'absolute',
+    right: 20,
+    bottom: 20,
+    width: 60,
+    height: 60,
+    borderRadius: 30,
+    backgroundColor: '#475569',
+    justifyContent: 'center',
+    alignItems: 'center',
+    shadowColor: '#000000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 8,
+  },
+  modalBackdrop: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  postMenuContainer: {
+    width: '80%',
+    maxWidth: 300,
+  },
+  postMenu: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 12,
+    overflow: 'hidden',
+    shadowColor: '#000000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.2,
+    shadowRadius: 12,
+    elevation: 8,
+  },
+  postMenuItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 16,
+    gap: 12,
+    backgroundColor: '#FFFFFF',
+    borderBottomWidth: 1,
+    borderBottomColor: '#F1F5F9',
+  },
+  postMenuItemDanger: {
+    borderBottomWidth: 0,
+  },
+  postMenuItemText: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: '#475569',
+  },
+  postMenuItemTextDanger: {
+    color: '#EF4444',
+    fontWeight: '600',
+  },
+}); 

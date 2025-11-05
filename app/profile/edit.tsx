@@ -1,10 +1,10 @@
 import { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, TextInput, TouchableOpacity, ScrollView, Image, Alert, ActivityIndicator, Switch, Platform } from 'react-native';
+import { View, Text, StyleSheet, TextInput, TouchableOpacity, ScrollView, Image, Alert, ActivityIndicator, Switch, Platform, Modal } from 'react-native';
 import { useFonts, Inter_400Regular, Inter_600SemiBold } from '@expo-google-fonts/inter';
 import { SplashScreen, useRouter } from 'expo-router';
-import { ArrowLeft, Camera, Eye, EyeOff, User, GraduationCap, Calendar, Chrome as Home, MapPin, Phone, Mail } from 'lucide-react-native';
+import { ArrowLeft, Camera, Trash2, User, GraduationCap, Calendar, Chrome as Home, MapPin, Phone, Mail, Link as LinkIcon } from 'lucide-react-native';
 import * as ImagePicker from 'expo-image-picker';
-import { supabase } from '@/lib/supabase';
+import { supabase, AVATAR_BUCKET } from '@/lib/supabase';
 import { useAuth } from '@/hooks/useAuth';
 
 SplashScreen.preventAutoHideAsync();
@@ -15,22 +15,48 @@ export default function EditProfileScreen() {
   const [loading, setLoading] = useState(true);
   const [uploading, setUploading] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [avatarPreviewVisible, setAvatarPreviewVisible] = useState(false);
+
+  // Track initial snapshot to warn on unsaved changes
+  const [initialSnapshot, setInitialSnapshot] = useState<any | null>(null);
   
   // Form state
-  const [username, setUsername] = useState('');
+  // Usernames removed – we only use full names
   const [fullName, setFullName] = useState('');
   const [classGroup, setClassGroup] = useState('');
   const [yearGroup, setYearGroup] = useState('');
   const [house, setHouse] = useState('');
   const [phone, setPhone] = useState('');
   const [location, setLocation] = useState('');
+  const [bio, setBio] = useState('');
   const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
+  // Social links
+  const [websiteUrl, setWebsiteUrl] = useState('');
+  const [linkedinUrl, setLinkedinUrl] = useState('');
+  const [twitterUrl, setTwitterUrl] = useState('');
+  const [instagramUrl, setInstagramUrl] = useState('');
+  const [facebookUrl, setFacebookUrl] = useState('');
+  
+  // Occupation fields
+  const [occupationStatus, setOccupationStatus] = useState<'student' | 'employed' | 'self_employed' | 'unemployed' | 'other'>('student');
+  const [jobTitle, setJobTitle] = useState('');
+  const [companyName, setCompanyName] = useState('');
+  const [currentStudyYear, setCurrentStudyYear] = useState('');
+  
+  // Education fields
+  const [educationLevel, setEducationLevel] = useState<'high_school' | 'undergraduate' | 'postgraduate' | 'doctorate' | 'other'>('undergraduate');
+  const [institutionName, setInstitutionName] = useState('');
+  const [programOfStudy, setProgramOfStudy] = useState('');
+  const [graduationYear, setGraduationYear] = useState('');
   
   // Visibility settings
   const [isClassPublic, setIsClassPublic] = useState(false);
   const [isYearGroupPublic, setIsYearGroupPublic] = useState(false);
   const [isHousePublic, setIsHousePublic] = useState(false);
   const [isContactPublic, setIsContactPublic] = useState(false);
+  const [isOccupationPublic, setIsOccupationPublic] = useState(false);
+  const [isEducationPublic, setIsEducationPublic] = useState(false);
+  const [isInterestsPublic, setIsInterestsPublic] = useState(true);
   const [receivesNotifications, setReceivesNotifications] = useState(true);
   const [themePreference, setThemePreference] = useState('light');
   
@@ -65,22 +91,77 @@ export default function EditProfileScreen() {
       if (error) throw error;
       
       if (data) {
-        setUsername(data.username || '');
         setFullName(data.full_name || '');
         setClassGroup(data.class || '');
         setYearGroup(data.year_group || '');
         setHouse(data.house || '');
         setPhone(data.phone || '');
         setLocation(data.location || '');
+        setBio(data.bio || '');
         setAvatarUrl(data.avatar_url || null);
+  // Social links
+  setWebsiteUrl((data as any).website_url || '');
+  setLinkedinUrl((data as any).linkedin_url || '');
+  setTwitterUrl((data as any).twitter_url || '');
+  setInstagramUrl((data as any).instagram_url || '');
+  setFacebookUrl((data as any).facebook_url || '');
+        
+  // Set occupation fields (normalize legacy 'worker' to 'employed')
+  setOccupationStatus((data.occupation_status === 'worker' ? 'employed' : data.occupation_status) || 'student');
+        setJobTitle(data.job_title || '');
+        setCompanyName(data.company_name || '');
+        
+        // Set education fields
+        setEducationLevel(data.education_level || 'undergraduate');
+        setInstitutionName(data.institution_name || '');
+        setProgramOfStudy(data.program_of_study || '');
+        setGraduationYear(data.graduation_year?.toString() || '');
+  setCurrentStudyYear((data as any).current_study_year?.toString?.() || '');
         
         // Set visibility preferences
         setIsClassPublic(data.is_class_public || false);
         setIsYearGroupPublic(data.is_year_group_public || false);
         setIsHousePublic(data.is_house_public || false);
         setIsContactPublic(data.is_contact_public || false);
+        setIsOccupationPublic(data.is_occupation_public || false);
+        setIsEducationPublic(data.is_education_public || false);
+  setIsInterestsPublic((data as any).is_interests_public !== false);
         setReceivesNotifications(data.receives_notifications !== false); // Default to true
         setThemePreference(data.theme_preference || 'light');
+
+        // Capture initial snapshot for unsaved changes detection
+        setInitialSnapshot({
+          fullName: data.full_name || '',
+          classGroup: data.class || '',
+          yearGroup: data.year_group || '',
+          house: data.house || '',
+          phone: data.phone || '',
+          location: data.location || '',
+          bio: data.bio || '',
+          avatarUrl: data.avatar_url || null,
+          websiteUrl: (data as any).website_url || '',
+          linkedinUrl: (data as any).linkedin_url || '',
+          twitterUrl: (data as any).twitter_url || '',
+          instagramUrl: (data as any).instagram_url || '',
+          facebookUrl: (data as any).facebook_url || '',
+          occupationStatus: data.occupation_status || 'student',
+          jobTitle: data.job_title || '',
+          companyName: data.company_name || '',
+          educationLevel: data.education_level || 'undergraduate',
+          institutionName: data.institution_name || '',
+          programOfStudy: data.program_of_study || '',
+          graduationYear: data.graduation_year?.toString() || '',
+          currentStudyYear: (data as any).current_study_year?.toString?.() || '',
+          isClassPublic: data.is_class_public || false,
+          isYearGroupPublic: data.is_year_group_public || false,
+          isHousePublic: data.is_house_public || false,
+          isContactPublic: data.is_contact_public || false,
+          isOccupationPublic: data.is_occupation_public || false,
+          isEducationPublic: data.is_education_public || false,
+          isInterestsPublic: (data as any).is_interests_public !== false,
+          receivesNotifications: data.receives_notifications !== false,
+          themePreference: data.theme_preference || 'light',
+        });
       }
     } catch (error) {
       console.error('Error fetching profile:', error);
@@ -126,22 +207,38 @@ export default function EditProfileScreen() {
       // For web, we need to convert the image to a blob
       const response = await fetch(uri);
       const blob = await response.blob();
-      
-      // Generate a unique file name
-      const fileExt = uri.split('.').pop();
-      const fileName = `${user?.id}/${Date.now()}.${fileExt}`;
-      const filePath = `${fileName}`;
+      const mime = blob.type || 'image/jpeg';
+      const getExtFromMime = (m: string) => {
+        if (!m) return 'jpg';
+        if (m.includes('jpeg')) return 'jpg';
+        if (m.includes('jpg')) return 'jpg';
+        if (m.includes('png')) return 'png';
+        if (m.includes('webp')) return 'webp';
+        if (m.includes('heic')) return 'heic';
+        return 'jpg';
+      };
+      const ext = getExtFromMime(mime);
+      const filePath = `${user?.id}/${Date.now()}.${ext}`;
       
       // Upload to Supabase Storage
       const { error: uploadError } = await supabase.storage
-        .from('avatars')
-        .upload(filePath, blob);
+        .from(AVATAR_BUCKET)
+        .upload(filePath, blob, { upsert: true, contentType: mime });
       
-      if (uploadError) throw uploadError;
+      if (uploadError) {
+        // Provide clearer guidance if the bucket doesn't exist
+        if ((uploadError as any)?.message?.toLowerCase?.().includes('bucket not found')) {
+          Alert.alert(
+            'Storage Bucket Missing',
+            `The storage bucket "${AVATAR_BUCKET}" was not found. Please create it in Supabase Storage or set EXPO_PUBLIC_SUPABASE_AVATAR_BUCKET to an existing bucket.`,
+          );
+        }
+        throw uploadError;
+      }
       
       // Get the public URL
       const { data } = supabase.storage
-        .from('avatars')
+        .from(AVATAR_BUCKET)
         .getPublicUrl(filePath);
       
       // Update avatar URL in state
@@ -162,45 +259,208 @@ export default function EditProfileScreen() {
       return;
     }
     
-    if (!username.trim() || !fullName.trim()) {
-      Alert.alert('Error', 'Username and full name are required');
+    // Basic validation
+    const fullNameTrim = fullName.trim();
+    if (!fullNameTrim) {
+      Alert.alert('Error', 'Full name is required');
+      return;
+    }
+    if (graduationYear && !/^\d{4}$/.test(graduationYear)) {
+      Alert.alert('Invalid year', 'Graduation year must be a 4-digit year, e.g., 2025.');
+      return;
+    }
+    if (occupationStatus === 'student' && currentStudyYear && !/^\d{1,2}$/.test(currentStudyYear)) {
+      Alert.alert('Invalid current year', 'Current study year must be a number (e.g., 1, 2, 3).');
       return;
     }
     
+    // Simple URL normalize + validate
+    const normalizeUrl = (v: string) => {
+      let s = (v || '').trim();
+      if (!s) return '';
+      if (!/^https?:\/\//i.test(s)) s = `https://${s}`;
+      try {
+        // Will throw if invalid
+        new URL(s);
+        return s;
+      } catch {
+        return '';
+      }
+    };
+
+  const normalizedWebsite = normalizeUrl(websiteUrl);
+  const normalizedLinkedin = normalizeUrl(linkedinUrl);
+  const normalizedTwitter = normalizeUrl(twitterUrl);
+  const normalizedInstagram = normalizeUrl(instagramUrl);
+  const normalizedFacebook = normalizeUrl(facebookUrl);
+
+    // If user typed something invalid (doesn't parse as URL even after scheme add), block save
+    if (websiteUrl.trim() && !normalizedWebsite) {
+      Alert.alert('Invalid website URL', 'Please enter a valid URL (e.g., https://example.com)');
+      return;
+    }
+    if (linkedinUrl.trim() && !normalizedLinkedin) {
+      Alert.alert('Invalid LinkedIn URL', 'Please enter a valid URL (e.g., https://linkedin.com/in/username)');
+      return;
+    }
+    if (twitterUrl.trim() && !normalizedTwitter) {
+      Alert.alert('Invalid Twitter URL', 'Please enter a valid URL (e.g., https://twitter.com/username)');
+      return;
+    }
+    if (instagramUrl.trim() && !normalizedInstagram) {
+      Alert.alert('Invalid Instagram URL', 'Please enter a valid URL (e.g., https://instagram.com/username)');
+      return;
+    }
+    if (facebookUrl.trim() && !normalizedFacebook) {
+      Alert.alert('Invalid Facebook URL', 'Please enter a valid URL (e.g., https://facebook.com/username)');
+      return;
+    }
+
     try {
       setSaving(true);
-      
       const { error } = await supabase
         .from('profiles')
         .update({
-          username: username.trim(),
-          full_name: fullName.trim(),
+          full_name: fullNameTrim,
           class: classGroup.trim(),
           year_group: yearGroup.trim(),
           house: house.trim(),
           phone: phone.trim(),
           location: location.trim(),
           avatar_url: avatarUrl,
+          bio: bio.trim(),
+          // Social links
+          website_url: normalizedWebsite || null,
+          linkedin_url: normalizedLinkedin || null,
+          twitter_url: normalizedTwitter || null,
+          instagram_url: normalizedInstagram || null,
+          facebook_url: normalizedFacebook || null,
+          // Occupation fields
+          occupation_status: occupationStatus,
+          job_title: jobTitle.trim(),
+          company_name: companyName.trim(),
+          // Education fields
+          education_level: educationLevel,
+          institution_name: institutionName.trim(),
+          program_of_study: programOfStudy.trim(),
+          graduation_year: graduationYear ? parseInt(graduationYear) : null,
+          current_study_year: currentStudyYear ? parseInt(currentStudyYear) : null,
+          // Visibility settings
           is_class_public: isClassPublic,
           is_year_group_public: isYearGroupPublic,
           is_house_public: isHousePublic,
           is_contact_public: isContactPublic,
+          is_occupation_public: isOccupationPublic,
+          is_education_public: isEducationPublic,
+          is_interests_public: isInterestsPublic,
           receives_notifications: receivesNotifications,
           theme_preference: themePreference,
         })
         .eq('id', user.id);
       
       if (error) throw error;
-      
-      Alert.alert('Success', 'Profile updated successfully', [
-        { text: 'OK', onPress: () => router.push('/grow') }
-      ]);
+      // Reset initial snapshot after successful save
+      setInitialSnapshot({
+        fullName: fullNameTrim,
+        classGroup: classGroup.trim(),
+        yearGroup: yearGroup.trim(),
+        house: house.trim(),
+        phone: phone.trim(),
+        location: location.trim(),
+        bio: bio.trim(),
+        avatarUrl,
+        websiteUrl: normalizedWebsite || '',
+        linkedinUrl: normalizedLinkedin || '',
+        twitterUrl: normalizedTwitter || '',
+  instagramUrl: normalizedInstagram || '',
+  facebookUrl: normalizedFacebook || '',
+        occupationStatus,
+        jobTitle: jobTitle.trim(),
+        companyName: companyName.trim(),
+        educationLevel,
+        institutionName: institutionName.trim(),
+        programOfStudy: programOfStudy.trim(),
+        graduationYear,
+        currentStudyYear,
+        isClassPublic,
+        isYearGroupPublic,
+        isHousePublic,
+        isContactPublic,
+        isOccupationPublic,
+        isEducationPublic,
+        isInterestsPublic,
+        receivesNotifications,
+        themePreference,
+      });
+
+      Alert.alert('Success', 'Profile updated successfully', [{ text: 'OK', onPress: () => router.push('/grow') }]);
     } catch (error) {
       console.error('Error updating profile:', error);
       Alert.alert('Error', 'Failed to update profile');
     } finally {
       setSaving(false);
     }
+  };
+
+  const isDirty = () => {
+    if (!initialSnapshot) return false;
+    const current = {
+      fullName,
+      classGroup,
+      yearGroup,
+      house,
+      phone,
+      location,
+      bio,
+      avatarUrl,
+      occupationStatus,
+      jobTitle,
+      companyName,
+      educationLevel,
+      institutionName,
+      programOfStudy,
+      graduationYear,
+      currentStudyYear,
+      isClassPublic,
+      isYearGroupPublic,
+      isHousePublic,
+      isContactPublic,
+      isOccupationPublic,
+      isEducationPublic,
+      isInterestsPublic,
+      receivesNotifications,
+      themePreference,
+      websiteUrl,
+      linkedinUrl,
+      twitterUrl,
+      instagramUrl,
+      facebookUrl,
+    };
+    try {
+      return JSON.stringify(current) !== JSON.stringify(initialSnapshot);
+    } catch {
+      return true;
+    }
+  };
+
+  const handleBack = () => {
+    if (saving) return;
+    if (isDirty()) {
+      Alert.alert('Discard changes?', 'You have unsaved changes. Do you want to discard them?', [
+        { text: 'Cancel', style: 'cancel' },
+        { text: 'Discard', style: 'destructive', onPress: () => router.push('/grow') },
+      ]);
+      return;
+    }
+    router.push('/grow');
+  };
+
+  const removeAvatar = () => {
+    if (!avatarUrl) return;
+    Alert.alert('Remove photo?', 'This will remove your current profile photo.', [
+      { text: 'Cancel', style: 'cancel' },
+      { text: 'Remove', style: 'destructive', onPress: () => setAvatarUrl(null) },
+    ]);
   };
 
   if (!fontsLoaded) {
@@ -217,10 +477,30 @@ export default function EditProfileScreen() {
 
   return (
     <View style={styles.container}>
+      {/* Avatar Preview Modal */}
+      <Modal
+        transparent
+        visible={avatarPreviewVisible}
+        animationType="fade"
+        onRequestClose={() => setAvatarPreviewVisible(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <TouchableOpacity style={styles.modalOverlay} activeOpacity={1} onPress={() => setAvatarPreviewVisible(false)}>
+            <View style={styles.imagePreviewCard}>
+              {avatarUrl ? (
+                <Image source={{ uri: avatarUrl }} style={styles.imagePreview} resizeMode="contain" />
+              ) : (
+                <View style={[styles.imagePreview, styles.avatarPlaceholder]} />
+              )}
+            </View>
+          </TouchableOpacity>
+        </View>
+      </Modal>
+
       <View style={styles.header}>
         <TouchableOpacity 
           style={styles.backButton}
-          onPress={() => router.push('/grow')}
+          onPress={handleBack}
         >
           <ArrowLeft size={24} color="#000000" />
         </TouchableOpacity>
@@ -244,47 +524,67 @@ export default function EditProfileScreen() {
           <Text style={styles.loadingText}>Loading profile...</Text>
         </View>
       ) : (
-        <ScrollView style={styles.scrollView}>
-          <View style={styles.avatarSection}>
-            <View style={styles.avatarContainer}>
-              {avatarUrl ? (
-                <Image source={{ uri: avatarUrl }} style={styles.avatar} />
-              ) : (
-                <View style={styles.avatarPlaceholder}>
-                  <User size={40} color="#CCCCCC" />
+        <ScrollView style={styles.scrollView} showsVerticalScrollIndicator={false}>
+          {/* Avatar Card */}
+          <View style={styles.card}>
+            <Text style={styles.cardTitle}>Profile Photo</Text>
+            <View style={styles.avatarRow}>
+              <TouchableOpacity onPress={() => avatarUrl && setAvatarPreviewVisible(true)}>
+                <View style={styles.avatarContainer}>
+                  {avatarUrl ? (
+                    <Image source={{ uri: avatarUrl }} style={styles.avatar} />
+                  ) : (
+                    <View style={[styles.avatar, styles.avatarPlaceholder]}>
+                      <User size={40} color="#FFFFFF" />
+                    </View>
+                  )}
+                  {uploading && (
+                    <View style={styles.uploadingOverlay}>
+                      <ActivityIndicator size="small" color="#FFFFFF" />
+                    </View>
+                  )}
                 </View>
-              )}
-              {uploading && (
-                <View style={styles.uploadingOverlay}>
-                  <ActivityIndicator size="small" color="#FFFFFF" />
-                </View>
-              )}
-            </View>
-            <TouchableOpacity 
-              style={styles.changePhotoButton}
-              onPress={pickImage}
-              disabled={uploading}
-            >
-              <Camera size={16} color="#4169E1" />
-              <Text style={styles.changePhotoText}>Change Photo</Text>
-            </TouchableOpacity>
-          </View>
-
-          <View style={styles.formSection}>
-            <View style={styles.formGroup}>
-              <Text style={styles.label}>Username</Text>
-              <View style={styles.inputContainer}>
-                <User size={20} color="#666666" />
-                <TextInput
-                  style={styles.input}
-                  placeholder="Username"
-                  placeholderTextColor="#666666"
-                  value={username}
-                  onChangeText={setUsername}
-                />
+              </TouchableOpacity>
+              <View style={styles.avatarActions}>
+                <TouchableOpacity 
+                  style={styles.primaryButton}
+                  onPress={pickImage}
+                  disabled={uploading}
+                >
+                  <Camera size={16} color="#FFFFFF" />
+                  <Text style={styles.primaryButtonText}>Change Photo</Text>
+                </TouchableOpacity>
+                {avatarUrl && (
+                  <TouchableOpacity style={styles.dangerButton} onPress={removeAvatar}>
+                    <Trash2 size={16} color="#FFFFFF" />
+                    <Text style={styles.dangerButtonText}>Remove</Text>
+                  </TouchableOpacity>
+                )}
               </View>
             </View>
+          </View>
 
+          {/* Bio Card */}
+          <View style={styles.card}>
+            <Text style={styles.cardTitle}>Bio</Text>
+            <View style={[styles.inputContainer, { alignItems: 'flex-start' }]}>
+              <TextInput
+                style={[styles.input, { height: 110, textAlignVertical: 'top' }]}
+                placeholder="Tell others about you"
+                placeholderTextColor="#666666"
+                multiline
+                maxLength={240}
+                value={bio}
+                onChangeText={setBio}
+              />
+            </View>
+            <Text style={styles.helperText}>{bio.length}/240</Text>
+          </View>
+
+          {/* About Card */}
+          <View style={styles.card}>
+            <Text style={styles.cardTitle}>About</Text>
+          <View style={styles.formGroup}>
             <View style={styles.formGroup}>
               <Text style={styles.label}>Full Name</Text>
               <View style={styles.inputContainer}>
@@ -374,24 +674,201 @@ export default function EditProfileScreen() {
                 />
               </View>
             </View>
+          </View>
+          </View>
 
-            <View style={styles.sectionDivider} />
-
-            <Text style={styles.sectionTitle}>Contact Information</Text>
-            <View style={styles.visibilityNote}>
-              <Text style={styles.visibilityNoteText}>
-                Toggle "Public" to make your contact information visible to other users
-              </Text>
+          {/* Occupation Card */}
+          <View style={styles.card}>
+            <View style={styles.cardHeaderRow}>
+              <Text style={styles.cardTitle}>Occupation</Text>
               <View style={styles.visibilityToggle}>
                 <Text style={styles.visibilityText}>Public</Text>
                 <Switch
-                  value={isContactPublic}
-                  onValueChange={setIsContactPublic}
+                  value={isOccupationPublic}
+                  onValueChange={setIsOccupationPublic}
                   trackColor={{ false: '#767577', true: '#4169E1' }}
                   thumbColor="#FFFFFF"
                 />
               </View>
             </View>
+
+            <View style={styles.formGroup}>
+              <Text style={styles.label}>Status</Text>
+              <View style={styles.segmentedContainer}>
+                {[{k:'student',l:'Student'}, {k:'employed',l:'Worker'}, {k:'self_employed',l:'Self-Employed'}, {k:'unemployed',l:'Unemployed'}, {k:'other',l:'Other'}].map((opt:any) => (
+                  <TouchableOpacity
+                    key={opt.k}
+                    style={[styles.segmentedOption, occupationStatus === opt.k && styles.segmentedOptionSelected]}
+                    onPress={() => setOccupationStatus(opt.k)}
+                    activeOpacity={0.85}
+                  >
+                    <Text style={[styles.segmentedLabel, occupationStatus === opt.k && styles.segmentedLabelSelected]}>
+                      {opt.l}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+            </View>
+
+            {(occupationStatus === 'employed' || occupationStatus === 'self_employed') && (
+              <>
+                <View style={styles.formGroup}>
+                  <Text style={styles.label}>Job Title</Text>
+                  <View style={styles.inputContainer}>
+                    <User size={20} color="#666666" />
+                    <TextInput
+                      style={styles.input}
+                      placeholder="e.g., Software Engineer, Manager"
+                      placeholderTextColor="#666666"
+                      value={jobTitle}
+                      onChangeText={setJobTitle}
+                    />
+                  </View>
+                </View>
+
+                <View style={styles.formGroup}>
+                  <Text style={styles.label}>Company/Organization</Text>
+                  <View style={styles.inputContainer}>
+                    <Home size={20} color="#666666" />
+                    <TextInput
+                      style={styles.input}
+                      placeholder="e.g., Google, Ministry of Health"
+                      placeholderTextColor="#666666"
+                      value={companyName}
+                      onChangeText={setCompanyName}
+                    />
+                  </View>
+                </View>
+              </>
+            )}
+
+            {/* Close Occupation Card */}
+          </View>
+
+            {/* Education Card (only when Student) */}
+            {occupationStatus === 'student' && (
+            <View style={styles.card}>
+              <View style={styles.cardHeaderRow}>
+                <Text style={styles.cardTitle}>Education</Text>
+                <View style={styles.visibilityToggle}>
+                  <Text style={styles.visibilityText}>Public</Text>
+                  <Switch
+                    value={isEducationPublic}
+                    onValueChange={setIsEducationPublic}
+                    trackColor={{ false: '#767577', true: '#4169E1' }}
+                    thumbColor="#FFFFFF"
+                  />
+                </View>
+              </View>
+
+            <View style={styles.formGroup}>
+              <Text style={styles.label}>Education Level</Text>
+              <View style={styles.pickerContainer}>
+                <TouchableOpacity 
+                  style={styles.pickerButton}
+                  onPress={() => {
+                    Alert.alert(
+                      'Select Level',
+                      'Choose your current or highest education level',
+                      [
+                        { text: 'High School', onPress: () => setEducationLevel('high_school') },
+                        { text: 'Undergraduate', onPress: () => setEducationLevel('undergraduate') },
+                        { text: 'Postgraduate', onPress: () => setEducationLevel('postgraduate') },
+                        { text: 'Doctorate', onPress: () => setEducationLevel('doctorate') },
+                        { text: 'Other', onPress: () => setEducationLevel('other') },
+                        { text: 'Cancel', style: 'cancel' }
+                      ]
+                    );
+                  }}
+                >
+                  <Text style={styles.pickerButtonText}>
+                    {educationLevel === 'high_school' ? 'High School' :
+                     educationLevel === 'undergraduate' ? 'Undergraduate' :
+                     educationLevel === 'postgraduate' ? 'Postgraduate' :
+                     educationLevel === 'doctorate' ? 'Doctorate' : 'Other'}
+                  </Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+
+            <View style={styles.formGroup}>
+              <Text style={styles.label}>Institution Name</Text>
+              <View style={styles.inputContainer}>
+                <GraduationCap size={20} color="#666666" />
+                <TextInput
+                  style={styles.input}
+                  placeholder="e.g., University of Ghana, Achimota School"
+                  placeholderTextColor="#666666"
+                  value={institutionName}
+                  onChangeText={setInstitutionName}
+                />
+              </View>
+            </View>
+
+            <View style={styles.formGroup}>
+              <Text style={styles.label}>Program of Study</Text>
+              <View style={styles.inputContainer}>
+                <GraduationCap size={20} color="#666666" />
+                <TextInput
+                  style={styles.input}
+                  placeholder="e.g., Computer Science, Medicine, Business"
+                  placeholderTextColor="#666666"
+                  value={programOfStudy}
+                  onChangeText={setProgramOfStudy}
+                />
+              </View>
+            </View>
+
+            <View style={styles.formGroup}>
+              <Text style={styles.label}>Graduation Year</Text>
+              <View style={styles.inputContainer}>
+                <Calendar size={20} color="#666666" />
+                <TextInput
+                  style={styles.input}
+                  placeholder="e.g., 2025"
+                  placeholderTextColor="#666666"
+                  keyboardType="numeric"
+                  maxLength={4}
+                  value={graduationYear}
+                  onChangeText={setGraduationYear}
+                />
+              </View>
+            </View>
+
+            <View style={styles.formGroup}>
+              <Text style={styles.label}>Current Year</Text>
+              <View style={styles.inputContainer}>
+                <GraduationCap size={20} color="#666666" />
+                <TextInput
+                  style={styles.input}
+                  placeholder="e.g., 2"
+                  placeholderTextColor="#666666"
+                  keyboardType="numeric"
+                  maxLength={2}
+                  value={currentStudyYear}
+                  onChangeText={setCurrentStudyYear}
+                />
+              </View>
+            </View>
+
+            {/* Close Education Card */}
+          </View>
+          )}
+
+            {/* Contact Card */}
+            <View style={styles.card}>
+              <View style={styles.cardHeaderRow}>
+                <Text style={styles.cardTitle}>Contact Information</Text>
+                <View style={styles.visibilityToggle}>
+                  <Text style={styles.visibilityText}>Public</Text>
+                  <Switch
+                    value={isContactPublic}
+                    onValueChange={setIsContactPublic}
+                    trackColor={{ false: '#767577', true: '#4169E1' }}
+                    thumbColor="#FFFFFF"
+                  />
+                </View>
+              </View>
 
             <View style={styles.formGroup}>
               <Text style={styles.label}>Phone</Text>
@@ -435,10 +912,113 @@ export default function EditProfileScreen() {
               </View>
             </View>
 
-            <View style={styles.sectionDivider} />
+          </View>
 
-            <Text style={styles.sectionTitle}>Preferences</Text>
+          {/* Interests Card */}
+          <View style={styles.card}>
+            <Text style={styles.cardTitle}>Interests</Text>
+            <Text style={styles.helperText}>Manage the topics that personalize your feed and profile chips.</Text>
+            <View style={[styles.preferenceItem, { borderBottomWidth: 0, paddingTop: 0 }]}> 
+              <Text style={styles.preferenceLabel}>Public</Text>
+              <Switch
+                value={isInterestsPublic}
+                onValueChange={setIsInterestsPublic}
+                trackColor={{ false: '#767577', true: '#4169E1' }}
+                thumbColor="#FFFFFF"
+              />
+            </View>
+            <TouchableOpacity
+              style={styles.primaryButton}
+              onPress={() => router.push('/(tabs)/discover?openInterestModal=1')}
+            >
+              <Text style={styles.primaryButtonText}>Edit Interests</Text>
+            </TouchableOpacity>
+          </View>
 
+          {/* Links Card */}
+          <View style={styles.card}>
+            <Text style={styles.cardTitle}>Links (optional)</Text>
+            <View style={styles.formGroup}>
+              <Text style={styles.label}>Website</Text>
+              <View style={styles.inputContainer}>
+                <LinkIcon size={20} color="#666666" />
+                <TextInput
+                  style={styles.input}
+                  placeholder="https://example.com"
+                  placeholderTextColor="#666666"
+                  autoCapitalize="none"
+                  keyboardType="url"
+                  value={websiteUrl}
+                  onChangeText={setWebsiteUrl}
+                />
+              </View>
+            </View>
+            <View style={styles.formGroup}>
+              <Text style={styles.label}>LinkedIn</Text>
+              <View style={styles.inputContainer}>
+                <LinkIcon size={20} color="#666666" />
+                <TextInput
+                  style={styles.input}
+                  placeholder="https://linkedin.com/in/username"
+                  placeholderTextColor="#666666"
+                  autoCapitalize="none"
+                  keyboardType="url"
+                  value={linkedinUrl}
+                  onChangeText={setLinkedinUrl}
+                />
+              </View>
+            </View>
+            <View style={styles.formGroup}>
+              <Text style={styles.label}>Twitter</Text>
+              <View style={styles.inputContainer}>
+                <LinkIcon size={20} color="#666666" />
+                <TextInput
+                  style={styles.input}
+                  placeholder="https://twitter.com/username"
+                  placeholderTextColor="#666666"
+                  autoCapitalize="none"
+                  keyboardType="url"
+                  value={twitterUrl}
+                  onChangeText={setTwitterUrl}
+                />
+              </View>
+            </View>
+            <View style={styles.formGroup}>
+              <Text style={styles.label}>Instagram</Text>
+              <View style={styles.inputContainer}>
+                <LinkIcon size={20} color="#666666" />
+                <TextInput
+                  style={styles.input}
+                  placeholder="https://instagram.com/username"
+                  placeholderTextColor="#666666"
+                  autoCapitalize="none"
+                  keyboardType="url"
+                  value={instagramUrl}
+                  onChangeText={setInstagramUrl}
+                />
+              </View>
+            </View>
+            <View style={styles.formGroup}>
+              <Text style={styles.label}>Facebook</Text>
+              <View style={styles.inputContainer}>
+                <LinkIcon size={20} color="#666666" />
+                <TextInput
+                  style={styles.input}
+                  placeholder="https://facebook.com/username"
+                  placeholderTextColor="#666666"
+                  autoCapitalize="none"
+                  keyboardType="url"
+                  value={facebookUrl}
+                  onChangeText={setFacebookUrl}
+                />
+              </View>
+            </View>
+            <Text style={styles.helperText}>We’ll show these as small link pills on your profile.</Text>
+          </View>
+
+          {/* Preferences Card */}
+          <View style={styles.card}>
+            <Text style={styles.cardTitle}>Preferences</Text>
             <View style={styles.preferenceItem}>
               <Text style={styles.preferenceLabel}>Receive Notifications</Text>
               <Switch
@@ -448,7 +1028,6 @@ export default function EditProfileScreen() {
                 thumbColor="#FFFFFF"
               />
             </View>
-
             <View style={styles.preferenceItem}>
               <Text style={styles.preferenceLabel}>Dark Mode</Text>
               <Switch
@@ -524,10 +1103,6 @@ const styles = StyleSheet.create({
   scrollView: {
     flex: 1,
   },
-  avatarSection: {
-    alignItems: 'center',
-    padding: 24,
-  },
   avatarContainer: {
     width: 120,
     height: 120,
@@ -535,7 +1110,6 @@ const styles = StyleSheet.create({
     backgroundColor: '#F8F9FA',
     justifyContent: 'center',
     alignItems: 'center',
-    marginBottom: 16,
     position: 'relative',
   },
   avatar: {
@@ -544,10 +1118,7 @@ const styles = StyleSheet.create({
     borderRadius: 60,
   },
   avatarPlaceholder: {
-    width: 120,
-    height: 120,
-    borderRadius: 60,
-    backgroundColor: '#F8F9FA',
+    backgroundColor: '#4169E1',
     justifyContent: 'center',
     alignItems: 'center',
   },
@@ -557,16 +1128,6 @@ const styles = StyleSheet.create({
     borderRadius: 60,
     justifyContent: 'center',
     alignItems: 'center',
-  },
-  changePhotoButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-  },
-  changePhotoText: {
-    fontSize: 16,
-    fontFamily: 'Inter-SemiBold',
-    color: '#4169E1',
   },
   formSection: {
     padding: 16,
@@ -621,33 +1182,6 @@ const styles = StyleSheet.create({
     marginTop: 4,
     marginLeft: 4,
   },
-  sectionDivider: {
-    height: 1,
-    backgroundColor: '#E2E8F0',
-    marginVertical: 24,
-  },
-  sectionTitle: {
-    fontSize: 18,
-    fontFamily: 'Inter-SemiBold',
-    color: '#000000',
-    marginBottom: 16,
-  },
-  visibilityNote: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    backgroundColor: '#F8F9FA',
-    padding: 12,
-    borderRadius: 8,
-    marginBottom: 16,
-  },
-  visibilityNoteText: {
-    flex: 1,
-    fontSize: 14,
-    fontFamily: 'Inter-Regular',
-    color: '#666666',
-    marginRight: 8,
-  },
   preferenceItem: {
     flexDirection: 'row',
     justifyContent: 'space-between',
@@ -660,5 +1194,124 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontFamily: 'Inter-Regular',
     color: '#000000',
+  },
+  pickerContainer: {
+    marginTop: 4,
+  },
+  pickerButton: {
+    backgroundColor: '#F8F9FA',
+    borderRadius: 12,
+    paddingHorizontal: 16,
+    paddingVertical: 16,
+    height: 56,
+    justifyContent: 'center',
+  },
+  pickerButtonText: {
+    fontSize: 16,
+    fontFamily: 'Inter-Regular',
+    color: '#000000',
+  },
+  segmentedContainer: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+  },
+  segmentedOption: {
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: '#D1D5DB',
+    backgroundColor: '#FFFFFF',
+  },
+  segmentedOptionSelected: {
+    backgroundColor: '#0A84FF',
+    borderColor: '#0A84FF',
+  },
+  segmentedLabel: {
+    fontSize: 13,
+    fontFamily: 'Inter-SemiBold',
+    color: '#4B5563',
+  },
+  segmentedLabelSelected: {
+    color: '#FFFFFF',
+  },
+  // Cards & Layout
+  card: {
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+    borderRadius: 12,
+    padding: 16,
+    marginHorizontal: 16,
+    marginTop: 12,
+  },
+  cardTitle: {
+    fontSize: 16,
+    fontFamily: 'Inter-SemiBold',
+    color: '#111827',
+    marginBottom: 10,
+  },
+  cardHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 6,
+  },
+  avatarRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 16,
+  },
+  avatarActions: {
+    flex: 1,
+    gap: 8,
+  },
+  primaryButton: {
+    flexDirection: 'row',
+    gap: 8,
+    alignItems: 'center',
+    backgroundColor: '#4169E1',
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    borderRadius: 10,
+    alignSelf: 'flex-start',
+  },
+  primaryButtonText: {
+    color: '#FFFFFF',
+    fontSize: 14,
+    fontFamily: 'Inter-SemiBold',
+  },
+  dangerButton: {
+    flexDirection: 'row',
+    gap: 8,
+    alignItems: 'center',
+    backgroundColor: '#EF4444',
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    borderRadius: 10,
+    alignSelf: 'flex-start',
+  },
+  dangerButtonText: {
+    color: '#FFFFFF',
+    fontSize: 14,
+    fontFamily: 'Inter-SemiBold',
+  },
+  // Modal preview styles
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.9)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  imagePreviewCard: {
+    width: 320,
+    height: 320,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  imagePreview: {
+    width: 320,
+    height: 320,
   },
 });

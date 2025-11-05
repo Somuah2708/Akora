@@ -8,6 +8,11 @@ export interface DiscoverItem {
   title: string;
   description: string;
   image: string | null;
+  image_urls?: string[];
+  video_url?: string | null;
+  video_urls?: string[];
+  youtube_url?: string | null;
+  youtube_urls?: string[];
   author?: {
     id: string;
     username: string;
@@ -15,9 +20,12 @@ export interface DiscoverItem {
     avatar_url: string;
   };
   date?: string;
+  created_at?: string;
   location?: string;
   likes?: number;
+  isLiked?: boolean;
   saved?: number;
+  comments?: number;
   matchScore?: number;
   tags?: string[];
   sourceId?: string;
@@ -26,6 +34,7 @@ export interface DiscoverItem {
 
 /**
  * Fetch personalized discover feed combining posts, products, and other content
+ * Shows posts from friends and based on user's interests
  */
 export async function fetchDiscoverFeed(
   userId?: string,
@@ -34,49 +43,177 @@ export async function fetchDiscoverFeed(
   try {
     const items: DiscoverItem[] = [];
 
-    // Fetch recent posts
-    const { data: posts } = await supabase
-      .from('posts')
-      .select('*, user:profiles(id, username, full_name, avatar_url)')
-      .order('created_at', { ascending: false })
-      .limit(10);
+    // Fetch posts using the new function that filters by friendships and interests
+    if (userId) {
+      const { data: posts, error } = await supabase
+        .rpc('get_discover_posts', {
+          p_user_id: userId,
+          p_limit: 20,
+          p_offset: 0
+        });
 
-    if (posts) {
-      items.push(
-        ...posts.map((post) => ({
-          id: `post-${post.id}`,
-          type: 'post' as const,
-          category: 'social',
-          title: post.content.substring(0, 60) + (post.content.length > 60 ? '...' : ''),
-          description: post.content,
-          image: post.image_url,
-          author: post.user
-            ? {
-                id: post.user.id,
-                username: post.user.username || '',
-                full_name: post.user.full_name || '',
-                avatar_url: post.user.avatar_url || '',
-              }
-            : undefined,
-          sourceId: post.id,
-          sourceTable: 'posts',
-          matchScore: 85,
-        }))
-      );
+      if (error) {
+        console.error('Error fetching discover posts:', error);
+      }
+
+      if (posts) {
+        // Fetch user profiles for each post
+        const postIds = posts.map((p: any) => p.id);
+        const { data: postsWithProfiles } = await supabase
+          .from('posts')
+          .select('*, user:profiles(id, username, full_name, avatar_url, is_admin)')
+          .in('id', postIds);
+
+        if (postsWithProfiles) {
+          // Filter out admin-authored posts for Discover
+          const nonAdminPosts = postsWithProfiles.filter((post: any) => !post.user?.is_admin);
+          
+          // Fetch accurate likes and comments counts for all posts
+          const postIdsForCounts = nonAdminPosts.map((p: any) => p.id);
+          const { data: countsData } = await supabase
+            .from('posts')
+            .select('id, post_likes(count), post_comments(count)')
+            .in('id', postIdsForCounts);
+          
+          const countsMap = new Map<string, { likes: number; comments: number }>();
+          (countsData || []).forEach((p: any) => {
+            const likesCount = Array.isArray(p.post_likes) ? p.post_likes.length : 0;
+            const commentsCount = Array.isArray(p.post_comments) ? p.post_comments.length : 0;
+            countsMap.set(p.id, { likes: likesCount, comments: commentsCount });
+          });
+          
+          items.push(
+            ...nonAdminPosts.map((post) => {
+              const counts = countsMap.get(post.id) || { likes: 0, comments: 0 };
+              return {
+                id: `post-${post.id}`,
+                type: 'post' as const,
+                category: post.category || 'social',
+                title: post.content.substring(0, 60) + (post.content.length > 60 ? '...' : ''),
+                description: post.content,
+                image: post.image_url || (Array.isArray(post.image_urls) ? post.image_urls[0] : null),
+                image_urls: post.image_urls || undefined,
+                video_url: post.video_url || null,
+                video_urls: post.video_urls || undefined,
+                youtube_url: post.youtube_url || null,
+                youtube_urls: post.youtube_urls || undefined,
+                created_at: post.created_at,
+                likes: counts.likes,
+                comments: counts.comments,
+                author: post.user
+                  ? {
+                      id: post.user.id,
+                      username: post.user.username || '',
+                      full_name: post.user.full_name || '',
+                      avatar_url: post.user.avatar_url || '',
+                    }
+                  : undefined,
+                sourceId: post.id,
+                sourceTable: 'posts',
+                matchScore: post.user_id === userId ? 100 : 85, // Higher score for own posts
+                tags: post.category ? [post.category] : [],
+              };
+            })
+          );
+        }
+      }
+    } else {
+      // If no user ID, show public posts only
+      const { data: posts } = await supabase
+        .from('posts')
+        .select('*, user:profiles(id, username, full_name, avatar_url, is_admin)')
+        .eq('visibility', 'public')
+        .order('created_at', { ascending: false })
+        .limit(10);
+
+      if (posts) {
+        const nonAdminPosts = posts.filter((post: any) => !post.user?.is_admin);
+        
+        // Fetch accurate likes and comments counts
+        const postIdsForCounts = nonAdminPosts.map((p: any) => p.id);
+        const { data: countsData } = await supabase
+          .from('posts')
+          .select('id, post_likes(count), post_comments(count)')
+          .in('id', postIdsForCounts);
+        
+        const countsMap = new Map<string, { likes: number; comments: number }>();
+        (countsData || []).forEach((p: any) => {
+          const likesCount = Array.isArray(p.post_likes) ? p.post_likes.length : 0;
+          const commentsCount = Array.isArray(p.post_comments) ? p.post_comments.length : 0;
+          countsMap.set(p.id, { likes: likesCount, comments: commentsCount });
+        });
+        
+        items.push(
+          ...nonAdminPosts.map((post) => {
+            const counts = countsMap.get(post.id) || { likes: 0, comments: 0 };
+            return {
+              id: `post-${post.id}`,
+              type: 'post' as const,
+              category: post.category || 'social',
+              title: post.content.substring(0, 60) + (post.content.length > 60 ? '...' : ''),
+              description: post.content,
+              image: post.image_url || (Array.isArray(post.image_urls) ? post.image_urls[0] : null),
+              image_urls: post.image_urls || undefined,
+              video_url: post.video_url || null,
+              video_urls: post.video_urls || undefined,
+              youtube_url: post.youtube_url || null,
+              youtube_urls: post.youtube_urls || undefined,
+              created_at: post.created_at,
+              likes: counts.likes,
+              comments: counts.comments,
+              author: post.user
+                ? {
+                    id: post.user.id,
+                    username: post.user.username || '',
+                    full_name: post.user.full_name || '',
+                    avatar_url: post.user.avatar_url || '',
+                  }
+                : undefined,
+              sourceId: post.id,
+              sourceTable: 'posts',
+              matchScore: 75,
+              tags: post.category ? [post.category] : [],
+            };
+          })
+        );
+      }
     }
 
     // Fetch featured products/services
-    const { data: products } = await supabase
+    const { data: products, error: productsError } = await supabase
       .from('products_services')
-      .select('*, user:profiles(id, username, full_name, avatar_url)')
+      .select('*')
       .eq('is_approved', true)
       .eq('is_featured', true)
       .order('created_at', { ascending: false })
       .limit(8);
 
-    if (products) {
+    if (productsError) {
+      console.error('Error fetching products:', productsError);
+    }
+
+    // Fetch user profiles separately for products
+    let productsWithUsers = products || [];
+    if (products && products.length > 0) {
+      const userIds = products.map(p => p.user_id).filter(Boolean);
+      if (userIds.length > 0) {
+        const { data: users } = await supabase
+          .from('profiles')
+          .select('id, username, full_name, avatar_url')
+          .in('id', userIds);
+        
+        if (users) {
+          productsWithUsers = products.map(product => ({
+            ...product,
+            user: users.find(u => u.id === product.user_id)
+          }));
+        }
+      }
+    }
+
+    if (productsWithUsers.length > 0) {
       items.push(
-        ...products.map((product) => ({
+        ...productsWithUsers.map((product) => ({
           id: `product-${product.id}`,
           type: 'product' as const,
           category: 'marketplace',

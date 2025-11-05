@@ -21,6 +21,7 @@ export default function GroupInfoScreen() {
   const [adding, setAdding] = useState(false);
   const [search, setSearch] = useState("");
   const [candidates, setCandidates] = useState<Profile[]>([]);
+  const [onlineCount, setOnlineCount] = useState(0);
 
   const load = useCallback(async () => {
     if (!groupId || !meId) return;
@@ -41,6 +42,30 @@ export default function GroupInfoScreen() {
   useEffect(() => {
     load();
   }, [load]);
+
+  // Presence: show online members count
+  useEffect(() => {
+    if (!groupId || !meId) return;
+    const presence = supabase.channel(`presence:group:${groupId}`, { config: { presence: { key: meId } } });
+    presence.subscribe((status) => {
+      if (status === "SUBSCRIBED") {
+        presence.track({ at: Date.now(), typing: false });
+      }
+    });
+    const sync = () => {
+      const state = presence.presenceState();
+      const onlineIds = new Set<string>(Object.keys(state));
+      const count = members.filter((m) => onlineIds.has(m.user_id)).length;
+      setOnlineCount(count);
+    };
+    presence.on("presence", { event: "sync" }, sync);
+    // initial compute shortly after subscribe
+    const t = setTimeout(sync, 400);
+    return () => {
+      clearTimeout(t);
+      supabase.removeChannel(presence);
+    };
+  }, [groupId, meId, members]);
 
   const saveName = useCallback(async () => {
     if (!isAdmin || !groupId) return;
@@ -149,10 +174,10 @@ export default function GroupInfoScreen() {
 
       {/* Members */}
       <View style={{ paddingHorizontal: 16, paddingBottom: 8, flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
-        <Text style={{ color: "#64748B", fontWeight: "600" }}>Members • {members.length}</Text>
+        <Text style={{ color: "#64748B", fontWeight: "600" }}>Members • {members.length} {onlineCount > 0 ? `(${onlineCount} online)` : ''}</Text>
         {isAdmin && (
           <TouchableOpacity onPress={() => setAdding(true)} style={{ padding: 8 }}>
-            <Text style={{ color: "#007AFF", fontWeight: "600" }}>Add</Text>
+            <Text style={{ color: "#64748B", fontWeight: "600" }}>Add</Text>
           </TouchableOpacity>
         )}
       </View>
@@ -217,7 +242,7 @@ export default function GroupInfoScreen() {
                     <View style={{ width: 36, height: 36, borderRadius: 18, backgroundColor: "#eee", marginRight: 10 }} />
                   )}
                   <Text style={{ flex: 1 }}>{item.full_name || item.id.slice(0, 6)}</Text>
-                  <Text style={{ color: "#007AFF" }}>Add</Text>
+                  <Text style={{ color: "#64748B" }}>Add</Text>
                 </TouchableOpacity>
               )}
               ItemSeparatorComponent={() => <View style={{ height: 1, backgroundColor: "#f2f2f2", marginLeft: 62 }} />}
@@ -226,6 +251,76 @@ export default function GroupInfoScreen() {
           </View>
         </View>
       )}
+
+      {/* Action buttons */}
+      <View style={{ padding: 16, borderTopWidth: 0.5, borderTopColor: "#eee", backgroundColor: "#fff", gap: 12 }}>
+        {/* Delete group (Admin only) */}
+        {isAdmin && (
+          <TouchableOpacity
+            onPress={async () => {
+              if (!groupId) return;
+              Alert.alert(
+                "Delete Group",
+                "Are you sure you want to delete this group? This will remove all messages and cannot be undone.",
+                [
+                  { text: "Cancel", style: "cancel" },
+                  {
+                    text: "Delete",
+                    style: "destructive",
+                    onPress: async () => {
+                      // Delete the group (cascade will handle members and messages)
+                      const { error } = await supabase.from('groups').delete().eq('id', groupId);
+                      if (error) {
+                        Alert.alert("Error", "Failed to delete group");
+                      } else {
+                        // Navigate back to chats list
+                        router.replace('/(tabs)/chat');
+                      }
+                    },
+                  },
+                ]
+              );
+            }}
+            style={{ backgroundColor: '#dc2626', padding: 14, borderRadius: 10, alignItems: 'center' }}
+          >
+            <Text style={{ color: '#fff', fontWeight: '600' }}>Delete Group</Text>
+          </TouchableOpacity>
+        )}
+        
+        {/* Leave group */}
+        <TouchableOpacity
+          onPress={async () => {
+            if (!groupId || !meId) return;
+            
+            Alert.alert(
+              "Leave Group",
+              "Are you sure you want to leave this group?",
+              [
+                { text: "Cancel", style: "cancel" },
+                {
+                  text: "Leave",
+                  style: "destructive",
+                  onPress: async () => {
+                    const others = members.filter((m) => m.user_id !== meId);
+                    const lastAdmin = members.filter((m) => m.role === 'admin').length === 1 && members.find((m) => m.user_id === meId && m.role === 'admin');
+                    
+                    // Informative alert; DB trigger will auto promote if needed
+                    if (lastAdmin && others.length > 0) {
+                      // noop: trigger will promote earliest joined member
+                    }
+                    
+                    const { error } = await supabase.from('group_members').delete().eq('group_id', groupId).eq('user_id', meId);
+                    if (!error) router.back();
+                  },
+                },
+              ]
+            );
+          }}
+          style={{ backgroundColor: '#fee2e2', padding: 14, borderRadius: 10, alignItems: 'center' }}
+        >
+          <Text style={{ color: '#b91c1c', fontWeight: '600' }}>Leave Group</Text>
+        </TouchableOpacity>
+      </View>
     </View>
   );
 }
