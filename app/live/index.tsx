@@ -53,9 +53,10 @@ export default function LiveStreamScreen() {
   const [liveStreams, setLiveStreams] = useState<Livestream[]>([]);
   const [upcomingStreams, setUpcomingStreams] = useState<Livestream[]>([]);
   const [pastStreams, setPastStreams] = useState<Livestream[]>([]);
+  const [savedStreams, setSavedStreams] = useState<Livestream[]>([]);
   const [userReminders, setUserReminders] = useState<Set<string>>(new Set());
   const [loading, setLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState<'live' | 'past'>('live');
+  const [activeTab, setActiveTab] = useState<'live' | 'past' | 'saved'>('live');
   const [refreshing, setRefreshing] = useState(false);
   
   // Start Live Stream Modal State
@@ -175,6 +176,7 @@ export default function LiveStreamScreen() {
   const fetchUserReminders = async () => {
     if (!user) {
       setUserReminders(new Set());
+      setSavedStreams([]);
       return;
     }
 
@@ -189,8 +191,79 @@ export default function LiveStreamScreen() {
       const reminderSet = new Set(data?.map(r => r.stream_id) || []);
       setUserReminders(reminderSet);
       console.log('User reminders loaded:', reminderSet.size);
+
+      // Fetch full stream details for saved streams
+      if (reminderSet.size > 0) {
+        const { data: streamsData, error: streamsError } = await supabase
+          .from('livestreams')
+          .select('*')
+          .in('id', Array.from(reminderSet));
+
+        if (streamsError) throw streamsError;
+        setSavedStreams(streamsData || []);
+      } else {
+        setSavedStreams([]);
+      }
     } catch (error) {
       console.error('Error fetching reminders:', error);
+    }
+  };
+
+  const handleSaveForLater = async (streamId: string, streamTitle: string) => {
+    if (!user) {
+      Alert.alert(
+        'Login Required', 
+        'Please log in to save streams to watch later.',
+        [{ text: 'OK' }]
+      );
+      return;
+    }
+
+    try {
+      if (userReminders.has(streamId)) {
+        // Remove from saved
+        const { error } = await supabase
+          .from('stream_reminders')
+          .delete()
+          .eq('user_id', user.id)
+          .eq('stream_id', streamId);
+
+        if (error) throw error;
+
+        const newReminders = new Set(userReminders);
+        newReminders.delete(streamId);
+        setUserReminders(newReminders);
+        
+        Alert.alert(
+          'Removed from Saved', 
+          `"${streamTitle}" has been removed from your watch later list.`,
+          [{ text: 'OK' }]
+        );
+      } else {
+        // Save for later
+        const { error } = await supabase
+          .from('stream_reminders')
+          .insert({
+            user_id: user.id,
+            stream_id: streamId,
+            reminder_sent: true, // Mark as saved for later (not a reminder)
+          });
+
+        if (error) throw error;
+
+        const newReminders = new Set(userReminders);
+        newReminders.add(streamId);
+        setUserReminders(newReminders);
+        
+        Alert.alert(
+          'Saved for Later!', 
+          `"${streamTitle}" has been added to your watch later list. You can find it in your saved streams.`,
+          [{ text: 'Got it' }]
+        );
+      }
+    } catch (error: any) {
+      console.error('Error saving stream:', error);
+      Alert.alert('Error', 'Failed to save stream. Please try again.');
     }
   };
 
@@ -513,14 +586,34 @@ export default function LiveStreamScreen() {
 
         {/* Action Buttons */}
         <View style={styles.actionButtons}>
-          {isPast && stream.replay_url ? (
-            <TouchableOpacity
-              style={styles.joinButton}
-              onPress={() => handleOpenReplay(stream.replay_url!)}
-            >
-              <Play size={20} color="#fff" />
-              <Text style={styles.joinButtonText}>Watch Replay</Text>
-            </TouchableOpacity>
+          {isPast ? (
+            <>
+              <TouchableOpacity
+                style={styles.remindButton}
+                onPress={() => handleSaveForLater(stream.id, stream.title)}
+              >
+                {userReminders.has(stream.id) ? (
+                  <>
+                    <BellOff size={20} color="#007AFF" />
+                    <Text style={styles.remindButtonText}>Saved</Text>
+                  </>
+                ) : (
+                  <>
+                    <Bell size={20} color="#007AFF" />
+                    <Text style={styles.remindButtonText}>Save for Later</Text>
+                  </>
+                )}
+              </TouchableOpacity>
+              {stream.replay_url && (
+                <TouchableOpacity
+                  style={styles.joinButton}
+                  onPress={() => handleOpenReplay(stream.replay_url!)}
+                >
+                  <Play size={20} color="#fff" />
+                  <Text style={styles.joinButtonText}>Watch Replay</Text>
+                </TouchableOpacity>
+              )}
+            </>
           ) : stream.is_live ? (
             <TouchableOpacity
               style={[styles.joinButton, styles.liveJoinButton]}
@@ -625,6 +718,17 @@ export default function LiveStreamScreen() {
             Past Streams ({pastStreams.length})
           </Text>
         </TouchableOpacity>
+        <TouchableOpacity
+          style={[styles.tab, activeTab === 'saved' && styles.activeTab]}
+          onPress={() => {
+            setActiveTab('saved');
+            setSearchQuery(''); // Clear search when switching tabs
+          }}
+        >
+          <Text style={[styles.tabText, activeTab === 'saved' && styles.activeTabText]}>
+            Saved ({savedStreams.length})
+          </Text>
+        </TouchableOpacity>
       </View>
 
       <ScrollView 
@@ -681,7 +785,7 @@ export default function LiveStreamScreen() {
               </View>
             )}
           </>
-        ) : (
+        ) : activeTab === 'past' ? (
           <View style={styles.section}>
             <View style={styles.sectionHeader}>
               <Text style={styles.sectionTitle}>🎬 Past Streams</Text>
@@ -701,25 +805,45 @@ export default function LiveStreamScreen() {
               </View>
             )}
           </View>
+        ) : (
+          <View style={styles.section}>
+            <View style={styles.sectionHeader}>
+              <Text style={styles.sectionTitle}>💾 Saved Streams</Text>
+              <Text style={styles.sectionCount}>{filterStreams(savedStreams).length}</Text>
+            </View>
+            {!user ? (
+              <View style={styles.emptyState}>
+                <Bell size={48} color="#ccc" />
+                <Text style={styles.emptyText}>Login Required</Text>
+                <Text style={styles.emptySubtext}>Sign in to save streams and watch them later</Text>
+              </View>
+            ) : filterStreams(savedStreams).length > 0 ? (
+              filterStreams(savedStreams).map(stream => renderStreamCard(stream, true))
+            ) : (
+              <View style={styles.emptyState}>
+                <Bell size={48} color="#ccc" />
+                <Text style={styles.emptyText}>No Saved Streams</Text>
+                <Text style={styles.emptySubtext}>Click "Save for Later" on any stream to add it here</Text>
+              </View>
+            )}
+          </View>
         )}
       </ScrollView>
 
       {/* Floating Action Button - Start Live Stream */}
-      <View style={styles.fabContainer} pointerEvents="box-none">
-        <TouchableOpacity
-          style={styles.fab}
-          onPress={() => {
-            setShowStartStreamModal(true);
-          }}
-          activeOpacity={0.7}
-          accessible={true}
-          accessibilityLabel="Start Live Stream"
-          accessibilityHint="Opens a form to start your own live stream"
-          hitSlop={{ top: 20, bottom: 20, left: 20, right: 20 }}
-        >
-          <Plus size={28} color="#fff" strokeWidth={3} />
-        </TouchableOpacity>
-      </View>
+      <TouchableOpacity
+        style={styles.fab}
+        onPress={() => {
+          console.log('🔴 FAB BUTTON PRESSED!');
+          handleStartStream();
+        }}
+        activeOpacity={0.7}
+        accessible={true}
+        accessibilityLabel="Start Live Stream"
+        testID="fab-button"
+      >
+        <Plus size={28} color="#fff" strokeWidth={3} />
+      </TouchableOpacity>
 
       {/* Start Live Stream Modal */}
       <Modal
@@ -757,7 +881,11 @@ export default function LiveStreamScreen() {
                       styles.streamTypeButton,
                       streamForm.start_now && styles.streamTypeButtonActive
                     ]}
-                    onPress={() => setStreamForm({ ...streamForm, start_now: true })}
+                    onPress={() => {
+                      console.log('Go Live Now clicked');
+                      setStreamForm({ ...streamForm, start_now: true });
+                    }}
+                    activeOpacity={0.7}
                   >
                     <Play size={20} color={streamForm.start_now ? '#fff' : '#007AFF'} />
                     <Text style={[
@@ -772,7 +900,11 @@ export default function LiveStreamScreen() {
                       styles.streamTypeButton,
                       !streamForm.start_now && styles.streamTypeButtonActive
                     ]}
-                    onPress={() => setStreamForm({ ...streamForm, start_now: false })}
+                    onPress={() => {
+                      console.log('Schedule clicked');
+                      setStreamForm({ ...streamForm, start_now: false });
+                    }}
+                    activeOpacity={0.7}
                   >
                     <Clock size={20} color={!streamForm.start_now ? '#fff' : '#007AFF'} />
                     <Text style={[
@@ -870,15 +1002,19 @@ export default function LiveStreamScreen() {
               {/* Scheduled Time (if not starting now) */}
               {!streamForm.start_now && (
                 <View style={styles.formGroup}>
-                  <Text style={styles.formLabel}>Scheduled Time</Text>
+                  <Text style={styles.formLabel}>Scheduled Time *</Text>
                   <TextInput
                     style={styles.formInput}
-                    placeholder="YYYY-MM-DD HH:MM (e.g., 2025-11-01 15:00)"
+                    placeholder="YYYY-MM-DD HH:MM (e.g., 2025-11-06 15:00)"
                     value={streamForm.scheduled_time}
                     onChangeText={(text) => setStreamForm({ ...streamForm, scheduled_time: text })}
+                    autoCapitalize="none"
                   />
                   <Text style={styles.formHint}>
-                    When should your stream start? Use format: YYYY-MM-DD HH:MM
+                    Format: YYYY-MM-DD HH:MM (24-hour time)
+                  </Text>
+                  <Text style={styles.formHint}>
+                    Example: {new Date(Date.now() + 24*60*60*1000).toISOString().slice(0, 16).replace('T', ' ')}
                   </Text>
                 </View>
               )}
@@ -1194,10 +1330,8 @@ const styles = StyleSheet.create({
   // Floating Action Button Container
   fabContainer: {
     position: 'absolute',
-    bottom: 0,
-    right: 0,
-    left: 0,
-    top: 0,
+    bottom: 30,
+    right: 30,
     zIndex: 9999,
     elevation: 9999,
   },
@@ -1212,12 +1346,12 @@ const styles = StyleSheet.create({
     backgroundColor: '#ff4444',
     justifyContent: 'center',
     alignItems: 'center',
-    elevation: 10,
+    elevation: 999,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.3,
     shadowRadius: 8,
-    zIndex: 10000,
+    zIndex: 999999,
   },
   // Modal Styles
   modalOverlay: {

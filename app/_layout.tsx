@@ -51,7 +51,7 @@ export default function RootLayout() {
     const inAuthGroup = segments[0] === 'auth';
     
     // Routes that require authentication but shouldn't trigger redirects
-    const protectedRoutes = ['create-job-listing', 'create-post', 'create-listing', 'create-event', 'create-educational-listing'];
+    const protectedRoutes = ['create-job-listing', 'create-post', 'create-listing', 'create-event', 'create-educational-listing', 'education'];
     const isProtectedRoute = protectedRoutes.includes(segments[0] || '');
 
     console.log('[RootLayout] Route check:', { 

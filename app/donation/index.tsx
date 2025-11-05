@@ -238,7 +238,7 @@ export default function DonationScreen() {
   const pinInputRef = useRef<TextInput>(null);
   
   const [notificationModalVisible, setNotificationModalVisible] = useState(false);
-  const [notifications, setNotifications] = useState<DonationNotification[]>(SAMPLE_NOTIFICATIONS);
+  const [notifications, setNotifications] = useState<DonationNotification[]>([]);
   const [donateModalVisible, setDonateModalVisible] = useState(false);
   const [selectedCampaign, setSelectedCampaign] = useState<any>(null);
   const [donationAmount, setDonationAmount] = useState<number | null>(null);
@@ -248,6 +248,7 @@ export default function DonationScreen() {
   const [selectedMomoNetwork, setSelectedMomoNetwork] = useState<string>('');
   const [selectedCard, setSelectedCard] = useState<string>('');
   const [selectedBank, setSelectedBank] = useState<string>('');
+  const [recognitionModalVisible, setRecognitionModalVisible] = useState(false);
   
   // Payment details states
   const [momoPhone, setMomoPhone] = useState('');
@@ -304,6 +305,7 @@ export default function DonationScreen() {
     fetchCampaigns();
     fetchDonationStats();
     fetchRecentDonors();
+    fetchNotifications();
   }, []);
 
   const fetchCampaigns = async () => {
@@ -387,6 +389,56 @@ export default function DonationScreen() {
     } finally {
       setLoadingDonors(false);
     }
+  };
+
+  const fetchNotifications = async () => {
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      
+      // Fetch user's notifications if logged in, otherwise show general notifications
+      const { data, error } = await supabase
+        .from('notifications')
+        .select('*')
+        .or(user ? `user_id.eq.${user.id},user_id.is.null` : 'user_id.is.null')
+        .order('created_at', { ascending: false })
+        .limit(20);
+
+      if (error) {
+        console.error('Error fetching notifications:', error);
+        return;
+      }
+
+      // Transform to match DonationNotification interface
+      const transformedNotifications: DonationNotification[] = data?.map(notif => ({
+        id: notif.id,
+        type: notif.type as 'update' | 'activity' | 'milestone',
+        title: notif.title,
+        message: notif.message,
+        timestamp: formatTimestamp(notif.created_at),
+        read: notif.read,
+        campaignId: notif.campaign_id,
+        amount: notif.amount ? `GH₵${notif.amount.toLocaleString()}` : undefined,
+      })) || [];
+
+      setNotifications(transformedNotifications);
+    } catch (error) {
+      console.error('Error in fetchNotifications:', error);
+    }
+  };
+
+  const formatTimestamp = (timestamp: string) => {
+    const date = new Date(timestamp);
+    const now = new Date();
+    const diffMs = now.getTime() - date.getTime();
+    const diffMins = Math.floor(diffMs / 60000);
+    const diffHours = Math.floor(diffMs / 3600000);
+    const diffDays = Math.floor(diffMs / 86400000);
+
+    if (diffMins < 1) return 'Just now';
+    if (diffMins < 60) return `${diffMins} minute${diffMins > 1 ? 's' : ''} ago`;
+    if (diffHours < 24) return `${diffHours} hour${diffHours > 1 ? 's' : ''} ago`;
+    if (diffDays < 7) return `${diffDays} day${diffDays > 1 ? 's' : ''} ago`;
+    return date.toLocaleDateString();
   };
 
   const fetchDonationStats = async () => {
@@ -486,7 +538,25 @@ export default function DonationScreen() {
     }
   };
 
-  const handleDonatePress = (campaign: any) => {
+  const handleDonatePress = async (campaign: any) => {
+    // Check if user is authenticated
+    const { data: { user } } = await supabase.auth.getUser();
+    
+    if (!user) {
+      Alert.alert(
+        'Sign In Required',
+        'Please sign in to make a donation and track your giving history.',
+        [
+          { text: 'Cancel', style: 'cancel' },
+          { 
+            text: 'Sign In', 
+            onPress: () => router.push('/auth/sign-in' as any)
+          }
+        ]
+      );
+      return;
+    }
+
     setSelectedCampaign(campaign);
     setDonateModalVisible(true);
     setDonationAmount(null);
@@ -658,42 +728,150 @@ export default function DonationScreen() {
       console.log('🎯 Campaign ID:', selectedCampaign.id);
       console.log('📊 Current raised amount (before):', selectedCampaign.raisedAmount);
       
-      // Update campaign raised_amount in database using RPC to increment
-      const { data: currentCampaign, error: fetchError } = await supabase
+      // Calculate new amounts
+      const newRaisedAmount = Number(selectedCampaign.raisedAmount || 0) + finalAmount;
+      const newProgress = Math.min((newRaisedAmount / selectedCampaign.targetAmount) * 100, 100);
+      
+      console.log('🎯 New raised_amount will be:', newRaisedAmount);
+      console.log('📊 New progress:', newProgress);
+      
+      // Update campaign raised_amount in database
+      const { error: updateError } = await supabase
         .from('campaigns')
-        .select('raised_amount')
-        .eq('id', selectedCampaign.id)
-        .single();
+        .update({
+          raised_amount: newRaisedAmount
+        })
+        .eq('id', selectedCampaign.id);
 
-      if (fetchError) {
-        console.error('❌ Error fetching current campaign:', fetchError);
+      if (updateError) {
+        console.error('❌ Error updating campaign:', updateError);
+        Alert.alert('Warning', 'Donation was saved but failed to update campaign total. Please refresh the page.');
       } else {
-        console.log('📈 Database current raised_amount:', currentCampaign.raised_amount);
-        const newRaisedAmount = Number(currentCampaign.raised_amount) + finalAmount;
-        console.log('🎯 New raised_amount will be:', newRaisedAmount);
+        console.log('✅ Campaign raised_amount updated successfully to:', newRaisedAmount);
         
-        const { error: updateError } = await supabase
-          .from('campaigns')
-          .update({
-            raised_amount: newRaisedAmount
-          })
-          .eq('id', selectedCampaign.id);
+        // Immediately update the UI with new amounts
+        console.log('� Updating UI immediately');
+        setCampaigns(prevCampaigns => 
+          prevCampaigns.map(c => 
+            c.id === selectedCampaign.id 
+              ? {
+                  ...c,
+                  raisedAmount: newRaisedAmount,
+                  raised: `GH₵${newRaisedAmount.toLocaleString()}`,
+                  progress: newProgress
+                }
+              : c
+          )
+        );
+        
+        // Also update donation stats immediately
+        setDonationStats(prev => ({
+          ...prev,
+          totalRaised: prev.totalRaised + finalAmount,
+        }));
+      }
+      
+      // Update or create donor record
+      console.log('👤 Updating donor record...');
+      if (user?.id) {
+        // For authenticated users
+        const { data: existingDonor, error: donorFetchError } = await supabase
+          .from('donors')
+          .select('*')
+          .eq('user_id', user.id)
+          .single();
 
-        if (updateError) {
-          console.error('❌ Error updating campaign:', updateError);
+        if (existingDonor) {
+          // Update existing donor
+          const { error: donorUpdateError } = await supabase
+            .from('donors')
+            .update({
+              total_donated: Number(existingDonor.total_donated) + finalAmount,
+              donation_count: existingDonor.donation_count + 1,
+              last_donation_date: new Date().toISOString(),
+            })
+            .eq('user_id', user.id);
+
+          if (donorUpdateError) {
+            console.error('Error updating donor:', donorUpdateError);
+          } else {
+            console.log('✅ Donor record updated');
+          }
         } else {
-          console.log('✅ Campaign raised_amount updated successfully to:', newRaisedAmount);
+          // Create new donor record
+          const { error: donorInsertError } = await supabase
+            .from('donors')
+            .insert({
+              user_id: user.id,
+              name: donorName,
+              email: donorEmail,
+              total_donated: finalAmount,
+              donation_count: 1,
+              last_donation_date: new Date().toISOString(),
+              recognition_level: 'bronze',
+              is_recurring_donor: false,
+            });
+
+          if (donorInsertError) {
+            console.error('Error creating donor:', donorInsertError);
+          } else {
+            console.log('✅ New donor record created');
+          }
+        }
+      }
+
+      // Create donation notification
+      console.log('📬 Creating donation notification...');
+      const { error: notificationError } = await supabase
+        .from('notifications')
+        .insert({
+          user_id: user?.id || null,
+          type: 'activity',
+          title: `Thank You for Your GH₵${finalAmount.toLocaleString()} Donation`,
+          message: `Your donation to ${selectedCampaign.title} has been received. You're making a difference!`,
+          campaign_id: selectedCampaign.id,
+          amount: finalAmount,
+          read: false,
+        });
+
+      if (notificationError) {
+        console.error('Error creating notification:', notificationError);
+      } else {
+        console.log('✅ Notification created');
+      }
+
+      // Check for campaign milestones and create notifications
+      const milestones = [25, 50, 75, 100];
+      const oldProgress = Math.min((selectedCampaign.raisedAmount / selectedCampaign.targetAmount) * 100, 100);
+      
+      for (const milestone of milestones) {
+        if (oldProgress < milestone && newProgress >= milestone) {
+          console.log(`🎉 Campaign reached ${milestone}% milestone!`);
+          const { error: milestoneError } = await supabase
+            .from('notifications')
+            .insert({
+              user_id: user?.id || null,
+              type: 'milestone',
+              title: `${selectedCampaign.title} Reached ${milestone}%!`,
+              message: milestone === 100 
+                ? `Amazing! The ${selectedCampaign.title} campaign has been fully funded thanks to donors like you!`
+                : `The ${selectedCampaign.title} campaign has reached ${milestone}% of its goal. Your contribution is making a difference!`,
+              campaign_id: selectedCampaign.id,
+              read: false,
+            });
+
+          if (milestoneError) {
+            console.error('Error creating milestone notification:', milestoneError);
+          }
         }
       }
       
-      // Refresh donation stats, campaign data, and donors after successful donation
-      console.log('🔄 Refreshing stats...');
-      await fetchDonationStats();
-      console.log('🔄 Refreshing campaigns...');
-      await fetchCampaigns();
-      console.log('🔄 Refreshing donors...');
-      await fetchRecentDonors();
-      console.log('✅ All data refreshed!');
+      // Refresh all data in background to ensure consistency
+      console.log('🔄 Refreshing all data in background...');
+      fetchDonationStats();
+      fetchCampaigns();
+      fetchRecentDonors();
+      console.log('✅ Background refresh initiated!');
       
       setDonateModalVisible(false);
       
@@ -785,6 +963,38 @@ export default function DonationScreen() {
       Alert.alert('Missing Date', 'Please enter an end date for the campaign');
       return;
     }
+    
+    // Validate date format (YYYY-MM-DD)
+    const dateRegex = /^\d{4}-\d{2}-\d{2}$/;
+    if (!dateRegex.test(campaignEndDate)) {
+      Alert.alert('Invalid Date Format', 'Please enter the date in YYYY-MM-DD format (e.g., 2025-12-31)');
+      return;
+    }
+    
+    // Validate date is in the future
+    const endDate = new Date(campaignEndDate);
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    
+    if (isNaN(endDate.getTime())) {
+      Alert.alert('Invalid Date', 'Please enter a valid date');
+      return;
+    }
+    
+    if (endDate <= today) {
+      Alert.alert('Invalid Date', 'Campaign end date must be in the future');
+      return;
+    }
+    
+    // Validate date is not too far in the future (e.g., max 2 years)
+    const twoYearsFromNow = new Date();
+    twoYearsFromNow.setFullYear(twoYearsFromNow.getFullYear() + 2);
+    
+    if (endDate > twoYearsFromNow) {
+      Alert.alert('Invalid Date', 'Campaign end date cannot be more than 2 years in the future');
+      return;
+    }
+    
     if (campaignImages.length === 0) {
       Alert.alert('Missing Images', 'Please add at least one image for your campaign');
       return;
@@ -916,6 +1126,17 @@ export default function DonationScreen() {
               <Text style={styles.notificationBadgeText}>{unreadCount}</Text>
             </View>
           )}
+        </TouchableOpacity>
+      </View>
+
+      {/* Quick Actions */}
+      <View style={styles.quickActions}>
+        <TouchableOpacity 
+          style={styles.quickActionButton}
+          onPress={() => router.push('/donation/my-donations' as any)}
+        >
+          <Heart size={18} color="#4169E1" />
+          <Text style={styles.quickActionText}>My Donations</Text>
         </TouchableOpacity>
       </View>
 
@@ -1172,7 +1393,10 @@ export default function DonationScreen() {
           <Text style={styles.recognitionText}>
             Join our distinguished donors and make a lasting impact on education
           </Text>
-          <TouchableOpacity style={styles.learnMoreButton}>
+          <TouchableOpacity 
+            style={styles.learnMoreButton}
+            onPress={() => setRecognitionModalVisible(true)}
+          >
             <Text style={styles.learnMoreText}>Learn More</Text>
             <ChevronRight size={16} color="#4169E1" />
           </TouchableOpacity>
@@ -1690,6 +1914,103 @@ export default function DonationScreen() {
         </View>
       </Modal>
 
+      {/* Donor Recognition Modal */}
+      <Modal
+        visible={recognitionModalVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setRecognitionModalVisible(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.recognitionModalContent}>
+            <View style={styles.recognitionModalHeader}>
+              <Text style={styles.recognitionModalTitle}>Donor Recognition Levels</Text>
+              <TouchableOpacity onPress={() => setRecognitionModalVisible(false)}>
+                <X size={24} color="#000000" />
+              </TouchableOpacity>
+            </View>
+
+            <ScrollView showsVerticalScrollIndicator={false} style={styles.recognitionScrollView}>
+              <View style={styles.recognitionLevelCard}>
+                <View style={[styles.recognitionLevelBadge, { backgroundColor: '#B9F2FF' }]}>
+                  <Text style={styles.recognitionLevelText}>💎 DIAMOND</Text>
+                </View>
+                <Text style={styles.recognitionAmount}>GH₵100,000+</Text>
+                <Text style={styles.recognitionBenefits}>
+                  • Permanent plaque at campus entrance{'\n'}
+                  • Annual gala dinner invitation{'\n'}
+                  • Naming rights for major facilities{'\n'}
+                  • Lifetime access to all school events{'\n'}
+                  • Featured in annual report cover
+                </Text>
+              </View>
+
+              <View style={styles.recognitionLevelCard}>
+                <View style={[styles.recognitionLevelBadge, { backgroundColor: '#E5E4E2' }]}>
+                  <Text style={styles.recognitionLevelText}>🏆 PLATINUM</Text>
+                </View>
+                <Text style={styles.recognitionAmount}>GH₵50,000 - GH₵99,999</Text>
+                <Text style={styles.recognitionBenefits}>
+                  • Recognition wall listing{'\n'}
+                  • VIP event invitations{'\n'}
+                  • Annual appreciation certificate{'\n'}
+                  • Featured in donor newsletter{'\n'}
+                  • Priority seating at ceremonies
+                </Text>
+              </View>
+
+              <View style={styles.recognitionLevelCard}>
+                <View style={[styles.recognitionLevelBadge, { backgroundColor: '#FFD700' }]}>
+                  <Text style={styles.recognitionLevelText}>🥇 GOLD</Text>
+                </View>
+                <Text style={styles.recognitionAmount}>GH₵10,000 - GH₵49,999</Text>
+                <Text style={styles.recognitionBenefits}>
+                  • Name on honor roll{'\n'}
+                  • Quarterly updates{'\n'}
+                  • Special appreciation event{'\n'}
+                  • Featured in school publications{'\n'}
+                  • Personalized thank you letter
+                </Text>
+              </View>
+
+              <View style={styles.recognitionLevelCard}>
+                <View style={[styles.recognitionLevelBadge, { backgroundColor: '#C0C0C0' }]}>
+                  <Text style={styles.recognitionLevelText}>🥈 SILVER</Text>
+                </View>
+                <Text style={styles.recognitionAmount}>GH₵5,000 - GH₵9,999</Text>
+                <Text style={styles.recognitionBenefits}>
+                  • Digital honor roll listing{'\n'}
+                  • Semi-annual updates{'\n'}
+                  • Appreciation certificate{'\n'}
+                  • Social media recognition{'\n'}
+                  • Email thank you note
+                </Text>
+              </View>
+
+              <View style={styles.recognitionLevelCard}>
+                <View style={[styles.recognitionLevelBadge, { backgroundColor: '#CD7F32' }]}>
+                  <Text style={styles.recognitionLevelText}>🥉 BRONZE</Text>
+                </View>
+                <Text style={styles.recognitionAmount}>Up to GH₵4,999</Text>
+                <Text style={styles.recognitionBenefits}>
+                  • Website acknowledgment{'\n'}
+                  • Annual impact report{'\n'}
+                  • Thank you email{'\n'}
+                  • Donor community access
+                </Text>
+              </View>
+
+              <View style={styles.recognitionNote}>
+                <Sparkles size={24} color="#4169E1" />
+                <Text style={styles.recognitionNoteText}>
+                  All donations, regardless of amount, make a meaningful difference in students' lives. Recognition levels are cumulative based on total lifetime giving.
+                </Text>
+              </View>
+            </ScrollView>
+          </View>
+        </View>
+      </Modal>
+
       {/* Create Campaign Modal */}
       <Modal
         visible={createCampaignModalVisible}
@@ -1863,6 +2184,25 @@ const styles = StyleSheet.create({
   },
   notificationButton: {
     padding: 8,
+  },
+  quickActions: {
+    paddingHorizontal: 16,
+    marginBottom: 8,
+  },
+  quickActionButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#E3F2FD',
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderRadius: 8,
+    gap: 8,
+    alignSelf: 'flex-start',
+  },
+  quickActionText: {
+    fontSize: 14,
+    fontFamily: 'Inter-SemiBold',
+    color: '#4169E1',
   },
   impactSection: {
     padding: 16,
@@ -2818,5 +3158,73 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontFamily: 'Inter-SemiBold',
     color: '#FFFFFF',
+  },
+  // Recognition Modal Styles
+  recognitionModalContent: {
+    backgroundColor: '#FFFFFF',
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    padding: 24,
+    maxHeight: '90%',
+    marginTop: 'auto',
+  },
+  recognitionModalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 20,
+  },
+  recognitionModalTitle: {
+    fontSize: 20,
+    fontFamily: 'Inter-SemiBold',
+    color: '#000000',
+  },
+  recognitionScrollView: {
+    flex: 1,
+  },
+  recognitionLevelCard: {
+    backgroundColor: '#F8F9FA',
+    borderRadius: 16,
+    padding: 20,
+    marginBottom: 16,
+  },
+  recognitionLevelBadge: {
+    alignSelf: 'flex-start',
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 12,
+    marginBottom: 12,
+  },
+  recognitionLevelText: {
+    fontSize: 14,
+    fontFamily: 'Inter-SemiBold',
+    color: '#000000',
+  },
+  recognitionAmount: {
+    fontSize: 18,
+    fontFamily: 'Inter-SemiBold',
+    color: '#4169E1',
+    marginBottom: 12,
+  },
+  recognitionBenefits: {
+    fontSize: 14,
+    fontFamily: 'Inter-Regular',
+    color: '#666666',
+    lineHeight: 22,
+  },
+  recognitionNote: {
+    flexDirection: 'row',
+    backgroundColor: '#E3F2FD',
+    borderRadius: 12,
+    padding: 16,
+    gap: 12,
+    marginBottom: 24,
+  },
+  recognitionNoteText: {
+    flex: 1,
+    fontSize: 13,
+    fontFamily: 'Inter-Regular',
+    color: '#666666',
+    lineHeight: 20,
   },
 });

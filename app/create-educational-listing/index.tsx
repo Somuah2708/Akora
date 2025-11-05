@@ -88,15 +88,15 @@ export default function CreateEducationalListingScreen() {
         'Your educational listing has been created successfully!',
         [
           {
-            text: 'View My Listings',
-            onPress: () => router.push('/my-listings')
+            text: 'OK',
+            onPress: () => router.back()
           }
         ]
       );
       
       // Auto-navigate after 1 second
       setTimeout(() => {
-        router.push('/my-listings');
+        router.back();
       }, 1000);
     } catch (error: any) {
       console.error('Error creating educational listing:', error);

@@ -41,7 +41,7 @@ const HERITAGE_ITEMS = [
     description: 'Educational opportunities and scholarship programs',
     icon: GraduationCap,
     image: 'https://images.unsplash.com/photo-1523050854058-8df90110c9f1?w=800&auto=format&fit=crop&q=60',
-    route: 'education',
+    route: '/education',
   },
   {
     id: '3',
@@ -180,7 +180,7 @@ export default function HubScreen() {
               <TouchableOpacity 
                 key={item.id}
                 style={styles.gridItem}
-                onPress={() => item.route && router.push(item.route)}
+                onPress={() => item.route && router.push(item.route as any)}
               >
                 <Image source={{ uri: item.image }} style={styles.itemImage} />
                 <View style={styles.itemContent}>
@@ -205,7 +205,7 @@ export default function HubScreen() {
               <TouchableOpacity 
                 key={item.id}
                 style={styles.gridItem}
-                onPress={() => item.route && router.push(item.route)}
+                onPress={() => item.route && router.push(item.route as any)}
               >
                 <Image source={{ uri: item.image }} style={styles.itemImage} />
                 <View style={styles.itemContent}>

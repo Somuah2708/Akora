@@ -181,10 +181,10 @@ export default function CreateListingScreen() {
       }
       
       console.log('✅ Listing created successfully!', newListing);
-      console.log('Navigating to my-listings page...');
+      console.log('Navigating back...');
 
-      // Navigate to my listings immediately
-      router.push('/my-listings');
+      // Navigate back
+      router.back();
       
       // Show success message after navigation starts
       setTimeout(() => {
@@ -703,5 +703,18 @@ const styles = StyleSheet.create({
   },
   bottomPadding: {
     height: 40,
+  },
+  currencyButton: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    borderRadius: 12,
+    borderWidth: 1.5,
+    borderColor: '#E8E8E8',
+    backgroundColor: '#FFFFFF',
+    gap: 6,
   },
 });

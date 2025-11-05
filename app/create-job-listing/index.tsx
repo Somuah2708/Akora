@@ -82,7 +82,7 @@ export default function CreateJobListingScreen() {
       setCurrency('USD');
       setEmail('');
       setImageUrl('');
-      setUploadedImage(null);
+      setUploadedImages([]);
       setCategory('');
     }
   };
