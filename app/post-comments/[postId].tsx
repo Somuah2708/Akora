@@ -6,6 +6,7 @@ import { ArrowLeft, Send, Heart, MoreVertical } from 'lucide-react-native';
 import { supabase, type PostComment, type Profile } from '@/lib/supabase';
 import { useAuth } from '@/hooks/useAuth';
 import { Image } from 'react-native';
+import ExpandableText from '@/components/ExpandableText';
 
 SplashScreen.preventAutoHideAsync();
 
@@ -237,7 +238,11 @@ export default function PostCommentsScreen() {
                   <Text style={styles.commentUsername}>{comment.user.full_name}</Text>
                   <Text style={styles.commentTime}>{getTimeAgo(comment.created_at)}</Text>
                 </View>
-                <Text style={styles.commentText}>{comment.content}</Text>
+                <ExpandableText
+                  text={comment.content}
+                  numberOfLines={3}
+                  style={styles.commentText}
+                />
                 <View style={styles.commentActions}>
                   <TouchableOpacity 
                     style={styles.commentAction}

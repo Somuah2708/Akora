@@ -4,6 +4,8 @@ import { useEffect, useState } from 'react';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/hooks/useAuth';
 import { ArrowLeft, Heart, MessageCircle, Bookmark as BookmarkIcon, Share2 } from 'lucide-react-native';
+import { Video, ResizeMode } from 'expo-av';
+import ExpandableText from '@/components/ExpandableText';
 
 const { width } = Dimensions.get('window');
 
@@ -149,7 +151,37 @@ export default function PostDetailScreen() {
 
       <ScrollView showsVerticalScrollIndicator={false}>
         {/* Media */}
-        {post.image_urls && post.image_urls.length > 0 ? (
+        {post.video_urls && post.video_urls.length > 0 ? (
+          <ScrollView horizontal pagingEnabled showsHorizontalScrollIndicator={false}>
+            {post.video_urls.map((videoUrl, i) => (
+              <View key={i} style={styles.videoContainer}>
+                <Video
+                  source={{ uri: videoUrl }}
+                  style={styles.hero}
+                  useNativeControls
+                  resizeMode={ResizeMode.CONTAIN}
+                  isLooping
+                  isMuted={false}
+                  volume={1.0}
+                  onError={(err) => console.warn('Video error:', err)}
+                />
+              </View>
+            ))}
+          </ScrollView>
+        ) : post.video_url ? (
+          <View style={styles.videoContainer}>
+            <Video
+              source={{ uri: post.video_url }}
+              style={styles.hero}
+              useNativeControls
+              resizeMode={ResizeMode.CONTAIN}
+              isLooping
+              isMuted={false}
+              volume={1.0}
+              onError={(err) => console.warn('Video error:', err)}
+            />
+          </View>
+        ) : post.image_urls && post.image_urls.length > 0 ? (
           <ScrollView horizontal pagingEnabled showsHorizontalScrollIndicator={false}>
             {post.image_urls.map((u, i) => (
               <Image key={i} source={{ uri: u }} style={styles.hero} />
@@ -176,7 +208,13 @@ export default function PostDetailScreen() {
 
         {/* Caption */}
         <View style={styles.captionBox}>
-          <Text style={styles.caption}><Text style={styles.author}>{post.user?.full_name || 'User'}</Text> {post.content}</Text>
+          <ExpandableText
+            text={post.content}
+            username={post.user?.full_name || 'User'}
+            numberOfLines={3}
+            style={styles.caption}
+            usernameStyle={styles.author}
+          />
         </View>
       </ScrollView>
     </View>
@@ -190,6 +228,7 @@ const styles = StyleSheet.create({
   backBtn: { width: 44, height: 44, borderRadius: 22, alignItems: 'center', justifyContent: 'center', backgroundColor: '#F5F5F5' },
   headerTitle: { fontSize: 18, color: '#111827', fontFamily: 'Inter-SemiBold' },
   hero: { width, height: width, backgroundColor: '#F3F4F6' },
+  videoContainer: { width, height: width },
   actions: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 12 },
   leftActions: { flexDirection: 'row', gap: 16 },
   actionBtn: { padding: 4 },

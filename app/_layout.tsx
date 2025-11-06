@@ -14,6 +14,7 @@ import { StatusBar } from 'expo-status-bar';
 import { useFrameworkReady } from '@/hooks/useFrameworkReady';
 import { useAuth } from '@/hooks/useAuth';
 import { ToastProvider } from '@/components/Toast';
+import { VideoSettingsProvider } from '@/contexts/VideoSettingsContext';
 
 export default function RootLayout() {
   useFrameworkReady();
@@ -97,14 +98,16 @@ export default function RootLayout() {
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
       <ToastProvider>
-        <Stack screenOptions={{ headerShown: false }}>
-          <Stack.Screen name="(tabs)" />
-          <Stack.Screen name="auth" />
-          {/* Ensure non-tab stacks (e.g., chat, user-profile, etc.) also have no header */}
-          <Stack.Screen name="chat" />
-          <Stack.Screen name="+not-found" options={{ headerShown: true }} />
-        </Stack>
-        <StatusBar style="auto" />
+        <VideoSettingsProvider>
+          <Stack screenOptions={{ headerShown: false }}>
+            <Stack.Screen name="(tabs)" />
+            <Stack.Screen name="auth" />
+            {/* Ensure non-tab stacks (e.g., chat, user-profile, etc.) also have no header */}
+            <Stack.Screen name="chat" />
+            <Stack.Screen name="+not-found" options={{ headerShown: true }} />
+          </Stack>
+          <StatusBar style="auto" />
+        </VideoSettingsProvider>
       </ToastProvider>
     </GestureHandlerRootView>
   );

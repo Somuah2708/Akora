@@ -18,6 +18,7 @@ import {
   Star,
   MoreHorizontal,
   Trash,
+  Play,
 } from 'lucide-react-native';
 import type { LucideIcon } from 'lucide-react-native';
 import { useAuth } from '@/hooks/useAuth';
@@ -25,6 +26,7 @@ import { useToast } from '@/components/Toast';
 import { supabase } from '@/lib/supabase';
 import { INTEREST_LIBRARY, type InterestOptionId } from '@/lib/interest-data';
 import VisitorActions from '@/components/VisitorActions';
+import { Video, ResizeMode } from 'expo-av';
 
 const { width, height } = Dimensions.get('window');
 const GRID_ITEM_SIZE = (width - 6) / 3;
@@ -261,7 +263,7 @@ export default function ProfileScreen() {
       if (isOwner) {
         const { data: bookmarks, error: bmError } = await supabase
           .from('post_bookmarks')
-          .select('post_id, posts:post_id ( id, image_url, image_urls, created_at )')
+          .select('post_id, posts:post_id ( id, image_url, image_urls, video_url, video_urls, created_at )')
           .eq('user_id', viewingUserId)
           .eq('posts.is_highlight_only', false)
           .order('created_at', { ascending: false });
@@ -889,29 +891,65 @@ export default function ProfileScreen() {
       {activeTab === 'grid' ? (
         <View style={styles.postsGrid}>
           {userPosts.length > 0 ? (
-            userPosts.map((post) => (
-              <View key={post.id} style={styles.gridItem}>
-                <TouchableOpacity style={{ flex: 1 }} onPress={() => router.push(`/post/${post.id}`)}>
-                {post.image_url ? (
-                  <Image source={{ uri: post.image_url }} style={styles.gridImage} />
-                ) : Array.isArray(post.image_urls) && post.image_urls.length > 0 ? (
-                  <Image source={{ uri: post.image_urls[0] }} style={styles.gridImage} />
-                ) : (
-                  <View style={styles.gridImagePlaceholder}>
-                    <Text style={styles.gridPlaceholderText}>No Image</Text>
-                  </View>
-                )}
-                </TouchableOpacity>
-                {isOwner && (
-                  <TouchableOpacity
-                    style={styles.gridMoreBtn}
-                    onPress={() => { setSelectedPostId(post.id); setSelectedFromTab('grid'); setPostSheetOpen(true); }}
-                  >
-                    <MoreHorizontal size={18} color="#111827" />
+            userPosts.map((post) => {
+              // Determine if this is a video post
+              const hasVideo = !!(post.video_url || (post.video_urls && post.video_urls.length > 0));
+              const hasImage = !!(post.image_url || (post.image_urls && post.image_urls.length > 0));
+              const videoUrl = post.video_url || (post.video_urls && post.video_urls[0]);
+              
+              // Get thumbnail: prefer image, fallback to video first frame
+              let thumbnail = null;
+              if (hasImage) {
+                thumbnail = post.image_url || (Array.isArray(post.image_urls) && post.image_urls.length > 0 ? post.image_urls[0] : null);
+              }
+
+              return (
+                <View key={post.id} style={styles.gridItem}>
+                  <TouchableOpacity style={{ flex: 1 }} onPress={() => router.push(`/post/${post.id}`)}>
+                    {thumbnail ? (
+                      <View style={styles.gridMediaContainer}>
+                        <Image source={{ uri: thumbnail }} style={styles.gridImage} />
+                        {hasVideo && (
+                          <View style={styles.videoOverlay}>
+                            <View style={styles.playIconContainer}>
+                              <Play size={20} color="#FFFFFF" fill="#FFFFFF" />
+                            </View>
+                          </View>
+                        )}
+                      </View>
+                    ) : hasVideo && videoUrl ? (
+                      <View style={styles.gridMediaContainer}>
+                        <Video
+                          source={{ uri: videoUrl }}
+                          style={styles.gridImage}
+                          resizeMode={ResizeMode.COVER}
+                          shouldPlay={false}
+                          isMuted={true}
+                          positionMillis={100}
+                        />
+                        <View style={styles.videoOverlay}>
+                          <View style={styles.playIconContainer}>
+                            <Play size={20} color="#FFFFFF" fill="#FFFFFF" />
+                          </View>
+                        </View>
+                      </View>
+                    ) : (
+                      <View style={styles.gridImagePlaceholder}>
+                        <Text style={styles.gridPlaceholderText}>No Media</Text>
+                      </View>
+                    )}
                   </TouchableOpacity>
-                )}
-              </View>
-            ))
+                  {isOwner && (
+                    <TouchableOpacity
+                      style={styles.gridMoreBtn}
+                      onPress={() => { setSelectedPostId(post.id); setSelectedFromTab('grid'); setPostSheetOpen(true); }}
+                    >
+                      <MoreHorizontal size={18} color="#111827" />
+                    </TouchableOpacity>
+                  )}
+                </View>
+              );
+            })
           ) : (
             <View style={styles.emptyState}>
               <Text style={styles.emptyStateText}>No posts yet</Text>
@@ -921,29 +959,65 @@ export default function ProfileScreen() {
       ) : (
         <View style={styles.postsGrid}>
           {savedPosts.length > 0 ? (
-            savedPosts.map((post) => (
-              <View key={post.id} style={styles.gridItem}>
-                <TouchableOpacity style={{ flex: 1 }} onPress={() => router.push(`/post/${post.id}`)}>
-                {post.image_url ? (
-                  <Image source={{ uri: post.image_url }} style={styles.gridImage} />
-                ) : Array.isArray(post.image_urls) && post.image_urls.length > 0 ? (
-                  <Image source={{ uri: post.image_urls[0] }} style={styles.gridImage} />
-                ) : (
-                  <View style={styles.gridImagePlaceholder}>
-                    <Text style={styles.gridPlaceholderText}>No Image</Text>
-                  </View>
-                )}
-                </TouchableOpacity>
-                {isOwner && (
-                  <TouchableOpacity
-                    style={styles.gridMoreBtn}
-                    onPress={() => { setSelectedPostId(post.id); setSelectedFromTab('saved'); setPostSheetOpen(true); }}
-                  >
-                    <MoreHorizontal size={18} color="#111827" />
+            savedPosts.map((post) => {
+              // Determine if this is a video post
+              const hasVideo = !!(post.video_url || (post.video_urls && post.video_urls.length > 0));
+              const hasImage = !!(post.image_url || (post.image_urls && post.image_urls.length > 0));
+              const videoUrl = post.video_url || (post.video_urls && post.video_urls[0]);
+              
+              // Get thumbnail: prefer image, fallback to video first frame
+              let thumbnail = null;
+              if (hasImage) {
+                thumbnail = post.image_url || (Array.isArray(post.image_urls) && post.image_urls.length > 0 ? post.image_urls[0] : null);
+              }
+
+              return (
+                <View key={post.id} style={styles.gridItem}>
+                  <TouchableOpacity style={{ flex: 1 }} onPress={() => router.push(`/post/${post.id}`)}>
+                    {thumbnail ? (
+                      <View style={styles.gridMediaContainer}>
+                        <Image source={{ uri: thumbnail }} style={styles.gridImage} />
+                        {hasVideo && (
+                          <View style={styles.videoOverlay}>
+                            <View style={styles.playIconContainer}>
+                              <Play size={20} color="#FFFFFF" fill="#FFFFFF" />
+                            </View>
+                          </View>
+                        )}
+                      </View>
+                    ) : hasVideo && videoUrl ? (
+                      <View style={styles.gridMediaContainer}>
+                        <Video
+                          source={{ uri: videoUrl }}
+                          style={styles.gridImage}
+                          resizeMode={ResizeMode.COVER}
+                          shouldPlay={false}
+                          isMuted={true}
+                          positionMillis={100}
+                        />
+                        <View style={styles.videoOverlay}>
+                          <View style={styles.playIconContainer}>
+                            <Play size={20} color="#FFFFFF" fill="#FFFFFF" />
+                          </View>
+                        </View>
+                      </View>
+                    ) : (
+                      <View style={styles.gridImagePlaceholder}>
+                        <Text style={styles.gridPlaceholderText}>No Media</Text>
+                      </View>
+                    )}
                   </TouchableOpacity>
-                )}
-              </View>
-            ))
+                  {isOwner && (
+                    <TouchableOpacity
+                      style={styles.gridMoreBtn}
+                      onPress={() => { setSelectedPostId(post.id); setSelectedFromTab('saved'); setPostSheetOpen(true); }}
+                    >
+                      <MoreHorizontal size={18} color="#111827" />
+                    </TouchableOpacity>
+                  )}
+                </View>
+              );
+            })
           ) : (
             <View style={styles.emptyState}>
               <Text style={styles.emptyStateText}>No saved posts yet</Text>
@@ -1336,6 +1410,46 @@ const styles = StyleSheet.create({
   gridPlaceholderText: {
     fontSize: 12,
     color: '#9CA3AF',
+  },
+  // Video support styles (Instagram-style)
+  gridMediaContainer: {
+    width: '100%',
+    height: '100%',
+    position: 'relative',
+  },
+  videoOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: 'rgba(0, 0, 0, 0.2)',
+  },
+  playIconContainer: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: 'rgba(0, 0, 0, 0.6)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.3,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  videoPlaceholder: {
+    backgroundColor: '#1F2937',
+    gap: 8,
+  },
+  videoPlaceholderText: {
+    fontSize: 11,
+    fontFamily: 'Inter-SemiBold',
+    color: '#FFFFFF',
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
   },
   gridMoreBtn: {
     position: 'absolute',

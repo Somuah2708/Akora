@@ -8,6 +8,8 @@ import { useAuth } from '@/hooks/useAuth';
 import { Video, ResizeMode, Audio } from 'expo-av';
 import YouTubePlayer from '@/components/YouTubePlayer';
 import { isYouTubeUrl, getYouTubeThumbnail, extractYouTubeVideoId } from '@/lib/youtube';
+import ExpandableText from '@/components/ExpandableText';
+import { useVideoSettings } from '@/contexts/VideoSettingsContext';
 
 SplashScreen.preventAutoHideAsync();
 
@@ -147,6 +149,7 @@ interface PostWithUser extends Post {
 export default function HomeScreen() {
   const router = useRouter();
   const { user, profile } = useAuth();
+  const { isMuted } = useVideoSettings();
   const [posts, setPosts] = useState<PostWithUser[]>([]);
   const [loading, setLoading] = useState(true);
   const [carouselIndices, setCarouselIndices] = useState<{ [key: string]: number }>({});
@@ -811,8 +814,8 @@ export default function HomeScreen() {
                           useNativeControls
                           resizeMode={ResizeMode.COVER}
                           isLooping
-                          isMuted={false}
-                          volume={1.0}
+                          isMuted={isMuted}
+                          volume={isMuted ? 0 : 1.0}
                           onError={(err) => console.warn('Video play error (carousel item)', err)}
                         />
                       </View>
@@ -876,8 +879,8 @@ export default function HomeScreen() {
                     useNativeControls
                     resizeMode={ResizeMode.COVER}
                     isLooping
-                    isMuted={false}
-                    volume={1.0}
+                    isMuted={isMuted}
+                    volume={isMuted ? 0 : 1.0}
                     onError={(err) => console.warn('Video play error (single)', err)}
                   />
                 </View>
@@ -921,12 +924,17 @@ export default function HomeScreen() {
               <Text style={styles.postLikes}>{post.likes || 0} {post.likes === 1 ? 'like' : 'likes'}</Text>
 
               {/* Post Caption */}
-              <View style={styles.postCaption}>
-                <Text style={styles.postCaptionText}>
-                  <Text style={styles.postCaptionUsername}>{post.user.full_name}</Text>
-                  {' '}{post.content}
-                </Text>
-              </View>
+              {post.content && (
+                <View style={styles.postCaption}>
+                  <ExpandableText
+                    text={post.content}
+                    username={post.user.full_name}
+                    numberOfLines={2}
+                    style={styles.postCaptionText}
+                    usernameStyle={styles.postCaptionUsername}
+                  />
+                </View>
+              )}
 
               {/* Post Comments Count */}
               {post.comments_count !== undefined && post.comments_count > 0 ? (

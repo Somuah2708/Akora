@@ -18,6 +18,7 @@ import {
   MoreHorizontal,
   Trash,
   ArrowLeft,
+  Play,
 } from 'lucide-react-native';
 import type { LucideIcon } from 'lucide-react-native';
 import { useAuth } from '@/hooks/useAuth';
@@ -25,6 +26,7 @@ import { useToast } from '@/components/Toast';
 import { supabase } from '@/lib/supabase';
 import { INTEREST_LIBRARY, type InterestOptionId } from '@/lib/interest-data';
 import VisitorActions from '@/components/VisitorActions';
+import { Video, ResizeMode } from 'expo-av';
 
 const { width, height } = Dimensions.get('window');
 const GRID_ITEM_SIZE = (width - 6) / 3;
@@ -612,17 +614,54 @@ export default function UserProfileScreen() {
         {/* Posts Grid */}
         <View style={styles.grid}>
           {userPosts.map((post) => {
-            const thumb = post.image_url || (post.image_urls?.[0]);
+            // Determine if this is a video post
+            const hasVideo = !!(post.video_url || (post.video_urls && post.video_urls.length > 0));
+            const hasImage = !!(post.image_url || (post.image_urls && post.image_urls.length > 0));
+            const videoUrl = post.video_url || (post.video_urls && post.video_urls[0]);
+            
+            // Get thumbnail: prefer image, fallback to video first frame
+            let thumbnail = null;
+            if (hasImage) {
+              thumbnail = post.image_url || (Array.isArray(post.image_urls) && post.image_urls.length > 0 ? post.image_urls[0] : null);
+            }
+
             return (
               <TouchableOpacity
                 key={post.id}
                 style={styles.gridItem}
                 onPress={() => router.push(`/post/${post.id}`)}
               >
-                {thumb ? (
-                  <Image source={{ uri: thumb }} style={styles.gridImage} />
+                {thumbnail ? (
+                  <View style={styles.gridMediaContainer}>
+                    <Image source={{ uri: thumbnail }} style={styles.gridImage} />
+                    {hasVideo && (
+                      <View style={styles.videoOverlay}>
+                        <View style={styles.playIconContainer}>
+                          <Play size={20} color="#FFFFFF" fill="#FFFFFF" />
+                        </View>
+                      </View>
+                    )}
+                  </View>
+                ) : hasVideo && videoUrl ? (
+                  <View style={styles.gridMediaContainer}>
+                    <Video
+                      source={{ uri: videoUrl }}
+                      style={styles.gridImage}
+                      resizeMode={ResizeMode.COVER}
+                      shouldPlay={false}
+                      isMuted={true}
+                      positionMillis={100}
+                    />
+                    <View style={styles.videoOverlay}>
+                      <View style={styles.playIconContainer}>
+                        <Play size={20} color="#FFFFFF" fill="#FFFFFF" />
+                      </View>
+                    </View>
+                  </View>
                 ) : (
-                  <View style={[styles.gridImage, { backgroundColor: '#F0F0F0' }]} />
+                  <View style={[styles.gridImage, { backgroundColor: '#F0F0F0', justifyContent: 'center', alignItems: 'center' }]}>
+                    <Text style={{ fontSize: 12, color: '#9CA3AF' }}>No Media</Text>
+                  </View>
                 )}
               </TouchableOpacity>
             );
@@ -736,6 +775,48 @@ const styles = StyleSheet.create({
   gridImage: {
     width: '100%',
     height: '100%',
+  },
+  // Video support styles (Instagram-style)
+  gridMediaContainer: {
+    width: '100%',
+    height: '100%',
+    position: 'relative',
+  },
+  videoOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: 'rgba(0, 0, 0, 0.2)',
+  },
+  playIconContainer: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: 'rgba(0, 0, 0, 0.6)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.3,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  videoPlaceholder: {
+    backgroundColor: '#1F2937',
+    justifyContent: 'center',
+    alignItems: 'center',
+    gap: 8,
+  },
+  videoPlaceholderText: {
+    fontSize: 11,
+    fontFamily: 'Inter-SemiBold',
+    color: '#FFFFFF',
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
   },
   loadingContainer: {
     flex: 1,

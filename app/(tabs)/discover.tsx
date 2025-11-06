@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState, useRef } from 'react';
 import { View, Text, StyleSheet, ScrollView, Image, TouchableOpacity, Dimensions, ActivityIndicator, RefreshControl, Modal, TextInput } from 'react-native';
 import { useFonts, Inter_400Regular, Inter_600SemiBold } from '@expo-google-fonts/inter';
 import { useRouter, useLocalSearchParams } from 'expo-router';
@@ -11,9 +11,11 @@ import { fetchDiscoverFeed, type DiscoverItem } from '@/lib/discover';
 import { INTEREST_LIBRARY, type InterestCategoryDefinition, type InterestOptionId } from '@/lib/interest-data';
 import { Video, ResizeMode, Audio } from 'expo-av';
 import YouTubePlayer from '@/components/YouTubePlayer';
+import ExpandableText from '@/components/ExpandableText';
+import { useVideoSettings } from '@/contexts/VideoSettingsContext';
 // Using the same simple horizontal ScrollView pattern as the Post detail screen
 
-const { width } = Dimensions.get('window');
+const { width, height } = Dimensions.get('window');
 
 function getTimeAgo(dateString: string): string {
   const now = new Date();
@@ -81,10 +83,17 @@ interface CarouselIndices {
   [key: string]: number;
 }
 
+interface PostLayout {
+  id: string;
+  y: number;
+  height: number;
+}
+
 export default function DiscoverScreen() {
   const router = useRouter();
   const params = useLocalSearchParams();
   const { user } = useAuth();
+  const { isMuted, setIsMuted } = useVideoSettings();
   const [activeFilter, setActiveFilter] = useState<'all' | 'friends' | string>('all');
   const [discoverFeed, setDiscoverFeed] = useState<DiscoverItem[]>([]);
   const [userInterests, setUserInterests] = useState<Set<string>>(new Set());
@@ -92,6 +101,10 @@ export default function DiscoverScreen() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [carouselIndices, setCarouselIndices] = useState<CarouselIndices>({});
+  const [visibleVideos, setVisibleVideos] = useState<Set<string>>(new Set());
+  const [postLayouts, setPostLayouts] = useState<PostLayout[]>([]);
+  const [scrollY, setScrollY] = useState(0);
+  const scrollViewRef = useRef<ScrollView>(null);
   const [interestModalVisible, setInterestModalVisible] = useState(false);
   const [interestSearch, setInterestSearch] = useState('');
   const [expandedCategories, setExpandedCategories] = useState<Set<string>>(new Set());
@@ -187,6 +200,38 @@ export default function DiscoverScreen() {
   const closeInterestModal = useCallback(() => {
     setInterestModalVisible(false);
   }, []);
+
+  // Calculate which videos are in viewport (50%+ visible)
+  const updateVisibleVideos = useCallback(() => {
+    const viewportTop = scrollY;
+    const viewportBottom = scrollY + height;
+    const threshold = 0.5; // 50% visibility required
+
+    const visible = new Set<string>();
+
+    postLayouts.forEach((layout) => {
+      const postTop = layout.y;
+      const postBottom = layout.y + layout.height;
+
+      // Calculate visible portion
+      const visibleTop = Math.max(postTop, viewportTop);
+      const visibleBottom = Math.min(postBottom, viewportBottom);
+      const visibleHeight = Math.max(0, visibleBottom - visibleTop);
+      const visibilityRatio = visibleHeight / layout.height;
+
+      // Only play if 50%+ visible
+      if (visibilityRatio >= threshold) {
+        visible.add(layout.id);
+      }
+    });
+
+    setVisibleVideos(visible);
+  }, [scrollY, postLayouts, height]);
+
+  // Update visible videos when scroll position or layouts change
+  useEffect(() => {
+    updateVisibleVideos();
+  }, [updateVisibleVideos]);
 
   const toggleCategoryExpansion = useCallback((categoryId: string) => {
     setExpandedCategories((prev) => {
@@ -1166,9 +1211,14 @@ export default function DiscoverScreen() {
       </Modal>
 
       <ScrollView 
+        ref={scrollViewRef}
         style={styles.scrollView}
         showsVerticalScrollIndicator={false} 
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
+        onScroll={(event) => {
+          setScrollY(event.nativeEvent.contentOffset.y);
+        }}
+        scrollEventThrottle={16}
       >
         {/* Header */}
         <View style={styles.headerWrapper}>
@@ -1246,7 +1296,17 @@ export default function DiscoverScreen() {
           discoverFeed
             .filter((item) => item.type === 'post') // Only show posts
             .map((item) => (
-            <View key={item.id} style={styles.postCard}>
+            <View 
+              key={item.id} 
+              style={styles.postCard}
+              onLayout={(event) => {
+                const { y, height } = event.nativeEvent.layout;
+                setPostLayouts((prev) => {
+                  const filtered = prev.filter((p) => p.id !== item.id);
+                  return [...filtered, { id: item.id, y, height }];
+                });
+              }}
+            >
               {/* Post Header */}
               <View style={styles.postHeader}>
                 <View style={styles.postHeaderLeft}>
@@ -1290,6 +1350,15 @@ export default function DiscoverScreen() {
                     showsHorizontalScrollIndicator={false}
                     removeClippedSubviews={false}
                     style={styles.carousel}
+                    onScroll={(event) => {
+                      const scrollX = event.nativeEvent.contentOffset.x;
+                      const currentIndex = Math.round(scrollX / width);
+                      setCarouselIndices({
+                        ...carouselIndices,
+                        [item.id]: currentIndex,
+                      });
+                    }}
+                    scrollEventThrottle={16}
                   >
                     {item.video_urls.map((videoUrl, index) => (
                       <View key={index} style={styles.mediaPage}>
@@ -1298,14 +1367,22 @@ export default function DiscoverScreen() {
                           style={styles.postImage}
                           useNativeControls
                           resizeMode={ResizeMode.COVER}
-                          isLooping={false}
-                          isMuted={false}
-                          volume={1.0}
+                          isLooping={true}
+                          shouldPlay={visibleVideos.has(item.id)}
+                          isMuted={isMuted}
+                          volume={isMuted ? 0 : 1.0}
                           onError={(err) => console.warn('Video play error (carousel item)', err)}
                         />
                       </View>
                     ))}
                   </ScrollView>
+                  {item.video_urls.length > 1 && (
+                    <View style={styles.carouselIndicator}>
+                      <Text style={styles.carouselIndicatorText}>
+                        {(carouselIndices[item.id] ?? 0) + 1}/{item.video_urls.length}
+                      </Text>
+                    </View>
+                  )}
                 </View>
               ) : item.image_urls && item.image_urls.length > 0 ? (
                 <View style={styles.carouselContainer}>
@@ -1315,6 +1392,14 @@ export default function DiscoverScreen() {
                     showsHorizontalScrollIndicator={false}
                     removeClippedSubviews={false}
                     style={styles.carousel}
+                    onScroll={(event) => {
+                      const scrollX = event.nativeEvent.contentOffset.x;
+                      const currentIndex = Math.round(scrollX / width);
+                      setCarouselIndices({
+                        ...carouselIndices,
+                        [item.id]: currentIndex,
+                      });
+                    }}
                     scrollEventThrottle={16}
                   >
                     {item.image_urls.map((imageUrl, index) => (
@@ -1333,6 +1418,13 @@ export default function DiscoverScreen() {
                       </TouchableOpacity>
                     ))}
                   </ScrollView>
+                  {item.image_urls.length > 1 && (
+                    <View style={styles.carouselIndicator}>
+                      <Text style={styles.carouselIndicatorText}>
+                        {(carouselIndices[item.id] ?? 0) + 1}/{item.image_urls.length}
+                      </Text>
+                    </View>
+                  )}
                 </View>
               ) : item.youtube_url ? (
                 <View style={styles.mediaPage}>
@@ -1345,9 +1437,10 @@ export default function DiscoverScreen() {
                     style={styles.postImage}
                     useNativeControls
                     resizeMode={ResizeMode.COVER}
-                    isLooping={false}
-                    isMuted={false}
-                    volume={1.0}
+                    isLooping={true}
+                    shouldPlay={visibleVideos.has(item.id)}
+                    isMuted={isMuted}
+                    volume={isMuted ? 0 : 1.0}
                     onError={(err) => console.warn('Video play error (single)', err)}
                   />
                 </View>
@@ -1400,14 +1493,17 @@ export default function DiscoverScreen() {
               <Text style={styles.postLikes}>{item.likes || 0} {item.likes === 1 ? 'like' : 'likes'}</Text>
 
               {/* Post Caption */}
-              <View style={styles.postCaption}>
-                <Text style={styles.postCaptionText}>
-                  <Text style={styles.postCaptionUsername}>
-                    {item.author?.full_name || 'Anonymous'}
-                  </Text>
-                  {' '}{item.description}
-                </Text>
-              </View>
+              {item.description && (
+                <View style={styles.postCaption}>
+                  <ExpandableText
+                    text={item.description}
+                    username={item.author?.full_name || 'Anonymous'}
+                    numberOfLines={2}
+                    style={styles.postCaptionText}
+                    usernameStyle={styles.postCaptionUsername}
+                  />
+                </View>
+              )}
 
               {/* Post Comments Count */}
               {item.comments !== undefined && item.comments > 0 ? (
