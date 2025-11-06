@@ -99,6 +99,7 @@ export default function DiscoverScreen() {
   const [selectedPostForShare, setSelectedPostForShare] = useState<DiscoverItem | null>(null);
   const [friendsList, setFriendsList] = useState<any[]>([]);
   const [searchFriends, setSearchFriends] = useState('');
+  const [loadingFriends, setLoadingFriends] = useState(false);
 
   const interestKey = useMemo(
     () => Array.from(userInterests).sort().join(','),
@@ -694,10 +695,15 @@ export default function DiscoverScreen() {
   const handleSharePress = async (item: DiscoverItem) => {
     if (!user?.id) return;
     setSelectedPostForShare(item);
+    setShareModalVisible(true); // Show modal immediately
+    setLoadingFriends(true); // Show loading state
     
-    // Fetch friends list
+    // Fetch friends list in background
     try {
-      const { data: friendsData, error } = await supabase
+      console.log('📋 Fetching friends list...');
+      
+      // Fetch where current user is user_id (you added them)
+      const { data: friendsData, error: friendsError } = await supabase
         .from('friends')
         .select(`
           friend_id,
@@ -705,10 +711,15 @@ export default function DiscoverScreen() {
         `)
         .eq('user_id', user.id);
       
-      if (error) throw error;
+      if (friendsError) {
+        console.error('Error fetching friends:', friendsError);
+        throw friendsError;
+      }
       
-      // Also get reverse friendships
-      const { data: reverseFriendsData } = await supabase
+      console.log('👥 Friends where you are user_id:', friendsData?.length || 0);
+      
+      // Fetch where current user is friend_id (they added you)
+      const { data: reverseFriendsData, error: reverseError } = await supabase
         .from('friends')
         .select(`
           user_id,
@@ -716,18 +727,38 @@ export default function DiscoverScreen() {
         `)
         .eq('friend_id', user.id);
       
+      if (reverseError) {
+        console.error('Error fetching reverse friends:', reverseError);
+        throw reverseError;
+      }
+      
+      console.log('👥 Friends where you are friend_id:', reverseFriendsData?.length || 0);
+      
+      // Combine both directions
       const allFriends = [
         ...(friendsData || []).map((f: any) => f.friend).filter(Boolean),
         ...(reverseFriendsData || []).map((f: any) => f.friend).filter(Boolean)
       ];
       
-      // Remove duplicates
+      console.log('👥 Total friends before deduplication:', allFriends.length);
+      
+      // Remove duplicates by id
       const uniqueFriends = Array.from(new Map(allFriends.map(f => [f.id, f])).values());
       
+      console.log('✅ Unique friends to display:', uniqueFriends.length);
+      console.log('Friends list:', uniqueFriends.map(f => f.full_name || f.username).join(', '));
+      
       setFriendsList(uniqueFriends);
-      setShareModalVisible(true);
+      
+      if (uniqueFriends.length === 0) {
+        console.log('⚠️ No friends found. User may need to add friends first.');
+      }
+      
     } catch (error) {
-      console.error('Error fetching friends:', error);
+      console.error('❌ Error fetching friends:', error);
+      setFriendsList([]); // Show empty state
+    } finally {
+      setLoadingFriends(false);
     }
   };
 
@@ -735,46 +766,86 @@ export default function DiscoverScreen() {
     if (!user?.id || !selectedPostForShare?.sourceId) return;
     
     try {
-      // Create or get existing chat with this friend
-      const { data: existingChat } = await supabase
-        .from('chats')
-        .select('id')
-        .or(`and(user1_id.eq.${user.id},user2_id.eq.${friendId}),and(user1_id.eq.${friendId},user2_id.eq.${user.id})`)
-        .maybeSingle();
+      // Find existing direct chat between these two users
+      const { data: existingChats } = await supabase
+        .from('chat_participants')
+        .select('chat_id, chats!inner(id, type)')
+        .eq('user_id', user.id);
       
-      let chatId = existingChat?.id;
+      let chatId = null;
+      
+      if (existingChats && existingChats.length > 0) {
+        // Check if any of these chats also includes the friend
+        for (const chat of existingChats) {
+          const { data: friendInChat } = await supabase
+            .from('chat_participants')
+            .select('user_id')
+            .eq('chat_id', chat.chat_id)
+            .eq('user_id', friendId)
+            .maybeSingle();
+          
+          if (friendInChat) {
+            chatId = chat.chat_id;
+            break;
+          }
+        }
+      }
       
       if (!chatId) {
-        // Create new chat
+        // Create new direct chat
         const { data: newChat, error: chatError } = await supabase
           .from('chats')
           .insert({
-            user1_id: user.id,
-            user2_id: friendId,
+            type: 'direct',
+            name: null,
           })
           .select('id')
           .single();
         
         if (chatError) throw chatError;
         chatId = newChat.id;
+        
+        // Add both participants
+        const { error: participantsError } = await supabase
+          .from('chat_participants')
+          .insert([
+            { chat_id: chatId, user_id: user.id },
+            { chat_id: chatId, user_id: friendId }
+          ]);
+        
+        if (participantsError) throw participantsError;
       }
       
-      // Send message with post link
-      const postUrl = `akora://post/${selectedPostForShare.sourceId}`;
-      const messageText = `Check out this post: ${selectedPostForShare.title || selectedPostForShare.description.substring(0, 50)}... ${postUrl}`;
-      
+      // Send message with post (Instagram-style: send as post type, not text)
       const { error: messageError } = await supabase
         .from('messages')
         .insert({
           chat_id: chatId,
           sender_id: user.id,
-          content: messageText,
-          post_id: selectedPostForShare.sourceId, // Store post reference
+          message_type: 'post', // Mark as post share
+          content: '', // Empty content for post shares
+          post_id: selectedPostForShare.sourceId, // Reference to the shared post
         });
       
       if (messageError) throw messageError;
       
-      // Increment share count
+      // ALSO send to direct_messages table for backward compatibility with existing chat screen
+      const { error: dmError } = await supabase
+        .from('direct_messages')
+        .insert({
+          sender_id: user.id,
+          receiver_id: friendId,
+          message: '', // Empty for shared posts
+          message_type: 'post', // Mark as post share
+          post_id: selectedPostForShare.sourceId, // Reference to the shared post
+        });
+      
+      if (dmError) {
+        console.error('Error sending to direct_messages:', dmError);
+        // Don't throw - the main message was sent successfully
+      }
+      
+      // Track share
       const { error: shareError } = await supabase
         .from('post_shares')
         .insert({
@@ -784,7 +855,7 @@ export default function DiscoverScreen() {
       
       if (shareError) console.error('Error tracking share:', shareError);
       
-      console.log('✅ Post shared successfully');
+      console.log('✅ Post shared successfully to both chat systems');
       
       // Show success feedback
       const friend = friendsList.find(f => f.id === friendId);
@@ -1033,52 +1104,61 @@ export default function DiscoverScreen() {
 
             {/* Friends List */}
             <ScrollView style={styles.shareFriendsList} showsVerticalScrollIndicator={false}>
-              {friendsList.length === 0 ? (
+              {loadingFriends ? (
+                <View style={styles.shareLoadingState}>
+                  <ActivityIndicator size="large" color="#0EA5E9" />
+                  <Text style={styles.shareLoadingText}>Loading friends...</Text>
+                </View>
+              ) : friendsList.length === 0 ? (
                 <View style={styles.shareEmptyState}>
                   <Users size={48} color="#D1D5DB" strokeWidth={2} />
                   <Text style={styles.shareEmptyText}>No friends yet</Text>
                   <Text style={styles.shareEmptySubtext}>Add friends to share posts with them</Text>
                 </View>
               ) : (
-                friendsList
-                  .filter(friend => 
-                    searchFriends === '' || 
-                    friend.full_name?.toLowerCase().includes(searchFriends.toLowerCase()) ||
-                    friend.username?.toLowerCase().includes(searchFriends.toLowerCase())
-                  )
-                  .map((friend) => (
-                    <TouchableOpacity
-                      key={friend.id}
-                      style={styles.shareFriendItem}
-                      onPress={() => {
-                        handleSendToFriend(friend.id);
-                        setShareModalVisible(false);
-                        setSearchFriends('');
-                      }}
-                      activeOpacity={0.7}
-                    >
-                      <View style={styles.shareFriendLeft}>
-                        {friend.avatar_url ? (
-                          <Image source={{ uri: friend.avatar_url }} style={styles.shareFriendAvatar} />
-                        ) : (
-                          <View style={[styles.shareFriendAvatar, styles.shareFriendAvatarPlaceholder]}>
-                            <Text style={styles.shareFriendAvatarText}>
-                              {friend.full_name?.[0]?.toUpperCase() || 'U'}
-                            </Text>
-                          </View>
-                        )}
-                        <View style={styles.shareFriendInfo}>
-                          <Text style={styles.shareFriendName}>{friend.full_name || 'Unknown'}</Text>
-                          {friend.username && (
-                            <Text style={styles.shareFriendUsername}>@{friend.username}</Text>
+                <>
+                  {(() => {
+                    const filteredFriends = friendsList.filter(friend => 
+                      searchFriends === '' || 
+                      friend.full_name?.toLowerCase().includes(searchFriends.toLowerCase()) ||
+                      friend.username?.toLowerCase().includes(searchFriends.toLowerCase())
+                    );
+                    console.log('🎯 Rendering friends:', filteredFriends.length, 'of', friendsList.length);
+                    return filteredFriends.map((friend) => (
+                      <TouchableOpacity
+                        key={friend.id}
+                        style={styles.shareFriendItem}
+                        onPress={() => {
+                          handleSendToFriend(friend.id);
+                          setShareModalVisible(false);
+                          setSearchFriends('');
+                        }}
+                        activeOpacity={0.7}
+                      >
+                        <View style={styles.shareFriendLeft}>
+                          {friend.avatar_url ? (
+                            <Image source={{ uri: friend.avatar_url }} style={styles.shareFriendAvatar} />
+                          ) : (
+                            <View style={[styles.shareFriendAvatar, styles.shareFriendAvatarPlaceholder]}>
+                              <Text style={styles.shareFriendAvatarText}>
+                                {friend.full_name?.[0]?.toUpperCase() || 'U'}
+                              </Text>
+                            </View>
                           )}
+                          <View style={styles.shareFriendInfo}>
+                            <Text style={styles.shareFriendName}>{friend.full_name || 'Unknown'}</Text>
+                            {friend.username && (
+                              <Text style={styles.shareFriendUsername}>@{friend.username}</Text>
+                            )}
+                          </View>
                         </View>
-                      </View>
-                      <View style={styles.shareSendButton}>
-                        <Send size={20} color="#0EA5E9" strokeWidth={2} />
-                      </View>
-                    </TouchableOpacity>
-                  ))
+                        <View style={styles.shareSendButton}>
+                          <Send size={20} color="#0EA5E9" strokeWidth={2} />
+                        </View>
+                      </TouchableOpacity>
+                    ));
+                  })()}
+                </>
               )}
             </ScrollView>
           </View>
@@ -1895,8 +1975,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#FFFFFF',
     borderTopLeftRadius: 20,
     borderTopRightRadius: 20,
-    maxHeight: '80%',
-    paddingBottom: 40,
+    height: '80%',
   },
   shareModalHeader: {
     flexDirection: 'row',
@@ -1983,6 +2062,18 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     paddingVertical: 60,
     paddingHorizontal: 40,
+  },
+  shareLoadingState: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 60,
+    paddingHorizontal: 40,
+  },
+  shareLoadingText: {
+    fontSize: 16,
+    fontFamily: 'Inter-Medium',
+    color: '#6B7280',
+    marginTop: 16,
   },
   shareEmptyText: {
     fontSize: 18,

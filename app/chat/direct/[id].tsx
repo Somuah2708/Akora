@@ -101,14 +101,46 @@ export default function DirectMessageScreen() {
             schema: 'public',
             table: 'direct_messages',
           },
-          (payload) => {
+          async (payload) => {
             const newMessage = payload.new as DirectMessage;
             // Only handle INCOMING messages to avoid duplicating our own optimistic sends
             if (!(newMessage.sender_id === friendId && newMessage.receiver_id === user.id)) {
               return;
             }
+            
+            // If it's a shared post, fetch the post data
+            let messageWithPost = newMessage;
+            if (newMessage.message_type === 'post' && (newMessage as any).post_id) {
+              try {
+                const { data: post, error: postError } = await supabase
+                  .from('posts')
+                  .select(`
+                    id,
+                    content,
+                    image_url,
+                    image_urls,
+                    video_url,
+                    video_urls,
+                    user_id,
+                    created_at,
+                    profiles!posts_user_id_fkey(id, username, full_name, avatar_url)
+                  `)
+                  .eq('id', (newMessage as any).post_id)
+                  .single();
+                
+                if (postError) {
+                  console.error('Error fetching shared post in real-time:', postError);
+                } else {
+                  messageWithPost = { ...newMessage, post };
+                  console.log('📬 Received shared post in real-time:', post?.content?.substring(0, 50));
+                }
+              } catch (error) {
+                console.error('Error fetching shared post in real-time:', error);
+              }
+            }
+            
             setMessages((prev) => {
-              const next = upsertMessage(prev, newMessage);
+              const next = upsertMessage(prev, messageWithPost);
               setCachedThread(user.id, friendId, next, friendProfile);
               return next;
             });
@@ -180,22 +212,62 @@ export default function DirectMessageScreen() {
 
     try {
       if (!skipSpinner) setLoading(true);
+      
+      // Get messages with shared post data (Instagram-style)
       const msgs = await getDirectMessages(user.id, friendId);
+      
+      // Fetch shared posts for messages with post_id
+      const messagesWithPosts = await Promise.all(
+        msgs.map(async (msg) => {
+          if (msg.message_type === 'post' && (msg as any).post_id) {
+            try {
+              const { data: post, error: postError } = await supabase
+                .from('posts')
+                .select(`
+                  id,
+                  content,
+                  image_url,
+                  image_urls,
+                  video_url,
+                  video_urls,
+                  user_id,
+                  created_at,
+                  profiles!posts_user_id_fkey(id, username, full_name, avatar_url)
+                `)
+                .eq('id', (msg as any).post_id)
+                .single();
+              
+              if (postError) {
+                console.error('Error fetching shared post:', postError);
+                return msg;
+              }
+              
+              console.log('📦 Loaded shared post:', post?.content?.substring(0, 50));
+              return { ...msg, post };
+            } catch (error) {
+              console.error('Error fetching shared post:', error);
+              return msg;
+            }
+          }
+          return msg;
+        })
+      );
+      
       // Determine first unread index before marking as read
-      const idx = msgs.findIndex((m) => m.receiver_id === user.id && !m.is_read);
+      const idx = messagesWithPosts.findIndex((m) => m.receiver_id === user.id && !m.is_read);
       setFirstUnreadIndex(idx >= 0 ? idx : null);
-      setMessages(msgs);
+      setMessages(messagesWithPosts);
       // Persist to cache
-      setCachedThread(user.id, friendId, msgs, friendProfile);
+      setCachedThread(user.id, friendId, messagesWithPosts, friendProfile);
 
       // Mark unread messages as read
-      const unreadMessages = msgs.filter(
+      const unreadMessages = messagesWithPosts.filter(
         (m) => m.receiver_id === user.id && !m.is_read
       );
       await Promise.all(unreadMessages.map((m) => markMessageAsRead(m.id)));
       
       // Mark all as delivered
-      const undeliveredMessages = msgs.filter(
+      const undeliveredMessages = messagesWithPosts.filter(
         (m) => m.receiver_id === user.id && !m.delivered_at
       );
       await Promise.all(undeliveredMessages.map((m) => markMessageAsDelivered(m.id)));
@@ -225,6 +297,10 @@ export default function DirectMessageScreen() {
     const status = await getUserOnlineStatus(friendId);
     setFriendIsOnline(status.isOnline);
     setFriendLastSeen(status.lastSeen);
+  };
+
+  const navigateToPost = (postId: string) => {
+    router.push(`/post/${postId}`);
   };
 
   const setupTypingIndicator = useCallback(() => {
@@ -750,8 +826,51 @@ export default function DirectMessageScreen() {
               </TouchableOpacity>
             )}
 
+            {/* Shared Post (Instagram-style) */}
+            {item.message_type === 'post' && (item as any).post && (
+              <TouchableOpacity 
+                style={styles.sharedPostCard}
+                onPress={() => navigateToPost((item as any).post.id)}
+                activeOpacity={0.8}
+              >
+                <View style={styles.sharedPostHeader}>
+                  {(item as any).post.profiles?.avatar_url ? (
+                    <Image 
+                      source={{ uri: (item as any).post.profiles.avatar_url }} 
+                      style={styles.sharedPostAvatar} 
+                    />
+                  ) : (
+                    <View style={[styles.sharedPostAvatar, styles.avatarPlaceholder]}>
+                      <Text style={styles.sharedPostAvatarText}>
+                        {(item as any).post.profiles?.full_name?.[0]?.toUpperCase() || 'U'}
+                      </Text>
+                    </View>
+                  )}
+                  <Text style={styles.sharedPostUsername}>
+                    {(item as any).post.profiles?.full_name || (item as any).post.profiles?.username || 'User'}
+                  </Text>
+                </View>
+                
+                {/* Show first image from image_urls array or single image_url */}
+                {((item as any).post.image_urls?.[0] || (item as any).post.image_url) && (
+                  <Image 
+                    source={{ uri: (item as any).post.image_urls?.[0] || (item as any).post.image_url }} 
+                    style={styles.sharedPostImage}
+                    resizeMode="cover"
+                  />
+                )}
+                
+                {/* Show content (not description) */}
+                {(item as any).post.content && (
+                  <Text style={styles.sharedPostDescription} numberOfLines={2}>
+                    {(item as any).post.content}
+                  </Text>
+                )}
+              </TouchableOpacity>
+            )}
+
             {/* Text / Caption (only for text messages or non-empty captions) */}
-            {(item.message_type === 'text' || (item.message_type !== 'voice' && item.message_type !== 'document' && item.message)) && (
+            {(item.message_type === 'text' || (item.message_type !== 'voice' && item.message_type !== 'document' && item.message_type !== 'post' && item.message)) && (
               <Text
                 style={[
                   styles.messageText,
@@ -1519,5 +1638,54 @@ const styles = StyleSheet.create({
     color: '#1F2937',
     fontWeight: '600',
     letterSpacing: -0.2,
+  },
+  // Shared Post Card Styles (Instagram-style)
+  sharedPostCard: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+    padding: 12,
+    marginBottom: 8,
+    width: 260,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.1,
+    shadowRadius: 3,
+    elevation: 2,
+  },
+  sharedPostHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 10,
+  },
+  sharedPostAvatar: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    marginRight: 10,
+  },
+  sharedPostAvatarText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#FFFFFF',
+  },
+  sharedPostUsername: {
+    fontSize: 14,
+    fontFamily: 'Inter-SemiBold',
+    color: '#111827',
+    fontWeight: '600',
+  },
+  sharedPostImage: {
+    width: '100%',
+    height: 180,
+    borderRadius: 8,
+    marginBottom: 10,
+    backgroundColor: '#F3F4F6',
+  },
+  sharedPostDescription: {
+    fontSize: 13,
+    color: '#6B7280',
+    lineHeight: 18,
   },
 });

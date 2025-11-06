@@ -41,8 +41,25 @@ export type DirectMessage = {
   sender_id: string;
   receiver_id: string;
   message: string;
-  message_type?: 'text' | 'image' | 'video' | 'voice' | 'document';
+  message_type?: 'text' | 'image' | 'video' | 'voice' | 'document' | 'post';
   media_url?: string;
+  post_id?: string;
+  post?: {
+    id: string;
+    content: string;
+    image_url?: string;
+    image_urls?: string[];
+    video_url?: string;
+    video_urls?: string[];
+    user_id: string;
+    created_at: string;
+    profiles?: {
+      id: string;
+      username: string;
+      full_name: string;
+      avatar_url?: string;
+    };
+  };
   created_at: string;
   is_read: boolean;
   read_at?: string;
