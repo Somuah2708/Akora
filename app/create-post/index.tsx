@@ -2,7 +2,9 @@ import { View, Text, StyleSheet, TextInput, TouchableOpacity, ScrollView, Alert,
 import { useFonts, Inter_400Regular, Inter_600SemiBold } from '@expo-google-fonts/inter';
 import { useEffect, useState } from 'react';
 import { SplashScreen, useLocalSearchParams, useRouter } from 'expo-router';
-import { ArrowLeft, Image as ImageIcon, Send, Globe, Users, Lock, X, ChevronDown, Video as VideoIcon, Link as LinkIcon } from 'lucide-react-native';
+import { ArrowLeft, Image as ImageIcon, Send, Globe, Users, Lock, X, ChevronDown, Video as VideoIcon, Link as LinkIcon, Edit3 } from 'lucide-react-native';
+import ImageCropperModal from '@/components/ImageCropperModal';
+import VideoTrimModal from '@/components/VideoTrimModal';
 import * as ImagePicker from 'expo-image-picker';
 import { Video, ResizeMode } from 'expo-av';
 import { supabase } from '@/lib/supabase';
@@ -58,6 +60,8 @@ export default function CreatePostScreen() {
   const { user } = useAuth();
   const [content, setContent] = useState('');
   const [media, setMedia] = useState<MediaItem[]>([]);
+  const [cropIndex, setCropIndex] = useState<number | null>(null);
+  const [trimIndex, setTrimIndex] = useState<number | null>(null);
   const [youtubeUrl, setYoutubeUrl] = useState('');
   const [category, setCategory] = useState('general');
   const [visibility, setVisibility] = useState('friends_only');
@@ -439,6 +443,18 @@ export default function CreatePostScreen() {
                   >
                     <X size={16} color="#FFFFFF" />
                   </TouchableOpacity>
+                  {/* Edit button */}
+                  {mediaItem.type !== 'youtube' && (
+                    <TouchableOpacity
+                      style={styles.editMediaButton}
+                      onPress={() => {
+                        if (mediaItem.type === 'image') setCropIndex(index);
+                        else if (mediaItem.type === 'video') setTrimIndex(index);
+                      }}
+                    >
+                      <Edit3 size={16} color="#FFFFFF" />
+                    </TouchableOpacity>
+                  )}
                   <View style={styles.imageCounter}>
                     <Text style={styles.imageCounterText}>{index + 1}/{media.length}</Text>
                   </View>
@@ -675,6 +691,32 @@ export default function CreatePostScreen() {
           </View>
         </View>
       </Modal>
+
+      {/* Image Cropper */}
+      {cropIndex !== null && media[cropIndex] && media[cropIndex].type === 'image' && (
+        <ImageCropperModal
+          visible={cropIndex !== null}
+          uri={media[cropIndex].uri}
+          onClose={() => setCropIndex(null)}
+          onDone={(croppedUri) => {
+            setMedia(prev => prev.map((m, i) => i === cropIndex ? { ...m, uri: croppedUri } : m));
+            setCropIndex(null);
+          }}
+        />
+      )}
+
+      {/* Video Trimmer */}
+      {trimIndex !== null && media[trimIndex] && media[trimIndex].type === 'video' && (
+        <VideoTrimModal
+          visible={trimIndex !== null}
+          uri={media[trimIndex].uri}
+          onClose={() => setTrimIndex(null)}
+          onDone={(trimmedUri) => {
+            setMedia(prev => prev.map((m, i) => i === trimIndex ? { ...m, uri: trimmedUri } : m));
+            setTrimIndex(null);
+          }}
+        />
+      )}
     </View>
   );
 }
@@ -757,6 +799,17 @@ const styles = StyleSheet.create({
     height: 28,
     borderRadius: 14,
     backgroundColor: 'rgba(0, 0, 0, 0.7)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  editMediaButton: {
+    position: 'absolute',
+    top: 8,
+    left: 8,
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: 'rgba(0,0,0,0.6)',
     justifyContent: 'center',
     alignItems: 'center',
   },
