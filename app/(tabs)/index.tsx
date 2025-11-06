@@ -649,7 +649,13 @@ export default function HomeScreen() {
         style={styles.categoriesContainer}
         contentContainerStyle={styles.categoriesContent}
       >
-        {(() => { const ICON_MAP: any = { BookOpen, PartyPopper, Calendar, TrendingUp, Users, Newspaper }; return (categoryTabs.length > 0 ? categoryTabs : DEFAULT_CATEGORY_TABS).map((category) => {
+        {(() => { 
+          const ICON_MAP: any = { BookOpen, PartyPopper, Calendar, TrendingUp, Users, Newspaper };
+          // Ensure Centenary routes to /centenary even if Supabase seed set it to /events
+          const tabsToUse = (categoryTabs.length > 0 ? categoryTabs : DEFAULT_CATEGORY_TABS).map((t: any) =>
+            t?.title === 'Centenary' && t?.route === '/events' ? { ...t, route: '/centenary' } : t
+          );
+          return tabsToUse.map((category: any) => {
           const IconComponent = ICON_MAP[(category as any).icon_name] || Users;
           const isActiveCategory = activeCategoryId === category.id;
           return (
