@@ -5,7 +5,7 @@ import { SplashScreen, useRouter, useFocusEffect } from 'expo-router';
 import { Heart, MessageCircle, Send, Bookmark, MoreHorizontal, Plus, BookOpen, PartyPopper, Calendar, TrendingUp, Users, Newspaper, Search, User, Edit3, Trash2, Play } from 'lucide-react-native';
 import { supabase, type Post, type Profile, type HomeFeaturedItem, type HomeCategoryTab } from '@/lib/supabase';
 import { useAuth } from '@/hooks/useAuth';
-import { Video, ResizeMode, Audio } from 'expo-av';
+import { Video, ResizeMode, Audio, InterruptionModeIOS, InterruptionModeAndroid } from 'expo-av';
 import YouTubePlayer from '@/components/YouTubePlayer';
 import { isYouTubeUrl, getYouTubeThumbnail, extractYouTubeVideoId } from '@/lib/youtube';
 import ExpandableText from '@/components/ExpandableText';
@@ -290,7 +290,15 @@ export default function HomeScreen() {
   useEffect(() => {
     (async () => {
       try {
-        await Audio.setAudioModeAsync({ playsInSilentModeIOS: true });
+        await Audio.setAudioModeAsync({
+          playsInSilentModeIOS: true,
+          staysActiveInBackground: false,
+          allowsRecordingIOS: false,
+          shouldDuckAndroid: true,
+          playThroughEarpieceAndroid: false,
+          interruptionModeIOS: InterruptionModeIOS.DoNotMix,
+          interruptionModeAndroid: InterruptionModeAndroid.DoNotMix,
+        });
       } catch (e) {
         console.warn('Audio mode setup failed', e);
       }
@@ -814,8 +822,7 @@ export default function HomeScreen() {
                           useNativeControls
                           resizeMode={ResizeMode.COVER}
                           isLooping
-                          isMuted={isMuted}
-                          volume={isMuted ? 0 : 1.0}
+                          volume={isMuted ? 0.0 : 1.0}
                           onError={(err) => console.warn('Video play error (carousel item)', err)}
                         />
                       </View>
@@ -879,8 +886,7 @@ export default function HomeScreen() {
                     useNativeControls
                     resizeMode={ResizeMode.COVER}
                     isLooping
-                    isMuted={isMuted}
-                    volume={isMuted ? 0 : 1.0}
+                    volume={isMuted ? 0.0 : 1.0}
                     onError={(err) => console.warn('Video play error (single)', err)}
                   />
                 </View>
@@ -926,12 +932,13 @@ export default function HomeScreen() {
               {/* Post Caption */}
               {post.content && (
                 <View style={styles.postCaption}>
+                  <Text style={styles.postCaptionUsername}>
+                    {post.user.full_name}
+                  </Text>
                   <ExpandableText
                     text={post.content}
-                    username={post.user.full_name}
                     numberOfLines={2}
-                    style={styles.postCaptionText}
-                    usernameStyle={styles.postCaptionUsername}
+                    captionStyle={styles.postCaptionText}
                   />
                 </View>
               )}
@@ -1207,6 +1214,9 @@ const styles = StyleSheet.create({
   },
   postCaptionUsername: {
     fontFamily: 'Inter-SemiBold',
+    fontSize: 14,
+    color: '#000000',
+    marginBottom: 2,
   },
   viewComments: {
     fontSize: 14,

@@ -241,7 +241,7 @@ export default function PostCommentsScreen() {
                 <ExpandableText
                   text={comment.content}
                   numberOfLines={3}
-                  style={styles.commentText}
+                  captionStyle={styles.commentText}
                 />
                 <View style={styles.commentActions}>
                   <TouchableOpacity 

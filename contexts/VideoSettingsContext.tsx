@@ -9,7 +9,7 @@ interface VideoSettingsContextType {
 const VideoSettingsContext = createContext<VideoSettingsContextType | undefined>(undefined);
 
 export function VideoSettingsProvider({ children }: { children: ReactNode }) {
-  const [isMuted, setIsMuted] = useState(true); // Start muted by default (Instagram behavior)
+  const [isMuted, setIsMuted] = useState(false); // Start unmuted for better iOS compatibility
 
   const toggleMute = () => {
     setIsMuted(prev => !prev);

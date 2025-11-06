@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useState, useRef } from 'react';
 import { View, Text, StyleSheet, ScrollView, Image, TouchableOpacity, Dimensions, ActivityIndicator, RefreshControl, Modal, TextInput } from 'react-native';
 import { useFonts, Inter_400Regular, Inter_600SemiBold } from '@expo-google-fonts/inter';
-import { useRouter, useLocalSearchParams } from 'expo-router';
+import { useRouter, useLocalSearchParams, useFocusEffect } from 'expo-router';
 import { Sparkles, Heart, MessageCircle, Bookmark, Lightbulb, SlidersHorizontal, Check, X, ChevronDown, Users, Camera, Send } from 'lucide-react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import type { LucideIcon } from 'lucide-react-native';
@@ -9,7 +9,7 @@ import { useAuth } from '@/hooks/useAuth';
 import { supabase } from '@/lib/supabase';
 import { fetchDiscoverFeed, type DiscoverItem } from '@/lib/discover';
 import { INTEREST_LIBRARY, type InterestCategoryDefinition, type InterestOptionId } from '@/lib/interest-data';
-import { Video, ResizeMode, Audio } from 'expo-av';
+import { Video, ResizeMode, Audio, InterruptionModeIOS, InterruptionModeAndroid } from 'expo-av';
 import YouTubePlayer from '@/components/YouTubePlayer';
 import ExpandableText from '@/components/ExpandableText';
 import { useVideoSettings } from '@/contexts/VideoSettingsContext';
@@ -102,6 +102,7 @@ export default function DiscoverScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [carouselIndices, setCarouselIndices] = useState<CarouselIndices>({});
   const [visibleVideos, setVisibleVideos] = useState<Set<string>>(new Set());
+  const [isScreenFocused, setIsScreenFocused] = useState(true);
   const [postLayouts, setPostLayouts] = useState<PostLayout[]>([]);
   const [scrollY, setScrollY] = useState(0);
   const scrollViewRef = useRef<ScrollView>(null);
@@ -425,12 +426,30 @@ export default function DiscoverScreen() {
           playsInSilentModeIOS: true,
           staysActiveInBackground: false,
           allowsRecordingIOS: false,
+          shouldDuckAndroid: true,
+          playThroughEarpieceAndroid: false,
+          interruptionModeIOS: InterruptionModeIOS.DoNotMix,
+          interruptionModeAndroid: InterruptionModeAndroid.DoNotMix,
         });
       } catch (e) {
         console.warn('Failed to set audio mode', e);
       }
     })();
   }, []);
+
+  // Stop all videos when screen loses focus (e.g., navigating to another tab)
+  useFocusEffect(
+    useCallback(() => {
+      // Screen is focused
+      setIsScreenFocused(true);
+      
+      return () => {
+        // Screen is unfocused - stop all videos
+        setIsScreenFocused(false);
+        setVisibleVideos(new Set());
+      };
+    }, [])
+  );
 
   // If routed with ?openInterestModal=1, open the interests modal on mount
   useEffect(() => {
@@ -1368,9 +1387,8 @@ export default function DiscoverScreen() {
                           useNativeControls
                           resizeMode={ResizeMode.COVER}
                           isLooping={true}
-                          shouldPlay={visibleVideos.has(item.id)}
-                          isMuted={isMuted}
-                          volume={isMuted ? 0 : 1.0}
+                          shouldPlay={isScreenFocused && visibleVideos.has(item.id)}
+                          volume={isMuted ? 0.0 : 1.0}
                           onError={(err) => console.warn('Video play error (carousel item)', err)}
                         />
                       </View>
@@ -1438,9 +1456,8 @@ export default function DiscoverScreen() {
                     useNativeControls
                     resizeMode={ResizeMode.COVER}
                     isLooping={true}
-                    shouldPlay={visibleVideos.has(item.id)}
-                    isMuted={isMuted}
-                    volume={isMuted ? 0 : 1.0}
+                    shouldPlay={isScreenFocused && visibleVideos.has(item.id)}
+                    volume={isMuted ? 0.0 : 1.0}
                     onError={(err) => console.warn('Video play error (single)', err)}
                   />
                 </View>
@@ -1495,12 +1512,13 @@ export default function DiscoverScreen() {
               {/* Post Caption */}
               {item.description && (
                 <View style={styles.postCaption}>
+                  <Text style={styles.postCaptionUsername}>
+                    {item.author?.full_name || 'Anonymous'}
+                  </Text>
                   <ExpandableText
                     text={item.description}
-                    username={item.author?.full_name || 'Anonymous'}
                     numberOfLines={2}
-                    style={styles.postCaptionText}
-                    usernameStyle={styles.postCaptionUsername}
+                    captionStyle={styles.postCaptionText}
                   />
                 </View>
               )}
@@ -2022,6 +2040,9 @@ const styles = StyleSheet.create({
   },
   postCaptionUsername: {
     fontFamily: 'Inter-SemiBold',
+    fontSize: 14,
+    color: '#000000',
+    marginBottom: 2,
   },
   viewComments: {
     fontSize: 14,

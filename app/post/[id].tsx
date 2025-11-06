@@ -208,12 +208,11 @@ export default function PostDetailScreen() {
 
         {/* Caption */}
         <View style={styles.captionBox}>
+          <Text style={styles.author}>{post.user?.full_name || 'User'}</Text>
           <ExpandableText
             text={post.content}
-            username={post.user?.full_name || 'User'}
             numberOfLines={3}
-            style={styles.caption}
-            usernameStyle={styles.author}
+            captionStyle={styles.caption}
           />
         </View>
       </ScrollView>
