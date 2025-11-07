@@ -2,15 +2,15 @@ import { View, Text, StyleSheet, TextInput, TouchableOpacity, ScrollView, Alert,
 import { useFonts, Inter_400Regular, Inter_600SemiBold } from '@expo-google-fonts/inter';
 import { useEffect, useRef, useState } from 'react';
 import { SplashScreen, useLocalSearchParams, useRouter } from 'expo-router';
-import { ArrowLeft, Image as ImageIcon, Send, Globe, Users, Lock, X, ChevronDown, Video as VideoIcon, Link as LinkIcon, Edit3 } from 'lucide-react-native';
+import { ArrowLeft, Image as ImageIcon, Send, Globe, Users, Lock, X, ChevronDown, Video as VideoIcon, Edit3, Sparkles, MessageSquare } from 'lucide-react-native';
 import MediaEditorModal from '@/components/MediaEditorModal';
 import * as ImagePicker from 'expo-image-picker';
 import { Video, ResizeMode } from 'expo-av';
 import { supabase } from '@/lib/supabase';
 import { INTEREST_LIBRARY } from '@/lib/interest-data';
 import { useAuth } from '@/hooks/useAuth';
-import { isYouTubeUrl, extractYouTubeVideoId, getYouTubeThumbnail } from '@/lib/youtube';
 import { isCloudinaryConfigured, processVideoWithCloudinary } from '@/lib/cloudinary';
+import { LinearGradient } from 'expo-linear-gradient';
 
 SplashScreen.preventAutoHideAsync();
 
@@ -50,8 +50,7 @@ const VISIBILITY_OPTIONS = [
 
 interface MediaItem {
   uri: string;
-  type: 'image' | 'video' | 'youtube';
-  videoId?: string; // For YouTube videos
+  type: 'image' | 'video';
   // Optional edit metadata for videos
   trimStart?: number;
   trimEnd?: number;
@@ -108,7 +107,6 @@ export default function CreatePostScreen() {
   const [media, setMedia] = useState<MediaItem[]>([]);
   const [editorVisible, setEditorVisible] = useState(false);
   const [currentEditItem, setCurrentEditItem] = useState<{ uri: string; type: 'image' | 'video'; index: number } | null>(null);
-  const [youtubeUrl, setYoutubeUrl] = useState('');
   const [category, setCategory] = useState('general');
   const [visibility, setVisibility] = useState('friends_only');
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -234,46 +232,16 @@ export default function CreatePostScreen() {
 
   const editMedia = (index: number) => {
     const mediaItem = media[index];
-    if (mediaItem.type !== 'youtube') {
-      setCurrentEditItem({
-        uri: mediaItem.uri,
-        type: mediaItem.type,
-        index,
-      });
-      setEditorVisible(true);
-    }
+    setCurrentEditItem({
+      uri: mediaItem.uri,
+      type: mediaItem.type,
+      index,
+    });
+    setEditorVisible(true);
   };
 
   const removeMedia = (index: number) => {
     setMedia(media.filter((_, i) => i !== index));
-  };
-
-  const addYouTubeVideo = () => {
-    if (!youtubeUrl.trim()) {
-      Alert.alert('Error', 'Please enter a YouTube URL');
-      return;
-    }
-
-    if (!isYouTubeUrl(youtubeUrl)) {
-      Alert.alert('Invalid URL', 'Please enter a valid YouTube video URL');
-      return;
-    }
-
-    if (media.length >= 20) {
-      Alert.alert('Limit Reached', 'You can only add up to 20 media items per post.');
-      return;
-    }
-
-    const videoId = extractYouTubeVideoId(youtubeUrl);
-    if (videoId) {
-      const newMedia: MediaItem = {
-        uri: youtubeUrl,
-        type: 'youtube',
-        videoId,
-      };
-      setMedia([...media, newMedia]);
-      setYoutubeUrl('');
-    }
   };
 
   const uploadMedia = async (uri: string, type: 'image' | 'video'): Promise<string | null> => {
@@ -378,59 +346,52 @@ export default function CreatePostScreen() {
       
       let uploadedImageUrls: string[] = [];
       let uploadedVideoUrls: string[] = [];
-      let youtubeUrls: string[] = [];
       
       if (media.length > 0) {
         console.log('Processing media...');
         // Process all media
         for (const mediaItem of media) {
-          if (mediaItem.type === 'youtube') {
-            // YouTube videos don't need upload, just save the URL
-            console.log('Adding YouTube video:', mediaItem.uri);
-            youtubeUrls.push(mediaItem.uri);
-          } else {
-            // Upload local images and videos
-            console.log('Uploading media:', mediaItem.uri, 'type:', mediaItem.type);
-            let url: string | null = null;
-            if (
-              mediaItem.type === 'video' &&
-              mediaItem.trimStart != null &&
-              mediaItem.trimEnd != null &&
-              mediaItem.trimEnd > mediaItem.trimStart &&
-              (mediaItem as any).requiresServerProcessing &&
-              isCloudinaryConfigured()
-            ) {
-              try {
-                url = await processVideoWithCloudinary(mediaItem.uri, {
-                  trimStart: mediaItem.trimStart,
-                  trimEnd: mediaItem.trimEnd,
-                  muted: mediaItem.muted,
-                });
-                console.log('Cloudinary processed URL:', url);
-              } catch (e) {
-                console.warn('Cloudinary processing failed, falling back to direct upload:', e);
-                url = await uploadMedia(mediaItem.uri, mediaItem.type);
-              }
-            } else {
-              // Default path: upload as-is (already edited on-device or no edits required)
+          // Upload local images and videos
+          console.log('Uploading media:', mediaItem.uri, 'type:', mediaItem.type);
+          let url: string | null = null;
+          if (
+            mediaItem.type === 'video' &&
+            mediaItem.trimStart != null &&
+            mediaItem.trimEnd != null &&
+            mediaItem.trimEnd > mediaItem.trimStart &&
+            (mediaItem as any).requiresServerProcessing &&
+            isCloudinaryConfigured()
+          ) {
+            try {
+              url = await processVideoWithCloudinary(mediaItem.uri, {
+                trimStart: mediaItem.trimStart,
+                trimEnd: mediaItem.trimEnd,
+                muted: mediaItem.muted,
+              });
+              console.log('Cloudinary processed URL:', url);
+            } catch (e) {
+              console.warn('Cloudinary processing failed, falling back to direct upload:', e);
               url = await uploadMedia(mediaItem.uri, mediaItem.type);
             }
-            if (url) {
-              console.log('Media uploaded:', url);
-              if (mediaItem.type === 'video') {
-                uploadedVideoUrls.push(url);
-                // Potential place to POST metadata (trim start/end, muted) to backend if required.
-                // await postVideoEditMetadata(url, mediaItem.trimStart, mediaItem.trimEnd, mediaItem.muted)
-              } else {
-                uploadedImageUrls.push(url);
-              }
+          } else {
+            // Default path: upload as-is (already edited on-device or no edits required)
+            url = await uploadMedia(mediaItem.uri, mediaItem.type);
+          }
+          if (url) {
+            console.log('Media uploaded:', url);
+            if (mediaItem.type === 'video') {
+              uploadedVideoUrls.push(url);
+              // Potential place to POST metadata (trim start/end, muted) to backend if required.
+              // await postVideoEditMetadata(url, mediaItem.trimStart, mediaItem.trimEnd, mediaItem.muted)
             } else {
-              console.log('Failed to upload media:', mediaItem.uri);
+              uploadedImageUrls.push(url);
             }
+          } else {
+            console.log('Failed to upload media:', mediaItem.uri);
           }
         }
         
-        if (uploadedImageUrls.length === 0 && uploadedVideoUrls.length === 0 && youtubeUrls.length === 0 && media.length > 0) {
+        if (uploadedImageUrls.length === 0 && uploadedVideoUrls.length === 0 && media.length > 0) {
           Alert.alert('Warning', 'Failed to process media. Post will be created without media.');
         }
       }
@@ -442,8 +403,8 @@ export default function CreatePostScreen() {
         image_urls: uploadedImageUrls.length > 0 ? uploadedImageUrls : null,
         video_url: uploadedVideoUrls.length > 0 ? uploadedVideoUrls[0] : null,
         video_urls: uploadedVideoUrls.length > 0 ? uploadedVideoUrls : null,
-        youtube_url: youtubeUrls.length > 0 ? youtubeUrls[0] : null,
-        youtube_urls: youtubeUrls.length > 0 ? youtubeUrls : null,
+        youtube_url: null,
+        youtube_urls: null,
         category,
         visibility,
       };
@@ -499,11 +460,20 @@ export default function CreatePostScreen() {
 
   return (
     <View style={styles.container}>
-      <View style={styles.header}>
+      {/* Modern Header with Gradient */}
+      <LinearGradient
+        colors={['#FFFFFF', '#F8FAFC']}
+        style={styles.header}
+      >
         <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
-          <ArrowLeft size={24} color="#1E293B" />
+          <View style={styles.backButtonCircle}>
+            <ArrowLeft size={22} color="#1E293B" />
+          </View>
         </TouchableOpacity>
-        <Text style={styles.title}>Create Post</Text>
+        <View style={styles.headerCenter}>
+          <Text style={styles.title}>Create Post</Text>
+          <Text style={styles.subtitle}>Share your thoughts</Text>
+        </View>
         <TouchableOpacity 
           style={[styles.submitButton, (!content.trim() || isSubmitting) && styles.submitButtonDisabled]}
           onPress={handleSubmit}
@@ -512,38 +482,51 @@ export default function CreatePostScreen() {
           {isSubmitting ? (
             <ActivityIndicator color="#FFFFFF" size="small" />
           ) : (
-            <Send size={20} color="#FFFFFF" />
+            <>
+              <Send size={18} color="#FFFFFF" />
+            </>
           )}
         </TouchableOpacity>
-      </View>
+      </LinearGradient>
 
-      <ScrollView style={styles.formContainer} showsVerticalScrollIndicator={false}>
-        <TextInput
-          style={styles.contentInput}
-          placeholder="What's on your mind?"
-          placeholderTextColor="#94A3B8"
-          multiline
-          value={content}
-          onChangeText={setContent}
-          maxLength={2000}
-          textAlignVertical="top"
-        />
+      <ScrollView style={styles.formContainer} showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>
+        {/* Content Input Card */}
+        <View style={styles.card}>
+          <View style={styles.cardHeader}>
+            <MessageSquare size={20} color="#6366F1" />
+            <Text style={styles.cardTitle}>Your Story / Caption</Text>
+          </View>
+          <TextInput
+            style={styles.contentInput}
+            placeholder="What's on your mind? Share something amazing..."
+            placeholderTextColor="#94A3B8"
+            multiline
+            value={content}
+            onChangeText={setContent}
+            maxLength={2000}
+            textAlignVertical="top"
+          />
+          <View style={styles.characterCount}>
+            <Text style={styles.characterCountText}>{content.length}/2000</Text>
+          </View>
+        </View>
         
+        {/* Media Preview Section */}
         {media.length > 0 && (
-          <View style={styles.imagesContainer}>
+          <View style={styles.card}>
+            <View style={styles.cardHeader}>
+              <ImageIcon size={20} color="#10B981" />
+              <Text style={styles.cardTitle}>Media ({media.length}/20)</Text>
+            </View>
             <ScrollView 
               horizontal 
               showsHorizontalScrollIndicator={false}
               style={styles.imagesScroll}
+              contentContainerStyle={styles.mediaScrollContent}
             >
               {media.map((mediaItem, index) => (
                 <View key={index} style={styles.imagePreview}>
-                  {mediaItem.type === 'youtube' ? (
-                    <Image 
-                      source={{ uri: getYouTubeThumbnail(mediaItem.videoId!) }} 
-                      style={styles.previewImage} 
-                    />
-                  ) : mediaItem.type === 'video' ? (
+                  {mediaItem.type === 'video' ? (
                     mediaItem.trimStart != null && mediaItem.trimEnd != null ? (
                       <TrimmedVideoPreview
                         uri={mediaItem.uri}
@@ -564,32 +547,33 @@ export default function CreatePostScreen() {
                   ) : (
                     <Image source={{ uri: mediaItem.uri }} style={styles.previewImage} />
                   )}
-                  <TouchableOpacity 
-                    style={styles.removeImageButton}
-                    onPress={() => removeMedia(index)}
+                  
+                  <LinearGradient
+                    colors={['rgba(0,0,0,0.6)', 'transparent']}
+                    style={styles.mediaOverlay}
                   >
-                    <X size={16} color="#FFFFFF" />
-                  </TouchableOpacity>
-                  {/* Edit button - tap on image to edit */}
-                  {mediaItem.type !== 'youtube' && (
+                    <TouchableOpacity 
+                      style={styles.removeImageButton}
+                      onPress={() => removeMedia(index)}
+                    >
+                      <X size={18} color="#FFFFFF" />
+                    </TouchableOpacity>
                     <TouchableOpacity
                       style={styles.editMediaButton}
                       onPress={() => editMedia(index)}
                     >
-                      <Edit3 size={16} color="#FFFFFF" />
+                      <Edit3 size={18} color="#FFFFFF" />
                     </TouchableOpacity>
-                  )}
+                  </LinearGradient>
+
                   <View style={styles.imageCounter}>
-                    <Text style={styles.imageCounterText}>{index + 1}/{media.length}</Text>
+                    <Text style={styles.imageCounterText}>{index + 1}</Text>
                   </View>
+                  
                   {mediaItem.type === 'video' && (
                     <View style={styles.videoIndicator}>
-                      <VideoIcon size={16} color="#FFFFFF" />
-                    </View>
-                  )}
-                  {mediaItem.type === 'youtube' && (
-                    <View style={styles.youtubeIndicator}>
-                      <Text style={styles.youtubeIndicatorText}>▶ YouTube</Text>
+                      <VideoIcon size={14} color="#FFFFFF" />
+                      <Text style={styles.videoIndicatorText}>Video</Text>
                     </View>
                   )}
                 </View>
@@ -598,92 +582,112 @@ export default function CreatePostScreen() {
           </View>
         )}
 
+        {/* Add Media Button */}
         <TouchableOpacity 
-          style={styles.addImageButton} 
+          style={[styles.addMediaCard, media.length >= 20 && styles.addMediaCardDisabled]} 
           onPress={pickMedia}
           disabled={media.length >= 20}
         >
-          <ImageIcon size={20} color={media.length >= 20 ? '#CBD5E1' : '#475569'} />
-          <Text style={[
-            styles.addImageText,
-            media.length >= 20 && styles.addImageTextDisabled
-          ]}>
-            {media.length === 0 ? 'Add Images/Videos' : `Add More Media (${media.length}/20)`}
-          </Text>
+          <LinearGradient
+            colors={media.length >= 20 ? ['#F1F5F9', '#F1F5F9'] : ['#EEF2FF', '#E0E7FF']}
+            style={styles.addMediaGradient}
+          >
+            <View style={styles.addMediaIconCircle}>
+              <ImageIcon size={24} color={media.length >= 20 ? '#CBD5E1' : '#6366F1'} />
+            </View>
+            <View style={styles.addMediaTextContainer}>
+              <Text style={[styles.addMediaTitle, media.length >= 20 && styles.addMediaTitleDisabled]}>
+                {media.length === 0 ? 'Add Photos & Videos' : 'Add More Media'}
+              </Text>
+              <Text style={[styles.addMediaSubtitle, media.length >= 20 && styles.addMediaSubtitleDisabled]}>
+                {media.length === 0 ? 'Capture moments to share' : `${media.length}/20 items added`}
+              </Text>
+            </View>
+          </LinearGradient>
         </TouchableOpacity>
 
-        <View style={styles.youtubeSection}>
-          <Text style={styles.youtubeSectionLabel}>Or add a YouTube video</Text>
-          <View style={styles.youtubeInputContainer}>
-            <LinkIcon size={20} color="#475569" />
-            <TextInput
-              style={styles.youtubeInput}
-              placeholder="Paste YouTube URL here..."
-              placeholderTextColor="#94A3B8"
-              value={youtubeUrl}
-              onChangeText={setYoutubeUrl}
-              autoCapitalize="none"
-              autoCorrect={false}
-            />
-            <TouchableOpacity
-              style={styles.addYoutubeButton}
-              onPress={addYouTubeVideo}
-              disabled={!youtubeUrl.trim() || media.length >= 20}
+        {/* Settings Section */}
+        <View style={styles.settingsSection}>
+          {/* Category Selection */}
+          <View style={styles.card}>
+            <Text style={styles.settingSectionTitle}>Post Settings</Text>
+            
+            <TouchableOpacity 
+              style={styles.settingItem}
+              onPress={() => setShowCategoryPicker(true)}
             >
-              <Text style={styles.addYoutubeButtonText}>Add</Text>
+              <View style={styles.settingLeft}>
+                <View style={[styles.settingIconCircle, { backgroundColor: '#DBEAFE' }]}>
+                  <Text style={styles.settingIconEmoji}>🏷️</Text>
+                </View>
+                <View style={styles.settingTextContainer}>
+                  <Text style={styles.settingLabel}>Category</Text>
+                  <Text style={styles.settingValue}>{selectedCategory?.label}</Text>
+                </View>
+              </View>
+              <ChevronDown size={20} color="#94A3B8" />
+            </TouchableOpacity>
+
+            <View style={styles.settingDivider} />
+
+            {/* Visibility Selection */}
+            <TouchableOpacity 
+              style={styles.settingItem}
+              onPress={() => setShowVisibilityPicker(true)}
+            >
+              <View style={styles.settingLeft}>
+                <View style={[styles.settingIconCircle, { backgroundColor: '#E0E7FF' }]}>
+                  <VisibilityIcon size={18} color="#6366F1" />
+                </View>
+                <View style={styles.settingTextContainer}>
+                  <Text style={styles.settingLabel}>Visibility</Text>
+                  <Text style={styles.settingValue}>{selectedVisibility?.label}</Text>
+                </View>
+              </View>
+              <ChevronDown size={20} color="#94A3B8" />
+            </TouchableOpacity>
+
+            <View style={styles.settingDivider} />
+
+            {/* Highlights Toggle */}
+            <TouchableOpacity
+              style={styles.settingItem}
+              onPress={() => setAddToHighlights(!addToHighlights)}
+            >
+              <View style={styles.settingLeft}>
+                <View style={[styles.settingIconCircle, { backgroundColor: addToHighlights ? '#FEF3C7' : '#F3F4F6' }]}>
+                  <Sparkles size={18} color={addToHighlights ? '#F59E0B' : '#9CA3AF'} />
+                </View>
+                <View style={styles.settingTextContainer}>
+                  <Text style={styles.settingLabel}>Add to Highlights</Text>
+                  <Text style={styles.settingValue}>
+                    {addToHighlights ? 'Enabled' : 'Disabled'}
+                  </Text>
+                </View>
+              </View>
+              <View style={[styles.toggle, addToHighlights && styles.toggleActive]}>
+                <View style={[styles.toggleCircle, addToHighlights && styles.toggleCircleActive]} />
+              </View>
             </TouchableOpacity>
           </View>
-        </View>
 
-        <View style={styles.section}>
-          <Text style={styles.sectionLabel}>Category</Text>
-          <TouchableOpacity 
-            style={styles.pickerButton}
-            onPress={() => setShowCategoryPicker(true)}
-          >
-            <Text style={styles.pickerButtonText}>{selectedCategory?.label}</Text>
-            <ChevronDown size={20} color="#64748B" />
-          </TouchableOpacity>
-        </View>
-
-        <View style={styles.section}>
-          <Text style={styles.sectionLabel}>Who can see this?</Text>
-          <TouchableOpacity 
-            style={styles.pickerButton}
-            onPress={() => setShowVisibilityPicker(true)}
-          >
-            <View style={styles.visibilityButtonContent}>
-              <VisibilityIcon size={18} color="#64748B" />
-              <Text style={styles.pickerButtonText}>{selectedVisibility?.label}</Text>
-            </View>
-            <ChevronDown size={20} color="#64748B" />
-          </TouchableOpacity>
-          <Text style={styles.visibilityDescription}>
-            {selectedVisibility?.description}
-          </Text>
-        </View>
-
-        {/* Add to highlights */}
-        <View style={styles.section}>
-          <Text style={styles.sectionLabel}>Highlights</Text>
-          <TouchableOpacity
-            style={styles.pickerButton}
-            onPress={() => setAddToHighlights(!addToHighlights)}
-          >
-            <Text style={styles.pickerButtonText}>{addToHighlights ? 'Will be added to Highlights' : 'Add to Highlights'}</Text>
-            <ChevronDown size={20} color="#64748B" />
-          </TouchableOpacity>
+          {/* Highlight Title Input */}
           {addToHighlights && (
-            <TextInput
-              style={[styles.contentInput, { minHeight: 48, marginTop: 8 }]}
-              placeholder="Optional highlight title"
-              placeholderTextColor="#94A3B8"
-              maxLength={40}
-              value={highlightTitle}
-              onChangeText={setHighlightTitle}
-            />
+            <View style={[styles.card, styles.highlightTitleCard]}>
+              <TextInput
+                style={styles.highlightTitleInput}
+                placeholder="Give your highlight a title..."
+                placeholderTextColor="#94A3B8"
+                maxLength={40}
+                value={highlightTitle}
+                onChangeText={setHighlightTitle}
+              />
+            </View>
           )}
         </View>
+
+        {/* Bottom Spacing */}
+        <View style={styles.bottomSpacing} />
       </ScrollView>
 
       {/* Category Picker Modal */}
@@ -833,165 +837,349 @@ export default function CreatePostScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#F8FAFC',
+    backgroundColor: '#F1F5F9',
   },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: 16,
+    paddingHorizontal: 20,
     paddingTop: 60,
-    paddingBottom: 16,
-    backgroundColor: '#FFFFFF',
-    borderBottomWidth: 1,
-    borderBottomColor: '#E2E8F0',
+    paddingBottom: 20,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 8,
+    elevation: 3,
   },
   backButton: {
-    padding: 8,
+    padding: 4,
   },
-  title: {
-    fontSize: 20,
-    fontFamily: 'Inter-SemiBold',
-    color: '#1E293B',
-  },
-  submitButton: {
+  backButtonCircle: {
     width: 40,
     height: 40,
     borderRadius: 20,
-    backgroundColor: '#475569',
+    backgroundColor: '#F8FAFC',
     justifyContent: 'center',
     alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.1,
+    shadowRadius: 3,
+    elevation: 2,
+  },
+  headerCenter: {
+    flex: 1,
+    alignItems: 'center',
+    marginHorizontal: 16,
+  },
+  title: {
+    fontSize: 22,
+    fontFamily: 'Inter-SemiBold',
+    color: '#0F172A',
+    letterSpacing: -0.5,
+  },
+  subtitle: {
+    fontSize: 13,
+    fontFamily: 'Inter-Regular',
+    color: '#64748B',
+    marginTop: 2,
+  },
+  submitButton: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    backgroundColor: '#6366F1',
+    justifyContent: 'center',
+    alignItems: 'center',
+    shadowColor: '#6366F1',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 5,
   },
   submitButtonDisabled: {
     backgroundColor: '#CBD5E1',
+    shadowOpacity: 0,
+    elevation: 0,
   },
   formContainer: {
     flex: 1,
+  },
+  scrollContent: {
     padding: 16,
+  },
+  card: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 16,
+    padding: 20,
+    marginBottom: 16,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.06,
+    shadowRadius: 8,
+    elevation: 2,
+  },
+  cardHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 16,
+    gap: 10,
+  },
+  cardTitle: {
+    fontSize: 16,
+    fontFamily: 'Inter-SemiBold',
+    color: '#0F172A',
   },
   contentInput: {
-    minHeight: 120,
-    backgroundColor: '#FFFFFF',
-    borderRadius: 12,
-    padding: 16,
+    minHeight: 140,
     fontSize: 16,
     fontFamily: 'Inter-Regular',
-    color: '#1E293B',
-    marginBottom: 16,
-    borderWidth: 1,
-    borderColor: '#E2E8F0',
+    color: '#0F172A',
+    lineHeight: 24,
+    textAlignVertical: 'top',
   },
-  imagesContainer: {
-    marginBottom: 16,
+  characterCount: {
+    alignItems: 'flex-end',
+    marginTop: 8,
+  },
+  characterCountText: {
+    fontSize: 12,
+    fontFamily: 'Inter-Regular',
+    color: '#94A3B8',
   },
   imagesScroll: {
     flexGrow: 0,
+    marginHorizontal: -20,
+    paddingHorizontal: 20,
+  },
+  mediaScrollContent: {
+    paddingRight: 20,
   },
   imagePreview: {
     position: 'relative',
     marginRight: 12,
-    borderRadius: 12,
+    borderRadius: 16,
     overflow: 'hidden',
-    width: 280,
-    height: 200,
+    width: 260,
+    height: 340,
+    backgroundColor: '#F1F5F9',
   },
   previewImage: {
     width: '100%',
     height: '100%',
-    backgroundColor: '#E2E8F0',
+  },
+  mediaOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    height: 80,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    padding: 12,
   },
   removeImageButton: {
-    position: 'absolute',
-    top: 8,
-    right: 8,
-    width: 28,
-    height: 28,
-    borderRadius: 14,
-    backgroundColor: 'rgba(0, 0, 0, 0.7)',
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: 'rgba(239, 68, 68, 0.95)',
     justifyContent: 'center',
     alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.15,
+    shadowRadius: 4,
+    elevation: 3,
   },
   editMediaButton: {
-    position: 'absolute',
-    top: 8,
-    left: 8,
-    width: 28,
-    height: 28,
-    borderRadius: 14,
-    backgroundColor: 'rgba(0,0,0,0.6)',
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: 'rgba(99, 102, 241, 0.95)',
     justifyContent: 'center',
     alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.15,
+    shadowRadius: 4,
+    elevation: 3,
   },
   imageCounter: {
     position: 'absolute',
-    bottom: 8,
-    right: 8,
-    backgroundColor: 'rgba(0, 0, 0, 0.7)',
-    paddingHorizontal: 8,
-    paddingVertical: 4,
+    bottom: 12,
+    right: 12,
+    backgroundColor: 'rgba(15, 23, 42, 0.85)',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
     borderRadius: 12,
+    minWidth: 36,
+    alignItems: 'center',
   },
   imageCounterText: {
     color: '#FFFFFF',
-    fontSize: 12,
+    fontSize: 13,
     fontFamily: 'Inter-SemiBold',
   },
-  addImageButton: {
+  videoIndicator: {
+    position: 'absolute',
+    bottom: 12,
+    left: 12,
+    backgroundColor: 'rgba(239, 68, 68, 0.95)',
+    borderRadius: 12,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
-    padding: 16,
-    backgroundColor: '#FFFFFF',
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: '#E2E8F0',
-    marginBottom: 24,
-    gap: 8,
+    gap: 4,
   },
-  addImageText: {
-    fontSize: 16,
+  videoIndicatorText: {
+    color: '#FFFFFF',
+    fontSize: 11,
     fontFamily: 'Inter-SemiBold',
-    color: '#475569',
-  },
-  addImageTextDisabled: {
-    color: '#CBD5E1',
-  },
-  section: {
-    marginBottom: 24,
-  },
-  sectionLabel: {
-    fontSize: 14,
-    fontFamily: 'Inter-SemiBold',
-    color: '#64748B',
-    marginBottom: 8,
     textTransform: 'uppercase',
     letterSpacing: 0.5,
   },
-  pickerButton: {
+  addMediaCard: {
+    marginBottom: 16,
+    borderRadius: 16,
+    overflow: 'hidden',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.06,
+    shadowRadius: 8,
+    elevation: 2,
+  },
+  addMediaCardDisabled: {
+    opacity: 0.5,
+  },
+  addMediaGradient: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 20,
+    gap: 16,
+  },
+  addMediaIconCircle: {
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    backgroundColor: '#FFFFFF',
+    justifyContent: 'center',
+    alignItems: 'center',
+    shadowColor: '#6366F1',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 2,
+  },
+  addMediaTextContainer: {
+    flex: 1,
+  },
+  addMediaTitle: {
+    fontSize: 17,
+    fontFamily: 'Inter-SemiBold',
+    color: '#0F172A',
+    marginBottom: 4,
+  },
+  addMediaTitleDisabled: {
+    color: '#94A3B8',
+  },
+  addMediaSubtitle: {
+    fontSize: 14,
+    fontFamily: 'Inter-Regular',
+    color: '#64748B',
+  },
+  addMediaSubtitleDisabled: {
+    color: '#CBD5E1',
+  },
+  settingsSection: {
+    marginTop: 8,
+  },
+  settingSectionTitle: {
+    fontSize: 14,
+    fontFamily: 'Inter-SemiBold',
+    color: '#64748B',
+    textTransform: 'uppercase',
+    letterSpacing: 0.8,
+    marginBottom: 16,
+  },
+  settingItem: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    backgroundColor: '#FFFFFF',
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: '#E2E8F0',
-    padding: 16,
+    paddingVertical: 4,
   },
-  pickerButtonText: {
-    fontSize: 16,
-    fontFamily: 'Inter-Regular',
-    color: '#1E293B',
-  },
-  visibilityButtonContent: {
+  settingLeft: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
+    flex: 1,
+    gap: 14,
   },
-  visibilityDescription: {
-    fontSize: 13,
+  settingIconCircle: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  settingIconEmoji: {
+    fontSize: 20,
+  },
+  settingTextContainer: {
+    flex: 1,
+  },
+  settingLabel: {
+    fontSize: 15,
+    fontFamily: 'Inter-SemiBold',
+    color: '#0F172A',
+    marginBottom: 2,
+  },
+  settingValue: {
+    fontSize: 14,
     fontFamily: 'Inter-Regular',
-    color: '#94A3B8',
-    marginTop: 8,
+    color: '#64748B',
+  },
+  settingDivider: {
+    height: 1,
+    backgroundColor: '#F1F5F9',
+    marginVertical: 16,
+  },
+  toggle: {
+    width: 48,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: '#E2E8F0',
+    padding: 3,
+    justifyContent: 'center',
+  },
+  toggleActive: {
+    backgroundColor: '#6366F1',
+  },
+  toggleCircle: {
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    backgroundColor: '#FFFFFF',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.2,
+    shadowRadius: 2,
+    elevation: 2,
+  },
+  toggleCircleActive: {
+    alignSelf: 'flex-end',
+  },
+  highlightTitleCard: {
+    paddingVertical: 12,
+  },
+  highlightTitleInput: {
+    fontSize: 15,
+    fontFamily: 'Inter-Regular',
+    color: '#0F172A',
+    padding: 0,
+  },
+  bottomSpacing: {
+    height: 40,
   },
   modalOverlay: {
     flex: 1,
@@ -1000,25 +1188,26 @@ const styles = StyleSheet.create({
   },
   modalContent: {
     backgroundColor: '#FFFFFF',
-    borderTopLeftRadius: 20,
-    borderTopRightRadius: 20,
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
     maxHeight: '70%',
   },
   modalHeader: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    padding: 20,
+    padding: 24,
     borderBottomWidth: 1,
-    borderBottomColor: '#E2E8F0',
+    borderBottomColor: '#F1F5F9',
   },
   modalTitle: {
-    fontSize: 18,
+    fontSize: 20,
     fontFamily: 'Inter-SemiBold',
-    color: '#1E293B',
+    color: '#0F172A',
   },
   modalScroll: {
     maxHeight: 400,
+    padding: 20,
   },
   modalOption: {
     padding: 16,
@@ -1026,43 +1215,43 @@ const styles = StyleSheet.create({
     borderBottomColor: '#F1F5F9',
   },
   publishCategoryGroup: {
-    marginBottom: 14,
+    marginBottom: 16,
   },
   publishCategoryOption: {
-    paddingVertical: 12,
-    paddingHorizontal: 16,
-    borderRadius: 14,
-    borderWidth: 1,
+    paddingVertical: 14,
+    paddingHorizontal: 18,
+    borderRadius: 12,
+    borderWidth: 2,
     borderColor: '#E5E7EB',
     backgroundColor: '#FFFFFF',
   },
   publishCategoryOptionSelected: {
-    borderColor: '#0A84FF',
-    backgroundColor: '#EFF6FF',
+    borderColor: '#6366F1',
+    backgroundColor: '#EEF2FF',
   },
   publishCategoryOptionText: {
-    fontSize: 15,
+    fontSize: 16,
     fontFamily: 'Inter-SemiBold',
-    color: '#1F2937',
+    color: '#0F172A',
   },
   publishCategoryOptionTextSelected: {
-    color: '#0A84FF',
+    color: '#6366F1',
   },
   publishCategoryChildren: {
-    marginTop: 8,
+    marginTop: 10,
     marginLeft: 16,
-    gap: 8,
+    gap: 10,
   },
   publishCategorySubOption: {
-    paddingVertical: 10,
-    paddingHorizontal: 14,
-    borderRadius: 12,
-    borderWidth: 1,
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    borderRadius: 10,
+    borderWidth: 1.5,
     borderColor: '#E5E7EB',
-    backgroundColor: '#FFFFFF',
+    backgroundColor: '#F9FAFB',
   },
   publishCategorySubOptionText: {
-    fontSize: 14,
+    fontSize: 15,
     fontFamily: 'Inter-Regular',
     color: '#4B5563',
   },
@@ -1072,16 +1261,16 @@ const styles = StyleSheet.create({
   modalOptionText: {
     fontSize: 16,
     fontFamily: 'Inter-Regular',
-    color: '#1E293B',
+    color: '#0F172A',
   },
   modalOptionTextSelected: {
     fontFamily: 'Inter-SemiBold',
-    color: '#475569',
+    color: '#6366F1',
   },
   visibilityOption: {
     flexDirection: 'row',
     alignItems: 'flex-start',
-    gap: 12,
+    gap: 14,
   },
   visibilityOptionText: {
     flex: 1,
@@ -1090,67 +1279,6 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontFamily: 'Inter-Regular',
     color: '#94A3B8',
-    marginTop: 2,
-  },
-  videoIndicator: {
-    position: 'absolute',
-    top: 8,
-    left: 8,
-    backgroundColor: 'rgba(0, 0, 0, 0.6)',
-    borderRadius: 12,
-    padding: 4,
-  },
-  youtubeIndicator: {
-    position: 'absolute',
-    bottom: 8,
-    left: 8,
-    backgroundColor: '#FF0000',
-    borderRadius: 12,
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-  },
-  youtubeIndicatorText: {
-    color: '#FFFFFF',
-    fontSize: 12,
-    fontFamily: 'Inter-SemiBold',
-  },
-  youtubeSection: {
-    marginTop: 16,
-    marginBottom: 16,
-  },
-  youtubeSectionLabel: {
-    fontSize: 14,
-    fontFamily: 'Inter-Regular',
-    color: '#64748B',
-    marginBottom: 8,
-  },
-  youtubeInputContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#F8FAFC',
-    borderRadius: 12,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderWidth: 1,
-    borderColor: '#E2E8F0',
-    gap: 8,
-  },
-  youtubeInput: {
-    flex: 1,
-    fontSize: 16,
-    fontFamily: 'Inter-Regular',
-    color: '#1E293B',
-    paddingVertical: 8,
-  },
-  addYoutubeButton: {
-    backgroundColor: '#0095F6',
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    borderRadius: 8,
-  },
-  addYoutubeButtonText: {
-    color: '#FFFFFF',
-    fontSize: 14,
-    fontFamily: 'Inter-SemiBold',
+    marginTop: 4,
   },
 });
