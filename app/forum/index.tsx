@@ -1,8 +1,10 @@
-import { View, Text, StyleSheet, ScrollView, Image, TouchableOpacity, TextInput, Dimensions } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, Image, TouchableOpacity, TextInput, Dimensions, ActivityIndicator } from 'react-native';
 import { useFonts, Inter_400Regular, Inter_600SemiBold } from '@expo-google-fonts/inter';
-import { useEffect, useState } from 'react';
-import { SplashScreen, useRouter } from 'expo-router';
+import { useEffect, useState, useCallback } from 'react';
+import { SplashScreen, useRouter, useFocusEffect } from 'expo-router';
 import { ArrowLeft, Search, Filter, MessageCircle, Users, ThumbsUp, Share2, Bookmark, Clock, Hash, Briefcase, Code, ChartLine as LineChart, Brain, Microscope, Palette, Building2, Globe, ChevronRight, Plus, Bell } from 'lucide-react-native';
+import { supabase } from '@/lib/supabase';
+import { useAuth } from '@/hooks/useAuth';
 
 SplashScreen.preventAutoHideAsync();
 
@@ -126,9 +128,34 @@ const ACTIVE_MEMBERS = [
   },
 ];
 
+interface Discussion {
+  id: string;
+  title: string;
+  content: string;
+  category: string;
+  author_id: string;
+  likes_count: number;
+  comments_count: number;
+  views_count: number;
+  is_pinned: boolean;
+  created_at: string;
+  profiles: {
+    id: string;
+    username: string;
+    full_name: string;
+    avatar_url?: string;
+  };
+}
+
 export default function ForumScreen() {
   const router = useRouter();
+  const { user } = useAuth();
   const [activeCategory, setActiveCategory] = useState('all');
+  const [discussions, setDiscussions] = useState<Discussion[]>([]);
+  const [trendingDiscussions, setTrendingDiscussions] = useState<Discussion[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [searchQuery, setSearchQuery] = useState('');
+  
   const [fontsLoaded] = useFonts({
     'Inter-Regular': Inter_400Regular,
     'Inter-SemiBold': Inter_600SemiBold,
@@ -140,8 +167,91 @@ export default function ForumScreen() {
     }
   }, [fontsLoaded]);
 
+  useFocusEffect(
+    useCallback(() => {
+      loadDiscussions();
+    }, [])
+  );
+
+  const loadDiscussions = async () => {
+    try {
+      setLoading(true);
+
+      // Fetch all discussions with author info
+      const { data, error } = await supabase
+        .from('forum_discussions')
+        .select(`
+          *,
+          profiles!forum_discussions_author_id_fkey (
+            id,
+            username,
+            full_name,
+            avatar_url
+          )
+        `)
+        .order('created_at', { ascending: false })
+        .limit(20);
+
+      if (error) throw error;
+
+      const formattedDiscussions = (data || []).map((d: any) => ({
+        ...d,
+        profiles: Array.isArray(d.profiles) ? d.profiles[0] : d.profiles,
+      }));
+
+      setDiscussions(formattedDiscussions);
+
+      // Get trending discussions (most liked + recent)
+      const trending = formattedDiscussions
+        .filter((d: Discussion) => d.likes_count > 5 || d.comments_count > 10)
+        .slice(0, 5);
+      
+      setTrendingDiscussions(trending);
+
+    } catch (error) {
+      console.error('Error loading discussions:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const getTimeAgo = (dateString: string) => {
+    const date = new Date(dateString);
+    const now = new Date();
+    const diffInSeconds = Math.floor((now.getTime() - date.getTime()) / 1000);
+    
+    if (diffInSeconds < 60) return `${diffInSeconds}s ago`;
+    if (diffInSeconds < 3600) return `${Math.floor(diffInSeconds / 60)}m ago`;
+    if (diffInSeconds < 86400) return `${Math.floor(diffInSeconds / 3600)}h ago`;
+    if (diffInSeconds < 2592000) return `${Math.floor(diffInSeconds / 86400)}d ago`;
+    return date.toLocaleDateString();
+  };
+
+  const filteredDiscussions = discussions.filter(d => {
+    const matchesCategory = activeCategory === 'all' || d.category === activeCategory;
+    const matchesSearch = !searchQuery || 
+      d.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      d.content.toLowerCase().includes(searchQuery.toLowerCase());
+    return matchesCategory && matchesSearch;
+  });
+
+  useEffect(() => {
+    if (fontsLoaded) {
+      SplashScreen.hideAsync();
+    }
+  }, [fontsLoaded]);
+
   if (!fontsLoaded) {
     return null;
+  }
+
+  if (loading) {
+    return (
+      <View style={styles.loadingContainer}>
+        <ActivityIndicator size="large" color="#4169E1" />
+        <Text style={styles.loadingText}>Loading discussions...</Text>
+      </View>
+    );
   }
 
   return (
@@ -155,7 +265,7 @@ export default function ForumScreen() {
           <TouchableOpacity style={styles.iconButton}>
             <Bell size={24} color="#000000" />
           </TouchableOpacity>
-          <TouchableOpacity style={styles.iconButton}>
+          <TouchableOpacity style={styles.iconButton} onPress={() => router.push('/forum/new')}>
             <Plus size={24} color="#000000" />
           </TouchableOpacity>
         </View>
@@ -167,15 +277,14 @@ export default function ForumScreen() {
           <TextInput
             style={styles.searchInput}
             placeholder="Search discussions..."
-            placeholderTextColor="#666666"
-          />
-        </View>
-        <TouchableOpacity style={styles.filterButton}>
-          <Filter size={20} color="#666666" />
-        </TouchableOpacity>
+          value={searchQuery}
+          onChangeText={setSearchQuery}
+        />
       </View>
-
-      <ScrollView
+      <TouchableOpacity style={styles.filterButton}>
+        <Filter size={20} color="#666666" />
+      </TouchableOpacity>
+    </View>      <ScrollView
         horizontal
         showsHorizontalScrollIndicator={false}
         style={styles.categoriesScroll}
@@ -224,9 +333,16 @@ export default function ForumScreen() {
           showsHorizontalScrollIndicator={false}
           contentContainerStyle={styles.trendingContent}
         >
-          {TRENDING_DISCUSSIONS.map((discussion) => (
-            <TouchableOpacity key={discussion.id} style={styles.trendingCard}>
-              <Image source={{ uri: discussion.image }} style={styles.trendingImage} />
+          {trendingDiscussions.length > 0 ? trendingDiscussions.map((discussion) => (
+            <TouchableOpacity
+              key={discussion.id}
+              style={styles.trendingCard}
+              onPress={() => router.push(`/forum/${discussion.id}` as any)}
+            >
+              <Image 
+                source={{ uri: 'https://images.unsplash.com/photo-1587854692152-cbe660dbde88?w=800&auto=format&fit=crop&q=60' }} 
+                style={styles.trendingImage} 
+              />
               <View style={styles.trendingOverlay}>
                 <View style={styles.categoryTag}>
                   <Hash size={14} color="#4169E1" />
@@ -234,29 +350,34 @@ export default function ForumScreen() {
                 </View>
                 <Text style={styles.trendingTitle}>{discussion.title}</Text>
                 <View style={styles.authorInfo}>
-                  <Image source={{ uri: discussion.author.avatar }} style={styles.authorAvatar} />
+                  <Image 
+                    source={{ uri: discussion.profiles?.avatar_url || 'https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?w=400&auto=format&fit=crop&q=60' }} 
+                    style={styles.authorAvatar} 
+                  />
                   <View style={styles.authorDetails}>
-                    <Text style={styles.authorName}>{discussion.author.name}</Text>
-                    <Text style={styles.authorRole}>{discussion.author.role}</Text>
+                    <Text style={styles.authorName}>{discussion.profiles?.full_name || 'Anonymous'}</Text>
+                    <Text style={styles.authorRole}>Member</Text>
                   </View>
                 </View>
                 <View style={styles.engagementInfo}>
                   <View style={styles.engagementItem}>
                     <ThumbsUp size={14} color="#FFFFFF" />
-                    <Text style={styles.engagementText}>{discussion.likes}</Text>
+                    <Text style={styles.engagementText}>{discussion.likes_count}</Text>
                   </View>
                   <View style={styles.engagementItem}>
                     <MessageCircle size={14} color="#FFFFFF" />
-                    <Text style={styles.engagementText}>{discussion.comments}</Text>
+                    <Text style={styles.engagementText}>{discussion.comments_count}</Text>
                   </View>
                   <View style={styles.engagementItem}>
                     <Clock size={14} color="#FFFFFF" />
-                    <Text style={styles.engagementText}>{discussion.timeAgo}</Text>
+                    <Text style={styles.engagementText}>{getTimeAgo(discussion.created_at)}</Text>
                   </View>
                 </View>
               </View>
             </TouchableOpacity>
-          ))}
+          )) : (
+            <Text style={styles.emptyText}>No trending discussions yet</Text>
+          )}
         </ScrollView>
       </View>
 
@@ -269,13 +390,20 @@ export default function ForumScreen() {
           </TouchableOpacity>
         </View>
 
-        {RECENT_DISCUSSIONS.map((discussion) => (
-          <TouchableOpacity key={discussion.id} style={styles.discussionCard}>
+        {filteredDiscussions.slice(0, 10).map((discussion) => (
+          <TouchableOpacity
+            key={discussion.id}
+            style={styles.discussionCard}
+            onPress={() => router.push(`/forum/${discussion.id}` as any)}
+          >
             <View style={styles.discussionHeader}>
-              <Image source={{ uri: discussion.author.avatar }} style={styles.discussionAvatar} />
+              <Image 
+                source={{ uri: discussion.profiles?.avatar_url || 'https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?w=400&auto=format&fit=crop&q=60' }} 
+                style={styles.discussionAvatar} 
+              />
               <View style={styles.discussionAuthorInfo}>
-                <Text style={styles.discussionAuthorName}>{discussion.author.name}</Text>
-                <Text style={styles.discussionAuthorRole}>{discussion.author.role}</Text>
+                <Text style={styles.discussionAuthorName}>{discussion.profiles?.full_name || 'Anonymous'}</Text>
+                <Text style={styles.discussionAuthorRole}>Member</Text>
               </View>
               <View style={styles.discussionCategory}>
                 <Hash size={12} color="#4169E1" />
@@ -283,16 +411,16 @@ export default function ForumScreen() {
               </View>
             </View>
             <Text style={styles.discussionTitle}>{discussion.title}</Text>
-            <Text style={styles.discussionPreview}>{discussion.preview}</Text>
+            <Text style={styles.discussionPreview} numberOfLines={2}>{discussion.content}</Text>
             <View style={styles.discussionFooter}>
               <View style={styles.discussionEngagement}>
                 <View style={styles.engagementItem}>
                   <ThumbsUp size={14} color="#666666" />
-                  <Text style={styles.engagementCount}>{discussion.engagement.likes}</Text>
+                  <Text style={styles.engagementCount}>{discussion.likes_count}</Text>
                 </View>
                 <View style={styles.engagementItem}>
                   <MessageCircle size={14} color="#666666" />
-                  <Text style={styles.engagementCount}>{discussion.engagement.comments}</Text>
+                  <Text style={styles.engagementCount}>{discussion.comments_count}</Text>
                 </View>
               </View>
               <View style={styles.discussionActions}>
@@ -683,5 +811,24 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontFamily: 'Inter-SemiBold',
     color: '#4169E1',
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: '#FFFFFF',
+  },
+  loadingText: {
+    marginTop: 16,
+    fontSize: 16,
+    fontFamily: 'Inter-Regular',
+    color: '#666666',
+  },
+  emptyText: {
+    fontSize: 14,
+    fontFamily: 'Inter-Regular',
+    color: '#666666',
+    textAlign: 'center',
+    paddingVertical: 20,
   },
 });

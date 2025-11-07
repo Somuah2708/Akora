@@ -42,10 +42,9 @@ const DEFAULT_FEATURED_ITEMS = [
 const DEFAULT_CATEGORY_TABS = [
   { id: '1', title: 'History', icon_name: 'BookOpen', color: '#FF6B6B', image_url: 'https://images.unsplash.com/photo-1524178232363-1fb2b075b655?w=400&auto=format&fit=crop&q=60', route: '/heritage' },
   { id: '2', title: 'Centenary', icon_name: 'PartyPopper', color: '#4ECDC4', image_url: 'https://images.unsplash.com/photo-1492684223066-81342ee5ff30?w=400&auto=format&fit=crop&q=60', route: '/centenary' },
-  { id: '3', title: 'Calendar', icon_name: 'Calendar', color: '#45B7D1', image_url: 'https://images.unsplash.com/photo-1506784983877-45594efa4cbe?w=400&auto=format&fit=crop&q=60', route: '/calendar' },
+  { id: '3', title: 'Calendar', icon_name: 'Calendar', color: '#45B7D1', image_url: 'https://images.unsplash.com/photo-1506784983877-45594efa4cbe?w=400&auto=format&fit=crop&q=60', route: '/secretariat/event-calendar' },
   { id: '4', title: 'Trending', icon_name: 'TrendingUp', color: '#F7B731', image_url: 'https://images.unsplash.com/photo-1552664730-d307ca884978?w=400&auto=format&fit=crop&q=60', route: '/news' },
   { id: '5', title: 'Community', icon_name: 'Users', color: '#A55EEA', image_url: 'https://images.unsplash.com/photo-1529156069898-49953e39b3ac?w=400&auto=format&fit=crop&q=60', route: '/circles' },
-  { id: '6', title: 'News', icon_name: 'Newspaper', color: '#26DE81', image_url: 'https://images.unsplash.com/photo-1504711434969-e33886168f5c?w=400&auto=format&fit=crop&q=60', route: '/news' },
 ];
 
 // Placeholder posts for when there's no data
@@ -662,10 +661,20 @@ export default function HomeScreen() {
       >
         {(() => { 
           const ICON_MAP: any = { BookOpen, PartyPopper, Calendar, TrendingUp, Users, Newspaper };
-          // Ensure Centenary routes to /centenary even if Supabase seed set it to /events
-          const tabsToUse = (categoryTabs.length > 0 ? categoryTabs : DEFAULT_CATEGORY_TABS).map((t: any) =>
-            t?.title === 'Centenary' && t?.route === '/events' ? { ...t, route: '/centenary' } : t
-          );
+          // Ensure routes are correct for OAA alumni app
+          const tabsToUse = (categoryTabs.length > 0 ? categoryTabs : DEFAULT_CATEGORY_TABS)
+            .filter((t: any) => t?.title !== 'News') // Remove News tab
+            .map((t: any) => {
+              // Fix Centenary route
+              if (t?.title === 'Centenary' && t?.route === '/events') {
+                return { ...t, route: '/centenary' };
+              }
+              // Fix Calendar route to show OAA events instead of academic calendar
+              if (t?.title === 'Calendar' && t?.route === '/calendar') {
+                return { ...t, route: '/secretariat/event-calendar' };
+              }
+              return t;
+            });
           return tabsToUse.map((category: any) => {
           const IconComponent = ICON_MAP[(category as any).icon_name] || Users;
           const isActiveCategory = activeCategoryId === category.id;

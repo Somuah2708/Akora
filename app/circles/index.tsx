@@ -624,11 +624,11 @@ const styles = StyleSheet.create({
     marginBottom: 16,
   },
   categoryButton: {
-    paddingHorizontal: 20,
+    paddingHorizontal: 16,
     paddingVertical: 8,
     marginRight: 12,
     backgroundColor: '#fff',
-    borderRadius: 20,
+    borderRadius: 8,
     borderWidth: 1,
     borderColor: '#e0e0e0',
   },
