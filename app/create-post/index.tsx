@@ -1,16 +1,16 @@
 import { View, Text, StyleSheet, TextInput, TouchableOpacity, ScrollView, Alert, ActivityIndicator, Image, Modal } from 'react-native';
 import { useFonts, Inter_400Regular, Inter_600SemiBold } from '@expo-google-fonts/inter';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { SplashScreen, useLocalSearchParams, useRouter } from 'expo-router';
 import { ArrowLeft, Image as ImageIcon, Send, Globe, Users, Lock, X, ChevronDown, Video as VideoIcon, Link as LinkIcon, Edit3 } from 'lucide-react-native';
-import ImageCropperModal from '@/components/ImageCropperModal';
-import VideoTrimModal from '@/components/VideoTrimModal';
+import MediaEditorModal from '@/components/MediaEditorModal';
 import * as ImagePicker from 'expo-image-picker';
 import { Video, ResizeMode } from 'expo-av';
 import { supabase } from '@/lib/supabase';
 import { INTEREST_LIBRARY } from '@/lib/interest-data';
 import { useAuth } from '@/hooks/useAuth';
 import { isYouTubeUrl, extractYouTubeVideoId, getYouTubeThumbnail } from '@/lib/youtube';
+import { isCloudinaryConfigured, processVideoWithCloudinary } from '@/lib/cloudinary';
 
 SplashScreen.preventAutoHideAsync();
 
@@ -52,7 +52,53 @@ interface MediaItem {
   uri: string;
   type: 'image' | 'video' | 'youtube';
   videoId?: string; // For YouTube videos
+  // Optional edit metadata for videos
+  trimStart?: number;
+  trimEnd?: number;
+  muted?: boolean;
+  originalDuration?: number;
+  // Indicates we couldn't process locally and need server-side (Cloudinary) transform
+  requiresServerProcessing?: boolean;
 }
+
+// Component to present a trimmed segment preview without needing a physically trimmed file.
+const TrimmedVideoPreview = ({ uri, trimStart, trimEnd, muted }: { uri: string; trimStart: number; trimEnd: number; muted?: boolean }) => {
+  const videoRef = useRef<Video | null>(null);
+  const durationRef = useRef<number>(0);
+  const playingRef = useRef(false);
+
+  const onStatusUpdate = (status: any) => {
+    if (!status || !status.isLoaded) return;
+    if (status.durationMillis && !durationRef.current) {
+      durationRef.current = status.durationMillis / 1000;
+      // Seek to trimStart once video loads
+      videoRef.current?.setPositionAsync(trimStart * 1000).then(() => {
+        videoRef.current?.playAsync();
+        playingRef.current = true;
+      }).catch(() => {});
+    }
+    if (status.positionMillis && playingRef.current) {
+      const pos = status.positionMillis / 1000;
+      if (pos > trimEnd) {
+        // Loop back within trimmed window
+        videoRef.current?.setPositionAsync(trimStart * 1000).catch(()=>{});
+      }
+    }
+  };
+
+  return (
+    <Video
+      ref={(r) => (videoRef.current = r)}
+      source={{ uri }}
+      style={styles.previewImage}
+      resizeMode={ResizeMode.COVER}
+      isMuted={!!muted}
+      shouldPlay={false}
+      isLooping
+      onPlaybackStatusUpdate={onStatusUpdate}
+    />
+  );
+};
 
 export default function CreatePostScreen() {
   const router = useRouter();
@@ -60,8 +106,8 @@ export default function CreatePostScreen() {
   const { user } = useAuth();
   const [content, setContent] = useState('');
   const [media, setMedia] = useState<MediaItem[]>([]);
-  const [cropIndex, setCropIndex] = useState<number | null>(null);
-  const [trimIndex, setTrimIndex] = useState<number | null>(null);
+  const [editorVisible, setEditorVisible] = useState(false);
+  const [currentEditItem, setCurrentEditItem] = useState<{ uri: string; type: 'image' | 'video'; index: number } | null>(null);
   const [youtubeUrl, setYoutubeUrl] = useState('');
   const [category, setCategory] = useState('general');
   const [visibility, setVisibility] = useState('friends_only');
@@ -134,21 +180,67 @@ export default function CreatePostScreen() {
     }
 
     const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ImagePicker.MediaTypeOptions.All,
+      mediaTypes: ['videos', 'images'] as any,
       allowsEditing: false,
-      allowsMultipleSelection: true,
+      allowsMultipleSelection: false, // Pick one at a time for editing
       quality: 0.8,
-      selectionLimit: 20 - media.length,
       // Prefer smaller, stream-friendly videos to improve upload/playback reliability
       videoExportPreset: (ImagePicker as any).VideoExportPreset?.MediumQuality || undefined,
     } as any);
 
-    if (!result.canceled) {
-      const newMedia: MediaItem[] = result.assets.map(asset => ({
+    if (!result.canceled && result.assets.length > 0) {
+      const asset = result.assets[0];
+      const mediaType = asset.type === 'video' ? 'video' : 'image';
+      
+      // Open editor immediately after selection (WhatsApp-style)
+      setCurrentEditItem({
         uri: asset.uri,
-        type: asset.type === 'video' ? 'video' : 'image',
-      }));
-      setMedia([...media, ...newMedia]);
+        type: mediaType,
+        index: -1, // -1 means new item, not editing existing
+      });
+      setEditorVisible(true);
+    }
+  };
+
+  const handleEditorDone = (result: { uri: string; type: 'image' | 'video'; trimStart?: number; trimEnd?: number; muted?: boolean; originalDuration?: number; requiresServerProcessing?: boolean }) => {
+    if (currentEditItem) {
+      if (currentEditItem.index === -1) {
+        // Adding new media
+        const newMedia: MediaItem = {
+          uri: result.uri,
+          type: result.type,
+          ...(result.type === 'video' ? { trimStart: result.trimStart, trimEnd: result.trimEnd, muted: result.muted, originalDuration: result.originalDuration, ...(result.requiresServerProcessing ? { requiresServerProcessing: true } : {}) } : {}),
+        };
+        setMedia([...media, newMedia]);
+      } else {
+        // Editing existing media
+        const updatedMedia = [...media];
+        updatedMedia[currentEditItem.index] = {
+          ...updatedMedia[currentEditItem.index],
+          uri: result.uri,
+          ...(result.type === 'video' ? { trimStart: result.trimStart, trimEnd: result.trimEnd, muted: result.muted, originalDuration: result.originalDuration, ...(result.requiresServerProcessing ? { requiresServerProcessing: true } : {}) } : {}),
+        };
+        setMedia(updatedMedia);
+      }
+    }
+    setEditorVisible(false);
+    setCurrentEditItem(null);
+  };
+
+  const handleEditorClose = () => {
+    setEditorVisible(false);
+    setCurrentEditItem(null);
+  };
+
+  const editMedia = (index: number) => {
+    const mediaItem = media[index];
+    if (mediaItem.type !== 'youtube') {
+      setCurrentEditItem({
+        uri: mediaItem.uri,
+        type: mediaItem.type,
+        index,
+      });
+      setEditorVisible(true);
     }
   };
 
@@ -299,11 +391,36 @@ export default function CreatePostScreen() {
           } else {
             // Upload local images and videos
             console.log('Uploading media:', mediaItem.uri, 'type:', mediaItem.type);
-            const url = await uploadMedia(mediaItem.uri, mediaItem.type);
+            let url: string | null = null;
+            if (
+              mediaItem.type === 'video' &&
+              mediaItem.trimStart != null &&
+              mediaItem.trimEnd != null &&
+              mediaItem.trimEnd > mediaItem.trimStart &&
+              (mediaItem as any).requiresServerProcessing &&
+              isCloudinaryConfigured()
+            ) {
+              try {
+                url = await processVideoWithCloudinary(mediaItem.uri, {
+                  trimStart: mediaItem.trimStart,
+                  trimEnd: mediaItem.trimEnd,
+                  muted: mediaItem.muted,
+                });
+                console.log('Cloudinary processed URL:', url);
+              } catch (e) {
+                console.warn('Cloudinary processing failed, falling back to direct upload:', e);
+                url = await uploadMedia(mediaItem.uri, mediaItem.type);
+              }
+            } else {
+              // Default path: upload as-is (already edited on-device or no edits required)
+              url = await uploadMedia(mediaItem.uri, mediaItem.type);
+            }
             if (url) {
               console.log('Media uploaded:', url);
               if (mediaItem.type === 'video') {
                 uploadedVideoUrls.push(url);
+                // Potential place to POST metadata (trim start/end, muted) to backend if required.
+                // await postVideoEditMetadata(url, mediaItem.trimStart, mediaItem.trimEnd, mediaItem.muted)
               } else {
                 uploadedImageUrls.push(url);
               }
@@ -427,13 +544,23 @@ export default function CreatePostScreen() {
                       style={styles.previewImage} 
                     />
                   ) : mediaItem.type === 'video' ? (
-                    <Video
-                      source={{ uri: mediaItem.uri }}
-                      style={styles.previewImage}
-                      useNativeControls
-                      resizeMode={ResizeMode.COVER}
-                      isLooping={false}
-                    />
+                    mediaItem.trimStart != null && mediaItem.trimEnd != null ? (
+                      <TrimmedVideoPreview
+                        uri={mediaItem.uri}
+                        trimStart={mediaItem.trimStart}
+                        trimEnd={mediaItem.trimEnd}
+                        muted={mediaItem.muted}
+                      />
+                    ) : (
+                      <Video
+                        source={{ uri: mediaItem.uri }}
+                        style={styles.previewImage}
+                        useNativeControls
+                        resizeMode={ResizeMode.COVER}
+                        isLooping
+                        isMuted={!!mediaItem.muted}
+                      />
+                    )
                   ) : (
                     <Image source={{ uri: mediaItem.uri }} style={styles.previewImage} />
                   )}
@@ -443,14 +570,11 @@ export default function CreatePostScreen() {
                   >
                     <X size={16} color="#FFFFFF" />
                   </TouchableOpacity>
-                  {/* Edit button */}
+                  {/* Edit button - tap on image to edit */}
                   {mediaItem.type !== 'youtube' && (
                     <TouchableOpacity
                       style={styles.editMediaButton}
-                      onPress={() => {
-                        if (mediaItem.type === 'image') setCropIndex(index);
-                        else if (mediaItem.type === 'video') setTrimIndex(index);
-                      }}
+                      onPress={() => editMedia(index)}
                     >
                       <Edit3 size={16} color="#FFFFFF" />
                     </TouchableOpacity>
@@ -692,29 +816,14 @@ export default function CreatePostScreen() {
         </View>
       </Modal>
 
-      {/* Image Cropper */}
-      {cropIndex !== null && media[cropIndex] && media[cropIndex].type === 'image' && (
-        <ImageCropperModal
-          visible={cropIndex !== null}
-          uri={media[cropIndex].uri}
-          onClose={() => setCropIndex(null)}
-          onDone={(croppedUri) => {
-            setMedia(prev => prev.map((m, i) => i === cropIndex ? { ...m, uri: croppedUri } : m));
-            setCropIndex(null);
-          }}
-        />
-      )}
-
-      {/* Video Trimmer */}
-      {trimIndex !== null && media[trimIndex] && media[trimIndex].type === 'video' && (
-        <VideoTrimModal
-          visible={trimIndex !== null}
-          uri={media[trimIndex].uri}
-          onClose={() => setTrimIndex(null)}
-          onDone={(trimmedUri) => {
-            setMedia(prev => prev.map((m, i) => i === trimIndex ? { ...m, uri: trimmedUri } : m));
-            setTrimIndex(null);
-          }}
+      {/* Media Editor Modal - WhatsApp Style */}
+      {currentEditItem && (
+        <MediaEditorModal
+          visible={editorVisible}
+          uri={currentEditItem.uri}
+          type={currentEditItem.type}
+          onClose={handleEditorClose}
+          onDone={handleEditorDone}
         />
       )}
     </View>

@@ -1,7 +1,15 @@
 import React, { useEffect, useState } from 'react';
-import { View, Text, Modal, StyleSheet, TouchableOpacity, ActivityIndicator, Image, ScrollView, Alert } from 'react-native';
+import { View, Text, Modal, StyleSheet, TouchableOpacity, ActivityIndicator, Image, ScrollView, Alert, Platform } from 'react-native';
 import * as VideoThumbnails from 'expo-video-thumbnails';
-import { FFmpegKit } from 'ffmpeg-kit-react-native';
+
+// Conditionally import FFmpegKit only if not in Expo Go
+let FFmpegKit: any = null;
+try {
+  // This will fail in Expo Go, but work in development builds
+  FFmpegKit = require('ffmpeg-kit-react-native').FFmpegKit;
+} catch (e) {
+  console.warn('FFmpegKit not available - video trimming disabled in Expo Go');
+}
 
 type Props = {
   visible: boolean;
@@ -17,6 +25,9 @@ export default function VideoTrimModal({ visible, uri, onClose, onDone }: Props)
   const [end, setEnd] = useState<number | null>(null);
   const [working, setWorking] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  // Check if FFmpeg is available
+  const isFFmpegAvailable = FFmpegKit !== null;
 
   // Generate a few thumbnails to help choose trim points
   useEffect(() => {
@@ -47,6 +58,15 @@ export default function VideoTrimModal({ visible, uri, onClose, onDone }: Props)
   }, [visible, uri]);
 
   const applyTrim = async () => {
+    if (!isFFmpegAvailable) {
+      Alert.alert(
+        'Feature Not Available',
+        'Video trimming requires a development build. For now, the original video will be used.',
+        [{ text: 'OK', onPress: () => onDone(uri) }]
+      );
+      return;
+    }
+
     if (end === null || end <= start) {
       Alert.alert('Invalid trim', 'End time must be after start time');
       return;
