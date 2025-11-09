@@ -1328,7 +1328,11 @@ export default function DiscoverScreen() {
             >
               {/* Post Header */}
               <View style={styles.postHeader}>
-                <View style={styles.postHeaderLeft}>
+                <TouchableOpacity 
+                  style={styles.postHeaderLeft}
+                  onPress={() => item.author?.id && router.push(`/user-profile/${item.author.id}` as any)}
+                  activeOpacity={0.7}
+                >
                   <Image 
                     source={{ 
                       uri: item.author?.avatar_url || 'https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?w=400&auto=format&fit=crop&q=60'
@@ -1336,16 +1340,85 @@ export default function DiscoverScreen() {
                     style={styles.postUserAvatar} 
                   />
                   <View>
-                    <Text style={styles.postUsername}>
-                      {item.author?.full_name || 'Anonymous'}
-                    </Text>
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                      <Text style={styles.postUsername}>
+                        {item.author?.full_name || 'Anonymous'}
+                      </Text>
+                      {((item.author as any)?.is_admin || (item.author as any)?.role === 'admin') && (
+                        <View style={styles.verifiedBadge}>
+                          <Text style={styles.verifiedCheck}>✓</Text>
+                        </View>
+                      )}
+                    </View>
                     <Text style={styles.postTime}>{getTimeAgo(item.created_at || new Date().toISOString())}</Text>
                   </View>
-                </View>
+                </TouchableOpacity>
               </View>
 
               {/* Post Media (Images/Videos/YouTube Carousel) */}
-              {item.youtube_urls && item.youtube_urls.length > 0 ? (
+              {(item as any).media_items && (item as any).media_items.length > 0 ? (
+                <View style={styles.carouselContainer}>
+                  <ScrollView
+                    horizontal
+                    pagingEnabled
+                    showsHorizontalScrollIndicator={false}
+                    removeClippedSubviews={false}
+                    style={styles.carousel}
+                    onScroll={(event) => {
+                      const scrollX = event.nativeEvent.contentOffset.x;
+                      const currentIndex = Math.round(scrollX / width);
+                      setCarouselIndices({
+                        ...carouselIndices,
+                        [item.id]: currentIndex,
+                      });
+                    }}
+                    scrollEventThrottle={16}
+                  >
+                    {(item as any).media_items.map((mediaItem: any, index: number) => (
+                      <View key={index} style={styles.mediaPage}>
+                        {mediaItem.type === 'video' ? (
+                          <Video
+                            source={{ uri: mediaItem.url }}
+                            style={styles.postImage}
+                            useNativeControls
+                            resizeMode={ResizeMode.COVER}
+                            isLooping={true}
+                            shouldPlay={
+                              isScreenFocused && 
+                              visibleVideos.has(item.id) && 
+                              (carouselIndices[item.id] ?? 0) === index
+                            }
+                            volume={
+                              isMuted || (carouselIndices[item.id] ?? 0) !== index 
+                                ? 0.0 
+                                : 1.0
+                            }
+                            onError={(err) => console.warn('Video play error (mixed media)', err)}
+                          />
+                        ) : (
+                          <TouchableOpacity 
+                            activeOpacity={0.95}
+                            onPress={() => item.sourceId && router.push(`/post/${item.sourceId}`)}
+                          >
+                            <Image
+                              source={{ uri: mediaItem.url }}
+                              style={styles.postImage}
+                              resizeMode="cover"
+                            />
+                          </TouchableOpacity>
+                        )}
+                      </View>
+                    ))}
+                  </ScrollView>
+                  {(item as any).media_items.length > 1 && (
+                    <View style={styles.carouselIndicator}>
+                      <Text style={styles.carouselIndicatorText}>
+                        {(carouselIndices[item.id] ?? 0) + 1}/{(item as any).media_items.length}
+                      </Text>
+                    </View>
+                  )}
+                </View>
+              ) : item.youtube_urls && item.youtube_urls.length > 0 ? (
                 <View style={styles.carouselContainer}>
                   <ScrollView
                     horizontal
@@ -1387,8 +1460,16 @@ export default function DiscoverScreen() {
                           useNativeControls
                           resizeMode={ResizeMode.COVER}
                           isLooping={true}
-                          shouldPlay={isScreenFocused && visibleVideos.has(item.id)}
-                          volume={isMuted ? 0.0 : 1.0}
+                          shouldPlay={
+                            isScreenFocused && 
+                            visibleVideos.has(item.id) && 
+                            (carouselIndices[item.id] ?? 0) === index
+                          }
+                          volume={
+                            isMuted || (carouselIndices[item.id] ?? 0) !== index 
+                              ? 0.0 
+                              : 1.0
+                          }
                           onError={(err) => console.warn('Video play error (carousel item)', err)}
                         />
                       </View>
@@ -1474,11 +1555,11 @@ export default function DiscoverScreen() {
                 </TouchableOpacity>
               ) : null}
 
-              {/* Post Actions */}
+              {/* Post Actions - Instagram Style */}
               <View style={styles.postActions}>
                 <View style={styles.postActionsLeft}>
                   <TouchableOpacity 
-                    style={styles.actionButton}
+                    style={styles.actionButtonWithCount}
                     onPress={() => handleLikeToggle(item.id)}
                   >
                     <Heart 
@@ -1487,12 +1568,18 @@ export default function DiscoverScreen() {
                       fill={item.isLiked ? "#FF3B30" : "none"}
                       strokeWidth={2}
                     />
+                    {(item.likes || 0) > 0 && (
+                      <Text style={styles.actionCount}>{item.likes}</Text>
+                    )}
                   </TouchableOpacity>
                   <TouchableOpacity 
-                    style={styles.actionButton}
+                    style={styles.actionButtonWithCount}
                     onPress={() => item.sourceId && router.push(`/post-comments/${item.sourceId}`)}
                   >
                     <MessageCircle size={26} color="#000000" strokeWidth={2} />
+                    {item.comments !== undefined && item.comments > 0 && (
+                      <Text style={styles.actionCount}>{item.comments}</Text>
+                    )}
                   </TouchableOpacity>
                   <TouchableOpacity 
                     style={styles.actionButton}
@@ -1505,9 +1592,6 @@ export default function DiscoverScreen() {
                   <Bookmark size={26} color={(item as any).isBookmarked ? '#111827' : '#000000'} fill={(item as any).isBookmarked ? '#111827' : 'none'} strokeWidth={2} />
                 </TouchableOpacity>
               </View>
-
-              {/* Post Likes */}
-              <Text style={styles.postLikes}>{item.likes || 0} {item.likes === 1 ? 'like' : 'likes'}</Text>
 
               {/* Post Caption */}
               {item.description && (
@@ -2020,6 +2104,17 @@ const styles = StyleSheet.create({
   actionButton: {
     padding: 4,
   },
+  actionButtonWithCount: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    padding: 4,
+  },
+  actionCount: {
+    fontSize: 14,
+    fontFamily: 'Inter-SemiBold',
+    color: '#000000',
+  },
   postLikes: {
     fontSize: 14,
     fontFamily: 'Inter-SemiBold',
@@ -2205,4 +2300,19 @@ const styles = StyleSheet.create({
     marginTop: 8,
     textAlign: 'center',
   },
+  verifiedBadge: {
+    backgroundColor: '#0EA5E9',
+    borderRadius: 10,
+    width: 18,
+    height: 18,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  verifiedCheck: {
+    color: '#FFFFFF',
+    fontSize: 12,
+    fontWeight: 'bold',
+    lineHeight: 18,
+  },
 });
+

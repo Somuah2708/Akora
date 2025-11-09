@@ -406,15 +406,24 @@ export default function UserProfileScreen() {
                 <Text style={styles.statNumber}>{stats.posts}</Text>
                 <Text style={styles.statLabel}>Posts</Text>
               </TouchableOpacity>
-              <TouchableOpacity style={styles.statItem}>
-                <Text style={styles.statNumber}>{stats.friends}</Text>
-                <Text style={styles.statLabel}>Friends</Text>
-              </TouchableOpacity>
+              {!profile.is_admin && (
+                <TouchableOpacity style={styles.statItem}>
+                  <Text style={styles.statNumber}>{stats.friends}</Text>
+                  <Text style={styles.statLabel}>Friends</Text>
+                </TouchableOpacity>
+              )}
             </View>
           </View>
 
           <View style={styles.bioSection}>
-            <Text style={styles.displayName}>{profile.full_name || 'User'}</Text>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+              <Text style={styles.displayName}>{profile.full_name || 'User'}</Text>
+              {profile.is_admin && (
+                <View style={styles.verifiedBadge}>
+                  <Text style={styles.verifiedCheck}>✓</Text>
+                </View>
+              )}
+            </View>
 
             {/* Bio Card */}
             {profile.bio && (
@@ -430,16 +439,17 @@ export default function UserProfileScreen() {
               </View>
             )}
 
-            {/* About Card */}
-            <View style={styles.card}>
-              <TouchableOpacity style={styles.cardHeader} onPress={() => setExpandAbout(!expandAbout)}>
-                <View style={styles.cardTitleRow}>
-                  <Star size={16} color="#4169E1" fill="#4169E1" />
-                  <Text style={styles.cardTitle}>About</Text>
-                </View>
-                {expandAbout ? <ChevronUp size={18} color="#666" /> : <ChevronDown size={18} color="#666" />}
-              </TouchableOpacity>
-              {expandAbout && (
+            {/* About Card - Hidden for admins */}
+            {!profile.is_admin && (
+              <View style={styles.card}>
+                <TouchableOpacity style={styles.cardHeader} onPress={() => setExpandAbout(!expandAbout)}>
+                  <View style={styles.cardTitleRow}>
+                    <Star size={16} color="#4169E1" fill="#4169E1" />
+                    <Text style={styles.cardTitle}>About</Text>
+                  </View>
+                  {expandAbout ? <ChevronUp size={18} color="#666" /> : <ChevronDown size={18} color="#666" />}
+                </TouchableOpacity>
+                {expandAbout && (
                 <View style={styles.cardBody}>
                   {(profile as any).occupation_status && (
                     <View style={styles.aboutRow}>
@@ -506,7 +516,8 @@ export default function UserProfileScreen() {
                   )}
                 </View>
               )}
-            </View>
+              </View>
+            )}
 
             {/* Interests Card */}
             {visibleInterestIds.length > 0 && (
@@ -572,8 +583,8 @@ export default function UserProfileScreen() {
           </View>
         </View>
 
-        {/* Visitor Actions (Follow/Message buttons) - placed after bio section */}
-        {!isOwner && (
+        {/* Visitor Actions (Follow/Message buttons) - Hidden for admins and own profile */}
+        {!isOwner && !viewProfile?.is_admin && (
           <VisitorActions userId={viewingUserId} />
         )}
 
@@ -1034,4 +1045,19 @@ const styles = StyleSheet.create({
   highlightsSection: {
     marginBottom: 12,
   },
+  verifiedBadge: {
+    backgroundColor: '#0EA5E9',
+    borderRadius: 12,
+    width: 22,
+    height: 22,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  verifiedCheck: {
+    color: '#FFFFFF',
+    fontSize: 14,
+    fontWeight: 'bold',
+    lineHeight: 22,
+  },
 });
+

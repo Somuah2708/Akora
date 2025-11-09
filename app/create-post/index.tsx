@@ -346,6 +346,7 @@ export default function CreatePostScreen() {
       
       let uploadedImageUrls: string[] = [];
       let uploadedVideoUrls: string[] = [];
+      let uploadedMediaItems: Array<{ type: 'image' | 'video'; url: string }> = [];
       
       if (media.length > 0) {
         console.log('Processing media...');
@@ -379,10 +380,12 @@ export default function CreatePostScreen() {
           }
           if (url) {
             console.log('Media uploaded:', url);
+            // Store in mixed media array (preserves order and type)
+            uploadedMediaItems.push({ type: mediaItem.type, url });
+            
+            // Also store in separate arrays for backward compatibility
             if (mediaItem.type === 'video') {
               uploadedVideoUrls.push(url);
-              // Potential place to POST metadata (trim start/end, muted) to backend if required.
-              // await postVideoEditMetadata(url, mediaItem.trimStart, mediaItem.trimEnd, mediaItem.muted)
             } else {
               uploadedImageUrls.push(url);
             }
@@ -391,7 +394,7 @@ export default function CreatePostScreen() {
           }
         }
         
-        if (uploadedImageUrls.length === 0 && uploadedVideoUrls.length === 0 && media.length > 0) {
+        if (uploadedMediaItems.length === 0 && media.length > 0) {
           Alert.alert('Warning', 'Failed to process media. Post will be created without media.');
         }
       }
@@ -405,6 +408,7 @@ export default function CreatePostScreen() {
         video_urls: uploadedVideoUrls.length > 0 ? uploadedVideoUrls : null,
         youtube_url: null,
         youtube_urls: null,
+        media_items: uploadedMediaItems.length > 0 ? uploadedMediaItems : null,
         category,
         visibility,
       };

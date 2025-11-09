@@ -1,8 +1,8 @@
-import { View, Text, StyleSheet, ScrollView, Image, TouchableOpacity, FlatList, Dimensions, Alert, Modal } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, Image, TouchableOpacity, FlatList, Dimensions, Alert, Modal, TextInput, ActivityIndicator, RefreshControl } from 'react-native';
 import { useFonts, Inter_400Regular, Inter_600SemiBold } from '@expo-google-fonts/inter';
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useRef } from 'react';
 import { SplashScreen, useRouter, useFocusEffect } from 'expo-router';
-import { Heart, MessageCircle, Send, Bookmark, MoreHorizontal, Plus, BookOpen, PartyPopper, Calendar, TrendingUp, Users, Newspaper, Search, User, Edit3, Trash2, Play } from 'lucide-react-native';
+import { Heart, MessageCircle, Send, Bookmark, MoreHorizontal, Plus, BookOpen, PartyPopper, Calendar, TrendingUp, Users, Newspaper, Search, User, Edit3, Trash2, Play, X } from 'lucide-react-native';
 import { supabase, type Post, type Profile, type HomeFeaturedItem, type HomeCategoryTab } from '@/lib/supabase';
 import { useAuth } from '@/hooks/useAuth';
 import { Video, ResizeMode, Audio, InterruptionModeIOS, InterruptionModeAndroid } from 'expo-av';
@@ -13,8 +13,24 @@ import { useVideoSettings } from '@/contexts/VideoSettingsContext';
 
 SplashScreen.preventAutoHideAsync();
 
-const { width } = Dimensions.get('window');
+const { width, height } = Dimensions.get('window');
 const CARD_WIDTH = width - 48;
+
+// Helper function to format time ago
+function getTimeAgo(dateString: string): string {
+  const now = new Date();
+  const past = new Date(dateString);
+  const diffMs = now.getTime() - past.getTime();
+  const diffMins = Math.floor(diffMs / 60000);
+  const diffHours = Math.floor(diffMs / 3600000);
+  const diffDays = Math.floor(diffMs / 86400000);
+
+  if (diffMins < 1) return 'just now';
+  if (diffMins < 60) return `${diffMins}m ago`;
+  if (diffHours < 24) return `${diffHours}h ago`;
+  if (diffDays < 7) return `${diffDays}d ago`;
+  return past.toLocaleDateString();
+}
 
 // Default featured items (fallback)
 const DEFAULT_FEATURED_ITEMS = [
@@ -40,10 +56,10 @@ const DEFAULT_FEATURED_ITEMS = [
 
 // Default category tabs (fallback)
 const DEFAULT_CATEGORY_TABS = [
-  { id: '1', title: 'History', icon_name: 'BookOpen', color: '#FF6B6B', image_url: 'https://images.unsplash.com/photo-1524178232363-1fb2b075b655?w=400&auto=format&fit=crop&q=60', route: '/heritage' },
+  { id: '1', title: 'History', icon_name: 'BookOpen', color: '#FF6B6B', image_url: 'https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcRWnZZyJTcu5Kxq6JgO2-0ePitSN7IiRZKm_w&s', route: '/heritage' },
   { id: '2', title: 'Centenary', icon_name: 'PartyPopper', color: '#4ECDC4', image_url: 'https://images.unsplash.com/photo-1492684223066-81342ee5ff30?w=400&auto=format&fit=crop&q=60', route: '/centenary' },
   { id: '3', title: 'Calendar', icon_name: 'Calendar', color: '#45B7D1', image_url: 'https://images.unsplash.com/photo-1506784983877-45594efa4cbe?w=400&auto=format&fit=crop&q=60', route: '/secretariat/event-calendar' },
-  { id: '4', title: 'Trending', icon_name: 'TrendingUp', color: '#F7B731', image_url: 'https://images.unsplash.com/photo-1552664730-d307ca884978?w=400&auto=format&fit=crop&q=60', route: '/news' },
+  { id: '4', title: 'Trending', icon_name: 'TrendingUp', color: '#F7B731', image_url: 'https://images.unsplash.com/photo-1504711434969-e33886168f5c?w=400&auto=format&fit=crop&q=60', route: '/news' },
   { id: '5', title: 'Community', icon_name: 'Users', color: '#A55EEA', image_url: 'https://images.unsplash.com/photo-1529156069898-49953e39b3ac?w=400&auto=format&fit=crop&q=60', route: '/circles' },
 ];
 
@@ -145,21 +161,82 @@ interface PostWithUser extends Post {
   comments?: number;
 }
 
+interface PostLayout {
+  id: string;
+  y: number;
+  height: number;
+}
+
 export default function HomeScreen() {
   const router = useRouter();
   const { user, profile } = useAuth();
-  const { isMuted } = useVideoSettings();
+  const { isMuted, setIsMuted } = useVideoSettings();
   const [posts, setPosts] = useState<PostWithUser[]>([]);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [carouselIndices, setCarouselIndices] = useState<{ [key: string]: number }>({});
   const [activeCategoryId, setActiveCategoryId] = useState<string | null>(null);
   const [featured, setFeatured] = useState<HomeFeaturedItem[]>([]);
   const [categoryTabs, setCategoryTabs] = useState<HomeCategoryTab[]>([]);
+  
+  // Video viewport detection
+  const [visibleVideos, setVisibleVideos] = useState<Set<string>>(new Set());
+  const [isScreenFocused, setIsScreenFocused] = useState(true);
+  const [postLayouts, setPostLayouts] = useState<PostLayout[]>([]);
+  const [scrollY, setScrollY] = useState(0);
+  const scrollViewRef = useRef<ScrollView>(null);
+  
+  // Share modal
+  const [shareModalVisible, setShareModalVisible] = useState(false);
+  const [selectedPostForShare, setSelectedPostForShare] = useState<PostWithUser | null>(null);
+  const [friendsList, setFriendsList] = useState<any[]>([]);
+  const [searchFriends, setSearchFriends] = useState('');
+  const [loadingFriends, setLoadingFriends] = useState(false);
 
   const [fontsLoaded] = useFonts({
     'Inter-Regular': Inter_400Regular,
     'Inter-SemiBold': Inter_600SemiBold,
   });
+
+  // Calculate which videos are in viewport (50%+ visible)
+  const updateVisibleVideos = useCallback(() => {
+    const viewportTop = scrollY;
+    const viewportBottom = scrollY + height;
+    const threshold = 0.5; // 50% visibility required
+
+    const visible = new Set<string>();
+
+    postLayouts.forEach((layout) => {
+      const postTop = layout.y;
+      const postBottom = layout.y + layout.height;
+
+      // Calculate visible portion
+      const visibleTop = Math.max(postTop, viewportTop);
+      const visibleBottom = Math.min(postBottom, viewportBottom);
+      const visibleHeight = Math.max(0, visibleBottom - visibleTop);
+      const visibilityRatio = visibleHeight / layout.height;
+
+      // Only play if 50%+ visible
+      if (visibilityRatio >= threshold) {
+        visible.add(layout.id);
+      }
+    });
+
+    // Only update if the set has actually changed
+    setVisibleVideos((prev) => {
+      const prevIds = Array.from(prev).sort().join(',');
+      const newIds = Array.from(visible).sort().join(',');
+      if (prevIds === newIds) return prev; // No change, return same reference
+      return visible;
+    });
+  }, [scrollY, postLayouts, height]);
+
+  // Update visible videos when scroll position or layouts change
+  useEffect(() => {
+    if (postLayouts.length > 0) {
+      updateVisibleVideos();
+    }
+  }, [scrollY, postLayouts.length]); // Only depend on scrollY and layouts count, not the callback
 
   const fetchPosts = useCallback(async () => {
     try {
@@ -175,6 +252,8 @@ export default function HomeScreen() {
           video_urls,
           youtube_url,
           youtube_urls,
+          comments_count,
+          likes_count,
           created_at,
           user_id,
           profiles:user_id!inner (
@@ -184,9 +263,7 @@ export default function HomeScreen() {
             avatar_url,
             is_admin,
             role
-          ),
-          post_comments(count),
-          post_likes(count)
+          )
         `)
   .eq('is_highlight_only', false)
   .or('is_admin.eq.true,role.eq.admin', { foreignTable: 'profiles' })
@@ -259,10 +336,10 @@ export default function HomeScreen() {
           youtube_urls: (post as any).youtube_urls,
           created_at: post.created_at,
           user: safeProfile,
-          likes: Array.isArray(post.post_likes) ? post.post_likes.length : 0,
+          likes: post.likes_count || 0,
           isLiked: userLikes.has(post.id),
           isBookmarked: userBookmarks.has(post.id),
-          comments_count: Array.isArray(post.post_comments) ? post.post_comments.length : 0,
+          comments_count: post.comments_count || 0,
         } as PostWithUser;
       });
 
@@ -304,102 +381,126 @@ export default function HomeScreen() {
     })();
   }, []);
 
+  const onRefresh = useCallback(async () => {
+    setRefreshing(true);
+    await fetchPosts();
+    setRefreshing(false);
+  }, [fetchPosts]);
+
   useEffect(() => {
     if (user) {
       fetchPosts();
     }
   }, [fetchPosts, user]);
 
+  // Stop all videos when screen loses focus (e.g., navigating to another tab)
+  useFocusEffect(
+    useCallback(() => {
+      // Screen is focused
+      setIsScreenFocused(true);
+      
+      return () => {
+        // Screen is unfocused - stop all videos
+        setIsScreenFocused(false);
+        setVisibleVideos(new Set());
+      };
+    }, [])
+  );
+
   // Real-time subscriptions for likes and comments on Home
   useEffect(() => {
-    if (!user?.id || posts.length === 0) return;
+    if (!user?.id) return;
 
-    const postIds = posts.map((p) => p.id);
+    console.log('📡 Setting up real-time subscriptions for Home feed');
 
-    // Subscribe to likes changes
+    // Subscribe to ALL post likes (not just current feed)
     const likesChannel = supabase
-      .channel('home_post_likes_changes')
+      .channel(`home_likes_${user.id}_${Date.now()}`)
       .on(
         'postgres_changes',
         {
           event: '*',
           schema: 'public',
           table: 'post_likes',
-          filter: `post_id=in.(${postIds.join(',')})`,
         },
         async (payload) => {
-          console.log('Like change detected on Home:', payload);
+          console.log('🔥 Real-time like change detected on Home:', payload.eventType);
           const postId = (payload.new as any)?.post_id || (payload.old as any)?.post_id;
           if (postId) {
-            const { data } = await supabase
-              .from('posts')
-              .select('id, post_likes(count)')
-              .eq('id', postId)
-              .single();
+            // Get accurate count by counting all likes for this post
+            const { count } = await supabase
+              .from('post_likes')
+              .select('*', { count: 'exact', head: true })
+              .eq('post_id', postId);
             
-            if (data) {
-              const likesCount = Array.isArray((data as any).post_likes) ? (data as any).post_likes.length : 0;
-              
-              // Check if current user liked this post
-              const { data: userLike } = await supabase
-                .from('post_likes')
-                .select('id')
-                .eq('post_id', postId)
-                .eq('user_id', user.id)
-                .maybeSingle();
-              
-              setPosts((prev) =>
-                prev.map((post) =>
-                  post.id === postId
-                    ? { ...post, likes: likesCount, isLiked: !!userLike }
-                    : post
-                )
-              );
-            }
+            const likesCount = count || 0;
+            
+            // Check if current user liked this post
+            const { data: userLike } = await supabase
+              .from('post_likes')
+              .select('id')
+              .eq('post_id', postId)
+              .eq('user_id', user.id)
+              .maybeSingle();
+            
+            console.log(`✅ Updated post ${postId}: ${likesCount} likes, user liked: ${!!userLike}`);
+            
+            setPosts((prev) =>
+              prev.map((post) =>
+                post.id === postId
+                  ? { ...post, likes: likesCount, isLiked: !!userLike }
+                  : post
+              )
+            );
           }
         }
       )
-      .subscribe();
+      .subscribe((status) => {
+        console.log('📡 Likes subscription status:', status);
+      });
 
-    // Subscribe to comments changes
+    // Subscribe to ALL post comments
     const commentsChannel = supabase
-      .channel('home_post_comments_changes')
+      .channel(`home_comments_${user.id}_${Date.now()}`)
       .on(
         'postgres_changes',
         {
           event: '*',
           schema: 'public',
           table: 'post_comments',
-          filter: `post_id=in.(${postIds.join(',')})`,
         },
         async (payload) => {
-          console.log('Comment change detected on Home:', payload);
+          console.log('🔥 Real-time comment change detected on Home:', payload.eventType);
           const postId = (payload.new as any)?.post_id || (payload.old as any)?.post_id;
           if (postId) {
-            const { data } = await supabase
-              .from('posts')
-              .select('id, post_comments(count)')
-              .eq('id', postId)
-              .single();
+            // Get accurate count by counting all comments for this post
+            const { count } = await supabase
+              .from('post_comments')
+              .select('*', { count: 'exact', head: true })
+              .eq('post_id', postId);
             
-            if (data) {
-              const commentsCount = Array.isArray((data as any).post_comments) ? (data as any).post_comments.length : 0;
-              setPosts((prev) =>
-                prev.map((post) =>
-                  post.id === postId ? { ...post, comments_count: commentsCount } : post
-                )
-              );
-            }
+            const commentsCount = count || 0;
+            
+            console.log(`✅ Updated post ${postId}: ${commentsCount} comments`);
+            
+            setPosts((prev) =>
+              prev.map((post) =>
+                post.id === postId ? { ...post, comments_count: commentsCount } : post
+              )
+            );
           }
         }
       )
-      .subscribe();
+      .subscribe((status) => {
+        console.log('📡 Comments subscription status:', status);
+      });
 
     return () => {
+      console.log('🔌 Unsubscribing from Home real-time channels');
       supabase.removeChannel(likesChannel);
       supabase.removeChannel(commentsChannel);
     };
-  }, [user?.id, posts.map((p) => p.id).join(',')]);
+  }, [user?.id]); // Only recreate when user changes, not when posts change
 
   const loadHomeConfig = useCallback(async () => {
     try {
@@ -450,23 +551,26 @@ export default function HomeScreen() {
     const wasLiked = post.isLiked;
     const originalLikes = post.likes ?? 0;
 
+    console.log('🎯 Like toggle:', { postId, wasLiked, originalLikes, userId: user.id });
+
     // Optimistic update
-      setPosts(prevPosts => prevPosts.map(p => {
-        if (p.id !== postId) return p;
+    setPosts(prevPosts => prevPosts.map(p => {
+      if (p.id !== postId) return p;
 
-        const currentLikes = p.likes ?? 0;
-        const nextLikes = p.isLiked ? Math.max(0, currentLikes - 1) : currentLikes + 1;
+      const currentLikes = p.likes ?? 0;
+      const nextLikes = p.isLiked ? Math.max(0, currentLikes - 1) : currentLikes + 1;
 
-        return {
-          ...p,
-          isLiked: !p.isLiked,
-          likes: nextLikes,
-        };
-      }));
+      return {
+        ...p,
+        isLiked: !p.isLiked,
+        likes: nextLikes,
+      };
+    }));
 
     try {
       if (wasLiked) {
         // Unlike: Delete the like
+        console.log('❌ Unliking post...');
         const { error } = await supabase
           .from('post_likes')
           .delete()
@@ -474,8 +578,10 @@ export default function HomeScreen() {
           .eq('user_id', user.id);
 
         if (error) throw error;
+        console.log('✅ Post unliked successfully');
       } else {
         // Like: Insert a new like
+        console.log('❤️ Liking post...');
         const { error } = await supabase
           .from('post_likes')
           .insert({
@@ -484,9 +590,37 @@ export default function HomeScreen() {
           });
 
         if (error) throw error;
+        console.log('✅ Post liked successfully');
       }
+
+      // Fetch accurate count after toggle
+      const { count } = await supabase
+        .from('post_likes')
+        .select('*', { count: 'exact', head: true })
+        .eq('post_id', postId);
+      
+      const actualLikesCount = count || 0;
+      
+      // Check current user's like status
+      const { data: userLike } = await supabase
+        .from('post_likes')
+        .select('id')
+        .eq('post_id', postId)
+        .eq('user_id', user.id)
+        .maybeSingle();
+      
+      console.log('📊 Final state:', { actualLikesCount, userLiked: !!userLike });
+      
+      // Update with accurate count
+      setPosts((prev) =>
+        prev.map((p) =>
+          p.id === postId
+            ? { ...p, isLiked: !!userLike, likes: actualLikesCount }
+            : p
+        )
+      );
     } catch (error: any) {
-      console.error('Error toggling like:', error);
+      console.error('❌ Error toggling like:', error);
       
       // Revert optimistic update on error
       setPosts(prevPosts => prevPosts.map(p => {
@@ -517,14 +651,192 @@ export default function HomeScreen() {
       if (wasSaved) {
         const { error } = await supabase.from('post_bookmarks').delete().eq('post_id', postId).eq('user_id', user.id);
         if (error) throw error;
+        console.log('✅ Post unsaved successfully');
       } else {
         const { error } = await supabase.from('post_bookmarks').insert({ post_id: postId, user_id: user.id });
         if (error) throw error;
+        console.log('✅ Post saved successfully - visible in Profile → Saved tab');
       }
     } catch (e) {
+      console.error('Error toggling bookmark:', e);
       // Revert
       setPosts(prev => prev.map(p => p.id === postId ? { ...p, isBookmarked: wasSaved } as any : p));
       Alert.alert('Error', 'Failed to update saved');
+    }
+  };
+
+  const handleSharePress = async (post: PostWithUser) => {
+    if (!user?.id) return;
+    setSelectedPostForShare(post);
+    setShareModalVisible(true); // Show modal immediately
+    setLoadingFriends(true); // Show loading state
+    
+    // Fetch friends list in background
+    try {
+      console.log('📋 Fetching friends list...');
+      
+      // Fetch where current user is user_id (you added them)
+      const { data: friendsData, error: friendsError } = await supabase
+        .from('friends')
+        .select(`
+          friend_id,
+          friend:profiles!friends_friend_id_fkey(id, username, full_name, avatar_url)
+        `)
+        .eq('user_id', user.id);
+      
+      if (friendsError) {
+        console.error('Error fetching friends:', friendsError);
+        throw friendsError;
+      }
+      
+      console.log('👥 Friends where you are user_id:', friendsData?.length || 0);
+      
+      // Fetch where current user is friend_id (they added you)
+      const { data: reverseFriendsData, error: reverseError } = await supabase
+        .from('friends')
+        .select(`
+          user_id,
+          friend:profiles!friends_user_id_fkey(id, username, full_name, avatar_url)
+        `)
+        .eq('friend_id', user.id);
+      
+      if (reverseError) {
+        console.error('Error fetching reverse friends:', reverseError);
+        throw reverseError;
+      }
+      
+      console.log('👥 Friends where you are friend_id:', reverseFriendsData?.length || 0);
+      
+      // Combine both directions
+      const allFriends = [
+        ...(friendsData || []).map((f: any) => f.friend).filter(Boolean),
+        ...(reverseFriendsData || []).map((f: any) => f.friend).filter(Boolean)
+      ];
+      
+      console.log('👥 Total friends before deduplication:', allFriends.length);
+      
+      // Remove duplicates by id
+      const uniqueFriends = Array.from(new Map(allFriends.map(f => [f.id, f])).values());
+      
+      console.log('✅ Unique friends to display:', uniqueFriends.length);
+      console.log('Friends list:', uniqueFriends.map(f => f.full_name || f.username).join(', '));
+      
+      setFriendsList(uniqueFriends);
+      
+      if (uniqueFriends.length === 0) {
+        console.log('⚠️ No friends found. User may need to add friends first.');
+      }
+      
+    } catch (error) {
+      console.error('❌ Error fetching friends:', error);
+      setFriendsList([]); // Show empty state
+    } finally {
+      setLoadingFriends(false);
+    }
+  };
+
+  const handleSendToFriend = async (friendId: string) => {
+    if (!user?.id || !selectedPostForShare?.id) return;
+    
+    try {
+      // Find existing direct chat between these two users
+      const { data: existingChats } = await supabase
+        .from('chat_participants')
+        .select('chat_id, chats!inner(id, type)')
+        .eq('user_id', user.id);
+      
+      let chatId = null;
+      
+      if (existingChats && existingChats.length > 0) {
+        // Check if any of these chats also includes the friend
+        for (const chat of existingChats) {
+          const { data: friendInChat } = await supabase
+            .from('chat_participants')
+            .select('user_id')
+            .eq('chat_id', chat.chat_id)
+            .eq('user_id', friendId)
+            .maybeSingle();
+          
+          if (friendInChat) {
+            chatId = chat.chat_id;
+            break;
+          }
+        }
+      }
+      
+      if (!chatId) {
+        // Create new direct chat
+        const { data: newChat, error: chatError } = await supabase
+          .from('chats')
+          .insert({
+            type: 'direct',
+            name: null,
+          })
+          .select('id')
+          .single();
+        
+        if (chatError) throw chatError;
+        chatId = newChat.id;
+        
+        // Add both participants
+        const { error: participantsError } = await supabase
+          .from('chat_participants')
+          .insert([
+            { chat_id: chatId, user_id: user.id },
+            { chat_id: chatId, user_id: friendId }
+          ]);
+        
+        if (participantsError) throw participantsError;
+      }
+      
+      // Send message with post (Instagram-style: send as post type, not text)
+      const { error: messageError } = await supabase
+        .from('messages')
+        .insert({
+          chat_id: chatId,
+          sender_id: user.id,
+          message_type: 'post', // Mark as post share
+          content: '', // Empty content for post shares
+          post_id: selectedPostForShare.id, // Reference to the shared post
+        });
+      
+      if (messageError) throw messageError;
+      
+      // ALSO send to direct_messages table for backward compatibility with existing chat screen
+      const { error: dmError } = await supabase
+        .from('direct_messages')
+        .insert({
+          sender_id: user.id,
+          receiver_id: friendId,
+          message: '', // Empty for shared posts
+          message_type: 'post', // Mark as post share
+          post_id: selectedPostForShare.id, // Reference to the shared post
+        });
+      
+      if (dmError) {
+        console.error('Error sending to direct_messages:', dmError);
+        // Don't throw - the main message was sent successfully
+      }
+      
+      // Track share
+      const { error: shareError } = await supabase
+        .from('post_shares')
+        .insert({
+          post_id: selectedPostForShare.id,
+          user_id: user.id,
+        });
+      
+      if (shareError) console.error('Error tracking share:', shareError);
+      
+      console.log('✅ Post shared successfully to both chat systems');
+      
+      // Show success feedback
+      const friend = friendsList.find(f => f.id === friendId);
+      alert(`Sent to ${friend?.full_name || 'friend'}!`);
+      
+    } catch (error) {
+      console.error('Error sharing post:', error);
+      alert('Failed to send post. Please try again.');
     }
   };
 
@@ -593,23 +905,110 @@ export default function HomeScreen() {
     return null;
   }
 
-  // Calculate time ago from ISO date string
-  const getTimeAgo = (dateString: string) => {
-    const date = new Date(dateString);
-    const now = new Date();
-    const diffInSeconds = Math.floor((now.getTime() - date.getTime()) / 1000);
-    if (diffInSeconds < 60) return `${diffInSeconds} seconds ago`;
-    if (diffInSeconds < 3600) return `${Math.floor(diffInSeconds / 60)} minutes ago`;
-    if (diffInSeconds < 86400) return `${Math.floor(diffInSeconds / 3600)} hours ago`;
-    return `${Math.floor(diffInSeconds / 86400)} days ago`;
-  };
-
   return (
     <View style={styles.container}>
+      {/* Share Modal (Instagram-style) */}
+      <Modal
+        visible={shareModalVisible}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setShareModalVisible(false)}
+      >
+        <View style={styles.shareModalOverlay}>
+          <View style={styles.shareModalContent}>
+            {/* Header */}
+            <View style={styles.shareModalHeader}>
+              <TouchableOpacity onPress={() => setShareModalVisible(false)}>
+                <X size={24} color="#111827" strokeWidth={2} />
+              </TouchableOpacity>
+              <Text style={styles.shareModalTitle}>Share</Text>
+              <View style={{ width: 24 }} />
+            </View>
+
+            {/* Search */}
+            <View style={styles.shareSearchContainer}>
+              <TextInput
+                style={styles.shareSearchInput}
+                placeholder="Search friends..."
+                value={searchFriends}
+                onChangeText={setSearchFriends}
+                placeholderTextColor="#9CA3AF"
+              />
+            </View>
+
+            {/* Friends List */}
+            <ScrollView style={styles.shareFriendsList} showsVerticalScrollIndicator={false}>
+              {loadingFriends ? (
+                <View style={styles.shareLoadingState}>
+                  <ActivityIndicator size="large" color="#0EA5E9" />
+                  <Text style={styles.shareLoadingText}>Loading friends...</Text>
+                </View>
+              ) : friendsList.length === 0 ? (
+                <View style={styles.shareEmptyState}>
+                  <Users size={48} color="#D1D5DB" strokeWidth={2} />
+                  <Text style={styles.shareEmptyText}>No friends yet</Text>
+                  <Text style={styles.shareEmptySubtext}>Add friends to share posts with them</Text>
+                </View>
+              ) : (
+                <>
+                  {(() => {
+                    const filteredFriends = friendsList.filter(friend => 
+                      searchFriends === '' || 
+                      friend.full_name?.toLowerCase().includes(searchFriends.toLowerCase()) ||
+                      friend.username?.toLowerCase().includes(searchFriends.toLowerCase())
+                    );
+                    console.log('🎯 Rendering friends:', filteredFriends.length, 'of', friendsList.length);
+                    return filteredFriends.map((friend) => (
+                      <TouchableOpacity
+                        key={friend.id}
+                        style={styles.shareFriendItem}
+                        onPress={() => {
+                          handleSendToFriend(friend.id);
+                          setShareModalVisible(false);
+                          setSearchFriends('');
+                        }}
+                        activeOpacity={0.7}
+                      >
+                        <View style={styles.shareFriendLeft}>
+                          {friend.avatar_url ? (
+                            <Image source={{ uri: friend.avatar_url }} style={styles.shareFriendAvatar} />
+                          ) : (
+                            <View style={[styles.shareFriendAvatar, styles.shareFriendAvatarPlaceholder]}>
+                              <Text style={styles.shareFriendAvatarText}>
+                                {friend.full_name?.[0]?.toUpperCase() || 'U'}
+                              </Text>
+                            </View>
+                          )}
+                          <View style={styles.shareFriendInfo}>
+                            <Text style={styles.shareFriendName}>{friend.full_name || 'Unknown'}</Text>
+                            {friend.username && (
+                              <Text style={styles.shareFriendUsername}>@{friend.username}</Text>
+                            )}
+                          </View>
+                        </View>
+                        <View style={styles.shareSendButton}>
+                          <Send size={20} color="#0EA5E9" strokeWidth={2} />
+                        </View>
+                      </TouchableOpacity>
+                    ));
+                  })()}
+                </>
+              )}
+            </ScrollView>
+          </View>
+        </View>
+      </Modal>
+
       <ScrollView 
+        ref={scrollViewRef}
         style={styles.scrollView}
         showsVerticalScrollIndicator={false}
         stickyHeaderIndices={[]}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
+        onScroll={(event) => {
+          setScrollY(event.nativeEvent.contentOffset.y);
+        }}
+        scrollEventThrottle={16}
       >
         {/* Header */}
         <View style={styles.header}>
@@ -690,7 +1089,15 @@ export default function HomeScreen() {
                 }
               }}
             >
-              <Image source={{ uri: (category as any).image_url }} style={styles.categoryImage} />
+              <Image 
+                source={
+                  typeof (category as any).image_url === 'string' 
+                    ? { uri: (category as any).image_url }
+                    : (category as any).image_url
+                } 
+                style={styles.categoryImage}
+                resizeMode="cover"
+              />
               <View
                 style={[
                   styles.categoryOverlay,
@@ -723,7 +1130,7 @@ export default function HomeScreen() {
           {(profile?.role === 'admin' || profile?.is_admin) && (
             <TouchableOpacity 
               style={styles.createFirstPostButton}
-              onPress={() => router.push('/create-post')}
+              onPress={() => router.push('/home-create-post')}
             >
               <Text style={styles.createFirstPostText}>Create First Post</Text>
             </TouchableOpacity>
@@ -731,10 +1138,24 @@ export default function HomeScreen() {
           </View>
         ) : (
           posts.map((post) => (
-            <View key={post.id} style={styles.postCard}>
+            <View 
+              key={post.id} 
+              style={styles.postCard}
+              onLayout={(event) => {
+                const { y, height } = event.nativeEvent.layout;
+                setPostLayouts((prev) => {
+                  const filtered = prev.filter((p) => p.id !== post.id);
+                  return [...filtered, { id: post.id, y, height }];
+                });
+              }}
+            >
               {/* Post Header */}
               <View style={styles.postHeader}>
-                <View style={styles.postHeaderLeft}>
+                <TouchableOpacity 
+                  style={styles.postHeaderLeft}
+                  onPress={() => router.push(`/user-profile/${post.user_id}` as any)}
+                  activeOpacity={0.7}
+                >
                   <Image 
                     source={{ 
                       uri: post.user.avatar_url || 'https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?w=400&auto=format&fit=crop&q=60'
@@ -742,10 +1163,17 @@ export default function HomeScreen() {
                     style={styles.postUserAvatar} 
                   />
                   <View>
-                    <Text style={styles.postUsername}>{post.user.full_name}</Text>
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                      <Text style={styles.postUsername}>{post.user.full_name}</Text>
+                      {(post.user.is_admin || post.user.role === 'admin') && (
+                        <View style={styles.verifiedBadge}>
+                          <Text style={styles.verifiedCheck}>✓</Text>
+                        </View>
+                      )}
+                    </View>
                     <Text style={styles.postTime}>{getTimeAgo(post.created_at)}</Text>
                   </View>
-                </View>
+                </TouchableOpacity>
                 <TouchableOpacity 
                   onPress={() => {
                     console.log('=== THREE DOT BUTTON CLICKED ===');
@@ -769,17 +1197,14 @@ export default function HomeScreen() {
               </View>
 
               {/* Post Media (Images/Videos/YouTube Carousel) */}
-              {post.youtube_urls && post.youtube_urls.length > 0 ? (
+              {(post as any).media_items && (post as any).media_items.length > 0 ? (
                 <View style={styles.carouselContainer}>
                   <ScrollView
                     horizontal
                     pagingEnabled
                     showsHorizontalScrollIndicator={false}
+                    removeClippedSubviews={false}
                     style={styles.carousel}
-                    directionalLockEnabled
-                    bounces={false}
-                    snapToInterval={width}
-                    decelerationRate="fast"
                     onScroll={(event) => {
                       const scrollX = event.nativeEvent.contentOffset.x;
                       const currentIndex = Math.round(scrollX / width);
@@ -790,17 +1215,65 @@ export default function HomeScreen() {
                     }}
                     scrollEventThrottle={16}
                   >
-                    {post.youtube_urls.map((youtubeUrl, index) => (
-                      <YouTubePlayer key={index} url={youtubeUrl} />
+                    {(post as any).media_items.map((mediaItem: any, index: number) => (
+                      <View key={index} style={styles.mediaPage}>
+                        {mediaItem.type === 'video' ? (
+                          <Video
+                            source={{ uri: mediaItem.url }}
+                            style={styles.postImage}
+                            useNativeControls
+                            resizeMode={ResizeMode.COVER}
+                            isLooping={true}
+                            shouldPlay={
+                              isScreenFocused && 
+                              visibleVideos.has(post.id) && 
+                              (carouselIndices[post.id] ?? 0) === index
+                            }
+                            volume={
+                              isMuted || (carouselIndices[post.id] ?? 0) !== index 
+                                ? 0.0 
+                                : 1.0
+                            }
+                            onError={(err) => console.warn('Video play error (mixed media)', err)}
+                          />
+                        ) : (
+                          <TouchableOpacity 
+                            activeOpacity={0.95}
+                            onPress={() => router.push(`/post/${post.id}`)}
+                          >
+                            <Image
+                              source={{ uri: mediaItem.url }}
+                              style={styles.postImage}
+                              resizeMode="cover"
+                            />
+                          </TouchableOpacity>
+                        )}
+                      </View>
                     ))}
                   </ScrollView>
-                  {post.youtube_urls.length > 1 && (
+                  {(post as any).media_items.length > 1 && (
                     <View style={styles.carouselIndicator}>
                       <Text style={styles.carouselIndicatorText}>
-                        {(carouselIndices[post.id] ?? 0) + 1}/{post.youtube_urls.length}
+                        {(carouselIndices[post.id] ?? 0) + 1}/{(post as any).media_items.length}
                       </Text>
                     </View>
                   )}
+                </View>
+              ) : post.youtube_urls && post.youtube_urls.length > 0 ? (
+                <View style={styles.carouselContainer}>
+                  <ScrollView
+                    horizontal
+                    pagingEnabled
+                    showsHorizontalScrollIndicator={false}
+                    removeClippedSubviews={false}
+                    style={styles.carousel}
+                  >
+                    {post.youtube_urls.map((youtubeUrl, index) => (
+                      <View key={index} style={styles.mediaPage}>
+                        <YouTubePlayer url={youtubeUrl} />
+                      </View>
+                    ))}
+                  </ScrollView>
                 </View>
               ) : post.video_urls && post.video_urls.length > 0 ? (
                 <View style={styles.carouselContainer}>
@@ -808,11 +1281,8 @@ export default function HomeScreen() {
                     horizontal
                     pagingEnabled
                     showsHorizontalScrollIndicator={false}
+                    removeClippedSubviews={false}
                     style={styles.carousel}
-                    directionalLockEnabled
-                    bounces={false}
-                    snapToInterval={width}
-                    decelerationRate="fast"
                     onScroll={(event) => {
                       const scrollX = event.nativeEvent.contentOffset.x;
                       const currentIndex = Math.round(scrollX / width);
@@ -824,14 +1294,23 @@ export default function HomeScreen() {
                     scrollEventThrottle={16}
                   >
                     {post.video_urls.map((videoUrl, index) => (
-                      <View key={index} style={styles.videoContainer}>
+                      <View key={index} style={styles.mediaPage}>
                         <Video
                           source={{ uri: videoUrl }}
                           style={styles.postImage}
                           useNativeControls
                           resizeMode={ResizeMode.COVER}
-                          isLooping
-                          volume={isMuted ? 0.0 : 1.0}
+                          isLooping={true}
+                          shouldPlay={
+                            isScreenFocused && 
+                            visibleVideos.has(post.id) && 
+                            (carouselIndices[post.id] ?? 0) === index
+                          }
+                          volume={
+                            isMuted || (carouselIndices[post.id] ?? 0) !== index 
+                              ? 0.0 
+                              : 1.0
+                          }
                           onError={(err) => console.warn('Video play error (carousel item)', err)}
                         />
                       </View>
@@ -846,17 +1325,13 @@ export default function HomeScreen() {
                   )}
                 </View>
               ) : post.image_urls && post.image_urls.length > 0 ? (
-                <TouchableOpacity activeOpacity={0.85} onPress={() => router.push(`/post/${post.id}`)}>
                 <View style={styles.carouselContainer}>
                   <ScrollView
                     horizontal
                     pagingEnabled
                     showsHorizontalScrollIndicator={false}
+                    removeClippedSubviews={false}
                     style={styles.carousel}
-                    directionalLockEnabled
-                    bounces={false}
-                    snapToInterval={width}
-                    decelerationRate="fast"
                     onScroll={(event) => {
                       const scrollX = event.nativeEvent.contentOffset.x;
                       const currentIndex = Math.round(scrollX / width);
@@ -868,12 +1343,19 @@ export default function HomeScreen() {
                     scrollEventThrottle={16}
                   >
                     {post.image_urls.map((imageUrl, index) => (
-                      <Image 
-                        key={index}
-                        source={{ uri: imageUrl }} 
-                        style={styles.postImage}
-                        resizeMode="contain"
-                      />
+                      <TouchableOpacity 
+                        key={index} 
+                        style={styles.mediaPage}
+                        activeOpacity={0.95}
+                        onPress={() => router.push(`/post/${post.id}`)}
+                      >
+                        <Image
+                          source={{ uri: imageUrl }}
+                          style={styles.postImage}
+                          resizeMode="cover"
+                          onError={(e) => console.warn('Image load error', imageUrl, e.nativeEvent?.error)}
+                        />
+                      </TouchableOpacity>
                     ))}
                   </ScrollView>
                   {post.image_urls.length > 1 && (
@@ -884,36 +1366,34 @@ export default function HomeScreen() {
                     </View>
                   )}
                 </View>
-                </TouchableOpacity>
               ) : post.youtube_url ? (
                 <YouTubePlayer url={post.youtube_url} />
               ) : post.video_url ? (
-                <View style={styles.videoContainer}>
-                  <Video
-                    source={{ uri: post.video_url }}
-                    style={styles.postImage}
-                    useNativeControls
-                    resizeMode={ResizeMode.COVER}
-                    isLooping
-                    volume={isMuted ? 0.0 : 1.0}
-                    onError={(err) => console.warn('Video play error (single)', err)}
-                  />
-                </View>
+                <Video
+                  source={{ uri: post.video_url }}
+                  style={styles.postImage}
+                  useNativeControls
+                  resizeMode={ResizeMode.COVER}
+                  isLooping
+                  shouldPlay={isScreenFocused && visibleVideos.has(post.id)}
+                  volume={isMuted ? 0.0 : 1.0}
+                  onError={(err) => console.warn('Video play error (single)', err)}
+                />
               ) : post.image_url ? (
                 <TouchableOpacity activeOpacity={0.85} onPress={() => router.push(`/post/${post.id}`)}>
                   <Image 
                     source={{ uri: post.image_url }} 
                     style={styles.postImage}
-                    resizeMode="contain"
+                    resizeMode="cover"
                   />
                 </TouchableOpacity>
               ) : null}
 
-              {/* Post Actions */}
+              {/* Post Actions - Instagram Style */}
               <View style={styles.postActions}>
                 <View style={styles.postActionsLeft}>
                   <TouchableOpacity 
-                    style={styles.actionButton}
+                    style={styles.actionButtonWithCount}
                     onPress={() => handleLikeToggle(post.id)}
                   >
                     <Heart 
@@ -922,21 +1402,30 @@ export default function HomeScreen() {
                       fill={post.isLiked ? "#FF3B30" : "none"}
                       strokeWidth={2}
                     />
+                    {(post.likes || 0) > 0 && (
+                      <Text style={styles.actionCount}>{post.likes}</Text>
+                    )}
                   </TouchableOpacity>
                   <TouchableOpacity 
-                    style={styles.actionButton}
+                    style={styles.actionButtonWithCount}
                     onPress={() => router.push(`/post-comments/${post.id}`)}
                   >
                     <MessageCircle size={26} color="#000000" strokeWidth={2} />
+                    {post.comments_count !== undefined && post.comments_count > 0 && (
+                      <Text style={styles.actionCount}>{post.comments_count}</Text>
+                    )}
+                  </TouchableOpacity>
+                  <TouchableOpacity 
+                    style={styles.actionButton}
+                    onPress={() => handleSharePress(post)}
+                  >
+                    <Send size={26} color="#000000" strokeWidth={2} />
                   </TouchableOpacity>
                 </View>
                 <TouchableOpacity style={styles.actionButton} onPress={() => handleBookmarkToggle(post.id)}>
                   <Bookmark size={26} color={post.isBookmarked ? '#111827' : '#000000'} fill={post.isBookmarked ? '#111827' : 'none'} strokeWidth={2} />
                 </TouchableOpacity>
               </View>
-
-              {/* Post Likes */}
-              <Text style={styles.postLikes}>{post.likes || 0} {post.likes === 1 ? 'like' : 'likes'}</Text>
 
               {/* Post Caption */}
               {post.content && (
@@ -976,7 +1465,7 @@ export default function HomeScreen() {
       {(profile?.role === 'admin' || profile?.is_admin) && (
         <TouchableOpacity 
           style={styles.fabButton}
-          onPress={() => router.push('/create-post')}
+          onPress={() => router.push('/home-create-post')}
           activeOpacity={0.8}
         >
           <Plus size={28} color="#FFFFFF" strokeWidth={2.5} />
@@ -1168,8 +1657,8 @@ const styles = StyleSheet.create({
   },
   postImage: {
     width: width,
-    height: width * 0.75, // 4:3 aspect ratio for better proportions
-    backgroundColor: '#F8F8F8',
+    height: width, // Square 1:1 ratio like Instagram
+    backgroundColor: '#000000',
   },
   carouselIndicator: {
     position: 'absolute',
@@ -1185,10 +1674,11 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontFamily: 'Inter-SemiBold',
   },
-  videoContainer: {
+  mediaPage: {
     width: width,
-    height: width,
+    height: width, // Square container
     backgroundColor: '#000000',
+    overflow: 'hidden',
   },
   postActions: {
     flexDirection: 'row',
@@ -1203,6 +1693,17 @@ const styles = StyleSheet.create({
   },
   actionButton: {
     padding: 4,
+  },
+  actionButtonWithCount: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    padding: 4,
+  },
+  actionCount: {
+    fontSize: 14,
+    fontFamily: 'Inter-SemiBold',
+    color: '#000000',
   },
   postLikes: {
     fontSize: 14,
@@ -1324,5 +1825,140 @@ const styles = StyleSheet.create({
   postMenuItemTextDanger: {
     color: '#EF4444',
     fontWeight: '600',
+  },
+  // Share Modal Styles (Instagram-style)
+  shareModalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'flex-end',
+  },
+  shareModalContent: {
+    backgroundColor: '#FFFFFF',
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    height: '80%',
+  },
+  shareModalHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 20,
+    paddingVertical: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: '#F3F4F6',
+  },
+  shareModalTitle: {
+    fontSize: 18,
+    fontFamily: 'Inter-SemiBold',
+    color: '#111827',
+  },
+  shareSearchContainer: {
+    paddingHorizontal: 20,
+    paddingVertical: 12,
+  },
+  shareSearchInput: {
+    backgroundColor: '#F3F4F6',
+    borderRadius: 10,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    fontSize: 16,
+    fontFamily: 'Inter-Regular',
+    color: '#111827',
+  },
+  shareFriendsList: {
+    flex: 1,
+  },
+  shareFriendItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 20,
+    paddingVertical: 12,
+  },
+  shareFriendLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
+  },
+  shareFriendAvatar: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    marginRight: 12,
+  },
+  shareFriendAvatarPlaceholder: {
+    backgroundColor: '#E5E7EB',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  shareFriendAvatarText: {
+    fontSize: 18,
+    fontFamily: 'Inter-SemiBold',
+    color: '#6B7280',
+  },
+  shareFriendInfo: {
+    flex: 1,
+  },
+  shareFriendName: {
+    fontSize: 16,
+    fontFamily: 'Inter-SemiBold',
+    color: '#111827',
+  },
+  shareFriendUsername: {
+    fontSize: 14,
+    fontFamily: 'Inter-Regular',
+    color: '#6B7280',
+    marginTop: 2,
+  },
+  shareSendButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: '#EFF6FF',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  shareEmptyState: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 60,
+    paddingHorizontal: 40,
+  },
+  shareLoadingState: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 60,
+    paddingHorizontal: 40,
+  },
+  shareLoadingText: {
+    fontSize: 16,
+    fontFamily: 'Inter-Medium',
+    color: '#6B7280',
+    marginTop: 16,
+  },
+  shareEmptyText: {
+    fontSize: 18,
+    fontFamily: 'Inter-SemiBold',
+    color: '#6B7280',
+    marginTop: 16,
+  },
+  shareEmptySubtext: {
+    fontSize: 14,
+    fontFamily: 'Inter-Regular',
+    color: '#9CA3AF',
+  },
+  verifiedBadge: {
+    backgroundColor: '#0EA5E9',
+    borderRadius: 10,
+    width: 18,
+    height: 18,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  verifiedCheck: {
+    color: '#FFFFFF',
+    fontSize: 12,
+    fontWeight: 'bold',
+    lineHeight: 18,
   },
 }); 

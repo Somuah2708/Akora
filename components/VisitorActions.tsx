@@ -1,24 +1,152 @@
-import React from 'react';
-import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
-import { MessageCircle, UserPlus } from 'lucide-react-native';
+import React, { useEffect, useState } from 'react';
+import { View, Text, TouchableOpacity, StyleSheet, Alert, ActivityIndicator } from 'react-native';
+import { MessageCircle, UserPlus, Check, Clock, UserMinus } from 'lucide-react-native';
+import { useRouter } from 'expo-router';
+import { useAuth } from '@/hooks/useAuth';
+import { checkFriendshipStatus, sendFriendRequest, acceptFriendRequest } from '@/lib/friends';
+import { supabase } from '@/lib/supabase';
 
 type Props = {
+  userId: string;
   onMessage?: () => void;
   onFollow?: () => void;
   following?: boolean;
   loading?: boolean;
 };
 
-export default function VisitorActions({ onMessage, onFollow, following, loading }: Props) {
+export default function VisitorActions({ userId, onMessage, onFollow, following, loading }: Props) {
+  const router = useRouter();
+  const { user } = useAuth();
+  const [friendshipStatus, setFriendshipStatus] = useState<'none' | 'friends' | 'request_sent' | 'request_received'>('none');
+  const [actionLoading, setActionLoading] = useState(false);
+  const [requestId, setRequestId] = useState<string | null>(null);
+
+  useEffect(() => {
+    loadFriendshipStatus();
+  }, [userId, user]);
+
+  const loadFriendshipStatus = async () => {
+    if (!user) return;
+    
+    try {
+      const status = await checkFriendshipStatus(user.id, userId);
+      setFriendshipStatus(status);
+      
+      // If request received, get the request ID for accepting
+      if (status === 'request_received') {
+        const { data } = await supabase
+          .from('friend_requests')
+          .select('id')
+          .eq('sender_id', userId)
+          .eq('receiver_id', user.id)
+          .eq('status', 'pending')
+          .single();
+        
+        if (data) setRequestId(data.id);
+      }
+    } catch (error) {
+      console.error('Error checking friendship status:', error);
+    }
+  };
+
+  const handleFriendAction = async () => {
+    if (!user || actionLoading) return;
+
+    try {
+      setActionLoading(true);
+
+      if (friendshipStatus === 'none') {
+        // Send friend request
+        await sendFriendRequest(userId, user.id);
+        Alert.alert('Success', 'Friend request sent!');
+        setFriendshipStatus('request_sent');
+      } else if (friendshipStatus === 'request_received' && requestId) {
+        // Accept friend request
+        await acceptFriendRequest(requestId);
+        Alert.alert('Success', 'Friend request accepted!');
+        setFriendshipStatus('friends');
+      }
+    } catch (error: any) {
+      Alert.alert('Error', error.message || 'Failed to perform action');
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
+  const handleMessage = () => {
+    if (onMessage) {
+      onMessage();
+    } else {
+      // Navigate to direct message
+      router.push(`/chat/direct/${userId}` as any);
+    }
+  };
+
+  const getFriendButtonContent = () => {
+    switch (friendshipStatus) {
+      case 'friends':
+        return {
+          icon: Check,
+          text: 'Friends',
+          color: '#10B981',
+          disabled: true,
+        };
+      case 'request_sent':
+        return {
+          icon: Clock,
+          text: 'Pending',
+          color: '#F59E0B',
+          disabled: true,
+        };
+      case 'request_received':
+        return {
+          icon: UserPlus,
+          text: 'Accept',
+          color: '#0A84FF',
+          disabled: false,
+        };
+      default:
+        return {
+          icon: UserPlus,
+          text: 'Add Friend',
+          color: '#0A84FF',
+          disabled: false,
+        };
+    }
+  };
+
+  const buttonContent = getFriendButtonContent();
+  const ButtonIcon = buttonContent.icon;
+
   return (
     <View style={styles.row}>
-      <TouchableOpacity style={[styles.btn, styles.primary]} onPress={onMessage} disabled={loading}>
+      <TouchableOpacity 
+        style={[styles.btn, styles.primary]} 
+        onPress={handleMessage} 
+        disabled={loading || actionLoading}
+      >
         <MessageCircle size={18} color="#FFFFFF" />
         <Text style={styles.primaryText}>Message</Text>
       </TouchableOpacity>
-      {/* Optional follow button for later */}
-      <TouchableOpacity style={[styles.btn, styles.secondary]} onPress={onFollow} disabled={loading}>
-        <UserPlus size={18} color="#111827" />
+      
+      <TouchableOpacity 
+        style={[
+          styles.btn, 
+          styles.friendButton,
+          { backgroundColor: buttonContent.color },
+          buttonContent.disabled && styles.disabledButton
+        ]} 
+        onPress={handleFriendAction}
+        disabled={loading || actionLoading || buttonContent.disabled}
+      >
+        {actionLoading ? (
+          <ActivityIndicator size="small" color="#FFFFFF" />
+        ) : (
+          <>
+            <ButtonIcon size={18} color="#FFFFFF" />
+            <Text style={styles.friendButtonText}>{buttonContent.text}</Text>
+          </>
+        )}
       </TouchableOpacity>
     </View>
   );
@@ -51,5 +179,18 @@ const styles = StyleSheet.create({
     flex: 0,
     backgroundColor: '#F3F4F6',
     paddingHorizontal: 14,
+  },
+  friendButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  friendButtonText: {
+    color: '#FFFFFF',
+    fontSize: 14,
+    fontFamily: 'Inter-SemiBold',
+  },
+  disabledButton: {
+    opacity: 0.7,
   },
 });

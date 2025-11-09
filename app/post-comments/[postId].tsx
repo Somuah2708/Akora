@@ -12,6 +12,10 @@ SplashScreen.preventAutoHideAsync();
 
 interface CommentWithUser extends PostComment {
   user: Profile;
+  like_count?: number;
+  isLikedByUser?: boolean;
+  replies?: CommentWithUser[];
+  reply_count?: number;
 }
 
 export default function PostCommentsScreen() {
@@ -38,11 +42,13 @@ export default function PostCommentsScreen() {
   }, [fontsLoaded]);
 
   const fetchComments = useCallback(async () => {
-    if (!postId) return;
+    if (!postId || !authUser) return;
     
     try {
       setLoading(true);
-      const { data, error } = await supabase
+      
+      // Fetch all comments for this post (both parent and replies)
+      const { data: allComments, error } = await supabase
         .from('post_comments')
         .select(`
           id,
@@ -50,6 +56,7 @@ export default function PostCommentsScreen() {
           user_id,
           content,
           parent_comment_id,
+          like_count,
           created_at,
           updated_at,
           profiles:user_id (
@@ -60,30 +67,77 @@ export default function PostCommentsScreen() {
           )
         `)
         .eq('post_id', postId)
-        .is('parent_comment_id', null) // Only top-level comments for now
-        .order('created_at', { ascending: false });
+        .order('created_at', { ascending: true }); // Changed to ascending for chronological replies
 
       if (error) throw error;
 
-      const formattedComments = data.map(comment => ({
-        id: comment.id,
-        post_id: comment.post_id,
-        user_id: comment.user_id,
-        content: comment.content,
-        parent_comment_id: comment.parent_comment_id,
-        created_at: comment.created_at,
-        updated_at: comment.updated_at,
-        user: Array.isArray(comment.profiles) ? comment.profiles[0] : comment.profiles,
-      })) as CommentWithUser[];
+      // Fetch user's likes for all comments
+      const allCommentIds = allComments.map(c => c.id);
+      const { data: likesData } = await supabase
+        .from('post_comment_likes')
+        .select('comment_id')
+        .eq('user_id', authUser.id)
+        .in('comment_id', allCommentIds);
 
-      setComments(formattedComments);
+      const likedCommentIds = new Set(likesData?.map(like => like.comment_id) || []);
+
+      // Separate parent comments and replies
+      const parentComments: CommentWithUser[] = [];
+      const repliesMap = new Map<string, CommentWithUser[]>();
+
+      allComments.forEach(comment => {
+        const formattedComment: CommentWithUser = {
+          id: comment.id,
+          post_id: comment.post_id,
+          user_id: comment.user_id,
+          content: comment.content,
+          parent_comment_id: comment.parent_comment_id,
+          like_count: comment.like_count || 0,
+          isLikedByUser: likedCommentIds.has(comment.id),
+          created_at: comment.created_at,
+          updated_at: comment.updated_at,
+          user: Array.isArray(comment.profiles) ? comment.profiles[0] : comment.profiles,
+          replies: [],
+          reply_count: 0,
+        };
+
+        if (!comment.parent_comment_id) {
+          // This is a parent comment
+          parentComments.push(formattedComment);
+        } else {
+          // This is a reply
+          if (!repliesMap.has(comment.parent_comment_id)) {
+            repliesMap.set(comment.parent_comment_id, []);
+          }
+          repliesMap.get(comment.parent_comment_id)!.push(formattedComment);
+        }
+      });
+
+      // Attach replies to their parent comments
+      parentComments.forEach(parent => {
+        const replies = repliesMap.get(parent.id) || [];
+        parent.replies = replies;
+        parent.reply_count = replies.length;
+      });
+
+      // Sort parent comments by newest first
+      parentComments.sort((a, b) => 
+        new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+      );
+
+      setComments(parentComments);
+      
+      // Update likedComments state
+      setLikedComments(likedCommentIds);
+      
+      console.log('✅ Loaded', parentComments.length, 'comments with', repliesMap.size, 'reply threads');
     } catch (error) {
       console.error('Error fetching comments:', error);
       Alert.alert('Error', 'Failed to load comments');
     } finally {
       setLoading(false);
     }
-  }, [postId]);
+  }, [postId, authUser]);
 
   useEffect(() => {
     fetchComments();
@@ -134,15 +188,14 @@ export default function PostCommentsScreen() {
 
       if (error) throw error;
 
-      // Add the new comment to the list with user info
-      const newComment: CommentWithUser = {
-        ...data,
-        user: userProfile,
-      };
+      console.log('✅ Comment added:', replyingTo ? 'Reply' : 'Comment', data.id);
 
-      setComments([newComment, ...comments]);
+      // Clear input and reply state
       setCommentText('');
-      setReplyingTo(null); // Clear reply state
+      setReplyingTo(null);
+      
+      // Refetch all comments to get the updated list with proper nesting
+      await fetchComments();
     } catch (error: any) {
       console.error('Error adding comment:', error);
       Alert.alert('Error', error.message || 'Failed to add comment');
@@ -151,19 +204,140 @@ export default function PostCommentsScreen() {
     }
   };
 
-  const handleLikeComment = (commentId: string) => {
-    console.log('Like comment:', commentId);
+  const handleLikeComment = async (commentId: string) => {
+    if (!authUser) return;
+
+    const isLiked = likedComments.has(commentId);
+    
+    // Optimistic update
     setLikedComments(prev => {
       const newSet = new Set(prev);
-      if (newSet.has(commentId)) {
+      if (isLiked) {
         newSet.delete(commentId);
       } else {
         newSet.add(commentId);
       }
       return newSet;
     });
-    // TODO: Add actual like functionality with Supabase
-    // For now, just toggle in local state
+
+    // Update comment like count optimistically
+    setComments(prevComments =>
+      prevComments.map(comment => {
+        // Check if this is the liked comment (parent)
+        if (comment.id === commentId) {
+          return {
+            ...comment,
+            like_count: isLiked ? Math.max(0, (comment.like_count || 0) - 1) : (comment.like_count || 0) + 1,
+            isLikedByUser: !isLiked,
+          };
+        }
+        // Check if the liked comment is a reply
+        if (comment.replies) {
+          const updatedReplies = comment.replies.map(reply =>
+            reply.id === commentId
+              ? {
+                  ...reply,
+                  like_count: isLiked ? Math.max(0, (reply.like_count || 0) - 1) : (reply.like_count || 0) + 1,
+                  isLikedByUser: !isLiked,
+                }
+              : reply
+          );
+          return { ...comment, replies: updatedReplies };
+        }
+        return comment;
+      })
+    );
+
+    try {
+      if (isLiked) {
+        // Unlike
+        const { error } = await supabase
+          .from('post_comment_likes')
+          .delete()
+          .eq('comment_id', commentId)
+          .eq('user_id', authUser.id);
+
+        if (error) throw error;
+      } else {
+        // Like
+        const { error } = await supabase
+          .from('post_comment_likes')
+          .insert({
+            comment_id: commentId,
+            user_id: authUser.id,
+          });
+
+        if (error) throw error;
+      }
+
+      // Fetch accurate count after successful operation
+      const { data: countData } = await supabase
+        .from('post_comments')
+        .select('like_count')
+        .eq('id', commentId)
+        .single();
+
+      if (countData) {
+        setComments(prevComments =>
+          prevComments.map(comment => {
+            // Check if this is the liked comment
+            if (comment.id === commentId) {
+              return { ...comment, like_count: countData.like_count || 0 };
+            }
+            // Check if the liked comment is a reply
+            if (comment.replies) {
+              const updatedReplies = comment.replies.map(reply =>
+                reply.id === commentId
+                  ? { ...reply, like_count: countData.like_count || 0 }
+                  : reply
+              );
+              return { ...comment, replies: updatedReplies };
+            }
+            return comment;
+          })
+        );
+      }
+    } catch (error: any) {
+      console.error('Error toggling comment like:', error);
+      
+      // Revert optimistic update on error
+      setLikedComments(prev => {
+        const newSet = new Set(prev);
+        if (isLiked) {
+          newSet.add(commentId);
+        } else {
+          newSet.delete(commentId);
+        }
+        return newSet;
+      });
+
+      setComments(prevComments =>
+        prevComments.map(comment => {
+          // Revert parent comment
+          if (comment.id === commentId) {
+            return {
+              ...comment,
+              like_count: isLiked ? (comment.like_count || 0) + 1 : Math.max(0, (comment.like_count || 0) - 1),
+              isLikedByUser: isLiked,
+            };
+          }
+          // Revert reply
+          if (comment.replies) {
+            const revertedReplies = comment.replies.map(reply =>
+              reply.id === commentId
+                ? {
+                    ...reply,
+                    like_count: isLiked ? (reply.like_count || 0) + 1 : Math.max(0, (reply.like_count || 0) - 1),
+                    isLikedByUser: isLiked,
+                  }
+                : reply
+            );
+            return { ...comment, replies: revertedReplies };
+          }
+          return comment;
+        })
+      );
+    }
   };
 
   const handleReplyComment = (comment: CommentWithUser) => {
@@ -226,53 +400,149 @@ export default function PostCommentsScreen() {
           </View>
         ) : (
           comments.map((comment) => (
-            <View key={comment.id} style={styles.commentCard}>
-              <Image
-                source={{ 
-                  uri: comment.user.avatar_url || 'https://ui-avatars.com/api/?name=' + encodeURIComponent(comment.user.full_name || 'User') + '&background=random'
-                }}
-                style={styles.commentAvatar}
-              />
-              <View style={styles.commentContent}>
-                <View style={styles.commentHeader}>
-                  <Text style={styles.commentUsername}>{comment.user.full_name}</Text>
-                  <Text style={styles.commentTime}>{getTimeAgo(comment.created_at)}</Text>
-                </View>
-                <ExpandableText
-                  text={comment.content}
-                  numberOfLines={3}
-                  captionStyle={styles.commentText}
-                />
-                <View style={styles.commentActions}>
-                  <TouchableOpacity 
-                    style={styles.commentAction}
-                    onPress={() => handleLikeComment(comment.id)}
-                  >
-                    <Heart 
-                      size={14} 
-                      color={likedComments.has(comment.id) ? "#EF4444" : "#64748B"}
-                      fill={likedComments.has(comment.id) ? "#EF4444" : "none"}
-                      strokeWidth={2} 
-                    />
-                    <Text style={[
-                      styles.commentActionText,
-                      likedComments.has(comment.id) && styles.commentActionTextLiked
-                    ]}>
-                      {likedComments.has(comment.id) ? 'Liked' : 'Like'}
-                    </Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity 
-                    style={styles.commentAction}
-                    onPress={() => handleReplyComment(comment)}
-                  >
-                    <Text style={styles.commentActionText}>Reply</Text>
-                  </TouchableOpacity>
-                </View>
-              </View>
-              {comment.user_id === authUser?.id && (
-                <TouchableOpacity style={styles.commentMoreButton}>
-                  <MoreVertical size={16} color="#64748B" />
+            <View key={comment.id}>
+              {/* Parent Comment */}
+              <View style={styles.commentCard}>
+                <TouchableOpacity
+                  onPress={() => router.push(`/user-profile/${comment.user_id}` as any)}
+                  activeOpacity={0.7}
+                >
+                  <Image
+                    source={{ 
+                      uri: comment.user.avatar_url || 'https://ui-avatars.com/api/?name=' + encodeURIComponent(comment.user.full_name || 'User') + '&background=random'
+                    }}
+                    style={styles.commentAvatar}
+                  />
                 </TouchableOpacity>
+                <View style={styles.commentContent}>
+                  <View style={styles.commentHeader}>
+                    <TouchableOpacity
+                      onPress={() => router.push(`/user-profile/${comment.user_id}` as any)}
+                      activeOpacity={0.7}
+                      style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}
+                    >
+                      <Text style={styles.commentUsername}>{comment.user.full_name}</Text>
+                      {((comment.user as any).is_admin || (comment.user as any).role === 'admin') && (
+                        <View style={styles.verifiedBadge}>
+                          <Text style={styles.verifiedCheck}>✓</Text>
+                        </View>
+                      )}
+                    </TouchableOpacity>
+                    <Text style={styles.commentTime}>{getTimeAgo(comment.created_at)}</Text>
+                  </View>
+                  <ExpandableText
+                    text={comment.content}
+                    numberOfLines={3}
+                    captionStyle={styles.commentText}
+                  />
+                  <View style={styles.commentActions}>
+                    <TouchableOpacity 
+                      style={styles.commentAction}
+                      onPress={() => handleLikeComment(comment.id)}
+                    >
+                      <Heart 
+                        size={14} 
+                        color={comment.isLikedByUser ? "#EF4444" : "#64748B"}
+                        fill={comment.isLikedByUser ? "#EF4444" : "none"}
+                        strokeWidth={2} 
+                      />
+                      <Text style={[
+                        styles.commentActionText,
+                        comment.isLikedByUser && styles.commentActionTextLiked
+                      ]}>
+                        {comment.like_count && comment.like_count > 0 
+                          ? `${comment.like_count} ${comment.like_count === 1 ? 'Like' : 'Likes'}`
+                          : 'Like'}
+                      </Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity 
+                      style={styles.commentAction}
+                      onPress={() => handleReplyComment(comment)}
+                    >
+                      <Text style={styles.commentActionText}>Reply</Text>
+                    </TouchableOpacity>
+                  </View>
+                </View>
+                {comment.user_id === authUser?.id && (
+                  <TouchableOpacity style={styles.commentMoreButton}>
+                    <MoreVertical size={16} color="#64748B" />
+                  </TouchableOpacity>
+                )}
+              </View>
+
+              {/* Nested Replies (Instagram-style) */}
+              {comment.replies && comment.replies.length > 0 && (
+                <View style={styles.repliesContainer}>
+                  {comment.replies.map((reply) => (
+                    <View key={reply.id} style={styles.replyCard}>
+                      <TouchableOpacity
+                        onPress={() => router.push(`/user-profile/${reply.user_id}` as any)}
+                        activeOpacity={0.7}
+                      >
+                        <Image
+                          source={{ 
+                            uri: reply.user.avatar_url || 'https://ui-avatars.com/api/?name=' + encodeURIComponent(reply.user.full_name || 'User') + '&background=random'
+                          }}
+                          style={styles.replyAvatar}
+                        />
+                      </TouchableOpacity>
+                      <View style={styles.commentContent}>
+                        <View style={styles.commentHeader}>
+                          <TouchableOpacity
+                            onPress={() => router.push(`/user-profile/${reply.user_id}` as any)}
+                            activeOpacity={0.7}
+                            style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}
+                          >
+                            <Text style={styles.commentUsername}>{reply.user.full_name}</Text>
+                            {((reply.user as any).is_admin || (reply.user as any).role === 'admin') && (
+                              <View style={styles.verifiedBadge}>
+                                <Text style={styles.verifiedCheck}>✓</Text>
+                              </View>
+                            )}
+                          </TouchableOpacity>
+                          <Text style={styles.commentTime}>{getTimeAgo(reply.created_at)}</Text>
+                        </View>
+                        <ExpandableText
+                          text={reply.content}
+                          numberOfLines={3}
+                          captionStyle={styles.commentText}
+                        />
+                        <View style={styles.commentActions}>
+                          <TouchableOpacity 
+                            style={styles.commentAction}
+                            onPress={() => handleLikeComment(reply.id)}
+                          >
+                            <Heart 
+                              size={14} 
+                              color={reply.isLikedByUser ? "#EF4444" : "#64748B"}
+                              fill={reply.isLikedByUser ? "#EF4444" : "none"}
+                              strokeWidth={2} 
+                            />
+                            <Text style={[
+                              styles.commentActionText,
+                              reply.isLikedByUser && styles.commentActionTextLiked
+                            ]}>
+                              {reply.like_count && reply.like_count > 0 
+                                ? `${reply.like_count} ${reply.like_count === 1 ? 'Like' : 'Likes'}`
+                                : 'Like'}
+                            </Text>
+                          </TouchableOpacity>
+                          <TouchableOpacity 
+                            style={styles.commentAction}
+                            onPress={() => handleReplyComment(comment)}
+                          >
+                            <Text style={styles.commentActionText}>Reply</Text>
+                          </TouchableOpacity>
+                        </View>
+                      </View>
+                      {reply.user_id === authUser?.id && (
+                        <TouchableOpacity style={styles.commentMoreButton}>
+                          <MoreVertical size={16} color="#64748B" />
+                        </TouchableOpacity>
+                      )}
+                    </View>
+                  ))}
+                </View>
               )}
             </View>
           ))
@@ -441,6 +711,25 @@ const styles = StyleSheet.create({
   commentMoreButton: {
     padding: 4,
   },
+  // Nested Replies Styles (Instagram-style)
+  repliesContainer: {
+    paddingLeft: 52, // Indent replies to show threading
+    backgroundColor: '#F8FAFC',
+  },
+  replyCard: {
+    flexDirection: 'row',
+    padding: 16,
+    paddingLeft: 0,
+    backgroundColor: 'transparent',
+    borderBottomWidth: 1,
+    borderBottomColor: '#F1F5F9',
+  },
+  replyAvatar: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: '#E2E8F0',
+  },
   inputContainer: {
     backgroundColor: '#FFFFFF',
     paddingHorizontal: 16,
@@ -505,4 +794,19 @@ const styles = StyleSheet.create({
     color: '#EF4444',
     fontWeight: '600',
   },
+  verifiedBadge: {
+    backgroundColor: '#0EA5E9',
+    borderRadius: 10,
+    width: 16,
+    height: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  verifiedCheck: {
+    color: '#FFFFFF',
+    fontSize: 11,
+    fontWeight: 'bold',
+    lineHeight: 16,
+  },
 });
+
