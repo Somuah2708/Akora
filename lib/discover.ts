@@ -61,7 +61,7 @@ export async function fetchDiscoverFeed(
         const postIds = posts.map((p: any) => p.id);
         const { data: postsWithProfiles } = await supabase
           .from('posts')
-          .select('*, user:profiles(id, username, full_name, avatar_url, is_admin)')
+          .select('*, user:profiles(id, username, full_name, avatar_url, is_admin), media_items')
           .in('id', postIds);
 
         if (postsWithProfiles) {
@@ -120,6 +120,7 @@ export async function fetchDiscoverFeed(
                 video_urls: post.video_urls || undefined,
                 youtube_url: post.youtube_url || null,
                 youtube_urls: post.youtube_urls || undefined,
+                media_items: post.media_items || undefined,
                 created_at: post.created_at,
                 likes: counts.likes,
                 comments: counts.comments,
@@ -204,6 +205,7 @@ export async function fetchDiscoverFeed(
               video_urls: post.video_urls || undefined,
               youtube_url: post.youtube_url || null,
               youtube_urls: post.youtube_urls || undefined,
+              media_items: post.media_items || undefined,
               created_at: post.created_at,
               likes: counts.likes,
               comments: counts.comments,

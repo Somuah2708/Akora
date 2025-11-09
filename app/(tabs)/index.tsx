@@ -252,6 +252,7 @@ export default function HomeScreen() {
           video_urls,
           youtube_url,
           youtube_urls,
+          media_items,
           comments_count,
           likes_count,
           created_at,
@@ -1137,20 +1138,28 @@ export default function HomeScreen() {
             )}
           </View>
         ) : (
-          posts.map((post) => (
-            <View 
-              key={post.id} 
-              style={styles.postCard}
-              onLayout={(event) => {
-                const { y, height } = event.nativeEvent.layout;
-                setPostLayouts((prev) => {
-                  const filtered = prev.filter((p) => p.id !== post.id);
-                  return [...filtered, { id: post.id, y, height }];
-                });
-              }}
-            >
-              {/* Post Header */}
-              <View style={styles.postHeader}>
+          posts.map((post) => {
+            // Debug log for each post
+            console.log('🔍 [HOME] Rendering post:', post.id, 'content:', post.content?.substring(0, 20));
+            console.log('  - has media_items?', !!(post as any).media_items);
+            console.log('  - media_items length:', (post as any).media_items?.length);
+            if ((post as any).media_items) {
+              console.log('  - media_items:', JSON.stringify((post as any).media_items, null, 2));
+            }
+            return (
+              <View 
+                key={post.id} 
+                style={styles.postCard}
+                onLayout={(event) => {
+                  const { y, height } = event.nativeEvent.layout;
+                  setPostLayouts((prev) => {
+                    const filtered = prev.filter((p) => p.id !== post.id);
+                    return [...filtered, { id: post.id, y, height }];
+                  });
+                }}
+              >
+                {/* Post Header */}
+                <View style={styles.postHeader}>
                 <TouchableOpacity 
                   style={styles.postHeaderLeft}
                   onPress={() => router.push(`/user-profile/${post.user_id}` as any)}
@@ -1198,58 +1207,83 @@ export default function HomeScreen() {
 
               {/* Post Media (Images/Videos/YouTube Carousel) */}
               {(post as any).media_items && (post as any).media_items.length > 0 ? (
-                <View style={styles.carouselContainer}>
-                  <ScrollView
-                    horizontal
-                    pagingEnabled
-                    showsHorizontalScrollIndicator={false}
-                    removeClippedSubviews={false}
-                    style={styles.carousel}
-                    onScroll={(event) => {
-                      const scrollX = event.nativeEvent.contentOffset.x;
-                      const currentIndex = Math.round(scrollX / width);
-                      setCarouselIndices({
-                        ...carouselIndices,
-                        [post.id]: currentIndex,
-                      });
-                    }}
-                    scrollEventThrottle={16}
-                  >
-                    {(post as any).media_items.map((mediaItem: any, index: number) => (
-                      <View key={index} style={styles.mediaPage}>
-                        {mediaItem.type === 'video' ? (
-                          <Video
-                            source={{ uri: mediaItem.url }}
-                            style={styles.postImage}
-                            useNativeControls
-                            resizeMode={ResizeMode.COVER}
-                            isLooping={true}
-                            shouldPlay={
-                              isScreenFocused && 
-                              visibleVideos.has(post.id) && 
-                              (carouselIndices[post.id] ?? 0) === index
-                            }
-                            volume={
-                              isMuted || (carouselIndices[post.id] ?? 0) !== index 
-                                ? 0.0 
-                                : 1.0
-                            }
-                            onError={(err) => console.warn('Video play error (mixed media)', err)}
-                          />
-                        ) : (
-                          <TouchableOpacity 
-                            activeOpacity={0.95}
-                            onPress={() => router.push(`/post/${post.id}`)}
-                          >
-                            <Image
+                (() => {
+                  console.log(`📺 [HOME] Post ${post.id} has media_items:`, (post as any).media_items.length, 'items');
+                  (post as any).media_items.forEach((item: any, idx: number) => {
+                    console.log(`  📦 Item ${idx}: ${item.type} - ${item.url?.substring(0, 60)}...`);
+                  });
+                  return (
+                    <View style={styles.carouselContainer}>
+                      <ScrollView
+                        horizontal
+                        pagingEnabled
+                        showsHorizontalScrollIndicator={false}
+                        removeClippedSubviews={false}
+                        style={styles.carousel}
+                        nestedScrollEnabled={true}
+                        decelerationRate="fast"
+                        snapToInterval={width}
+                        snapToAlignment="start"
+                        onScroll={(event) => {
+                          const scrollX = event.nativeEvent.contentOffset.x;
+                          const currentIndex = Math.round(scrollX / width);
+                          setCarouselIndices({
+                            ...carouselIndices,
+                            [post.id]: currentIndex,
+                          });
+                        }}
+                        scrollEventThrottle={16}
+                      >
+                        {(post as any).media_items.map((mediaItem: any, index: number) => {
+                          console.log(`🎬 Rendering media item ${index} for post ${post.id}:`, {
+                            type: mediaItem.type,
+                            url: mediaItem.url?.substring(0, 80),
+                            hasUrl: !!mediaItem.url
+                          });
+                      return (
+                        <View key={index} style={styles.mediaPage}>
+                          {mediaItem.type === 'video' ? (
+                            <Video
                               source={{ uri: mediaItem.url }}
                               style={styles.postImage}
-                              resizeMode="cover"
+                              useNativeControls
+                              resizeMode={ResizeMode.COVER}
+                              isLooping={true}
+                              shouldPlay={
+                                isScreenFocused && 
+                                visibleVideos.has(post.id) && 
+                                (carouselIndices[post.id] ?? 0) === index
+                              }
+                              volume={
+                                isMuted || (carouselIndices[post.id] ?? 0) !== index 
+                                  ? 0.0 
+                                  : 1.0
+                              }
+                              onError={(err) => {
+                                console.error('❌ Video error:', err);
+                                console.warn('Video play error (mixed media)', err);
+                              }}
                             />
-                          </TouchableOpacity>
-                        )}
-                      </View>
-                    ))}
+                          ) : (
+                            <TouchableOpacity 
+                              activeOpacity={0.95}
+                              onPress={() => router.push(`/post/${post.id}`)}
+                            >
+                              <Image
+                                source={{ uri: mediaItem.url }}
+                                style={styles.postImage}
+                                resizeMode="cover"
+                                onLoad={() => console.log(`✅ Image ${index} loaded successfully`)}
+                                onError={(err) => {
+                                  console.error(`❌ Image ${index} failed to load:`, err.nativeEvent);
+                                  console.error('Image URL:', mediaItem.url);
+                                }}
+                              />
+                            </TouchableOpacity>
+                          )}
+                        </View>
+                      );
+                    })}
                   </ScrollView>
                   {(post as any).media_items.length > 1 && (
                     <View style={styles.carouselIndicator}>
@@ -1259,6 +1293,8 @@ export default function HomeScreen() {
                     </View>
                   )}
                 </View>
+                  );
+                })()
               ) : post.youtube_urls && post.youtube_urls.length > 0 ? (
                 <View style={styles.carouselContainer}>
                   <ScrollView
@@ -1456,7 +1492,8 @@ export default function HomeScreen() {
                 </TouchableOpacity>
               )}
             </View>
-          ))
+            );
+          })
         )}
 
       </ScrollView>

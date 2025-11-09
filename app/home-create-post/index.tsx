@@ -78,22 +78,71 @@ export default function HomeCreatePostScreen() {
       Alert.alert('Permission Denied', 'Media library permission is required.');
       return;
     }
+    
+    // Allow multiple selection of both images and videos
     const result = await ImagePicker.launchImageLibraryAsync({
       mediaTypes: ['videos', 'images'] as any,
       allowsEditing: false,
-      allowsMultipleSelection: false,
+      allowsMultipleSelection: true, // Enable multiple selection
       quality: 0.8,
+      selectionLimit: Math.max(1, 20 - media.length), // Respect the 20 item limit
     } as any);
+    
     if (!result.canceled && result.assets.length > 0) {
-      const asset = result.assets[0];
-      const mediaType = asset.type === 'video' ? 'video' : 'image';
-      setCurrentEditItem({ uri: asset.uri, type: mediaType, index: -1 });
-      setEditorVisible(true);
+      // Show helpful tip on first use
+      if (media.length === 0 && result.assets.length > 1) {
+        const hasImages = result.assets.some(a => a.type === 'image');
+        const hasVideos = result.assets.some(a => a.type === 'video');
+        if (hasImages && hasVideos) {
+          Alert.alert(
+            '🎉 Mixed Media Post!',
+            'You selected both images and videos. They will be combined in one post!',
+            [{ text: 'Got it!', style: 'default' }]
+          );
+        }
+      }
+      
+      // Collect items to add (excluding the first one which will be edited)
+      const itemsToAddDirectly: MediaItem[] = [];
+      
+      // Process all selected assets
+      result.assets.forEach((asset, index) => {
+        if (media.length + itemsToAddDirectly.length >= 20) {
+          if (index === 0) return; // Still allow first item for editing
+          Alert.alert('Limit Reached', 'Maximum 20 items per post. Some items were not added.');
+          return;
+        }
+        
+        const mediaType = asset.type === 'video' ? 'video' : 'image';
+        
+        if (index === 0) {
+          // Open editor for the first selected item
+          setCurrentEditItem({ uri: asset.uri, type: mediaType, index: -1 });
+          setEditorVisible(true);
+        } else {
+          // Collect remaining items to add after editor closes
+          itemsToAddDirectly.push({ uri: asset.uri, type: mediaType });
+        }
+      });
+      
+      // Add remaining items immediately
+      if (itemsToAddDirectly.length > 0) {
+        console.log('📦 Adding items directly:', itemsToAddDirectly.length, 'items');
+        itemsToAddDirectly.forEach((item, idx) => {
+          console.log(`  Item ${idx + 1}: ${item.type} - ${item.uri.substring(0, 50)}...`);
+        });
+        setMedia((prev) => {
+          const updated = [...prev, ...itemsToAddDirectly];
+          console.log('✅ Updated media array (after direct add):', updated.length, 'total items');
+          return updated;
+        });
+      }
     }
   };
 
   const handleEditorDone = (result: { uri: string; type: 'image' | 'video'; trimStart?: number; trimEnd?: number; muted?: boolean }) => {
     if (!currentEditItem) return;
+    console.log('🎨 Editor done with:', result.type);
     const base: MediaItem = { uri: result.uri, type: result.type };
     if (result.type === 'video') {
       if (result.trimStart != null && result.trimEnd != null) {
@@ -103,7 +152,14 @@ export default function HomeCreatePostScreen() {
       if (result.muted != null) base.muted = result.muted;
     }
     if (currentEditItem.index === -1) {
-      setMedia((prev) => [...prev, base]);
+      setMedia((prev) => {
+        const updated = [...prev, base];
+        console.log('✅ Media after editor (new item):', updated.length, 'total items');
+        updated.forEach((item, idx) => {
+          console.log(`  Item ${idx}: ${item.type}`);
+        });
+        return updated;
+      });
     } else {
       setMedia((prev) => prev.map((m, i) => (i === currentEditItem.index ? base : m)));
     }
@@ -181,21 +237,37 @@ export default function HomeCreatePostScreen() {
     }
     setIsSubmitting(true);
     try {
+      console.log('📤 Starting submission with', media.length, 'media items');
+      media.forEach((item, idx) => {
+        console.log(`  Upload Item ${idx}: ${item.type}`);
+      });
+      
       const imageUrls: string[] = [];
       const videoUrls: string[] = [];
       const mediaItems: Array<{ type: 'image' | 'video'; url: string }> = [];
       
       for (const item of media) {
+        console.log(`📤 Uploading: ${item.type}`);
         const url = await uploadMedia(item.uri, item.type);
         if (url) {
+          console.log(`✅ Uploaded ${item.type}: ${url.substring(0, 60)}...`);
           // Store in mixed media array (preserves order and type)
           mediaItems.push({ type: item.type, url });
           
           // Also store in separate arrays for backward compatibility
           if (item.type === 'image') imageUrls.push(url);
           else videoUrls.push(url);
+        } else {
+          console.error(`❌ Failed to upload ${item.type}`);
         }
       }
+      
+      console.log('📊 Upload summary:');
+      console.log('  - Images:', imageUrls.length);
+      console.log('  - Videos:', videoUrls.length);
+      console.log('  - Media items:', mediaItems.length);
+      console.log('  - Media items array:', JSON.stringify(mediaItems, null, 2));
+      
       const postData: any = {
         user_id: user.id,
         content: content.trim(),
@@ -293,7 +365,7 @@ export default function HomeCreatePostScreen() {
             <View style={styles.addMediaIconCircle}><ImageIcon size={24} color={media.length >= 20 ? '#CBD5E1' : '#6366F1'} /></View>
             <View style={styles.addMediaTextContainer}>
               <Text style={[styles.addMediaTitle, media.length >= 20 && styles.addMediaTitleDisabled]}>{media.length === 0 ? 'Add Photos & Videos' : 'Add More Media'}</Text>
-              <Text style={[styles.addMediaSubtitle, media.length >= 20 && styles.addMediaSubtitleDisabled]}>{media.length === 0 ? 'Capture moments to share' : `${media.length}/20 items added`}</Text>
+              <Text style={[styles.addMediaSubtitle, media.length >= 20 && styles.addMediaSubtitleDisabled]}>{media.length === 0 ? 'Mix images and videos in one post' : `${media.length}/20 items added`}</Text>
             </View>
           </LinearGradient>
         </TouchableOpacity>

@@ -177,26 +177,66 @@ export default function CreatePostScreen() {
       return;
     }
 
+    // Allow multiple selection of both images and videos
     const result = await ImagePicker.launchImageLibraryAsync({
       mediaTypes: ['videos', 'images'] as any,
       allowsEditing: false,
-      allowsMultipleSelection: false, // Pick one at a time for editing
+      allowsMultipleSelection: true, // Enable multiple selection for mixed media
       quality: 0.8,
+      selectionLimit: Math.max(1, 20 - media.length), // Respect the 20 item limit
       // Prefer smaller, stream-friendly videos to improve upload/playback reliability
       videoExportPreset: (ImagePicker as any).VideoExportPreset?.MediumQuality || undefined,
     } as any);
 
     if (!result.canceled && result.assets.length > 0) {
-      const asset = result.assets[0];
-      const mediaType = asset.type === 'video' ? 'video' : 'image';
+      // Show helpful tip on first use
+      if (media.length === 0 && result.assets.length > 1) {
+        const hasImages = result.assets.some(a => a.type === 'image');
+        const hasVideos = result.assets.some(a => a.type === 'video');
+        if (hasImages && hasVideos) {
+          Alert.alert(
+            '🎉 Mixed Media Post!',
+            'You selected both images and videos. They will be combined in one post!',
+            [{ text: 'Got it!', style: 'default' }]
+          );
+        }
+      }
       
-      // Open editor immediately after selection (WhatsApp-style)
-      setCurrentEditItem({
-        uri: asset.uri,
-        type: mediaType,
-        index: -1, // -1 means new item, not editing existing
+      // Collect items to add (excluding the first one which will be edited)
+      const itemsToAddDirectly: MediaItem[] = [];
+      
+      // Process all selected assets
+      result.assets.forEach((asset, index) => {
+        if (media.length + itemsToAddDirectly.length >= 20) {
+          if (index === 0) return; // Still allow first item for editing
+          Alert.alert('Limit Reached', 'Maximum 20 items per post. Some items were not added.');
+          return;
+        }
+        
+        const mediaType = asset.type === 'video' ? 'video' : 'image';
+        
+        if (index === 0) {
+          // Open editor for the first selected item (WhatsApp-style)
+          setCurrentEditItem({
+            uri: asset.uri,
+            type: mediaType,
+            index: -1, // -1 means new item, not editing existing
+          });
+          setEditorVisible(true);
+        } else {
+          // Collect remaining items to add after editor closes
+          itemsToAddDirectly.push({ 
+            uri: asset.uri, 
+            type: mediaType,
+            ...(mediaType === 'video' ? {} : {})
+          });
+        }
       });
-      setEditorVisible(true);
+      
+      // Add remaining items immediately
+      if (itemsToAddDirectly.length > 0) {
+        setMedia((prev) => [...prev, ...itemsToAddDirectly]);
+      }
     }
   };
 
@@ -604,7 +644,7 @@ export default function CreatePostScreen() {
                 {media.length === 0 ? 'Add Photos & Videos' : 'Add More Media'}
               </Text>
               <Text style={[styles.addMediaSubtitle, media.length >= 20 && styles.addMediaSubtitleDisabled]}>
-                {media.length === 0 ? 'Capture moments to share' : `${media.length}/20 items added`}
+                {media.length === 0 ? 'Mix images and videos in one post' : `${media.length}/20 items added`}
               </Text>
             </View>
           </LinearGradient>

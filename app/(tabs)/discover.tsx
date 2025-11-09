@@ -1314,20 +1314,28 @@ export default function DiscoverScreen() {
         ) : (
           discoverFeed
             .filter((item) => item.type === 'post') // Only show posts
-            .map((item) => (
-            <View 
-              key={item.id} 
-              style={styles.postCard}
-              onLayout={(event) => {
-                const { y, height } = event.nativeEvent.layout;
-                setPostLayouts((prev) => {
-                  const filtered = prev.filter((p) => p.id !== item.id);
-                  return [...filtered, { id: item.id, y, height }];
-                });
-              }}
-            >
-              {/* Post Header */}
-              <View style={styles.postHeader}>
+            .map((item) => {
+              // Debug log for each item
+              console.log('🔍 [DISCOVER] Rendering item:', item.id, 'desc:', item.description?.substring(0, 20));
+              console.log('  - has media_items?', !!(item as any).media_items);
+              console.log('  - media_items length:', (item as any).media_items?.length);
+              if ((item as any).media_items) {
+                console.log('  - media_items:', JSON.stringify((item as any).media_items, null, 2));
+              }
+              return (
+                <View 
+                  key={item.id} 
+                  style={styles.postCard}
+                  onLayout={(event) => {
+                    const { y, height } = event.nativeEvent.layout;
+                    setPostLayouts((prev) => {
+                      const filtered = prev.filter((p) => p.id !== item.id);
+                      return [...filtered, { id: item.id, y, height }];
+                    });
+                  }}
+                >
+                  {/* Post Header */}
+                  <View style={styles.postHeader}>
                 <TouchableOpacity 
                   style={styles.postHeaderLeft}
                   onPress={() => item.author?.id && router.push(`/user-profile/${item.author.id}` as any)}
@@ -1357,58 +1365,83 @@ export default function DiscoverScreen() {
 
               {/* Post Media (Images/Videos/YouTube Carousel) */}
               {(item as any).media_items && (item as any).media_items.length > 0 ? (
-                <View style={styles.carouselContainer}>
-                  <ScrollView
-                    horizontal
-                    pagingEnabled
-                    showsHorizontalScrollIndicator={false}
-                    removeClippedSubviews={false}
-                    style={styles.carousel}
-                    onScroll={(event) => {
-                      const scrollX = event.nativeEvent.contentOffset.x;
-                      const currentIndex = Math.round(scrollX / width);
-                      setCarouselIndices({
-                        ...carouselIndices,
-                        [item.id]: currentIndex,
-                      });
-                    }}
-                    scrollEventThrottle={16}
-                  >
-                    {(item as any).media_items.map((mediaItem: any, index: number) => (
-                      <View key={index} style={styles.mediaPage}>
-                        {mediaItem.type === 'video' ? (
-                          <Video
-                            source={{ uri: mediaItem.url }}
-                            style={styles.postImage}
-                            useNativeControls
-                            resizeMode={ResizeMode.COVER}
-                            isLooping={true}
-                            shouldPlay={
-                              isScreenFocused && 
-                              visibleVideos.has(item.id) && 
-                              (carouselIndices[item.id] ?? 0) === index
-                            }
-                            volume={
-                              isMuted || (carouselIndices[item.id] ?? 0) !== index 
-                                ? 0.0 
-                                : 1.0
-                            }
-                            onError={(err) => console.warn('Video play error (mixed media)', err)}
-                          />
-                        ) : (
-                          <TouchableOpacity 
-                            activeOpacity={0.95}
-                            onPress={() => item.sourceId && router.push(`/post/${item.sourceId}`)}
-                          >
-                            <Image
+                (() => {
+                  console.log(`📺 [DISCOVER] Item ${item.id} has media_items:`, (item as any).media_items.length, 'items');
+                  (item as any).media_items.forEach((mediaItem: any, idx: number) => {
+                    console.log(`  📦 Item ${idx}: ${mediaItem.type} - ${mediaItem.url?.substring(0, 60)}...`);
+                  });
+                  return (
+                    <View style={styles.carouselContainer}>
+                      <ScrollView
+                        horizontal
+                        pagingEnabled
+                        showsHorizontalScrollIndicator={false}
+                        removeClippedSubviews={false}
+                        style={styles.carousel}
+                        nestedScrollEnabled={true}
+                        decelerationRate="fast"
+                        snapToInterval={width}
+                        snapToAlignment="start"
+                        onScroll={(event) => {
+                          const scrollX = event.nativeEvent.contentOffset.x;
+                          const currentIndex = Math.round(scrollX / width);
+                          setCarouselIndices({
+                            ...carouselIndices,
+                            [item.id]: currentIndex,
+                          });
+                        }}
+                        scrollEventThrottle={16}
+                      >
+                        {(item as any).media_items.map((mediaItem: any, index: number) => {
+                          console.log(`🎬 [Discover] Rendering media item ${index} for item ${item.id}:`, {
+                            type: mediaItem.type,
+                            url: mediaItem.url?.substring(0, 80),
+                            hasUrl: !!mediaItem.url
+                          });
+                      return (
+                        <View key={index} style={styles.mediaPage}>
+                          {mediaItem.type === 'video' ? (
+                            <Video
                               source={{ uri: mediaItem.url }}
                               style={styles.postImage}
-                              resizeMode="cover"
+                              useNativeControls
+                              resizeMode={ResizeMode.COVER}
+                              isLooping={true}
+                              shouldPlay={
+                                isScreenFocused && 
+                                visibleVideos.has(item.id) && 
+                                (carouselIndices[item.id] ?? 0) === index
+                              }
+                              volume={
+                                isMuted || (carouselIndices[item.id] ?? 0) !== index 
+                                  ? 0.0 
+                                  : 1.0
+                              }
+                              onError={(err) => {
+                                console.error('❌ Video error:', err);
+                                console.warn('Video play error (mixed media)', err);
+                              }}
                             />
-                          </TouchableOpacity>
-                        )}
-                      </View>
-                    ))}
+                          ) : (
+                            <TouchableOpacity 
+                              activeOpacity={0.95}
+                              onPress={() => item.sourceId && router.push(`/post/${item.sourceId}`)}
+                            >
+                              <Image
+                                source={{ uri: mediaItem.url }}
+                                style={styles.postImage}
+                                resizeMode="cover"
+                                onLoad={() => console.log(`✅ [Discover] Image ${index} loaded successfully`)}
+                                onError={(err) => {
+                                  console.error(`❌ [Discover] Image ${index} failed to load:`, err.nativeEvent);
+                                  console.error('Image URL:', mediaItem.url);
+                                }}
+                              />
+                            </TouchableOpacity>
+                          )}
+                        </View>
+                      );
+                    })}
                   </ScrollView>
                   {(item as any).media_items.length > 1 && (
                     <View style={styles.carouselIndicator}>
@@ -1418,6 +1451,8 @@ export default function DiscoverScreen() {
                     </View>
                   )}
                 </View>
+                  );
+                })()
               ) : item.youtube_urls && item.youtube_urls.length > 0 ? (
                 <View style={styles.carouselContainer}>
                   <ScrollView
@@ -1622,7 +1657,8 @@ export default function DiscoverScreen() {
                 </TouchableOpacity>
               )}
             </View>
-          ))
+              );
+            })
         )}
 
         {/* Personalization Note */}
