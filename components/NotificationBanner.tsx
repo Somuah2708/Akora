@@ -2,7 +2,7 @@ import React, { useEffect, useRef } from 'react';
 import { View, Text, StyleSheet, Animated, TouchableOpacity, Image, Platform } from 'react-native';
 import { router } from 'expo-router';
 import { Heart, MessageCircle, UserPlus, AtSign, Share2, UserCheck } from 'lucide-react-native';
-// import { Audio } from 'expo-av'; // Uncomment when adding notification sound
+import { Audio } from 'expo-av';
 import * as Haptics from 'expo-haptics';
 import { Notification, NotificationType } from '@/lib/notifications';
 
@@ -13,7 +13,7 @@ interface NotificationBannerProps {
 
 export default function NotificationBanner({ notification, onDismiss }: NotificationBannerProps) {
   const slideAnim = useRef(new Animated.Value(-100)).current;
-  // const soundRef = useRef<Audio.Sound | null>(null); // Uncomment when adding sound
+  const soundRef = useRef<Audio.Sound | null>(null);
 
   useEffect(() => {
     if (notification) {
@@ -39,11 +39,6 @@ export default function NotificationBanner({ notification, onDismiss }: Notifica
   }, [notification]);
 
   const playNotificationSound = async () => {
-    // Note: To add custom notification sound, place an MP3 file at: assets/notification.mp3
-    // For now, we just use haptic feedback as it's more reliable across platforms
-    // Uncomment below to enable sound when you add the MP3 file
-    
-    /*
     try {
       await Audio.setAudioModeAsync({
         playsInSilentModeIOS: true,
@@ -58,7 +53,6 @@ export default function NotificationBanner({ notification, onDismiss }: Notifica
     } catch (error) {
       console.log('Notification sound not available, using haptic only');
     }
-    */
   };
 
   const triggerHaptic = () => {
@@ -77,7 +71,10 @@ export default function NotificationBanner({ notification, onDismiss }: Notifica
     }).start(() => {
       onDismiss();
       // Cleanup sound if enabled
-      // if (soundRef.current) soundRef.current.unloadAsync();
+      if (soundRef.current) {
+        soundRef.current.unloadAsync().catch(() => {});
+        soundRef.current = null;
+      }
     });
   };
 

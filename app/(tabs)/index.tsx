@@ -10,7 +10,7 @@ import YouTubePlayer from '@/components/YouTubePlayer';
 import { isYouTubeUrl, getYouTubeThumbnail, extractYouTubeVideoId } from '@/lib/youtube';
 import ExpandableText from '@/components/ExpandableText';
 import { useVideoSettings } from '@/contexts/VideoSettingsContext';
-import { getUnreadCount, subscribeToNotifications } from '@/lib/notifications';
+import { useNotifications } from '@/contexts/NotificationContext';
 
 SplashScreen.preventAutoHideAsync();
 
@@ -206,8 +206,8 @@ export default function HomeScreen() {
   const [searchLoading, setSearchLoading] = useState(false);
   const [selectedSearchFilter, setSelectedSearchFilter] = useState<'all' | 'posts' | 'people' | 'articles'>('all');
 
-  // Notifications
-  const [unreadNotifications, setUnreadNotifications] = useState(0);
+  // Notifications (use central NotificationContext for real-time badge)
+  const { unreadCount: unreadNotifications, refreshUnreadCount } = useNotifications();
 
   const [fontsLoaded] = useFonts({
     'Inter-Regular': Inter_400Regular,
@@ -541,65 +541,19 @@ export default function HomeScreen() {
     useCallback(() => {
       // Screen is focused
       setIsScreenFocused(true);
-      
-      // Load notification count when screen is focused
-      const loadNotificationCount = async () => {
-        try {
-          const count = await getUnreadCount();
-          setUnreadNotifications(count);
-        } catch (error) {
-          console.error('Error loading notification count:', error);
-        }
-      };
-      loadNotificationCount();
-      
+
+      // Refresh badge count when screen becomes focused
+      refreshUnreadCount().catch((e) => console.error('Error refreshing unread count on focus', e));
+
       return () => {
         // Screen is unfocused - stop all videos
         setIsScreenFocused(false);
         setVisibleVideos(new Set());
       };
-    }, [])
+    }, [refreshUnreadCount])
   );
 
-  // Listen for new notifications to update badge count in REAL-TIME
-  // Note: The actual real-time subscription and banner display is handled by NotificationProvider
-  useEffect(() => {
-    if (!user?.id) return;
-
-    console.log('🔔 [HOME] Setting up REAL-TIME badge count subscription for user:', user.id);
-
-    // Subscribe to notification changes to update badge
-    const channel = supabase
-      .channel(`notification_badge_${user.id}`)
-      .on(
-        'postgres_changes',
-        {
-          event: 'INSERT',
-          schema: 'public',
-          table: 'notifications',
-          filter: `recipient_id=eq.${user.id}`
-        },
-        (payload) => {
-          console.log('🔔 [HOME] NEW NOTIFICATION RECEIVED! Payload:', payload);
-          console.log('🔔 [HOME] Current badge count:', unreadNotifications);
-          
-          // Increment badge count when new notification arrives
-          setUnreadNotifications(prev => {
-            const newCount = prev + 1;
-            console.log('🔔 [HOME] Badge count updated:', prev, '→', newCount);
-            return newCount;
-          });
-        }
-      )
-      .subscribe((status) => {
-        console.log('🔔 [HOME] Badge subscription status:', status);
-      });
-
-    return () => {
-      console.log('🔔 [HOME] Cleaning up badge subscription');
-      supabase.removeChannel(channel);
-    };
-  }, [user?.id]);
+  // Real-time badge updates are handled centrally by NotificationProvider; no local listener needed here
 
   // Real-time subscriptions for likes and comments on Home
   useEffect(() => {

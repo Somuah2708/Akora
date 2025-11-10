@@ -11,20 +11,7 @@ const CARD_WIDTH = width - 48;
 const GRID_SPACING = 16;
 const GRID_ITEM_WIDTH = (width - 48 - GRID_SPACING) / 2;
 
-const FEATURED_ITEMS = [
-  {
-    id: 'featured1',
-    title: 'Upcoming Alumni Meet',
-    description: 'Join us for the annual gathering',
-    image: 'https://images.unsplash.com/photo-1523580494863-6f3031224c94?w=800&auto=format&fit=crop&q=60',
-  },
-  {
-    id: 'featured2',
-    title: 'Scholarship Program 2024',
-    description: 'Applications now open',
-    image: 'https://images.unsplash.com/photo-1524178232363-1fb2b075b655?w=800&auto=format&fit=crop&q=60',
-  },
-];
+// Removed horizontal featured scroller – content moved to Home as requested
 
 const HERITAGE_ITEMS = [
   {
@@ -153,23 +140,6 @@ export default function HubScreen() {
         <Text style={styles.subtitle}>Connect, grow, and engage with the community</Text>
       </View>
 
-      <ScrollView 
-        horizontal 
-        showsHorizontalScrollIndicator={false} 
-        style={styles.featuredScroll}
-        contentContainerStyle={styles.featuredContent}
-      >
-        {FEATURED_ITEMS.map((item) => (
-          <TouchableOpacity key={item.id} style={styles.featuredItem}>
-            <Image source={{ uri: item.image }} style={styles.featuredImage} />
-            <View style={styles.featuredOverlay}>
-              <Text style={styles.featuredTitle}>{item.title}</Text>
-              <Text style={styles.featuredDescription}>{item.description}</Text>
-            </View>
-          </TouchableOpacity>
-        ))}
-      </ScrollView>
-
       {/* Two Column Layout */}
       <View style={styles.columnsContainer}>
         {/* Left Column */}
@@ -246,44 +216,6 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontFamily: 'Inter-Regular',
     color: '#666666',
-  },
-  featuredScroll: {
-    marginBottom: 0,
-  },
-  featuredContent: {
-    paddingHorizontal: 24,
-    paddingVertical: 0,
-    gap: 16,
-  },
-  featuredItem: {
-    width: CARD_WIDTH,
-    height: 200,
-    borderRadius: 16,
-    overflow: 'hidden',
-  },
-  featuredImage: {
-    width: '100%',
-    height: '100%',
-  },
-  featuredOverlay: {
-    position: 'absolute',
-    bottom: 0,
-    left: 0,
-    right: 0,
-    padding: 20,
-    backgroundColor: 'rgba(0,0,0,0.4)',
-  },
-  featuredTitle: {
-    fontSize: 20,
-    fontFamily: 'Inter-SemiBold',
-    color: '#FFFFFF',
-    marginBottom: 4,
-  },
-  featuredDescription: {
-    fontSize: 14,
-    fontFamily: 'Inter-Regular',
-    color: '#FFFFFF',
-    opacity: 0.8,
   },
   columnsContainer: {
     flexDirection: 'row',
