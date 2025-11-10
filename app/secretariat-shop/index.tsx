@@ -314,16 +314,18 @@ export default function SecretariatShopScreen() {
               router.push('/cart');
             }}
           >
-            <ShoppingCart size={24} color="#000000" />
-            {showCartBadge && (
+            <ShoppingBag size={24} color="#000000" />
+            {showCartBadge && cartCount > 0 && (
               <View style={styles.cartBadge}>
                 <Text style={styles.cartBadgeText}>{cartCount}</Text>
               </View>
             )}
           </TouchableOpacity>
         </View>
+
       </View>
 
+      {/* Search */}
       <View style={styles.searchContainer}>
         <View style={styles.searchInputContainer}>
           <Search size={20} color="#666666" />
@@ -459,7 +461,6 @@ export default function SecretariatShopScreen() {
                     e.stopPropagation();
                     handleToggleFavorite(product.id);
                   }}
-                  activeOpacity={0.7}
                 >
                   <Heart 
                     size={20} 
