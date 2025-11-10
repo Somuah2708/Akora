@@ -1,55 +1,44 @@
 import { View, Text, StyleSheet, TextInput, TouchableOpacity, ScrollView, Alert, ActivityIndicator, Image } from 'react-native';
-import { useFonts, Inter_400Regular, Inter_600SemiBold } from '@expo-google-fonts/inter';
-import { useEffect, useRef, useState } from 'react';
-import { SplashScreen, useLocalSearchParams, useRouter } from 'expo-router';
-import { ArrowLeft, Image as ImageIcon, Send, Video as VideoIcon, Edit3, MessageSquare, X } from 'lucide-react-native';
-import MediaEditorModal from '@/components/MediaEditorModal';
+import { useState, useEffect, useRef } from 'react';
+import { useRouter } from 'expo-router';
+import { ArrowLeft, Image as ImageIcon, Send, X, Edit3, Video as VideoIcon } from 'lucide-react-native';
 import * as ImagePicker from 'expo-image-picker';
+import { readAsStringAsync } from 'expo-file-system/legacy';
+import { decode } from 'base64-arraybuffer';
 import { Video, ResizeMode } from 'expo-av';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/hooks/useAuth';
-import { isCloudinaryConfigured, processVideoWithCloudinary } from '@/lib/cloudinary';
+import MediaEditorModal from '@/components/MediaEditorModal';
 import { LinearGradient } from 'expo-linear-gradient';
-
-SplashScreen.preventAutoHideAsync();
 
 interface MediaItem {
   uri: string;
   type: 'image' | 'video';
-  // Optional edit metadata for videos
   trimStart?: number;
   trimEnd?: number;
   muted?: boolean;
-  originalDuration?: number;
-  // Indicates we couldn't process locally and need server-side (Cloudinary) transform
-  requiresServerProcessing?: boolean;
 }
 
-// Component to present a trimmed segment preview without needing a physically trimmed file.
 const TrimmedVideoPreview = ({ uri, trimStart, trimEnd, muted }: { uri: string; trimStart: number; trimEnd: number; muted?: boolean }) => {
   const videoRef = useRef<Video | null>(null);
   const durationRef = useRef<number>(0);
   const playingRef = useRef(false);
-
   const onStatusUpdate = (status: any) => {
-    if (!status || !status.isLoaded) return;
+    if (!status?.isLoaded) return;
     if (status.durationMillis && !durationRef.current) {
       durationRef.current = status.durationMillis / 1000;
-      // Seek to trimStart once video loads
       videoRef.current?.setPositionAsync(trimStart * 1000).then(() => {
         videoRef.current?.playAsync();
         playingRef.current = true;
-      }).catch(() => {});
+      }).catch(()=>{});
     }
     if (status.positionMillis && playingRef.current) {
       const pos = status.positionMillis / 1000;
       if (pos > trimEnd) {
-        // Loop back within trimmed window
         videoRef.current?.setPositionAsync(trimStart * 1000).catch(()=>{});
       }
     }
   };
-
   return (
     <Video
       ref={(r) => (videoRef.current = r)}
@@ -66,95 +55,113 @@ const TrimmedVideoPreview = ({ uri, trimStart, trimEnd, muted }: { uri: string; 
 
 export default function HomeCreatePostScreen() {
   const router = useRouter();
-  const params = useLocalSearchParams<{ autoPick?: string }>();
   const { user } = useAuth();
   const [content, setContent] = useState('');
   const [media, setMedia] = useState<MediaItem[]>([]);
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const [editorVisible, setEditorVisible] = useState(false);
   const [currentEditItem, setCurrentEditItem] = useState<{ uri: string; type: 'image' | 'video'; index: number } | null>(null);
-  const [isSubmitting, setIsSubmitting] = useState(false);
-
-  const [fontsLoaded] = useFonts({
-    'Inter-Regular': Inter_400Regular,
-    'Inter-SemiBold': Inter_600SemiBold,
-  });
 
   useEffect(() => {
-    if (fontsLoaded) {
-      SplashScreen.hideAsync();
+    if (!user) {
+      // Could redirect to login screen if desired
     }
-  }, [fontsLoaded]);
-
-  useEffect(() => {
-    // Optional: Auth sanity log
-    const checkAuth = async () => {
-      const { data: { session } } = await supabase.auth.getSession();
-      console.log('Auth session:', session?.user?.id);
-      console.log('User from hook:', user?.id);
-    };
-    checkAuth();
   }, [user]);
-
-  // Auto-open media picker if requested (first-time only)
-  useEffect(() => {
-    let opened = false;
-    const tryOpen = async () => {
-      if (!opened && params?.autoPick === '1' && fontsLoaded && user && media.length === 0) {
-        opened = true;
-        setTimeout(() => {
-          pickMedia();
-        }, 200);
-      }
-    };
-    tryOpen();
-  }, [params?.autoPick, fontsLoaded, user, media.length]);
 
   const pickMedia = async () => {
     if (media.length >= 20) {
-      Alert.alert('Limit Reached', 'You can only add up to 20 images/videos per post.');
+      Alert.alert('Limit Reached', 'You can only add up to 20 items.');
       return;
     }
-
     const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
     if (status !== 'granted') {
-      Alert.alert('Permission Denied', 'We need camera roll permissions to upload media.');
+      Alert.alert('Permission Denied', 'Media library permission is required.');
       return;
     }
-
+    
+    // Allow multiple selection of both images and videos
     const result = await ImagePicker.launchImageLibraryAsync({
       mediaTypes: ['videos', 'images'] as any,
       allowsEditing: false,
-      allowsMultipleSelection: false,
+      allowsMultipleSelection: true, // Enable multiple selection
       quality: 0.8,
-      videoExportPreset: (ImagePicker as any).VideoExportPreset?.MediumQuality || undefined,
+      selectionLimit: Math.max(1, 20 - media.length), // Respect the 20 item limit
     } as any);
-
+    
     if (!result.canceled && result.assets.length > 0) {
-      const asset = result.assets[0];
-      const mediaType = asset.type === 'video' ? 'video' : 'image';
-      setCurrentEditItem({ uri: asset.uri, type: mediaType, index: -1 });
-      setEditorVisible(true);
+      // Show helpful tip on first use
+      if (media.length === 0 && result.assets.length > 1) {
+        const hasImages = result.assets.some(a => a.type === 'image');
+        const hasVideos = result.assets.some(a => a.type === 'video');
+        if (hasImages && hasVideos) {
+          Alert.alert(
+            '🎉 Mixed Media Post!',
+            'You selected both images and videos. They will be combined in one post!',
+            [{ text: 'Got it!', style: 'default' }]
+          );
+        }
+      }
+      
+      // Collect items to add (excluding the first one which will be edited)
+      const itemsToAddDirectly: MediaItem[] = [];
+      
+      // Process all selected assets
+      result.assets.forEach((asset, index) => {
+        if (media.length + itemsToAddDirectly.length >= 20) {
+          if (index === 0) return; // Still allow first item for editing
+          Alert.alert('Limit Reached', 'Maximum 20 items per post. Some items were not added.');
+          return;
+        }
+        
+        const mediaType = asset.type === 'video' ? 'video' : 'image';
+        
+        if (index === 0) {
+          // Open editor for the first selected item
+          setCurrentEditItem({ uri: asset.uri, type: mediaType, index: -1 });
+          setEditorVisible(true);
+        } else {
+          // Collect remaining items to add after editor closes
+          itemsToAddDirectly.push({ uri: asset.uri, type: mediaType });
+        }
+      });
+      
+      // Add remaining items immediately
+      if (itemsToAddDirectly.length > 0) {
+        console.log('📦 Adding items directly:', itemsToAddDirectly.length, 'items');
+        itemsToAddDirectly.forEach((item, idx) => {
+          console.log(`  Item ${idx + 1}: ${item.type} - ${item.uri.substring(0, 50)}...`);
+        });
+        setMedia((prev) => {
+          const updated = [...prev, ...itemsToAddDirectly];
+          console.log('✅ Updated media array (after direct add):', updated.length, 'total items');
+          return updated;
+        });
+      }
     }
   };
 
-  const handleEditorDone = (result: { uri: string; type: 'image' | 'video'; trimStart?: number; trimEnd?: number; muted?: boolean; originalDuration?: number; requiresServerProcessing?: boolean }) => {
-    if (currentEditItem) {
-      if (currentEditItem.index === -1) {
-        const newMedia: MediaItem = {
-          uri: result.uri,
-          type: result.type,
-          ...(result.type === 'video' ? { trimStart: result.trimStart, trimEnd: result.trimEnd, muted: result.muted, originalDuration: result.originalDuration, ...(result.requiresServerProcessing ? { requiresServerProcessing: true } : {}) } : {}),
-        };
-        setMedia([...media, newMedia]);
-      } else {
-        const updated = [...media];
-        updated[currentEditItem.index] = {
-          ...updated[currentEditItem.index],
-          uri: result.uri,
-          ...(result.type === 'video' ? { trimStart: result.trimStart, trimEnd: result.trimEnd, muted: result.muted, originalDuration: result.originalDuration, ...(result.requiresServerProcessing ? { requiresServerProcessing: true } : {}) } : {}),
-        };
-        setMedia(updated);
+  const handleEditorDone = (result: { uri: string; type: 'image' | 'video'; trimStart?: number; trimEnd?: number; muted?: boolean }) => {
+    if (!currentEditItem) return;
+    console.log('🎨 Editor done with:', result.type);
+    const base: MediaItem = { uri: result.uri, type: result.type };
+    if (result.type === 'video') {
+      if (result.trimStart != null && result.trimEnd != null) {
+        base.trimStart = result.trimStart;
+        base.trimEnd = result.trimEnd;
       }
+      if (result.muted != null) base.muted = result.muted;
+    }
+    if (currentEditItem.index === -1) {
+      setMedia((prev) => {
+        const updated = [...prev, base];
+        console.log('✅ Media after editor (new item):', updated.length, 'total items');
+        updated.forEach((item, idx) => {
+          console.log(`  Item ${idx}: ${item.type}`);
+        });
+        return updated;
+      });
+    } else {
+      setMedia((prev) => prev.map((m, i) => (i === currentEditItem.index ? base : m)));
     }
     setEditorVisible(false);
     setCurrentEditItem(null);
@@ -166,185 +173,150 @@ export default function HomeCreatePostScreen() {
   };
 
   const editMedia = (index: number) => {
-    const mediaItem = media[index];
-    setCurrentEditItem({ uri: mediaItem.uri, type: mediaItem.type, index });
+    const item = media[index];
+    setCurrentEditItem({ uri: item.uri, type: item.type, index });
     setEditorVisible(true);
   };
 
   const removeMedia = (index: number) => {
-    setMedia(media.filter((_, i) => i !== index));
+    setMedia((prev) => prev.filter((_, i) => i !== index));
   };
 
   const uploadMedia = async (uri: string, type: 'image' | 'video'): Promise<string | null> => {
     try {
-      console.log('📤 Starting upload for:', uri, 'type:', type);
-      const response = await fetch(uri);
-      if (!response.ok) throw new Error(`Failed to fetch media: ${response.status}`);
-
-      const arrayBuffer = await response.arrayBuffer();
-      const size = arrayBuffer.byteLength;
-      console.log('📦 ArrayBuffer created, size:', size);
-      if (type === 'video' && size > 80 * 1024 * 1024) {
-        Alert.alert('Video Too Large', 'Please select a shorter or smaller video (under ~80MB).');
-        return null;
-      }
-
-      const fileExt = uri.split('.').pop() || (type === 'video' ? 'mp4' : 'jpg');
-      const fileName = `${user?.id}-${Date.now()}.${fileExt}`;
+      console.log('📤 Starting upload for:', type, uri);
+      const fileExt = type === 'image' ? 'jpg' : 'mp4';
+      const fileName = `${Date.now()}-${Math.random().toString(36).slice(2)}.${fileExt}`;
       const filePath = `posts/${fileName}`;
-
-      const inferContentType = (ext: string, t: 'image' | 'video') => {
-        const e = (ext || '').toLowerCase();
-        if (t === 'video') {
-          if (e.includes('mp4') || e.includes('m4v')) return 'video/mp4';
-          if (e.includes('mov')) return 'video/quicktime';
-          if (e.includes('webm')) return 'video/webm';
-          return 'video/mp4';
-        }
-        if (e.includes('png')) return 'image/png';
-        if (e.includes('webp')) return 'image/webp';
-        if (e.includes('jpeg') || e.includes('jpg')) return 'image/jpeg';
-        return 'image/jpeg';
-      };
-
-      const contentType = inferContentType(fileExt, type);
-
-      const { data: uploadData, error: uploadError } = await supabase.storage
-        .from('media')
-        .upload(filePath, arrayBuffer, { contentType, cacheControl: '3600', upsert: false });
-      if (uploadError) throw uploadError;
-      console.log('✅ Upload successful:', uploadData);
-
-      const { data: urlData } = supabase.storage.from('media').getPublicUrl(filePath);
-      console.log('🔗 Public URL:', urlData.publicUrl);
+      
+      // Read file as base64 using legacy API
+      const base64 = await readAsStringAsync(uri, {
+        encoding: 'base64' as any,
+      });
+      console.log('✅ Read file as base64, length:', base64.length);
+      
+      // Decode base64 to ArrayBuffer
+      const arrayBuffer = decode(base64);
+      console.log('✅ Decoded to ArrayBuffer');
+      
+      // Upload to Supabase Storage
+      const { data, error } = await supabase.storage
+        .from('post-media')
+        .upload(filePath, arrayBuffer, {
+          contentType: type === 'image' ? 'image/jpeg' : 'video/mp4',
+          upsert: false,
+        });
+      
+      if (error) {
+        console.error('❌ Upload error:', error);
+        throw error;
+      }
+      
+      console.log('✅ Upload successful:', data);
+      
+      // Get public URL
+      const { data: urlData } = supabase.storage.from('post-media').getPublicUrl(filePath);
+      console.log('✅ Public URL:', urlData.publicUrl);
+      
       return urlData.publicUrl;
-    } catch (error: any) {
-      console.error('❌ Error uploading media:', error);
-      Alert.alert('Upload Error', error.message || 'Failed to upload media');
+    } catch (e: any) {
+      console.error('❌ Upload failed:', e);
+      Alert.alert('Upload Error', e.message || 'Failed to upload media');
       return null;
     }
   };
 
   const handleSubmit = async () => {
-    console.log('Home Create Post submit');
-    if (!content.trim()) {
-      Alert.alert('Error', 'Post content cannot be empty');
-      return;
-    }
     if (!user) {
-      Alert.alert('Error', 'You must be logged in to create a post');
+      Alert.alert('Login Required', 'Please log in to create a post.');
       return;
     }
-
+    if (!content.trim()) {
+      Alert.alert('Empty Post', 'Write something before posting.');
+      return;
+    }
+    setIsSubmitting(true);
     try {
-      setIsSubmitting(true);
-      let uploadedImageUrls: string[] = [];
-      let uploadedVideoUrls: string[] = [];
-
-      if (media.length > 0) {
-        for (const mediaItem of media) {
-          let url: string | null = null;
-          if (
-            mediaItem.type === 'video' &&
-            mediaItem.trimStart != null &&
-            mediaItem.trimEnd != null &&
-            mediaItem.trimEnd > mediaItem.trimStart &&
-            (mediaItem as any).requiresServerProcessing &&
-            isCloudinaryConfigured()
-          ) {
-            try {
-              url = await processVideoWithCloudinary(mediaItem.uri, {
-                trimStart: mediaItem.trimStart,
-                trimEnd: mediaItem.trimEnd,
-                muted: mediaItem.muted,
-              });
-            } catch (e) {
-              console.warn('Cloudinary processing failed, falling back to direct upload:', e);
-              url = await uploadMedia(mediaItem.uri, mediaItem.type);
-            }
-          } else {
-            url = await uploadMedia(mediaItem.uri, mediaItem.type);
-          }
-          if (url) {
-            if (mediaItem.type === 'video') {
-              uploadedVideoUrls.push(url);
-            } else {
-              uploadedImageUrls.push(url);
-            }
-          }
+      console.log('📤 Starting submission with', media.length, 'media items');
+      media.forEach((item, idx) => {
+        console.log(`  Upload Item ${idx}: ${item.type}`);
+      });
+      
+      const imageUrls: string[] = [];
+      const videoUrls: string[] = [];
+      const mediaItems: Array<{ type: 'image' | 'video'; url: string }> = [];
+      
+      for (const item of media) {
+        console.log(`📤 Uploading: ${item.type}`);
+        const url = await uploadMedia(item.uri, item.type);
+        if (url) {
+          console.log(`✅ Uploaded ${item.type}: ${url.substring(0, 60)}...`);
+          // Store in mixed media array (preserves order and type)
+          mediaItems.push({ type: item.type, url });
+          
+          // Also store in separate arrays for backward compatibility
+          if (item.type === 'image') imageUrls.push(url);
+          else videoUrls.push(url);
+        } else {
+          console.error(`❌ Failed to upload ${item.type}`);
         }
       }
-
-      const postData = {
+      
+      console.log('📊 Upload summary:');
+      console.log('  - Images:', imageUrls.length);
+      console.log('  - Videos:', videoUrls.length);
+      console.log('  - Media items:', mediaItems.length);
+      console.log('  - Media items array:', JSON.stringify(mediaItems, null, 2));
+      
+      const postData: any = {
         user_id: user.id,
         content: content.trim(),
-        image_url: uploadedImageUrls.length > 0 ? uploadedImageUrls[0] : null,
-        image_urls: uploadedImageUrls.length > 0 ? uploadedImageUrls : null,
-        video_url: uploadedVideoUrls.length > 0 ? uploadedVideoUrls[0] : null,
-        video_urls: uploadedVideoUrls.length > 0 ? uploadedVideoUrls : null,
+        image_url: imageUrls[0] || null,
+        image_urls: imageUrls.length ? imageUrls : null,
+        video_url: videoUrls[0] || null,
+        video_urls: videoUrls.length ? videoUrls : null,
+        media_items: mediaItems.length ? mediaItems : null,
         youtube_url: null,
         youtube_urls: null,
-        category: 'general',
-        visibility: 'public',
-      } as const;
-
-      console.log('Inserting home post:', postData);
-      const { data, error } = await supabase.from('posts').insert(postData).select();
+        // Home feed: no category, visibility, highlights
+      };
+      const { error } = await supabase.from('posts').insert(postData);
       if (error) throw error;
-
-      Alert.alert('Success', 'Post added successfully', [
-        { text: 'OK', onPress: () => router.back() }
-      ]);
-    } catch (error: any) {
-      console.error('Error creating post:', error);
-      Alert.alert('Error', error.message || 'Failed to create post');
+      Alert.alert('Success', 'Post created!', [{ text: 'OK', onPress: () => router.back() }]);
+    } catch (e: any) {
+      console.error('Create post error', e);
+      Alert.alert('Error', e.message || 'Failed to create post');
     } finally {
       setIsSubmitting(false);
     }
   };
 
-  if (!fontsLoaded || !user) {
-    return null;
-  }
-
   return (
     <View style={styles.container}>
-      {/* Header */}
       <LinearGradient colors={['#FFFFFF', '#F8FAFC']} style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
+        <TouchableOpacity onPress={() => router.back()} style={styles.backButton}> 
           <View style={styles.backButtonCircle}>
             <ArrowLeft size={22} color="#1E293B" />
           </View>
         </TouchableOpacity>
         <View style={styles.headerCenter}>
-          <Text style={styles.title}>Create Post</Text>
-          <Text style={styles.subtitle}>Home feed • quick share</Text>
+          <Text style={styles.title}>New Post</Text>
+          <Text style={styles.subtitle}>Share with everyone</Text>
         </View>
-        <TouchableOpacity
+        <TouchableOpacity 
           style={[styles.submitButton, (!content.trim() || isSubmitting) && styles.submitButtonDisabled]}
           onPress={handleSubmit}
           disabled={!content.trim() || isSubmitting}
         >
-          {isSubmitting ? (
-            <ActivityIndicator color="#FFFFFF" size="small" />
-          ) : (
-            <>
-              <Send size={18} color="#FFFFFF" />
-            </>
-          )}
+          {isSubmitting ? <ActivityIndicator color="#FFFFFF" size="small" /> : <Send size={18} color="#FFFFFF" />}
         </TouchableOpacity>
       </LinearGradient>
 
       <ScrollView style={styles.formContainer} showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>
-        {/* Content Input Card */}
         <View style={styles.card}>
-          <View style={styles.cardHeader}>
-            <MessageSquare size={20} color="#6366F1" />
-            <Text style={styles.cardTitle}>Your Story / Caption</Text>
-          </View>
           <TextInput
             style={styles.contentInput}
-            placeholder="What's on your mind? Share something..."
+            placeholder="What's happening?"
             placeholderTextColor="#94A3B8"
             multiline
             value={content}
@@ -352,95 +324,55 @@ export default function HomeCreatePostScreen() {
             maxLength={2000}
             textAlignVertical="top"
           />
-          <View style={styles.characterCount}>
+          <View style={styles.characterCount}> 
             <Text style={styles.characterCountText}>{content.length}/2000</Text>
           </View>
         </View>
 
-        {/* Media Preview Section */}
         {media.length > 0 && (
           <View style={styles.card}>
-            <View style={styles.cardHeader}>
-              <ImageIcon size={20} color="#10B981" />
-              <Text style={styles.cardTitle}>Media ({media.length}/20)</Text>
-            </View>
-            <ScrollView
-              horizontal
-              showsHorizontalScrollIndicator={false}
-              style={styles.imagesScroll}
-              contentContainerStyle={styles.mediaScrollContent}
-            >
-              {media.map((mediaItem, index) => (
+            <Text style={styles.sectionTitle}>Media ({media.length}/20)</Text>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.imagesScroll} contentContainerStyle={styles.mediaScrollContent}>
+              {media.map((item, index) => (
                 <View key={index} style={styles.imagePreview}>
-                  {mediaItem.type === 'video' ? (
-                    mediaItem.trimStart != null && mediaItem.trimEnd != null ? (
-                      <TrimmedVideoPreview
-                        uri={mediaItem.uri}
-                        trimStart={mediaItem.trimStart}
-                        trimEnd={mediaItem.trimEnd}
-                        muted={mediaItem.muted}
-                      />
+                  {item.type === 'video' ? (
+                    item.trimStart != null && item.trimEnd != null ? (
+                      <TrimmedVideoPreview uri={item.uri} trimStart={item.trimStart} trimEnd={item.trimEnd} muted={item.muted} />
                     ) : (
-                      <Video
-                        source={{ uri: mediaItem.uri }}
-                        style={styles.previewImage}
-                        useNativeControls
-                        resizeMode={ResizeMode.COVER}
-                        isLooping
-                        isMuted={!!mediaItem.muted}
-                      />
+                      <Video source={{ uri: item.uri }} style={styles.previewImage} useNativeControls resizeMode={ResizeMode.COVER} isLooping isMuted={!!item.muted} />
                     )
                   ) : (
-                    <Image source={{ uri: mediaItem.uri }} style={styles.previewImage} />
+                    <Image source={{ uri: item.uri }} style={styles.previewImage} />
                   )}
-
-                  <LinearGradient colors={['rgba(0,0,0,0.6)', 'transparent']} style={styles.mediaOverlay}>
+                  <View style={styles.mediaOverlayMinimal}>
                     <TouchableOpacity style={styles.removeImageButton} onPress={() => removeMedia(index)}>
                       <X size={18} color="#FFFFFF" />
                     </TouchableOpacity>
                     <TouchableOpacity style={styles.editMediaButton} onPress={() => editMedia(index)}>
                       <Edit3 size={18} color="#FFFFFF" />
                     </TouchableOpacity>
-                  </LinearGradient>
-
-                  <View style={styles.imageCounter}>
-                    <Text style={styles.imageCounterText}>{index + 1}</Text>
                   </View>
-
-                  {mediaItem.type === 'video' && (
-                    <View style={styles.videoIndicator}>
-                      <VideoIcon size={14} color="#FFFFFF" />
-                      <Text style={styles.videoIndicatorText}>Video</Text>
-                    </View>
-                  )}
+                  <View style={styles.imageCounter}><Text style={styles.imageCounterText}>{index + 1}</Text></View>
+                  {item.type === 'video' && <View style={styles.videoIndicator}><VideoIcon size={14} color="#FFFFFF" /><Text style={styles.videoIndicatorText}>Video</Text></View>}
                 </View>
               ))}
             </ScrollView>
           </View>
         )}
 
-        {/* Add Media Button */}
         <TouchableOpacity style={[styles.addMediaCard, media.length >= 20 && styles.addMediaCardDisabled]} onPress={pickMedia} disabled={media.length >= 20}>
           <LinearGradient colors={media.length >= 20 ? ['#F1F5F9', '#F1F5F9'] : ['#EEF2FF', '#E0E7FF']} style={styles.addMediaGradient}>
-            <View style={styles.addMediaIconCircle}>
-              <ImageIcon size={24} color={media.length >= 20 ? '#CBD5E1' : '#6366F1'} />
-            </View>
+            <View style={styles.addMediaIconCircle}><ImageIcon size={24} color={media.length >= 20 ? '#CBD5E1' : '#6366F1'} /></View>
             <View style={styles.addMediaTextContainer}>
-              <Text style={[styles.addMediaTitle, media.length >= 20 && styles.addMediaTitleDisabled]}>
-                {media.length === 0 ? 'Add Photos & Videos' : 'Add More Media'}
-              </Text>
-              <Text style={[styles.addMediaSubtitle, media.length >= 20 && styles.addMediaSubtitleDisabled]}>
-                {media.length === 0 ? 'Capture moments to share' : `${media.length}/20 items added`}
-              </Text>
+              <Text style={[styles.addMediaTitle, media.length >= 20 && styles.addMediaTitleDisabled]}>{media.length === 0 ? 'Add Photos & Videos' : 'Add More Media'}</Text>
+              <Text style={[styles.addMediaSubtitle, media.length >= 20 && styles.addMediaSubtitleDisabled]}>{media.length === 0 ? 'Mix images and videos in one post' : `${media.length}/20 items added`}</Text>
             </View>
           </LinearGradient>
         </TouchableOpacity>
 
-        {/* Bottom Spacing */}
         <View style={styles.bottomSpacing} />
       </ScrollView>
 
-      {/* Media Editor Modal */}
       {currentEditItem && (
         <MediaEditorModal
           visible={editorVisible}
@@ -456,87 +388,40 @@ export default function HomeCreatePostScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#F1F5F9' },
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 20,
-    paddingTop: 60,
-    paddingBottom: 20,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.05,
-    shadowRadius: 8,
-    elevation: 3,
-  },
+  header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 20, paddingTop: 60, paddingBottom: 20 },
   backButton: { padding: 4 },
-  backButtonCircle: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: '#F8FAFC',
-    justifyContent: 'center',
-    alignItems: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.1,
-    shadowRadius: 3,
-    elevation: 2,
-  },
+  backButtonCircle: { width: 40, height: 40, borderRadius: 20, backgroundColor: '#F8FAFC', justifyContent: 'center', alignItems: 'center' },
   headerCenter: { flex: 1, alignItems: 'center', marginHorizontal: 16 },
-  title: { fontSize: 22, fontFamily: 'Inter-SemiBold', color: '#0F172A', letterSpacing: -0.5 },
-  subtitle: { fontSize: 13, fontFamily: 'Inter-Regular', color: '#64748B', marginTop: 2 },
-  submitButton: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
-    backgroundColor: '#6366F1',
-    justifyContent: 'center',
-    alignItems: 'center',
-    shadowColor: '#6366F1',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 8,
-    elevation: 5,
-  },
-  submitButtonDisabled: { backgroundColor: '#CBD5E1', shadowOpacity: 0, elevation: 0 },
+  title: { fontSize: 22, fontWeight: '600', color: '#0F172A', letterSpacing: -0.5 },
+  subtitle: { fontSize: 13, color: '#64748B', marginTop: 2 },
+  submitButton: { width: 48, height: 48, borderRadius: 24, backgroundColor: '#6366F1', justifyContent: 'center', alignItems: 'center' },
+  submitButtonDisabled: { backgroundColor: '#94A3B8' },
   formContainer: { flex: 1 },
-  scrollContent: { padding: 16 },
-  card: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 16,
-    padding: 20,
-    marginBottom: 16,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.06,
-    shadowRadius: 8,
-    elevation: 2,
-  },
-  cardHeader: { flexDirection: 'row', alignItems: 'center', marginBottom: 16, gap: 10 },
-  cardTitle: { fontSize: 16, fontFamily: 'Inter-SemiBold', color: '#0F172A' },
-  contentInput: { minHeight: 140, fontSize: 16, fontFamily: 'Inter-Regular', color: '#0F172A', lineHeight: 24, textAlignVertical: 'top' },
+  scrollContent: { padding: 20, paddingBottom: 140 },
+  card: { backgroundColor: '#FFFFFF', borderRadius: 16, padding: 16, marginBottom: 20, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.05, shadowRadius: 8, elevation: 2 },
+  contentInput: { minHeight: 160, fontSize: 16, color: '#0F172A' },
   characterCount: { alignItems: 'flex-end', marginTop: 8 },
-  characterCountText: { fontSize: 12, fontFamily: 'Inter-Regular', color: '#94A3B8' },
-  imagesScroll: { flexGrow: 0, marginHorizontal: -20, paddingHorizontal: 20 },
-  mediaScrollContent: { paddingRight: 20 },
-  imagePreview: { position: 'relative', marginRight: 12, borderRadius: 16, overflow: 'hidden', width: 260, height: 340, backgroundColor: '#F1F5F9' },
+  characterCountText: { fontSize: 12, color: '#64748B' },
+  sectionTitle: { fontSize: 16, fontWeight: '600', color: '#0F172A', marginBottom: 12 },
+  imagesScroll: { },
+  mediaScrollContent: { flexDirection: 'row', gap: 12 },
+  imagePreview: { width: 180, height: 240, borderRadius: 16, overflow: 'hidden', backgroundColor: '#000' },
   previewImage: { width: '100%', height: '100%' },
-  mediaOverlay: { position: 'absolute', top: 0, left: 0, right: 0, height: 80, flexDirection: 'row', justifyContent: 'space-between', padding: 12 },
-  removeImageButton: { width: 36, height: 36, borderRadius: 18, backgroundColor: 'rgba(239, 68, 68, 0.95)', justifyContent: 'center', alignItems: 'center', shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.15, shadowRadius: 4, elevation: 3 },
-  editMediaButton: { width: 36, height: 36, borderRadius: 18, backgroundColor: 'rgba(99, 102, 241, 0.95)', justifyContent: 'center', alignItems: 'center', shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.15, shadowRadius: 4, elevation: 3 },
-  imageCounter: { position: 'absolute', bottom: 12, right: 12, backgroundColor: 'rgba(15, 23, 42, 0.85)', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 12, minWidth: 36, alignItems: 'center' },
-  imageCounterText: { color: '#FFFFFF', fontSize: 13, fontFamily: 'Inter-SemiBold' },
-  videoIndicator: { position: 'absolute', bottom: 12, left: 12, backgroundColor: 'rgba(239, 68, 68, 0.95)', borderRadius: 12, paddingHorizontal: 10, paddingVertical: 6, flexDirection: 'row', alignItems: 'center', gap: 4 },
-  videoIndicatorText: { color: '#FFFFFF', fontSize: 11, fontFamily: 'Inter-SemiBold', textTransform: 'uppercase', letterSpacing: 0.5 },
-  addMediaCard: { marginBottom: 16, borderRadius: 16, overflow: 'hidden', shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.06, shadowRadius: 8, elevation: 2 },
-  addMediaCardDisabled: { opacity: 0.5 },
-  addMediaGradient: { flexDirection: 'row', alignItems: 'center', padding: 20, gap: 16 },
-  addMediaIconCircle: { width: 56, height: 56, borderRadius: 28, backgroundColor: '#FFFFFF', justifyContent: 'center', alignItems: 'center', shadowColor: '#6366F1', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.1, shadowRadius: 4, elevation: 2 },
+  mediaOverlayMinimal: { position: 'absolute', top: 8, left: 8, right: 8, flexDirection: 'row', justifyContent: 'space-between' },
+  removeImageButton: { width: 32, height: 32, borderRadius: 16, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', alignItems: 'center' },
+  editMediaButton: { width: 32, height: 32, borderRadius: 16, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', alignItems: 'center' },
+  imageCounter: { position: 'absolute', bottom: 8, right: 8, backgroundColor: 'rgba(0,0,0,0.4)', paddingHorizontal: 8, paddingVertical: 4, borderRadius: 12 },
+  imageCounterText: { color: '#FFFFFF', fontSize: 12, fontWeight: '600' },
+  videoIndicator: { position: 'absolute', bottom: 8, left: 8, flexDirection: 'row', alignItems: 'center', backgroundColor: 'rgba(0,0,0,0.4)', paddingHorizontal: 8, paddingVertical: 4, borderRadius: 12 },
+  videoIndicatorText: { color: '#FFFFFF', fontSize: 12, marginLeft: 4 },
+  addMediaCard: { borderRadius: 16, overflow: 'hidden', marginBottom: 20 },
+  addMediaCardDisabled: { opacity: 0.6 },
+  addMediaGradient: { flexDirection: 'row', alignItems: 'center', padding: 16, gap: 16 },
+  addMediaIconCircle: { width: 52, height: 52, borderRadius: 26, backgroundColor: '#FFFFFF', justifyContent: 'center', alignItems: 'center' },
   addMediaTextContainer: { flex: 1 },
-  addMediaTitle: { fontSize: 17, fontFamily: 'Inter-SemiBold', color: '#0F172A', marginBottom: 4 },
+  addMediaTitle: { fontSize: 16, fontWeight: '600', color: '#1E293B' },
   addMediaTitleDisabled: { color: '#94A3B8' },
-  addMediaSubtitle: { fontSize: 14, fontFamily: 'Inter-Regular', color: '#64748B' },
-  addMediaSubtitleDisabled: { color: '#CBD5E1' },
+  addMediaSubtitle: { fontSize: 13, color: '#64748B', marginTop: 4 },
+  addMediaSubtitleDisabled: { color: '#94A3B8' },
   bottomSpacing: { height: 40 },
 });

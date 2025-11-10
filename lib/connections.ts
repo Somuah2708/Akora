@@ -20,8 +20,8 @@ export async function searchUsers(query: string, currentUserId?: string): Promis
   try {
     let queryBuilder = supabase
       .from('profiles')
-      .select('id, username, full_name, avatar_url, bio')
-      .or(`username.ilike.%${query}%,full_name.ilike.%${query}%`)
+      .select('*')
+      .or(`username.ilike.%${query}%,full_name.ilike.%${query}%,first_name.ilike.%${query}%,surname.ilike.%${query}%`)
       .limit(20);
 
     // Exclude current user from results

@@ -19,6 +19,7 @@ type PostDetail = {
   video_urls?: string[] | null;
   youtube_url?: string | null;
   youtube_urls?: string[] | null;
+  media_items?: Array<{ type: 'image' | 'video'; url: string }> | null;
   created_at: string;
   user?: {
     id: string;
@@ -66,6 +67,7 @@ export default function PostDetailScreen() {
           video_urls: data.video_urls,
           youtube_url: data.youtube_url,
           youtube_urls: data.youtube_urls,
+          media_items: data.media_items,
           created_at: data.created_at,
           user: userRow ? { id: userRow.id, full_name: userRow.full_name, avatar_url: userRow.avatar_url, is_admin: userRow.is_admin } : null,
           likes_count: Array.isArray((data as any).post_likes) ? (data as any).post_likes.length : 0,
@@ -150,8 +152,35 @@ export default function PostDetailScreen() {
       </View>
 
       <ScrollView showsVerticalScrollIndicator={false}>
-        {/* Media */}
-        {post.video_urls && post.video_urls.length > 0 ? (
+        {/* Media - Mixed Media Support */}
+        {post.media_items && post.media_items.length > 0 ? (
+          <ScrollView 
+            horizontal 
+            pagingEnabled 
+            showsHorizontalScrollIndicator={false}
+            snapToInterval={width}
+            decelerationRate="fast"
+          >
+            {post.media_items.map((mediaItem, i) => (
+              <View key={i} style={[styles.hero, { width }]}>
+                {mediaItem.type === 'video' ? (
+                  <Video
+                    source={{ uri: mediaItem.url }}
+                    style={styles.hero}
+                    useNativeControls
+                    resizeMode={ResizeMode.CONTAIN}
+                    isLooping
+                    isMuted={false}
+                    volume={1.0}
+                    onError={(err) => console.warn('Video error:', err)}
+                  />
+                ) : (
+                  <Image source={{ uri: mediaItem.url }} style={styles.hero} resizeMode="cover" />
+                )}
+              </View>
+            ))}
+          </ScrollView>
+        ) : post.video_urls && post.video_urls.length > 0 ? (
           <ScrollView horizontal pagingEnabled showsHorizontalScrollIndicator={false}>
             {post.video_urls.map((videoUrl, i) => (
               <View key={i} style={styles.videoContainer}>
@@ -194,11 +223,17 @@ export default function PostDetailScreen() {
         {/* Actions */}
         <View style={styles.actions}>
           <View style={styles.leftActions}>
-            <TouchableOpacity onPress={toggleLike} style={styles.actionBtn}>
+            <TouchableOpacity onPress={toggleLike} style={styles.actionBtnWithCount}>
               <Heart size={24} color={isLiked ? '#FF3B30' : '#111827'} fill={isLiked ? '#FF3B30' : 'none'} />
+              {(post.likes_count ?? 0) > 0 && (
+                <Text style={styles.actionCount}>{post.likes_count}</Text>
+              )}
             </TouchableOpacity>
-            <TouchableOpacity onPress={() => router.push(`/post-comments/${post.id}`)} style={styles.actionBtn}>
+            <TouchableOpacity onPress={() => router.push(`/post-comments/${post.id}`)} style={styles.actionBtnWithCount}>
               <MessageCircle size={24} color="#111827" />
+              {(post.comments_count ?? 0) > 0 && (
+                <Text style={styles.actionCount}>{post.comments_count}</Text>
+              )}
             </TouchableOpacity>
           </View>
           <TouchableOpacity onPress={toggleBookmark} style={styles.actionBtn}>
@@ -231,6 +266,8 @@ const styles = StyleSheet.create({
   actions: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 12 },
   leftActions: { flexDirection: 'row', gap: 16 },
   actionBtn: { padding: 4 },
+  actionBtnWithCount: { flexDirection: 'row', alignItems: 'center', gap: 6, padding: 4 },
+  actionCount: { fontSize: 14, color: '#111827', fontWeight: '600' },
   captionBox: { paddingHorizontal: 16, paddingBottom: 20 },
   caption: { fontSize: 14, color: '#111827' },
   author: { fontFamily: 'Inter-SemiBold' },

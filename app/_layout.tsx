@@ -15,6 +15,7 @@ import { useFrameworkReady } from '@/hooks/useFrameworkReady';
 import { useAuth } from '@/hooks/useAuth';
 import { ToastProvider } from '@/components/Toast';
 import { VideoSettingsProvider } from '@/contexts/VideoSettingsContext';
+import { NotificationProvider } from '@/contexts/NotificationContext';
 
 export default function RootLayout() {
   useFrameworkReady();
@@ -99,14 +100,16 @@ export default function RootLayout() {
     <GestureHandlerRootView style={{ flex: 1 }}>
       <ToastProvider>
         <VideoSettingsProvider>
-          <Stack screenOptions={{ headerShown: false }}>
-            <Stack.Screen name="(tabs)" />
-            <Stack.Screen name="auth" />
-            {/* Ensure non-tab stacks (e.g., chat, user-profile, etc.) also have no header */}
-            <Stack.Screen name="chat" />
-            <Stack.Screen name="+not-found" options={{ headerShown: true }} />
-          </Stack>
-          <StatusBar style="auto" />
+          <NotificationProvider>
+            <Stack screenOptions={{ headerShown: false }}>
+              <Stack.Screen name="(tabs)" />
+              <Stack.Screen name="auth" />
+              {/* Ensure non-tab stacks (e.g., chat, user-profile, etc.) also have no header */}
+              <Stack.Screen name="chat" />
+              <Stack.Screen name="+not-found" options={{ headerShown: true }} />
+            </Stack>
+            <StatusBar style="auto" />
+          </NotificationProvider>
         </VideoSettingsProvider>
       </ToastProvider>
     </GestureHandlerRootView>

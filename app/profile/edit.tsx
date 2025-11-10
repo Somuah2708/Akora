@@ -204,26 +204,25 @@ export default function EditProfileScreen() {
     try {
       setUploading(true);
       
-      // For web, we need to convert the image to a blob
-      const response = await fetch(uri);
-      const blob = await response.blob();
-      const mime = blob.type || 'image/jpeg';
-      const getExtFromMime = (m: string) => {
-        if (!m) return 'jpg';
-        if (m.includes('jpeg')) return 'jpg';
-        if (m.includes('jpg')) return 'jpg';
-        if (m.includes('png')) return 'png';
-        if (m.includes('webp')) return 'webp';
-        if (m.includes('heic')) return 'heic';
-        return 'jpg';
-      };
-      const ext = getExtFromMime(mime);
+      // Use expo-file-system to read file as base64 (works on mobile)
+      const { readAsStringAsync } = await import('expo-file-system/legacy');
+      const base64 = await readAsStringAsync(uri, { encoding: 'base64' });
+      
+      // Determine file extension from URI or default to jpg
+      const uriParts = uri.split('.');
+      const ext = uriParts.length > 1 ? uriParts[uriParts.length - 1].toLowerCase() : 'jpg';
+      const mime = ext === 'png' ? 'image/png' : ext === 'webp' ? 'image/webp' : 'image/jpeg';
+      
+      // Decode base64 to ArrayBuffer for upload
+      const { decode } = await import('base64-arraybuffer');
+      const arrayBuffer = decode(base64);
+      
       const filePath = `${user?.id}/${Date.now()}.${ext}`;
       
       // Upload to Supabase Storage
       const { error: uploadError } = await supabase.storage
         .from(AVATAR_BUCKET)
-        .upload(filePath, blob, { upsert: true, contentType: mime });
+        .upload(filePath, arrayBuffer, { upsert: true, contentType: mime });
       
       if (uploadError) {
         // Provide clearer guidance if the bucket doesn't exist

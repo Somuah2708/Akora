@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   View,
   Text,
@@ -9,9 +9,10 @@ import {
   Alert,
   StyleSheet,
 } from 'react-native';
-import { Plus, Search, Users, Lock, Globe, Calendar, GraduationCap } from 'lucide-react-native';
+import { Plus, Search, Users, Lock, Globe, Calendar, GraduationCap, ArrowLeft, X, MessageCircle } from 'lucide-react-native';
 import { useAuth } from '@/hooks/useAuth';
 import { supabase } from '@/lib/supabase';
+import { useRouter } from 'expo-router';
 
 interface Circle {
   id: string;
@@ -25,6 +26,7 @@ interface Circle {
   member_count?: number;
   is_member?: boolean;
   has_pending_request?: boolean;
+  group_chat_id?: string;
 }
 
 interface JoinRequest {
@@ -42,6 +44,7 @@ interface JoinRequest {
 
 export default function CirclesScreen() {
   const { user } = useAuth();
+  const router = useRouter();
   const [circles, setCircles] = useState<Circle[]>([]);
   const [filteredCircles, setFilteredCircles] = useState<Circle[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
@@ -67,9 +70,36 @@ export default function CirclesScreen() {
     }
   }, [user]);
 
+  const filterCircles = useCallback(() => {
+    console.log('🔍 Filtering circles:', {
+      totalCircles: circles.length,
+      searchQuery,
+      selectedCategory
+    });
+
+    let filtered = circles;
+
+    if (searchQuery.trim()) {
+      filtered = filtered.filter(circle =>
+        circle.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        circle.description.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        circle.category.toLowerCase().includes(searchQuery.toLowerCase())
+      );
+      console.log('📝 After search filter:', filtered.length, 'circles');
+    }
+
+    if (selectedCategory !== 'All') {
+      filtered = filtered.filter(circle => circle.category === selectedCategory);
+      console.log('🏷️ After category filter:', filtered.length, 'circles');
+    }
+
+    console.log('✅ Final filtered circles:', filtered.length);
+    setFilteredCircles(filtered);
+  }, [circles, searchQuery, selectedCategory]);
+
   useEffect(() => {
     filterCircles();
-  }, [circles, searchQuery, selectedCategory]);
+  }, [filterCircles]);
 
   const fetchCircles = async () => {
     try {
@@ -153,24 +183,6 @@ export default function CirclesScreen() {
     }
   };
 
-  const filterCircles = () => {
-    let filtered = circles;
-
-    if (searchQuery) {
-      filtered = filtered.filter(circle =>
-        circle.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        circle.description.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        circle.category.toLowerCase().includes(searchQuery.toLowerCase())
-      );
-    }
-
-    if (selectedCategory !== 'All') {
-      filtered = filtered.filter(circle => circle.category === selectedCategory);
-    }
-
-    setFilteredCircles(filtered);
-  };
-
   const createCircle = async () => {
     if (!user) {
       Alert.alert('Error', 'You must be logged in to create a circle');
@@ -244,6 +256,42 @@ export default function CirclesScreen() {
     }
   };
 
+  const sendJoinRequestNotification = async (circleId: string, circleName: string, circleCreatorId: string, isPrivate: boolean) => {
+    try {
+      // Don't send notification if user is the creator
+      if (circleCreatorId === user?.id) {
+        console.log('⚠️ User is the circle creator, skipping notification');
+        return;
+      }
+
+      // Create notification for circle admin
+      const content = isPrivate 
+        ? `requested to join your circle "${circleName}"`
+        : `joined your circle "${circleName}"`;
+
+      const { error } = await supabase
+        .from('notifications')
+        .insert([
+          {
+            recipient_id: circleCreatorId,
+            actor_id: user?.id,
+            type: 'circle_join_request',
+            content: content,
+            post_id: null,
+            comment_id: null,
+          }
+        ]);
+
+      if (error) {
+        console.error('Error creating notification:', error);
+      } else {
+        console.log('✅ Join notification sent to circle admin');
+      }
+    } catch (error) {
+      console.error('Error sending notification:', error);
+    }
+  };
+
   const joinCircle = async (circle: Circle) => {
     if (!user) {
       Alert.alert('Error', 'You must be logged in to join a circle');
@@ -264,6 +312,9 @@ export default function CirclesScreen() {
 
         if (error) throw error;
 
+        // Send notification to circle admin
+        await sendJoinRequestNotification(circle.id, circle.name, circle.created_by, true);
+
         Alert.alert('Success', 'Join request sent! The group admin will review your request.');
       } else {
         // Join directly
@@ -278,6 +329,9 @@ export default function CirclesScreen() {
 
         if (error) throw error;
 
+        // Send notification to circle admin about new member
+        await sendJoinRequestNotification(circle.id, circle.name, circle.created_by, false);
+
         Alert.alert('Success', 'You have joined the circle!');
       }
 
@@ -286,6 +340,42 @@ export default function CirclesScreen() {
       console.error('Error joining circle:', error);
       Alert.alert('Error', 'Failed to join circle');
     }
+  };
+
+  const openCircleChat = async (circleId: string) => {
+    try {
+      // Get the chat associated with this circle
+      const { data: chat, error } = await supabase
+        .from('chats')
+        .select('id')
+        .eq('circle_id', circleId)
+        .single();
+
+      if (error) {
+        console.error('Error fetching circle chat:', error);
+        Alert.alert('Error', 'Could not find circle chat');
+        return;
+      }
+
+      if (chat) {
+        router.push(`/chat/${chat.id}` as any);
+      } else {
+        Alert.alert('Info', 'Chat not found for this circle');
+      }
+    } catch (error) {
+      console.error('Error opening circle chat:', error);
+      Alert.alert('Error', 'Failed to open chat');
+    }
+  };
+
+  const openGroupChat = (circle: Circle) => {
+    if (!circle.group_chat_id) {
+      Alert.alert('Info', 'Group chat is being set up for this circle');
+      return;
+    }
+    
+    console.log('Opening group chat for circle:', circle.name, 'Group ID:', circle.group_chat_id);
+    router.push(`/chat/group/${circle.group_chat_id}` as any);
   };
 
   const handleJoinRequest = async (requestId: string, action: 'approve' | 'reject') => {
@@ -303,6 +393,34 @@ export default function CirclesScreen() {
               user_id: request.user_id,
             }
           ]);
+
+        // Send approval notification to user
+        await supabase
+          .from('notifications')
+          .insert([
+            {
+              recipient_id: request.user_id,
+              actor_id: user?.id,
+              type: 'circle_join_approved',
+              content: `approved your request to join "${(request as any).circles?.name || 'the circle'}"`,
+              post_id: null,
+              comment_id: null,
+            }
+          ]);
+      } else {
+        // Send rejection notification to user
+        await supabase
+          .from('notifications')
+          .insert([
+            {
+              recipient_id: request.user_id,
+              actor_id: user?.id,
+              type: 'circle_join_rejected',
+              content: `declined your request to join "${(request as any).circles?.name || 'the circle'}"`,
+              post_id: null,
+              comment_id: null,
+            }
+          ]);
       }
 
       // Update request status
@@ -311,7 +429,7 @@ export default function CirclesScreen() {
         .update({ status: action === 'approve' ? 'approved' : 'rejected' })
         .eq('id', requestId);
 
-      Alert.alert('Success', `Request ${action}d successfully!`);
+      Alert.alert('Success', `Request ${action}d successfully! User has been notified.`);
       fetchPendingRequests();
       fetchCircles();
     } catch (error) {
@@ -339,72 +457,116 @@ export default function CirclesScreen() {
           <Text style={styles.memberCountText}>{circle.member_count} members</Text>
         </View>
         
-        {circle.is_member ? (
-          <View style={styles.joinedBadge}>
-            <Text style={styles.joinedText}>Joined</Text>
-          </View>
-        ) : circle.has_pending_request ? (
-          <View style={styles.pendingBadge}>
-            <Text style={styles.pendingText}>Pending</Text>
-          </View>
-        ) : (
-          <TouchableOpacity
-            style={styles.joinButton}
-            onPress={() => joinCircle(circle)}
-          >
-            <Text style={styles.joinButtonText}>
-              {circle.is_private ? 'Request to Join' : 'Join'}
-            </Text>
-          </TouchableOpacity>
-        )}
+        <View style={styles.circleActions}>
+          {circle.is_member ? (
+            <>
+              <TouchableOpacity
+                style={styles.chatButton}
+                onPress={() => openGroupChat(circle)}
+              >
+                <MessageCircle size={16} color="#007AFF" />
+                <Text style={styles.chatButtonText}>Chat</Text>
+              </TouchableOpacity>
+              <View style={styles.joinedBadge}>
+                <Text style={styles.joinedText}>Joined</Text>
+              </View>
+            </>
+          ) : circle.has_pending_request ? (
+            <View style={styles.pendingBadge}>
+              <Text style={styles.pendingText}>Pending</Text>
+            </View>
+          ) : (
+            <TouchableOpacity
+              style={styles.joinButton}
+              onPress={() => joinCircle(circle)}
+            >
+              <Text style={styles.joinButtonText}>
+                {circle.is_private ? 'Request to Join' : 'Join'}
+              </Text>
+            </TouchableOpacity>
+          )}
+        </View>
       </View>
     </View>
   );
 
-  const myCircles = circles.filter(circle => circle.created_by === user?.id);
+  const myCircles = filteredCircles.filter(circle => circle.created_by === user?.id);
   const otherCircles = filteredCircles.filter(circle => circle.created_by !== user?.id);
 
   return (
     <View style={styles.container}>
-      {/* Header */}
-      <ScrollView style={styles.header}>
-        <Text style={styles.headerTitle}>Circles, Fun Clubs & Groups</Text>
-        <Text style={styles.headerSubtitle}>Connect with your community</Text>
-      </ScrollView>
-
-      {/* Search Bar */}
-      <View style={styles.searchContainer}>
-        <Search size={20} color="#666" style={styles.searchIcon} />
-        <TextInput
-          style={styles.searchInput}
-          placeholder="Search circles..."
-          value={searchQuery}
-          onChangeText={setSearchQuery}
-        />
-      </View>
-
-      {/* Category Filter */}
-      <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.categoryContainer}>
-        {categories.map((category) => (
-          <TouchableOpacity
-            key={category}
-            style={[
-              styles.categoryButton,
-              selectedCategory === category && styles.categoryButtonActive
-            ]}
-            onPress={() => setSelectedCategory(category)}
-          >
-            <Text style={[
-              styles.categoryButtonText,
-              selectedCategory === category && styles.categoryButtonTextActive
-            ]}>
-              {category}
-            </Text>
+      <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
+        {/* Header */}
+        <View style={styles.header}>
+          <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
+            <ArrowLeft size={24} color="#333" />
           </TouchableOpacity>
-        ))}
-      </ScrollView>
+          <View style={styles.headerTextContainer}>
+            <Text style={styles.headerTitle}>Circles, Fun Clubs & Groups</Text>
+            <Text style={styles.headerSubtitle}>Connect with your community</Text>
+          </View>
+        </View>
 
-      <ScrollView style={styles.content}>
+        {/* Search Bar */}
+        <View style={styles.searchContainer}>
+          <Search size={20} color="#666" style={styles.searchIcon} />
+          <TextInput
+            style={styles.searchInput}
+            placeholder="Search circles..."
+            value={searchQuery}
+            onChangeText={(text) => {
+              console.log('🔤 Search text changed:', text);
+              setSearchQuery(text);
+            }}
+            placeholderTextColor="#999"
+            autoCapitalize="none"
+            autoCorrect={false}
+          />
+          {searchQuery.length > 0 && (
+            <TouchableOpacity 
+              onPress={() => {
+                console.log('🗑️ Clearing search');
+                setSearchQuery('');
+              }}
+              style={styles.clearButton}
+              hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+            >
+              <X size={18} color="#666" />
+            </TouchableOpacity>
+          )}
+        </View>
+        
+        {/* Search Results Info */}
+        {(searchQuery.trim() || selectedCategory !== 'All') && (
+          <View style={styles.searchInfo}>
+            <Text style={styles.searchInfoText}>
+              Found {filteredCircles.length} circle{filteredCircles.length !== 1 ? 's' : ''}
+              {searchQuery.trim() && ` matching "${searchQuery}"`}
+              {selectedCategory !== 'All' && ` in ${selectedCategory}`}
+            </Text>
+          </View>
+        )}
+
+        {/* Category Filter */}
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.categoryContainer}>
+          {categories.map((category) => (
+            <TouchableOpacity
+              key={category}
+              style={[
+                styles.categoryButton,
+                selectedCategory === category && styles.categoryButtonActive
+              ]}
+              onPress={() => setSelectedCategory(category)}
+            >
+              <Text style={[
+                styles.categoryButtonText,
+                selectedCategory === category && styles.categoryButtonTextActive
+              ]}>
+                {category}
+              </Text>
+            </TouchableOpacity>
+          ))}
+        </ScrollView>
         {/* Pending Requests */}
         {pendingRequests.length > 0 && (
           <View style={styles.section}>
@@ -452,7 +614,7 @@ export default function CirclesScreen() {
         {/* My Circles */}
         {myCircles.length > 0 && (
           <View style={styles.section}>
-            <Text style={styles.sectionTitle}>My Circles</Text>
+            <Text style={styles.sectionTitle}>My Circles ({myCircles.length})</Text>
             {myCircles.map(renderCircleCard)}
           </View>
         )}
@@ -460,12 +622,29 @@ export default function CirclesScreen() {
         {/* All Circles */}
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>
-            {myCircles.length > 0 ? 'Discover More' : 'All Circles'}
+            {myCircles.length > 0 ? `Discover More (${otherCircles.length})` : `All Circles (${otherCircles.length})`}
           </Text>
           {otherCircles.length > 0 ? (
             otherCircles.map(renderCircleCard)
           ) : (
-            <Text style={styles.emptyText}>No circles found</Text>
+            <View style={styles.emptyStateContainer}>
+              <Text style={styles.emptyText}>
+                {searchQuery || selectedCategory !== 'All' 
+                  ? 'No circles match your search' 
+                  : 'No circles found'}
+              </Text>
+              {(searchQuery || selectedCategory !== 'All') && (
+                <TouchableOpacity 
+                  style={styles.clearFiltersButton}
+                  onPress={() => {
+                    setSearchQuery('');
+                    setSelectedCategory('All');
+                  }}
+                >
+                  <Text style={styles.clearFiltersText}>Clear filters</Text>
+                </TouchableOpacity>
+              )}
+            </View>
           )}
         </View>
       </ScrollView>
@@ -587,8 +766,15 @@ const styles = StyleSheet.create({
     padding: 20,
     paddingTop: 60,
     backgroundColor: '#fff',
-    borderBottomWidth: 1,
-    borderBottomColor: '#e0e0e0',
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  backButton: {
+    padding: 8,
+  },
+  headerTextContainer: {
+    flex: 1,
   },
   headerTitle: {
     fontSize: 28,
@@ -596,7 +782,7 @@ const styles = StyleSheet.create({
     color: '#333',
   },
   headerSubtitle: {
-    fontSize: 16,
+    fontSize: 14,
     color: '#666',
     marginTop: 4,
   },
@@ -618,6 +804,25 @@ const styles = StyleSheet.create({
     flex: 1,
     fontSize: 16,
     color: '#333',
+  },
+  clearButton: {
+    padding: 4,
+    marginLeft: 8,
+  },
+  searchInfo: {
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    backgroundColor: '#F0F9FF',
+    borderLeftWidth: 3,
+    borderLeftColor: '#007AFF',
+    marginHorizontal: 16,
+    marginBottom: 8,
+    borderRadius: 8,
+  },
+  searchInfoText: {
+    fontSize: 14,
+    color: '#007AFF',
+    fontWeight: '500',
   },
   categoryContainer: {
     paddingHorizontal: 16,
@@ -645,7 +850,7 @@ const styles = StyleSheet.create({
     color: '#fff',
   },
   content: {
-    flex: 1,
+    flexGrow: 1,
   },
   section: {
     marginBottom: 24,
@@ -719,6 +924,27 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: '#666',
     marginLeft: 6,
+  },
+  circleActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  chatButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#EFF6FF',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 8,
+    gap: 6,
+    borderWidth: 1,
+    borderColor: '#007AFF',
+  },
+  chatButtonText: {
+    color: '#007AFF',
+    fontSize: 14,
+    fontWeight: '600',
   },
   joinButton: {
     backgroundColor: '#007AFF',
@@ -806,11 +1032,29 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: '500',
   },
+  emptyStateContainer: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 32,
+    paddingHorizontal: 16,
+  },
   emptyText: {
     textAlign: 'center',
     color: '#666',
     fontSize: 16,
-    marginTop: 32,
+    marginBottom: 16,
+  },
+  clearFiltersButton: {
+    backgroundColor: '#007AFF',
+    paddingHorizontal: 20,
+    paddingVertical: 10,
+    borderRadius: 20,
+    marginTop: 8,
+  },
+  clearFiltersText: {
+    color: '#fff',
+    fontSize: 14,
+    fontWeight: '600',
   },
   floatingButton: {
     position: 'absolute',
