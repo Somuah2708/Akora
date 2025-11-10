@@ -215,6 +215,26 @@ export type HomeCategoryTab = {
   created_at: string;
 };
 
+export type TrendingArticle = {
+  id: string;
+  title: string;
+  subtitle?: string;
+  summary: string;
+  image_url: string;
+  article_content?: string;
+  author_id?: string;
+  category: string;
+  link_url?: string;
+  is_active: boolean;
+  is_featured: boolean;
+  view_count: number;
+  order_index: number;
+  published_at: string;
+  created_at: string;
+  updated_at: string;
+  author?: Profile;
+};
+
 export type ProductService = {
   id: string;
   user_id: string;

@@ -16,27 +16,22 @@ import { Search, UserPlus, UserCheck, Clock, X, ArrowLeft } from 'lucide-react-n
 import { useAuth } from '@/hooks/useAuth';
 import {
   searchUsers,
-  sendConnectionRequest,
-  getConnectionStatus,
-  cancelConnectionRequest,
-  type ConnectionStatus,
-} from '@/lib/connections';
+  sendFriendRequest,
+  checkFriendshipStatus,
+} from '@/lib/friends';
 import type { Profile } from '@/lib/supabase';
-import { getOrCreateDirectChat } from '@/lib/chats';
 
 SplashScreen.preventAutoHideAsync();
 
-interface UserWithConnectionStatus extends Profile {
-  connectionStatus: ConnectionStatus | null;
-  connectionId: string | null;
-  isRequester: boolean;
+interface UserWithFriendshipStatus extends Profile {
+  friendshipStatus: 'friends' | 'request_sent' | 'request_received' | 'none';
 }
 
 export default function SearchScreen() {
   const router = useRouter();
   const { user } = useAuth();
   const [searchQuery, setSearchQuery] = useState('');
-  const [users, setUsers] = useState<UserWithConnectionStatus[]>([]);
+  const [users, setUsers] = useState<UserWithFriendshipStatus[]>([]);
   const [loading, setLoading] = useState(false);
   const [sendingRequest, setSendingRequest] = useState<string | null>(null);
 
@@ -56,17 +51,17 @@ export default function SearchScreen() {
 
     setLoading(true);
     try {
-      const results = await searchUsers(searchQuery, user.id);
+      const results = await searchUsers(searchQuery);
 
-      // Get connection status for each user
+      // Filter out current user and get friendship status for each user
+      const filteredResults = results.filter(profile => profile.id !== user.id);
+      
       const usersWithStatus = await Promise.all(
-        results.map(async (profile) => {
-          const status = await getConnectionStatus(user.id, profile.id);
+        filteredResults.map(async (profile) => {
+          const status = await checkFriendshipStatus(user.id, profile.id);
           return {
             ...profile,
-            connectionStatus: status.status,
-            connectionId: status.connectionId,
-            isRequester: status.isRequester,
+            friendshipStatus: status as 'friends' | 'request_sent' | 'request_received' | 'none',
           };
         })
       );
@@ -82,7 +77,7 @@ export default function SearchScreen() {
 
   useEffect(() => {
     const delaySearch = setTimeout(() => {
-      if (searchQuery.length >= 2) {
+      if (searchQuery.length >= 1) {
         handleSearch();
       } else {
         setUsers([]);
@@ -92,76 +87,45 @@ export default function SearchScreen() {
     return () => clearTimeout(delaySearch);
   }, [searchQuery, handleSearch]);
 
-  const handleConnect = async (targetUser: UserWithConnectionStatus) => {
+  const handleAddFriend = async (targetUser: UserWithFriendshipStatus) => {
     if (!user) return;
 
     setSendingRequest(targetUser.id);
     try {
-      await sendConnectionRequest(user.id, targetUser.id);
-  Alert.alert('Success', `Connection request sent to ${targetUser.full_name}`);
+      await sendFriendRequest(targetUser.id, user.id);
+      Alert.alert('Success', `Friend request sent to ${targetUser.full_name}`);
 
-      // Update the user's connection status in the list
+      // Update the user's friendship status in the list
       setUsers((prev) =>
         prev.map((u) =>
           u.id === targetUser.id
-            ? { ...u, connectionStatus: 'pending', isRequester: true }
+            ? { ...u, friendshipStatus: 'request_sent' }
             : u
         )
       );
     } catch (error: any) {
-      Alert.alert('Error', error.message || 'Failed to send connection request');
+      Alert.alert('Error', error.message || 'Failed to send friend request');
     } finally {
       setSendingRequest(null);
     }
   };
 
-  const handleCancelRequest = async (targetUser: UserWithConnectionStatus) => {
-    if (!targetUser.connectionId) return;
-
-    Alert.alert(
-      'Cancel Request',
-  `Cancel connection request to ${targetUser.full_name}?`,
-      [
-        { text: 'No', style: 'cancel' },
-        {
-          text: 'Yes',
-          style: 'destructive',
-          onPress: async () => {
-            setSendingRequest(targetUser.id);
-            try {
-              await cancelConnectionRequest(targetUser.connectionId!);
-              setUsers((prev) =>
-                prev.map((u) =>
-                  u.id === targetUser.id
-                    ? { ...u, connectionStatus: null, connectionId: null }
-                    : u
-                )
-              );
-            } catch (error) {
-              Alert.alert('Error', 'Failed to cancel request');
-            } finally {
-              setSendingRequest(null);
-            }
-          },
-        },
-      ]
-    );
-  };
-
-  const handleMessage = async (targetUser: UserWithConnectionStatus) => {
+  const handleMessage = async (targetUser: UserWithFriendshipStatus) => {
     if (!user) return;
 
     try {
-      const chatId = await getOrCreateDirectChat(user.id, targetUser.id);
-      if (chatId) {
-        router.push(`/chat/${chatId}` as any);
-      }
+      // Navigate directly to the direct message screen
+      router.push(`/chat/direct/${targetUser.id}` as any);
     } catch (error) {
       Alert.alert('Error', 'Failed to open chat');
     }
   };
 
-  const renderConnectionButton = (targetUser: UserWithConnectionStatus) => {
+  const handleViewProfile = (targetUser: UserWithFriendshipStatus) => {
+    router.push(`/user-profile/${targetUser.id}` as any);
+  };
+
+  const renderConnectionButton = (targetUser: UserWithFriendshipStatus) => {
     const isLoading = sendingRequest === targetUser.id;
 
     if (isLoading) {
@@ -172,7 +136,7 @@ export default function SearchScreen() {
       );
     }
 
-    if (targetUser.connectionStatus === 'accepted') {
+    if (targetUser.friendshipStatus === 'friends') {
       return (
         <TouchableOpacity
           style={[styles.connectButton, styles.connectedButton]}
@@ -184,51 +148,50 @@ export default function SearchScreen() {
       );
     }
 
-    if (targetUser.connectionStatus === 'pending') {
-      if (targetUser.isRequester) {
-        // User sent the request
-        return (
-          <TouchableOpacity
-            style={[styles.connectButton, styles.pendingButton]}
-            onPress={() => handleCancelRequest(targetUser)}
-          >
-            <Clock size={18} color="#F59E0B" />
-            <Text style={styles.pendingText}>Pending</Text>
-          </TouchableOpacity>
-        );
-      } else {
-        // User received the request - show in notifications/requests screen
-        return (
-          <View style={[styles.connectButton, styles.pendingButton]}>
-            <Clock size={18} color="#F59E0B" />
-            <Text style={styles.pendingText}>Requested</Text>
-          </View>
-        );
-      }
+    if (targetUser.friendshipStatus === 'request_sent') {
+      return (
+        <View style={[styles.connectButton, styles.pendingButton]}>
+          <Clock size={18} color="#F59E0B" />
+          <Text style={styles.pendingText}>Pending</Text>
+        </View>
+      );
+    }
+
+    if (targetUser.friendshipStatus === 'request_received') {
+      return (
+        <View style={[styles.connectButton, styles.pendingButton]}>
+          <Clock size={18} color="#F59E0B" />
+          <Text style={styles.pendingText}>Respond</Text>
+        </View>
+      );
     }
 
     return (
       <TouchableOpacity
         style={styles.connectButton}
-        onPress={() => handleConnect(targetUser)}
+        onPress={() => handleAddFriend(targetUser)}
       >
         <UserPlus size={18} color="#4169E1" />
-        <Text style={styles.connectText}>Connect</Text>
+        <Text style={styles.connectText}>Add Friend</Text>
       </TouchableOpacity>
     );
   };
 
-  const renderUser = ({ item }: { item: UserWithConnectionStatus }) => (
+  const renderUser = ({ item }: { item: UserWithFriendshipStatus }) => (
     <TouchableOpacity
       style={styles.userCard}
-      onPress={() => router.push(`/profile/${item.id}` as any)}
+      onPress={() => handleViewProfile(item)}
     >
-      <Image
-        source={{ uri: item.avatar_url || 'https://i.pravatar.cc/150' }}
-        style={styles.avatar}
-      />
+      {item.avatar_url ? (
+        <Image
+          source={{ uri: item.avatar_url }}
+          style={styles.avatar}
+        />
+      ) : (
+        <View style={[styles.avatar, styles.avatarPlaceholder]} />
+      )}
       <View style={styles.userInfo}>
-  <Text style={styles.userName}>{item.full_name}</Text>
+        <Text style={styles.userName}>{item.full_name || item.username}</Text>
         {item.bio && <Text style={styles.userBio} numberOfLines={2}>{item.bio}</Text>}
       </View>
       {renderConnectionButton(item)}
@@ -279,11 +242,11 @@ export default function SearchScreen() {
           <Text style={styles.emptyTitle}>No users found</Text>
           <Text style={styles.emptyText}>Try searching with a different name</Text>
         </View>
-      ) : searchQuery.length < 2 ? (
+      ) : searchQuery.length < 1 ? (
         <View style={styles.centered}>
           <Search size={48} color="#D1D5DB" />
           <Text style={styles.emptyTitle}>Start Searching</Text>
-          <Text style={styles.emptyText}>Type at least 2 characters to search</Text>
+          <Text style={styles.emptyText}>Start typing to find friends</Text>
         </View>
       ) : (
         <FlatList
@@ -381,6 +344,9 @@ const styles = StyleSheet.create({
     width: 56,
     height: 56,
     borderRadius: 28,
+  },
+  avatarPlaceholder: {
+    backgroundColor: '#E5E7EB',
   },
   userInfo: {
     flex: 1,

@@ -2,14 +2,15 @@ import { View, Text, StyleSheet, ScrollView, Image, TouchableOpacity, FlatList, 
 import { useFonts, Inter_400Regular, Inter_600SemiBold } from '@expo-google-fonts/inter';
 import { useEffect, useState, useCallback, useRef } from 'react';
 import { SplashScreen, useRouter, useFocusEffect } from 'expo-router';
-import { Heart, MessageCircle, Send, Bookmark, MoreHorizontal, Plus, BookOpen, PartyPopper, Calendar, TrendingUp, Users, Newspaper, Search, User, Edit3, Trash2, Play, X } from 'lucide-react-native';
-import { supabase, type Post, type Profile, type HomeFeaturedItem, type HomeCategoryTab } from '@/lib/supabase';
+import { Bell, Heart, MessageCircle, Send, Bookmark, MoreHorizontal, Plus, BookOpen, PartyPopper, Calendar, TrendingUp, Users, Newspaper, Search, User, Edit3, Trash2, Play, X } from 'lucide-react-native';
+import { supabase, type Post, type Profile, type HomeFeaturedItem, type HomeCategoryTab, type TrendingArticle } from '@/lib/supabase';
 import { useAuth } from '@/hooks/useAuth';
 import { Video, ResizeMode, Audio, InterruptionModeIOS, InterruptionModeAndroid } from 'expo-av';
 import YouTubePlayer from '@/components/YouTubePlayer';
 import { isYouTubeUrl, getYouTubeThumbnail, extractYouTubeVideoId } from '@/lib/youtube';
 import ExpandableText from '@/components/ExpandableText';
 import { useVideoSettings } from '@/contexts/VideoSettingsContext';
+import { getUnreadCount, subscribeToNotifications } from '@/lib/notifications';
 
 SplashScreen.preventAutoHideAsync();
 
@@ -178,6 +179,7 @@ export default function HomeScreen() {
   const [activeCategoryId, setActiveCategoryId] = useState<string | null>(null);
   const [featured, setFeatured] = useState<HomeFeaturedItem[]>([]);
   const [categoryTabs, setCategoryTabs] = useState<HomeCategoryTab[]>([]);
+  const [trendingArticles, setTrendingArticles] = useState<TrendingArticle[]>([]);
   
   // Video viewport detection
   const [visibleVideos, setVisibleVideos] = useState<Set<string>>(new Set());
@@ -192,6 +194,20 @@ export default function HomeScreen() {
   const [friendsList, setFriendsList] = useState<any[]>([]);
   const [searchFriends, setSearchFriends] = useState('');
   const [loadingFriends, setLoadingFriends] = useState(false);
+
+  // Search functionality
+  const [searchVisible, setSearchVisible] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [searchResults, setSearchResults] = useState<{
+    posts: PostWithUser[];
+    people: Profile[];
+    articles: TrendingArticle[];
+  }>({ posts: [], people: [], articles: [] });
+  const [searchLoading, setSearchLoading] = useState(false);
+  const [selectedSearchFilter, setSelectedSearchFilter] = useState<'all' | 'posts' | 'people' | 'articles'>('all');
+
+  // Notifications
+  const [unreadNotifications, setUnreadNotifications] = useState(0);
 
   const [fontsLoaded] = useFonts({
     'Inter-Regular': Inter_400Regular,
@@ -382,11 +398,133 @@ export default function HomeScreen() {
     })();
   }, []);
 
+  // Load home configuration (trending articles, categories, etc.)
+  const loadHomeConfig = useCallback(async () => {
+    try {
+      const [featRes, tabsRes, trendingRes] = await Promise.all([
+        supabase
+          .from('home_featured_items')
+          .select('*')
+          .eq('is_active', true)
+          .order('order_index', { ascending: true }),
+        supabase
+          .from('home_category_tabs')
+          .select('*')
+          .eq('is_active', true)
+          .order('order_index', { ascending: true }),
+        supabase
+          .from('trending_articles')
+          .select('*')
+          .eq('is_active', true)
+          .eq('is_featured', true)
+          .order('created_at', { ascending: false }) // Most recent first!
+          .limit(10),
+      ]);
+
+      setFeatured((featRes.data as HomeFeaturedItem[]) || []);
+      setCategoryTabs((tabsRes.data as HomeCategoryTab[]) || []);
+      setTrendingArticles((trendingRes.data as TrendingArticle[]) || []);
+      
+      console.log('✅ Trending articles refreshed:', (trendingRes.data as TrendingArticle[])?.length || 0);
+    } catch (e) {
+      console.warn('Failed to load home config, using defaults', e);
+      setFeatured([]);
+      setCategoryTabs([]);
+      setTrendingArticles([]);
+    }
+  }, []);
+
+  // Search function
+  const performSearch = useCallback(async (query: string) => {
+    if (!query.trim()) {
+      setSearchResults({ posts: [], people: [], articles: [] });
+      return;
+    }
+
+    setSearchLoading(true);
+    try {
+      const searchPromises = [];
+
+      // Search posts
+      if (selectedSearchFilter === 'all' || selectedSearchFilter === 'posts') {
+        searchPromises.push(
+          supabase
+            .from('posts')
+            .select(`
+              *,
+              user:profiles(*)
+            `)
+            .ilike('content', `%${query}%`)
+            .order('created_at', { ascending: false })
+            .limit(20)
+        );
+      } else {
+        searchPromises.push(Promise.resolve({ data: [] }));
+      }
+
+      // Search people
+      if (selectedSearchFilter === 'all' || selectedSearchFilter === 'people') {
+        searchPromises.push(
+          supabase
+            .from('profiles')
+            .select('*')
+            .or(`username.ilike.%${query}%,full_name.ilike.%${query}%,first_name.ilike.%${query}%,surname.ilike.%${query}%,bio.ilike.%${query}%`)
+            .limit(20)
+        );
+      } else {
+        searchPromises.push(Promise.resolve({ data: [] }));
+      }
+
+      // Search articles
+      if (selectedSearchFilter === 'all' || selectedSearchFilter === 'articles') {
+        searchPromises.push(
+          supabase
+            .from('trending_articles')
+            .select('*')
+            .eq('is_active', true)
+            .or(`title.ilike.%${query}%,subtitle.ilike.%${query}%,summary.ilike.%${query}%,article_content.ilike.%${query}%`)
+            .limit(10)
+        );
+      } else {
+        searchPromises.push(Promise.resolve({ data: [] }));
+      }
+
+      const [postsRes, peopleRes, articlesRes] = await Promise.all(searchPromises);
+
+      setSearchResults({
+        posts: (postsRes.data as any[]) || [],
+        people: (peopleRes.data as Profile[]) || [],
+        articles: (articlesRes.data as TrendingArticle[]) || [],
+      });
+    } catch (error) {
+      console.error('Search error:', error);
+      Alert.alert('Error', 'Failed to perform search');
+    } finally {
+      setSearchLoading(false);
+    }
+  }, [selectedSearchFilter]);
+
+  // Debounced search
+  useEffect(() => {
+    const debounce = setTimeout(() => {
+      if (searchQuery.length >= 1) {
+        performSearch(searchQuery);
+      } else {
+        setSearchResults({ posts: [], people: [], articles: [] });
+      }
+    }, 300);
+
+    return () => clearTimeout(debounce);
+  }, [searchQuery, performSearch]);
+
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
-    await fetchPosts();
+    await Promise.all([
+      fetchPosts(),
+      loadHomeConfig(), // Also refresh trending articles!
+    ]);
     setRefreshing(false);
-  }, [fetchPosts]);
+  }, [fetchPosts, loadHomeConfig]);
 
   useEffect(() => {
     if (user) {
@@ -394,11 +532,26 @@ export default function HomeScreen() {
     }
   }, [fetchPosts, user]);
 
+  useEffect(() => {
+    loadHomeConfig();
+  }, [loadHomeConfig]);
+
   // Stop all videos when screen loses focus (e.g., navigating to another tab)
   useFocusEffect(
     useCallback(() => {
       // Screen is focused
       setIsScreenFocused(true);
+      
+      // Load notification count when screen is focused
+      const loadNotificationCount = async () => {
+        try {
+          const count = await getUnreadCount();
+          setUnreadNotifications(count);
+        } catch (error) {
+          console.error('Error loading notification count:', error);
+        }
+      };
+      loadNotificationCount();
       
       return () => {
         // Screen is unfocused - stop all videos
@@ -407,6 +560,46 @@ export default function HomeScreen() {
       };
     }, [])
   );
+
+  // Listen for new notifications to update badge count in REAL-TIME
+  // Note: The actual real-time subscription and banner display is handled by NotificationProvider
+  useEffect(() => {
+    if (!user?.id) return;
+
+    console.log('🔔 [HOME] Setting up REAL-TIME badge count subscription for user:', user.id);
+
+    // Subscribe to notification changes to update badge
+    const channel = supabase
+      .channel(`notification_badge_${user.id}`)
+      .on(
+        'postgres_changes',
+        {
+          event: 'INSERT',
+          schema: 'public',
+          table: 'notifications',
+          filter: `recipient_id=eq.${user.id}`
+        },
+        (payload) => {
+          console.log('🔔 [HOME] NEW NOTIFICATION RECEIVED! Payload:', payload);
+          console.log('🔔 [HOME] Current badge count:', unreadNotifications);
+          
+          // Increment badge count when new notification arrives
+          setUnreadNotifications(prev => {
+            const newCount = prev + 1;
+            console.log('🔔 [HOME] Badge count updated:', prev, '→', newCount);
+            return newCount;
+          });
+        }
+      )
+      .subscribe((status) => {
+        console.log('🔔 [HOME] Badge subscription status:', status);
+      });
+
+    return () => {
+      console.log('🔔 [HOME] Cleaning up badge subscription');
+      supabase.removeChannel(channel);
+    };
+  }, [user?.id]);
 
   // Real-time subscriptions for likes and comments on Home
   useEffect(() => {
@@ -503,41 +696,14 @@ export default function HomeScreen() {
     };
   }, [user?.id]); // Only recreate when user changes, not when posts change
 
-  const loadHomeConfig = useCallback(async () => {
-    try {
-      const [featRes, tabsRes] = await Promise.all([
-        supabase
-          .from('home_featured_items')
-          .select('*')
-          .eq('is_active', true)
-          .order('order_index', { ascending: true }),
-        supabase
-          .from('home_category_tabs')
-          .select('*')
-          .eq('is_active', true)
-          .order('order_index', { ascending: true }),
-      ]);
-
-      setFeatured((featRes.data as HomeFeaturedItem[]) || []);
-      setCategoryTabs((tabsRes.data as HomeCategoryTab[]) || []);
-    } catch (e) {
-      console.warn('Failed to load home config, using defaults', e);
-      setFeatured([]);
-      setCategoryTabs([]);
-    }
-  }, []);
-
-  useEffect(() => {
-    loadHomeConfig();
-  }, [loadHomeConfig]);
-
-  // Refresh posts when screen comes into focus (e.g., after creating a post)
+  // Refresh posts and trending when screen comes into focus (e.g., after creating a post or article)
   useFocusEffect(
     useCallback(() => {
       if (user) {
         fetchPosts();
       }
-    }, [user])
+      loadHomeConfig(); // Also refresh trending articles
+    }, [user, fetchPosts, loadHomeConfig])
   );
 
   const handleLikeToggle = async (postId: string) => {
@@ -902,6 +1068,59 @@ export default function HomeScreen() {
     );
   };
 
+  const handleDeleteTrendingArticle = async (articleId: string) => {
+    Alert.alert(
+      'Delete Article',
+      'Are you sure you want to delete this trending article?',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              const { error } = await supabase
+                .from('trending_articles')
+                .delete()
+                .eq('id', articleId);
+
+              if (error) throw error;
+
+              // Remove from local state
+              setTrendingArticles(prev => prev.filter(article => article.id !== articleId));
+              Alert.alert('Success', 'Article deleted successfully');
+            } catch (error: any) {
+              console.error('Error deleting trending article:', error);
+              Alert.alert('Error', 'Failed to delete article');
+            }
+          },
+        },
+      ]
+    );
+  };
+
+  const showTrendingMenu = (articleId: string) => {
+    Alert.alert(
+      'Article Actions',
+      'Choose an action',
+      [
+        {
+          text: 'Edit Article',
+          onPress: () => router.push(`/trending-edit/${articleId}` as any),
+        },
+        {
+          text: 'Delete Article',
+          style: 'destructive',
+          onPress: () => handleDeleteTrendingArticle(articleId),
+        },
+        {
+          text: 'Cancel',
+          style: 'cancel',
+        },
+      ]
+    );
+  };
+
   if (!fontsLoaded) {
     return null;
   }
@@ -1000,6 +1219,222 @@ export default function HomeScreen() {
         </View>
       </Modal>
 
+      {/* Search Modal */}
+      <Modal
+        visible={searchVisible}
+        transparent
+        animationType="slide"
+        onRequestClose={() => {
+          setSearchVisible(false);
+          setSearchQuery('');
+          setSearchResults({ posts: [], people: [], articles: [] });
+        }}
+      >
+        <View style={styles.searchModalOverlay}>
+          <View style={styles.searchModalContent}>
+            {/* Header with search input */}
+            <View style={styles.searchModalHeader}>
+              <TouchableOpacity 
+                onPress={() => {
+                  setSearchVisible(false);
+                  setSearchQuery('');
+                  setSearchResults({ posts: [], people: [], articles: [] });
+                }}
+                style={styles.searchBackButton}
+              >
+                <X size={24} color="#111827" strokeWidth={2} />
+              </TouchableOpacity>
+              <View style={styles.searchInputContainer}>
+                <Search size={20} color="#9CA3AF" strokeWidth={2} />
+                <TextInput
+                  style={styles.searchModalInput}
+                  placeholder="Search posts, people, and more..."
+                  value={searchQuery}
+                  onChangeText={setSearchQuery}
+                  placeholderTextColor="#9CA3AF"
+                  autoFocus
+                  returnKeyType="search"
+                />
+                {searchQuery.length > 0 && (
+                  <TouchableOpacity onPress={() => setSearchQuery('')}>
+                    <X size={18} color="#9CA3AF" strokeWidth={2} />
+                  </TouchableOpacity>
+                )}
+              </View>
+            </View>
+
+            {/* Filter chips */}
+            <ScrollView 
+              horizontal 
+              showsHorizontalScrollIndicator={false}
+              style={styles.searchFiltersContainer}
+              contentContainerStyle={styles.searchFiltersContent}
+            >
+              {[
+                { id: 'all', label: 'All' },
+                { id: 'posts', label: 'Posts' },
+                { id: 'people', label: 'People' },
+                { id: 'articles', label: 'Articles' },
+              ].map((filter) => (
+                <TouchableOpacity
+                  key={filter.id}
+                  style={[
+                    styles.searchFilterChip,
+                    selectedSearchFilter === filter.id && styles.searchFilterChipActive,
+                  ]}
+                  onPress={() => setSelectedSearchFilter(filter.id as any)}
+                  activeOpacity={0.7}
+                >
+                  <Text
+                    style={[
+                      styles.searchFilterChipText,
+                      selectedSearchFilter === filter.id && styles.searchFilterChipTextActive,
+                    ]}
+                  >
+                    {filter.label}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
+
+            {/* Results */}
+            <ScrollView style={styles.searchResultsContainer} showsVerticalScrollIndicator={false}>
+              {searchLoading ? (
+                <View style={styles.searchLoadingState}>
+                  <ActivityIndicator size="large" color="#0EA5E9" />
+                  <Text style={styles.searchLoadingText}>Searching...</Text>
+                </View>
+              ) : searchQuery.length === 0 ? (
+                <View style={styles.searchEmptyState}>
+                  <Search size={64} color="#D1D5DB" strokeWidth={1.5} />
+                  <Text style={styles.searchEmptyTitle}>Search Everything</Text>
+                  <Text style={styles.searchEmptyText}>
+                    Find posts, people, and trending articles{'\n'}across the Akora community
+                  </Text>
+                </View>
+              ) : searchResults.posts.length === 0 && searchResults.people.length === 0 && searchResults.articles.length === 0 ? (
+                <View style={styles.searchEmptyState}>
+                  <Search size={64} color="#D1D5DB" strokeWidth={1.5} />
+                  <Text style={styles.searchEmptyTitle}>No results found</Text>
+                  <Text style={styles.searchEmptyText}>
+                    Try different keywords or check your spelling
+                  </Text>
+                </View>
+              ) : (
+                <>
+                  {/* People Results */}
+                  {searchResults.people.length > 0 && (selectedSearchFilter === 'all' || selectedSearchFilter === 'people') && (
+                    <View style={styles.searchSection}>
+                      <Text style={styles.searchSectionTitle}>People ({searchResults.people.length})</Text>
+                      {searchResults.people.map((person) => (
+                        <TouchableOpacity
+                          key={person.id}
+                          style={styles.searchPersonItem}
+                          onPress={() => {
+                            setSearchVisible(false);
+                            setSearchQuery('');
+                            router.push(`/user-profile/${person.id}` as any);
+                          }}
+                          activeOpacity={0.7}
+                        >
+                          {person.avatar_url ? (
+                            <Image source={{ uri: person.avatar_url }} style={styles.searchPersonAvatar} />
+                          ) : (
+                            <View style={[styles.searchPersonAvatar, styles.searchPersonAvatarPlaceholder]} />
+                          )}
+                          <View style={styles.searchPersonInfo}>
+                            <Text style={styles.searchPersonName} numberOfLines={1}>
+                              {person.full_name || person.username}
+                            </Text>
+                            {person.bio && (
+                              <Text style={styles.searchPersonBio} numberOfLines={1}>
+                                {person.bio}
+                              </Text>
+                            )}
+                          </View>
+                        </TouchableOpacity>
+                      ))}
+                    </View>
+                  )}
+
+                  {/* Posts Results */}
+                  {searchResults.posts.length > 0 && (selectedSearchFilter === 'all' || selectedSearchFilter === 'posts') && (
+                    <View style={styles.searchSection}>
+                      <Text style={styles.searchSectionTitle}>Posts ({searchResults.posts.length})</Text>
+                      {searchResults.posts.map((post) => (
+                        <TouchableOpacity
+                          key={post.id}
+                          style={styles.searchPostItem}
+                          onPress={() => {
+                            setSearchVisible(false);
+                            setSearchQuery('');
+                            router.push(`/post-comments/${post.id}`);
+                          }}
+                          activeOpacity={0.7}
+                        >
+                          <View style={styles.searchPostLeft}>
+                            <View style={styles.searchPostHeader}>
+                              {post.user?.avatar_url ? (
+                                <Image source={{ uri: post.user.avatar_url }} style={styles.searchPostUserAvatar} />
+                              ) : (
+                                <View style={[styles.searchPostUserAvatar, styles.searchPostUserAvatarPlaceholder]} />
+                              )}
+                              <Text style={styles.searchPostUserName} numberOfLines={1}>
+                                {post.user?.full_name || 'Unknown'}
+                              </Text>
+                            </View>
+                            <Text style={styles.searchPostContent} numberOfLines={3}>
+                              {post.content}
+                            </Text>
+                          </View>
+                          {(post.image_url || post.image_urls?.[0]) && (
+                            <Image
+                              source={{ uri: post.image_url || post.image_urls?.[0] }}
+                              style={styles.searchPostThumbnail}
+                            />
+                          )}
+                        </TouchableOpacity>
+                      ))}
+                    </View>
+                  )}
+
+                  {/* Articles Results */}
+                  {searchResults.articles.length > 0 && (selectedSearchFilter === 'all' || selectedSearchFilter === 'articles') && (
+                    <View style={styles.searchSection}>
+                      <Text style={styles.searchSectionTitle}>Articles ({searchResults.articles.length})</Text>
+                      {searchResults.articles.map((article) => (
+                        <TouchableOpacity
+                          key={article.id}
+                          style={styles.searchArticleItem}
+                          onPress={() => {
+                            setSearchVisible(false);
+                            setSearchQuery('');
+                            router.push(`/trending-article/${article.id}`);
+                          }}
+                          activeOpacity={0.7}
+                        >
+                          <Image source={{ uri: article.image_url }} style={styles.searchArticleThumbnail} />
+                          <View style={styles.searchArticleInfo}>
+                            <Text style={styles.searchArticleTitle} numberOfLines={2}>
+                              {article.title}
+                            </Text>
+                            {article.subtitle && (
+                              <Text style={styles.searchArticleSubtitle} numberOfLines={1}>
+                                {article.subtitle}
+                              </Text>
+                            )}
+                          </View>
+                        </TouchableOpacity>
+                      ))}
+                    </View>
+                  )}
+                </>
+              )}
+            </ScrollView>
+          </View>
+        </View>
+      </Modal>
+
       <ScrollView 
         ref={scrollViewRef}
         style={styles.scrollView}
@@ -1015,50 +1450,116 @@ export default function HomeScreen() {
         <View style={styles.header}>
         <Text style={styles.logoText}>Akora</Text>
         <View style={styles.headerIcons}>
-          {(profile?.role === 'admin' || profile?.is_admin) && (
-            <TouchableOpacity style={styles.headerIcon} onPress={() => Alert.alert('Manage Home', 'Admins can manage Home elements in Supabase tables:\n- home_featured_items\n- home_category_tabs\n\nAn in-app management UI is coming soon.') }>
-              <Edit3 size={24} color="#000000" strokeWidth={2} />
-            </TouchableOpacity>
-          )}
-          <TouchableOpacity style={styles.headerIcon}>
-            <Heart size={24} color="#000000" strokeWidth={2} />
-          </TouchableOpacity>
-          <TouchableOpacity 
-            style={styles.headerIcon}
-            onPress={() => router.push('/profile/edit')}
+          <TouchableOpacity
+            style={styles.headerIconWithBadge}
+            onPress={() => router.push('/notifications')}
           >
-            <User size={24} color="#000000" strokeWidth={2} />
+            <View>
+              <Bell size={24} color="#000000" strokeWidth={2} fill="none" />
+              {unreadNotifications > 0 && (
+                <View style={styles.notificationBadge}>
+                  <Text style={styles.notificationBadgeText}>
+                    {unreadNotifications > 99 ? '99+' : unreadNotifications}
+                  </Text>
+                </View>
+              )}
+            </View>
           </TouchableOpacity>
         </View>
       </View>
 
-      {/* Featured Items */}
-      <ScrollView 
-        horizontal 
-        showsHorizontalScrollIndicator={false} 
-        style={styles.featuredScroll}
-        contentContainerStyle={styles.featuredContent}
-      >
-        {(featured.length > 0 ? featured : DEFAULT_FEATURED_ITEMS).map((item) => (
-          <TouchableOpacity key={item.id} style={styles.featuredItem}>
-            <Image source={{ uri: (item as any).image_url }} style={styles.featuredImage} />
-            <View style={styles.featuredOverlay}>
-              <Text style={styles.featuredTitle}>{item.title}</Text>
-              {!!(item as any).description && (
-                <Text style={styles.featuredDescription}>{(item as any).description}</Text>
+      {/* Featured Items / Trending Section */}
+      <View style={styles.trendingContainer}>
+        <View style={styles.trendingSectionHeader}>
+          <Text style={styles.trendingSectionTitle}>Trending</Text>
+          {(profile?.role === 'admin' || profile?.is_admin) && (
+            <TouchableOpacity 
+              style={styles.trendingAdminButton}
+              onPress={() => router.push('/trending-create')}
+              activeOpacity={0.7}
+            >
+              <Plus size={20} color="#0EA5E9" strokeWidth={2.5} />
+              <Text style={styles.trendingAdminButtonText}>Add</Text>
+            </TouchableOpacity>
+          )}
+        </View>
+        <ScrollView 
+          horizontal 
+          showsHorizontalScrollIndicator={false} 
+          style={styles.featuredScroll}
+          contentContainerStyle={styles.featuredContent}
+        >
+          {(trendingArticles.length > 0 ? trendingArticles : DEFAULT_FEATURED_ITEMS.map((item) => ({
+            ...item,
+            summary: item.description || '',
+            subtitle: '',
+            article_content: '',
+            author_id: null,
+            category: 'alumni_news',
+            link_url: null,
+            is_active: true,
+            is_featured: true,
+            view_count: 0,
+            order_index: 0,
+            published_at: new Date().toISOString(),
+            updated_at: new Date().toISOString(),
+          }))).map((article) => (
+            <TouchableOpacity 
+              key={article.id} 
+              style={styles.featuredItem}
+              onPress={() => router.push(`/trending-article/${article.id}` as any)}
+              onLongPress={() => {
+                if (profile?.is_admin || profile?.role === 'admin') {
+                  showTrendingMenu(article.id);
+                }
+              }}
+              activeOpacity={0.9}
+            >
+              <Image source={{ uri: article.image_url }} style={styles.featuredImage} />
+              <View style={styles.featuredOverlay}>
+                <Text style={styles.featuredTitle}>{article.title}</Text>
+                {article.summary && (
+                  <Text style={styles.featuredDescription}>{article.summary}</Text>
+                )}
+              </View>
+              {(profile?.is_admin || profile?.role === 'admin') && (
+                <TouchableOpacity 
+                  style={styles.trendingCardMenu}
+                  onPress={(e) => {
+                    e.stopPropagation();
+                    showTrendingMenu(article.id);
+                  }}
+                  hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                >
+                  <MoreHorizontal size={20} color="#FFFFFF" strokeWidth={2} />
+                </TouchableOpacity>
               )}
-            </View>
-          </TouchableOpacity>
-        ))}
-      </ScrollView>
+            </TouchableOpacity>
+          ))}
+        </ScrollView>
+      </View>
 
       {/* Category Tabs */}
-      <ScrollView 
-        horizontal 
-        showsHorizontalScrollIndicator={false}
-        style={styles.categoriesContainer}
-        contentContainerStyle={styles.categoriesContent}
-      >
+      <View style={styles.categoriesSection}>
+        <View style={styles.categoriesSectionHeader}>
+          <Text style={styles.categoriesSectionTitle}>Quick Access</Text>
+          {(profile?.role === 'admin' || profile?.is_admin) && (
+            <TouchableOpacity 
+              style={styles.categoryAdminButton}
+              onPress={() => router.push('/categories-manage' as any)}
+              activeOpacity={0.7}
+            >
+              <Edit3 size={18} color="#0EA5E9" strokeWidth={2.5} />
+              <Text style={styles.categoryAdminButtonText}>Edit</Text>
+            </TouchableOpacity>
+          )}
+        </View>
+        <ScrollView 
+          horizontal 
+          showsHorizontalScrollIndicator={false}
+          style={styles.categoriesContainer}
+          contentContainerStyle={styles.categoriesContent}
+        >
         {(() => { 
           const ICON_MAP: any = { BookOpen, PartyPopper, Calendar, TrendingUp, Users, Newspaper };
           // Ensure routes are correct for OAA alumni app
@@ -1113,9 +1614,14 @@ export default function HomeScreen() {
           );
         }); })()}
       </ScrollView>
+      </View>
 
       {/* Search Bar */}
-      <TouchableOpacity style={styles.searchBar}>
+      <TouchableOpacity 
+        style={styles.searchBar}
+        onPress={() => setSearchVisible(true)}
+        activeOpacity={0.7}
+      >
         <Search size={20} color="#8E8E8E" strokeWidth={2} />
         <Text style={styles.searchPlaceholder}>Search posts, people, and more...</Text>
       </TouchableOpacity>
@@ -1543,12 +2049,67 @@ const styles = StyleSheet.create({
   headerIcon: {
     padding: 4,
   },
+  headerIconWithBadge: {
+    padding: 4,
+    position: 'relative',
+  },
+  notificationBadge: {
+    position: 'absolute',
+    top: -2,
+    right: -2,
+    backgroundColor: '#EF4444',
+    borderRadius: 10,
+    minWidth: 18,
+    height: 18,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 4,
+    borderWidth: 2,
+    borderColor: '#FFFFFF',
+  },
+  notificationBadgeText: {
+    fontSize: 10,
+    fontWeight: '700',
+    color: '#FFFFFF',
+  },
+  trendingContainer: {
+    marginBottom: 0,
+  },
+  trendingSectionHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingTop: 16,
+    paddingBottom: 8,
+  },
+  trendingSectionTitle: {
+    fontSize: 20,
+    fontFamily: 'Inter-SemiBold',
+    color: '#111827',
+  },
+  trendingAdminButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: '#EFF6FF',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: '#0EA5E9',
+  },
+  trendingAdminButtonText: {
+    fontSize: 14,
+    fontFamily: 'Inter-SemiBold',
+    color: '#0EA5E9',
+  },
   featuredScroll: {
     marginBottom: 0,
   },
   featuredContent: {
-    paddingHorizontal: 24,
-    paddingVertical: 16,
+    paddingHorizontal: 16,
+    paddingVertical: 8,
     gap: 16,
   },
   featuredItem: {
@@ -1556,6 +2117,7 @@ const styles = StyleSheet.create({
     height: 200,
     borderRadius: 16,
     overflow: 'hidden',
+    position: 'relative',
   },
   featuredImage: {
     width: '100%',
@@ -1569,6 +2131,17 @@ const styles = StyleSheet.create({
     padding: 20,
     backgroundColor: 'rgba(0,0,0,0.4)',
   },
+  trendingCardMenu: {
+    position: 'absolute',
+    top: 12,
+    right: 12,
+    backgroundColor: 'rgba(0, 0, 0, 0.6)',
+    borderRadius: 20,
+    width: 32,
+    height: 32,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   featuredTitle: {
     fontSize: 20,
     fontFamily: 'Inter-SemiBold',
@@ -1581,14 +2154,46 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     opacity: 0.8,
   },
+  categoriesSection: {
+    marginBottom: 0,
+  },
+  categoriesSectionHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingTop: 12,
+    paddingBottom: 8,
+  },
+  categoriesSectionTitle: {
+    fontSize: 16,
+    fontFamily: 'Inter-SemiBold',
+    color: '#111827',
+  },
+  categoryAdminButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: '#EFF6FF',
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: '#0EA5E9',
+  },
+  categoryAdminButtonText: {
+    fontSize: 13,
+    fontFamily: 'Inter-SemiBold',
+    color: '#0EA5E9',
+  },
   categoriesContainer: {
     borderBottomWidth: 0,
     borderBottomColor: '#DBDBDB',
     backgroundColor: '#FFFFFF',
   },
   categoriesContent: {
-    paddingHorizontal: 12,
-    paddingTop: 8,
+    paddingHorizontal: 16,
+    paddingTop: 0,
     paddingBottom: 8,
     gap: 12,
   },
@@ -1997,5 +2602,220 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: 'bold',
     lineHeight: 18,
+  },
+  // Search Modal Styles
+  searchModalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'flex-end',
+  },
+  searchModalContent: {
+    backgroundColor: '#FFFFFF',
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    height: '95%',
+    paddingTop: 16,
+  },
+  searchModalHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingBottom: 16,
+    gap: 12,
+  },
+  searchBackButton: {
+    padding: 4,
+  },
+  searchInputContainer: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#F3F4F6',
+    borderRadius: 12,
+    paddingHorizontal: 12,
+    height: 48,
+    gap: 8,
+  },
+  searchModalInput: {
+    flex: 1,
+    fontSize: 16,
+    fontFamily: 'Inter-Regular',
+    color: '#111827',
+    height: '100%',
+  },
+  searchFiltersContainer: {
+    maxHeight: 50,
+    borderBottomWidth: 1,
+    borderBottomColor: '#F3F4F6',
+  },
+  searchFiltersContent: {
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    gap: 8,
+  },
+  searchFilterChip: {
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 20,
+    backgroundColor: '#F3F4F6',
+    marginRight: 8,
+  },
+  searchFilterChipActive: {
+    backgroundColor: '#0EA5E9',
+  },
+  searchFilterChipText: {
+    fontSize: 14,
+    fontFamily: 'Inter-SemiBold',
+    color: '#6B7280',
+  },
+  searchFilterChipTextActive: {
+    color: '#FFFFFF',
+  },
+  searchResultsContainer: {
+    flex: 1,
+  },
+  searchLoadingState: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 80,
+  },
+  searchLoadingText: {
+    fontSize: 16,
+    fontFamily: 'Inter-Medium',
+    color: '#6B7280',
+    marginTop: 16,
+  },
+  searchEmptyState: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 80,
+    paddingHorizontal: 32,
+  },
+  searchEmptyTitle: {
+    fontSize: 20,
+    fontFamily: 'Inter-SemiBold',
+    color: '#111827',
+    marginTop: 16,
+  },
+  searchEmptyText: {
+    fontSize: 14,
+    fontFamily: 'Inter-Regular',
+    color: '#6B7280',
+    marginTop: 8,
+    textAlign: 'center',
+    lineHeight: 20,
+  },
+  searchSection: {
+    paddingTop: 16,
+  },
+  searchSectionTitle: {
+    fontSize: 16,
+    fontFamily: 'Inter-SemiBold',
+    color: '#111827',
+    paddingHorizontal: 16,
+    marginBottom: 12,
+  },
+  searchPersonItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    gap: 12,
+  },
+  searchPersonAvatar: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    backgroundColor: '#F3F4F6',
+  },
+  searchPersonAvatarPlaceholder: {
+    backgroundColor: '#E5E7EB',
+  },
+  searchPersonInfo: {
+    flex: 1,
+  },
+  searchPersonName: {
+    fontSize: 15,
+    fontFamily: 'Inter-SemiBold',
+    color: '#111827',
+    marginBottom: 2,
+  },
+  searchPersonBio: {
+    fontSize: 13,
+    fontFamily: 'Inter-Regular',
+    color: '#6B7280',
+  },
+  searchPostItem: {
+    flexDirection: 'row',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    gap: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: '#F3F4F6',
+  },
+  searchPostLeft: {
+    flex: 1,
+  },
+  searchPostHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 8,
+    gap: 8,
+  },
+  searchPostUserAvatar: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    backgroundColor: '#F3F4F6',
+  },
+  searchPostUserAvatarPlaceholder: {
+    backgroundColor: '#E5E7EB',
+  },
+  searchPostUserName: {
+    fontSize: 14,
+    fontFamily: 'Inter-SemiBold',
+    color: '#111827',
+    flex: 1,
+  },
+  searchPostContent: {
+    fontSize: 14,
+    fontFamily: 'Inter-Regular',
+    color: '#374151',
+    lineHeight: 20,
+  },
+  searchPostThumbnail: {
+    width: 80,
+    height: 80,
+    borderRadius: 8,
+    backgroundColor: '#F3F4F6',
+  },
+  searchArticleItem: {
+    flexDirection: 'row',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    gap: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: '#F3F4F6',
+  },
+  searchArticleThumbnail: {
+    width: 80,
+    height: 80,
+    borderRadius: 8,
+    backgroundColor: '#F3F4F6',
+  },
+  searchArticleInfo: {
+    flex: 1,
+  },
+  searchArticleTitle: {
+    fontSize: 15,
+    fontFamily: 'Inter-SemiBold',
+    color: '#111827',
+    lineHeight: 20,
+    marginBottom: 4,
+  },
+  searchArticleSubtitle: {
+    fontSize: 13,
+    fontFamily: 'Inter-Regular',
+    color: '#6B7280',
   },
 }); 
