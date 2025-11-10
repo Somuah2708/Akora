@@ -2022,9 +2022,11 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#FFFFFF',
+    width: '100%',
   },
   scrollView: {
     flex: 1,
+    width: '100%',
   },
   header: {
     flexDirection: 'row',
@@ -2036,6 +2038,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#FFFFFF',
     borderBottomWidth: 0.5,
     borderBottomColor: '#DBDBDB',
+    width: '100%',
   },
   logoText: {
     fontSize: 28,
@@ -2074,6 +2077,7 @@ const styles = StyleSheet.create({
   },
   trendingContainer: {
     marginBottom: 0,
+    width: '100%',
   },
   trendingSectionHeader: {
     flexDirection: 'row',
@@ -2156,6 +2160,7 @@ const styles = StyleSheet.create({
   },
   categoriesSection: {
     marginBottom: 0,
+    width: '100%',
   },
   categoriesSectionHeader: {
     flexDirection: 'row',
@@ -2242,6 +2247,8 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingVertical: 12,
     borderRadius: 10,
+    maxWidth: width - 32,
+    alignSelf: 'center',
   },
   searchPlaceholder: {
     fontSize: 15,
@@ -2252,11 +2259,13 @@ const styles = StyleSheet.create({
   feedContainer: {
     flex: 1,
     paddingTop: 0,
+    width: '100%',
   },
   postCard: {
     marginBottom: 16,
     marginTop: 0,
     backgroundColor: '#FFFFFF',
+    width: '100%',
   },
   postHeader: {
     flexDirection: 'row',
@@ -2293,9 +2302,11 @@ const styles = StyleSheet.create({
   },
   carouselContainer: {
     position: 'relative',
+    width: '100%',
   },
   carousel: {
     width: width,
+    alignSelf: 'center',
   },
   postImage: {
     width: width,
@@ -2321,6 +2332,7 @@ const styles = StyleSheet.create({
     height: width, // Square container
     backgroundColor: '#000000',
     overflow: 'hidden',
+    alignSelf: 'center',
   },
   postActions: {
     flexDirection: 'row',
