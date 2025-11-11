@@ -57,67 +57,56 @@ export default function CheckoutScreen() {
   }, [fontsLoaded]);
 
   const handlePayment = () => {
-    if (paymentMethod === 'momo') {
-      if (!momoNumber || !momoNetwork) {
-        Alert.alert('Missing Information', 'Please enter your mobile money number and select a network');
-        return;
-      }
-      
-      if (momoNumber.length !== 10) {
-        Alert.alert('Invalid Number', 'Please enter a valid 10-digit mobile number');
-        return;
-      }
-      
-      Alert.alert(
-        '🔐 Secure Payment',
-        `A payment prompt will be sent to ${momoNumber} (${momoNetwork}) for ₵${total.toFixed(2)}`,
-        [
-          { text: 'Cancel', style: 'cancel' },
-          {
-            text: 'Send Prompt',
-            onPress: () => {
-              // Implement mobile money payment logic here
-              Alert.alert('✅ Payment Initiated', 'Please check your phone and approve the payment prompt.', [
-                {
-                  text: 'Done',
-                  onPress: () => router.push('/(tabs)'),
-                },
-              ]);
-            },
+    Alert.alert(
+      '✅ Payment Confirmation',
+      `Have you sent ₵${total.toFixed(2)} to +233 24 123 4567 via Mobile Money?`,
+      [
+        { 
+          text: 'Not Yet', 
+          style: 'cancel',
+          onPress: () => {
+            Alert.alert(
+              '📱 Payment Instructions',
+              'Please complete the Mobile Money transfer to +233 24 123 4567 before confirming your order.',
+              [{ text: 'OK' }]
+            );
+          }
+        },
+        {
+          text: "Yes, I've Paid",
+          onPress: async () => {
+            try {
+              // Import and clear the cart after successful payment confirmation
+              const { clearCart } = await import('@/lib/secretariatCart');
+              await clearCart();
+              
+              Alert.alert(
+                '🎉 Order Confirmed!',
+                `Your order has been received!\n\n📦 Order Details:\n• Total: ₵${total.toFixed(2)}\n• Delivery: ${deliveryMethod === 'delivery' ? 'Home Delivery (24hrs)' : 'Pickup at Campus'}\n\nThe OAA Secretariat will verify your payment and process your order shortly. You will be contacted for confirmation.`,
+                [
+                  {
+                    text: 'Done',
+                    onPress: () => router.push('/(tabs)'),
+                  },
+                ]
+              );
+            } catch (error) {
+              console.error('Error processing order:', error);
+              Alert.alert(
+                'Order Received',
+                'Your order has been received. The cart will be cleared when you return to the main screen.',
+                [
+                  {
+                    text: 'OK',
+                    onPress: () => router.push('/(tabs)'),
+                  },
+                ]
+              );
+            }
           },
-        ]
-      );
-    } else {
-      if (!cardNumber || !cardExpiry || !cardCVV || !cardName) {
-        Alert.alert('Missing Information', 'Please fill in all card details');
-        return;
-      }
-      
-      if (cardNumber.length < 15) {
-        Alert.alert('Invalid Card', 'Please enter a valid card number');
-        return;
-      }
-      
-      Alert.alert(
-        '🔐 Secure Payment',
-        `Charge ₵${total.toFixed(2)} to card ending in ${cardNumber.slice(-4)}?`,
-        [
-          { text: 'Cancel', style: 'cancel' },
-          {
-            text: 'Pay Now',
-            onPress: () => {
-              // Implement card payment logic here
-              Alert.alert('✅ Payment Successful', 'Your order has been confirmed!', [
-                {
-                  text: 'View Orders',
-                  onPress: () => router.push('/(tabs)'),
-                },
-              ]);
-            },
-          },
-        ]
-      );
-    }
+        },
+      ]
+    );
   };
 
   if (!fontsLoaded) {
@@ -174,181 +163,51 @@ export default function CheckoutScreen() {
           </View>
         </View>
 
-        {/* Payment Method Selection */}
+        {/* Payment Method - Mobile Money Only */}
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Select Payment Method</Text>
-          <View style={styles.paymentMethods}>
-            <TouchableOpacity
-              style={[
-                styles.paymentMethodCard,
-                paymentMethod === 'momo' && styles.paymentMethodCardActive,
-              ]}
-              onPress={() => setPaymentMethod('momo')}
-              activeOpacity={0.7}
-            >
-              <View style={[
-                styles.iconContainer,
-                paymentMethod === 'momo' && styles.iconContainerActive,
-              ]}>
-                <Smartphone
-                  size={24}
-                  color={paymentMethod === 'momo' ? '#FFFFFF' : '#4169E1'}
-                />
+          <Text style={styles.sectionTitle}>Payment Method</Text>
+          <View style={styles.detailsCard}>
+            <View style={styles.momoInstructionHeader}>
+              <View style={styles.momoIconLarge}>
+                <Smartphone size={32} color="#4169E1" />
               </View>
-              <Text
-                style={[
-                  styles.paymentMethodText,
-                  paymentMethod === 'momo' && styles.paymentMethodTextActive,
-                ]}
-              >
-                Mobile Money
-              </Text>
-              {paymentMethod === 'momo' && (
-                <View style={styles.checkmark}>
-                  <CheckCircle size={20} color="#4169E1" />
+              <Text style={styles.cardTitle}>Mobile Money Payment</Text>
+            </View>
+            
+            <View style={styles.paymentInstructionCard}>
+              <Text style={styles.instructionTitle}>How to Pay:</Text>
+              <Text style={styles.instructionStep}>1. Open your Mobile Money app</Text>
+              <Text style={styles.instructionStep}>2. Select "Send Money"</Text>
+              <Text style={styles.instructionStep}>3. Send ₵{total.toFixed(2)} to:</Text>
+              
+              <View style={styles.oaaNumberCard}>
+                <Text style={styles.oaaLabel}>OAA Secretariat Number</Text>
+                <View style={styles.phoneNumberBox}>
+                  <Text style={styles.oaaPhoneNumber}>+233 24 123 4567</Text>
                 </View>
-              )}
-            </TouchableOpacity>
-
-            <TouchableOpacity
-              style={[
-                styles.paymentMethodCard,
-                paymentMethod === 'card' && styles.paymentMethodCardActive,
-              ]}
-              onPress={() => setPaymentMethod('card')}
-              activeOpacity={0.7}
-            >
-              <View style={[
-                styles.iconContainer,
-                paymentMethod === 'card' && styles.iconContainerActive,
-              ]}>
-                <CreditCard
-                  size={24}
-                  color={paymentMethod === 'card' ? '#FFFFFF' : '#4169E1'}
-                />
+                <Text style={styles.oaaNetworkInfo}>All Networks Supported (MTN, Vodafone, AirtelTigo)</Text>
               </View>
-              <Text
-                style={[
-                  styles.paymentMethodText,
-                  paymentMethod === 'card' && styles.paymentMethodTextActive,
-                ]}
-              >
-                Debit/Credit Card
-              </Text>
-              {paymentMethod === 'card' && (
-                <View style={styles.checkmark}>
-                  <CheckCircle size={20} color="#4169E1" />
-                </View>
-              )}
-            </TouchableOpacity>
+              
+              <Text style={styles.instructionStep}>4. Use your order reference as payment note</Text>
+              <View style={styles.referenceCard}>
+                <Text style={styles.referenceLabel}>Reference:</Text>
+                <Text style={styles.referenceNumber}>OAA-{Date.now().toString().slice(-6)}</Text>
+              </View>
+              
+              <Text style={styles.instructionStep}>5. Complete the payment on your phone</Text>
+            </View>
+            
+            <View style={styles.importantNote}>
+              <Shield size={18} color="#F59E0B" />
+              <View style={styles.importantNoteText}>
+                <Text style={styles.importantNoteTitle}>Important:</Text>
+                <Text style={styles.importantNoteDescription}>
+                  After completing payment, please click "I've Paid" below to confirm your order
+                </Text>
+              </View>
+            </View>
           </View>
         </View>
-
-        {/* Payment Details */}
-        {paymentMethod === 'momo' ? (
-          <View style={styles.detailsCard}>
-            <Text style={styles.cardTitle}>Mobile Money Details</Text>
-            <View style={styles.inputGroup}>
-              <Text style={styles.label}>Select Network Provider</Text>
-              <View style={styles.networkButtons}>
-                {['MTN', 'Vodafone', 'AirtelTigo'].map(network => (
-                  <TouchableOpacity
-                    key={network}
-                    style={[
-                      styles.networkButton,
-                      momoNetwork === network && styles.networkButtonActive,
-                    ]}
-                    onPress={() => setMomoNetwork(network)}
-                    activeOpacity={0.7}
-                  >
-                    <Text
-                      style={[
-                        styles.networkButtonText,
-                        momoNetwork === network && styles.networkButtonTextActive,
-                      ]}
-                    >
-                      {network}
-                    </Text>
-                  </TouchableOpacity>
-                ))}
-              </View>
-            </View>
-            <View style={styles.inputGroup}>
-              <Text style={styles.label}>Mobile Number</Text>
-              <View style={styles.inputWrapper}>
-                <Text style={styles.countryCode}>+233</Text>
-                <TextInput
-                  style={styles.input}
-                  placeholder="XX XXX XXXX"
-                  placeholderTextColor="#999999"
-                  keyboardType="phone-pad"
-                  value={momoNumber}
-                  onChangeText={setMomoNumber}
-                  maxLength={10}
-                />
-              </View>
-              <Text style={styles.helperText}>You will receive a prompt to approve the payment</Text>
-            </View>
-          </View>
-        ) : (
-          <View style={styles.detailsCard}>
-            <Text style={styles.cardTitle}>Card Information</Text>
-            <View style={styles.inputGroup}>
-              <Text style={styles.label}>Cardholder Name</Text>
-              <TextInput
-                style={styles.inputFull}
-                placeholder="John Doe"
-                placeholderTextColor="#999999"
-                value={cardName}
-                onChangeText={setCardName}
-                autoCapitalize="words"
-              />
-            </View>
-            <View style={styles.inputGroup}>
-              <Text style={styles.label}>Card Number</Text>
-              <TextInput
-                style={styles.inputFull}
-                placeholder="1234 5678 9012 3456"
-                placeholderTextColor="#999999"
-                keyboardType="number-pad"
-                value={cardNumber}
-                onChangeText={setCardNumber}
-                maxLength={16}
-              />
-            </View>
-            <View style={styles.row}>
-              <View style={[styles.inputGroup, styles.halfWidth]}>
-                <Text style={styles.label}>Expiry Date</Text>
-                <TextInput
-                  style={styles.inputFull}
-                  placeholder="MM/YY"
-                  placeholderTextColor="#999999"
-                  keyboardType="number-pad"
-                  value={cardExpiry}
-                  onChangeText={setCardExpiry}
-                  maxLength={5}
-                />
-              </View>
-              <View style={[styles.inputGroup, styles.halfWidth]}>
-                <Text style={styles.label}>CVV</Text>
-                <TextInput
-                  style={styles.inputFull}
-                  placeholder="123"
-                  placeholderTextColor="#999999"
-                  keyboardType="number-pad"
-                  value={cardCVV}
-                  onChangeText={setCardCVV}
-                  maxLength={3}
-                  secureTextEntry
-                />
-              </View>
-            </View>
-            <View style={styles.securityNote}>
-              <Shield size={16} color="#10B981" />
-              <Text style={styles.securityNoteText}>Your card details are encrypted and secure</Text>
-            </View>
-          </View>
-        )}
 
         {/* Delivery Options */}
         <View style={styles.section}>
@@ -378,7 +237,7 @@ export default function CheckoutScreen() {
                 <Text style={styles.deliveryDescription}>
                   Get items delivered to your doorstep
                 </Text>
-                <Text style={styles.deliveryTime}>3-5 business days</Text>
+                <Text style={styles.deliveryTime}>Within 24 hours</Text>
               </View>
               {deliveryMethod === 'delivery' && (
                 <CheckCircle size={24} color="#4169E1" />
@@ -458,8 +317,7 @@ export default function CheckoutScreen() {
             end={{ x: 1, y: 0 }}
             style={styles.payButtonGradient}
           >
-            <Lock size={20} color="#FFFFFF" />
-            <Text style={styles.payButtonText}>Pay ₵{total.toFixed(2)}</Text>
+            <Text style={styles.payButtonText}>I've Paid</Text>
           </LinearGradient>
         </TouchableOpacity>
       </View>

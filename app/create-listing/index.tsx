@@ -417,19 +417,6 @@ export default function CreateListingScreen() {
           </Text>
         </View>
 
-        {/* Validation Status */}
-        {isButtonDisabled && !isSubmitting && (
-          <View style={{backgroundColor:'#FEF2F2',padding:12,borderRadius:8,marginBottom:16,borderLeftWidth:4,borderLeftColor:'#EF4444'}}>
-            <Text style={{fontSize:14,color:'#EF4444',fontFamily:'Inter-SemiBold'}}>Missing required fields:</Text>
-            <Text style={{fontSize:12,color:'#666',marginTop:4}}>
-              {!title.trim() && '• Title\n'}
-              {!description.trim() && '• Description\n'}
-              {!price.trim() && '• Price\n'}
-              {!category && '• Category'}
-            </Text>
-          </View>
-        )}
-
         {/* Submit Button at Bottom */}
         <TouchableOpacity 
           style={[
@@ -438,11 +425,6 @@ export default function CreateListingScreen() {
           ]}
           onPress={() => {
             console.log('👆 TouchableOpacity onPress triggered');
-            console.log('Button disabled?', isButtonDisabled);
-            if (isButtonDisabled) {
-              Alert.alert('Missing Information', 'Please fill in all required fields (Title, Description, Price, and Category)');
-              return;
-            }
             handleSubmit();
           }}
           disabled={isButtonDisabled}
