@@ -41,7 +41,7 @@ const CATEGORIES = [
 export default function EditListing() {
   const { id } = useLocalSearchParams();
   const router = useRouter();
-  const { user } = useAuth();
+  const { user, profile } = useAuth();
 
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -53,9 +53,16 @@ export default function EditListing() {
   const [currency, setCurrency] = useState('GHS');
   const [category, setCategory] = useState('');
   const [imageUrl, setImageUrl] = useState('');
-  const [email, setEmail] = useState('');
+  const [contactEmail, setContactEmail] = useState('');
   const [location, setLocation] = useState('');
   const [localImages, setLocalImages] = useState<string[]>([]);
+
+  // Education-specific fields
+  const [applicationUrl, setApplicationUrl] = useState('');
+  const [websiteUrl, setWebsiteUrl] = useState('');
+  const [deadlineDate, setDeadlineDate] = useState('');
+  const [eligibility, setEligibility] = useState('');
+  const [fundingAmount, setFundingAmount] = useState('');
 
   const [fontsLoaded] = useFonts({
     'Inter-Regular': Inter_400Regular,
@@ -103,7 +110,7 @@ export default function EditListing() {
         setCurrency('GHS');
         setPrice(data.price != null ? String(data.price) : '');
       }
-      setCategory(data.category_name || '');
+  setCategory(data.category_name || '');
       
       // Handle image_url which might be JSON array or string
       if (data.image_url) {
@@ -119,6 +126,17 @@ export default function EditListing() {
           setImageUrl(data.image_url);
         }
       }
+
+      // Prefill education fields if present on record
+      if (data.application_url || data.application_link) {
+        setApplicationUrl((data.application_url || data.application_link) as string);
+      }
+      if (data.website_url) setWebsiteUrl(String(data.website_url));
+      if (data.funding_amount != null) setFundingAmount(String(data.funding_amount));
+      if (data.deadline_date) setDeadlineDate(String(data.deadline_date));
+      if (data.eligibility_criteria) setEligibility(String(data.eligibility_criteria));
+      if (data.contact_email) setContactEmail(String(data.contact_email));
+      if (data.location) setLocation(String(data.location));
     } catch (err) {
       console.error('Failed to fetch listing', err);
       Alert.alert('Error', 'Failed to load listing');
@@ -150,12 +168,14 @@ export default function EditListing() {
       return;
     }
 
-    // Ensure user owns the listing
-    if (listing.user_id !== user.id) {
+    const isAdmin = !!(profile?.is_admin || profile?.role === 'admin');
+    // Ensure user owns the listing, unless admin
+    if (listing.user_id !== user.id && !isAdmin) {
       Alert.alert('Forbidden', 'You can only edit your own listings');
       return;
     }
 
+    const isEducation = category === 'Universities' || category === 'Scholarships';
     // Validation
     if (!title.trim()) {
       Alert.alert('Error', 'Please enter a title');
@@ -165,13 +185,20 @@ export default function EditListing() {
       Alert.alert('Error', 'Please enter a description');
       return;
     }
-    if (!price.trim() || isNaN(Number(price)) || Number(price) < 0) {
-      Alert.alert('Error', 'Please enter a valid price (or 0 for free)');
-      return;
-    }
     if (!category) {
       Alert.alert('Error', 'Please select a category');
       return;
+    }
+    if (isEducation) {
+      if (!applicationUrl.trim()) {
+        Alert.alert('Error', 'Please provide the Application Link');
+        return;
+      }
+    } else {
+      if (!price.trim() || isNaN(Number(price)) || Number(price) < 0) {
+        Alert.alert('Error', 'Please enter a valid price (or 0 for free)');
+        return;
+      }
     }
 
     try {
@@ -184,14 +211,33 @@ export default function EditListing() {
       }
           // Filter out blob URLs
           const validImageUrls = finalImageUrls.filter(url => url && !url.startsWith('blob:'));
+          const isEducationUpdate = category === 'Universities' || category === 'Scholarships';
           const updates: any = {
             title: title.trim(),
             description: description.trim(),
-            price: Number(price.trim()),
-            currency,
             category_name: category,
             image_url: validImageUrls.length > 0 ? JSON.stringify(validImageUrls) : null,
           };
+          if (isEducationUpdate) {
+            updates.application_url = applicationUrl.trim();
+            if (websiteUrl.trim()) updates.website_url = websiteUrl.trim();
+            updates.contact_email = contactEmail.trim() || null;
+            updates.location = location.trim() || null;
+            // sanitize deadline: only accept YYYY-MM-DD for date logic; otherwise store as plain text
+            const dd = deadlineDate.trim();
+            if (dd) {
+              // Store raw value; front-end decides if it's ISO for countdown
+              updates.deadline_date = dd;
+            }
+            if (eligibility.trim()) updates.eligibility_criteria = eligibility.trim();
+            if (category === 'Scholarships' && fundingAmount.trim()) {
+              const amt = Number(fundingAmount.replace(/[^0-9.]/g, ''));
+              if (!Number.isNaN(amt)) updates.funding_amount = amt;
+            }
+          } else {
+            updates.price = Number(price.trim());
+            updates.currency = currency;
+          }
           console.log('📝 Updating listing:', updates);
           const { error } = await supabase
             .from('products_services')
@@ -203,7 +249,11 @@ export default function EditListing() {
           }
           Alert.alert('✅ Success!', 'Your listing has been updated successfully!');
           setTimeout(() => {
-            router.replace('/my-listings');
+            if (isEducationUpdate && (profile?.is_admin || profile?.role === 'admin')) {
+              router.replace('/education/admin');
+            } else {
+              router.replace('/my-listings');
+            }
           }, 500);
     } catch (err) {
       console.error('❌ Failed to update listing', err);
@@ -227,7 +277,8 @@ export default function EditListing() {
       Alert.alert('Authentication Required', 'Please sign in to delete listings');
       return;
     }
-    if (listing.user_id !== user.id) {
+    const isAdmin = !!(profile?.is_admin || profile?.role === 'admin');
+    if (listing.user_id !== user.id && !isAdmin) {
       console.log('❌ User does not own this listing');
       Alert.alert('Forbidden', 'You can only delete your own listings');
       return;
@@ -263,7 +314,11 @@ export default function EditListing() {
         console.log('✅ Listing deleted successfully');
         
         // Navigate to my-listings page
-        router.push('/my-listings');
+        if ((category === 'Universities' || category === 'Scholarships') && (profile?.is_admin || profile?.role === 'admin')) {
+          router.push('/education/admin');
+        } else {
+          router.push('/my-listings');
+        }
         
         // Show success message after navigation
         setTimeout(() => {
@@ -291,7 +346,8 @@ export default function EditListing() {
     return null;
   }
 
-  const isButtonDisabled = !title.trim() || !description.trim() || !price.trim() || !category || saving;
+  const isEducation = category === 'Universities' || category === 'Scholarships';
+  const isButtonDisabled = !title.trim() || !description.trim() || !category || (isEducation ? !applicationUrl.trim() : !price.trim()) || saving;
 
   return (
     <View style={styles.container}>
@@ -309,7 +365,7 @@ export default function EditListing() {
           >
             <ArrowLeft size={24} color="#FFFFFF" />
           </TouchableOpacity>
-          <Text style={styles.headerTitle}>Edit Listing</Text>
+          <Text style={styles.headerTitle}>Edit {isEducation ? (category === 'Universities' ? 'University' : 'Scholarship') : 'Listing'}</Text>
           <TouchableOpacity 
             style={[
               styles.submitButton, 
@@ -345,7 +401,7 @@ export default function EditListing() {
           <Text style={styles.label}>Description *</Text>
           <TextInput
             style={[styles.input, styles.textArea]}
-            placeholder="Describe your product or service in detail..."
+            placeholder={isEducation ? 'Describe the opportunity, requirements, and overview...' : 'Describe your product or service in detail...'}
             placeholderTextColor="#999999"
             multiline
             value={description}
@@ -356,6 +412,7 @@ export default function EditListing() {
           <Text style={styles.charCount}>{description.length}/500</Text>
         </View>
         
+        {!isEducation && (
         <View style={styles.formGroup}>
           <View style={{backgroundColor:'#F8F9FA',borderRadius:16,padding:18,marginBottom:18,shadowColor:'#4169E1',shadowOffset:{width:0,height:2},shadowOpacity:0.08,shadowRadius:8,elevation:2,borderWidth:1,borderColor:'#E2E8F0'}}>
             <Text style={{fontSize:16,fontFamily:'Inter-SemiBold',color:'#4169E1',marginBottom:10}}>Price *</Text>
@@ -375,6 +432,70 @@ export default function EditListing() {
             <Text style={{fontSize:12,color:'#666666',marginTop:4,fontFamily:'Inter-Regular'}}>Enter the hourly rate in your selected currency</Text>
           </View>
         </View>
+        )}
+
+        {isEducation && (
+          <>
+            {category === 'Scholarships' && (
+              <View style={styles.formGroup}>
+                <Text style={styles.label}>Funding Amount (Optional)</Text>
+                <TextInput
+                  style={styles.input}
+                  placeholder="e.g., 5000"
+                  placeholderTextColor="#999999"
+                  value={fundingAmount}
+                  onChangeText={setFundingAmount}
+                  keyboardType="decimal-pad"
+                />
+              </View>
+            )}
+            <View style={styles.formGroup}>
+              <Text style={styles.label}>Application Link *</Text>
+              <TextInput
+                style={styles.input}
+                placeholder="https://apply.example.com"
+                placeholderTextColor="#999999"
+                value={applicationUrl}
+                onChangeText={setApplicationUrl}
+                autoCapitalize="none"
+              />
+            </View>
+            <View style={styles.formGroup}>
+              <Text style={styles.label}>Website Link (Optional)</Text>
+              <TextInput
+                style={styles.input}
+                placeholder="https://www.university.edu"
+                placeholderTextColor="#999999"
+                value={websiteUrl}
+                onChangeText={setWebsiteUrl}
+                autoCapitalize="none"
+              />
+            </View>
+            <View style={styles.formGroup}>
+              <Text style={styles.label}>Deadline (Optional)</Text>
+              <TextInput
+                style={styles.input}
+                placeholder="YYYY-MM-DD or a simple note"
+                placeholderTextColor="#999999"
+                value={deadlineDate}
+                onChangeText={setDeadlineDate}
+                autoCapitalize="none"
+              />
+            </View>
+            <View style={styles.formGroup}>
+              <Text style={styles.label}>Eligibility (Optional)</Text>
+              <TextInput
+                style={[styles.input, styles.textArea]}
+                placeholder="Who can apply, GPA, nationality, etc."
+                placeholderTextColor="#999999"
+                multiline
+                value={eligibility}
+                onChangeText={setEligibility}
+                textAlignVertical="top"
+              />
+            </View>
+          </>
+        )}
         
         <View style={styles.formGroup}>
           <Text style={styles.label}>Category *</Text>
@@ -414,12 +535,14 @@ export default function EditListing() {
             style={styles.input}
             placeholder="your@email.com (optional)"
             placeholderTextColor="#999999"
-            value={email}
-            onChangeText={setEmail}
+            value={contactEmail}
+            onChangeText={setContactEmail}
             autoCapitalize="none"
             keyboardType="email-address"
           />
-          <Text style={styles.helperText}>This field is optional and not stored in database</Text>
+          {isEducation ? null : (
+            <Text style={styles.helperText}>This field is optional and not stored in database</Text>
+          )}
         </View>
 
         <View style={styles.formGroup}>
@@ -431,7 +554,9 @@ export default function EditListing() {
             value={location}
             onChangeText={setLocation}
           />
-          <Text style={styles.helperText}>This field is optional and not stored in database</Text>
+          {isEducation ? null : (
+            <Text style={styles.helperText}>This field is optional and not stored in database</Text>
+          )}
         </View>
         
         <View style={styles.formGroup}>

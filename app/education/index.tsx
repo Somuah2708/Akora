@@ -15,7 +15,7 @@ type TabType = 'universities' | 'scholarships' | 'mentors' | 'resources' | 'cour
 
 export default function EducationScreen() {
   const router = useRouter();
-  const { user } = useAuth();
+  const { user, profile } = useAuth();
   const [activeTab, setActiveTab] = useState<TabType>('universities');
   const [universities, setUniversities] = useState<any[]>([]);
   const [scholarships, setScholarships] = useState<any[]>([]);
@@ -304,11 +304,12 @@ export default function EducationScreen() {
   });
 
   const handleAddOpportunity = () => {
-    if (!user) {
-      Alert.alert('Authentication Required', 'Please sign in to add an educational opportunity.');
+    // Only admins can access admin dashboard
+    if (!user || !profile || !(profile.is_admin || profile.role === 'admin')) {
+      Alert.alert('Admins only', 'You need admin access to manage Schools & Scholarships.');
       return;
     }
-    router.push('/create-educational-listing');
+    router.push('/education/admin');
   };
 
   // Toggle bookmark
@@ -360,12 +361,18 @@ export default function EducationScreen() {
           <ArrowLeft size={24} color="#000000" />
         </TouchableOpacity>
         <Text style={styles.title}>Schools & Scholarships</Text>
-        <TouchableOpacity 
-          style={styles.addButton}
-          onPress={handleAddOpportunity}
-        >
-          <Plus size={24} color="#4169E1" />
-        </TouchableOpacity>
+        {(profile?.is_admin || profile?.role === 'admin') ? (
+          <TouchableOpacity 
+            style={styles.addButton}
+            onPress={handleAddOpportunity}
+            accessibilityLabel="Manage Schools and Scholarships"
+          >
+            <Plus size={24} color="#4169E1" />
+          </TouchableOpacity>
+        ) : (
+          // preserve layout spacing when button hidden
+          <View style={{ width: 40 }} />
+        )}
       </View>
 
       <View style={styles.searchContainer}>

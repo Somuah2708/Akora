@@ -115,7 +115,10 @@ export default function EducationDetailScreen() {
   };
 
   const calculateDaysLeft = (deadlineDate: string) => {
+    // Only compute if valid ISO date YYYY-MM-DD
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(deadlineDate)) return null;
     const deadline = new Date(deadlineDate);
+    if (isNaN(deadline.getTime())) return null;
     const today = new Date();
     const diffTime = deadline.getTime() - today.getTime();
     const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
@@ -196,6 +199,13 @@ export default function EducationDetailScreen() {
               </Text>
             </View>
           )}
+          {/* Show raw deadline text if available but not valid ISO */}
+          {daysLeft === null && opportunity.deadline_date && (
+            <View style={styles.infoRow}>
+              <Calendar size={18} color="#666666" />
+              <Text style={styles.infoText}>Deadline: {opportunity.deadline_date}</Text>
+            </View>
+          )}
 
           {/* Funding Amount (for Scholarships) */}
           {isScholarship && opportunity.funding_amount && (
@@ -234,8 +244,8 @@ export default function EducationDetailScreen() {
                 <Text style={styles.contactText}>{opportunity.contact_email}</Text>
               </TouchableOpacity>
             )}
-            {opportunity.application_url && (
-              <TouchableOpacity style={styles.contactButton} onPress={handleApplyNow}>
+            {opportunity.website_url && (
+              <TouchableOpacity style={styles.contactButton} onPress={() => Linking.openURL(opportunity.website_url)}>
                 <Globe size={18} color="#4169E1" />
                 <Text style={styles.contactText}>Visit Website</Text>
               </TouchableOpacity>
