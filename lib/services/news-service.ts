@@ -11,13 +11,19 @@ import {
   NEWS_PAGE_SIZE,
   DEFAULT_NEWS_IMAGE 
 } from '../constants/news';
+import { regionService } from './region-service';
+import { preferencesService } from './preferences-service';
 
 class NewsService {
   private cache: Map<string, CachedNews> = new Map();
   private readonly CACHE_KEY_PREFIX = '@news_cache_';
   private readonly API_KEY = process.env.EXPO_PUBLIC_NEWS_API_KEY || '';
   private readonly NEWS_API_BASE = 'https://newsapi.org/v2';
-  private readonly PRIMARY_COUNTRY = (process.env.EXPO_PUBLIC_NEWS_PRIMARY_COUNTRY || 'gh').toLowerCase();
+  // Environment override for primary country (if provided). If absent, we detect via RegionService.
+  private readonly ENV_PRIMARY_COUNTRY = (process.env.EXPO_PUBLIC_NEWS_PRIMARY_COUNTRY || '').toLowerCase();
+  private detectedCountry: string | null = null;
+  private detectedAt: number | null = null;
+  private readonly COUNTRY_TTL_MS = 6 * 60 * 60 * 1000; // 6 hours
   private readonly SECONDARY_COUNTRIES: string[] = (process.env.EXPO_PUBLIC_NEWS_SECONDARY_COUNTRIES || 'us,gb,ng')
     .toLowerCase()
     .split(',')
@@ -61,8 +67,9 @@ class NewsService {
    */
   async fetchBreakingNews(): Promise<NewsArticle[]> {
     try {
+      const primary = await this.getPrimaryCountry();
       const response = await fetch(
-        `${this.NEWS_API_BASE}/top-headlines?country=${this.PRIMARY_COUNTRY}&pageSize=5&apiKey=${this.API_KEY}`
+        `${this.NEWS_API_BASE}/top-headlines?country=${primary}&pageSize=5&apiKey=${this.API_KEY}`
       );
       const data: NewsApiResponse = await response.json();
       
@@ -127,7 +134,8 @@ class NewsService {
     }
 
     if (category === 'ghana') {
-      return this.fetchTopHeadlinesByCountry(this.PRIMARY_COUNTRY);
+      const primary = await this.getPrimaryCountry();
+      return this.fetchTopHeadlinesByCountry(primary);
     }
 
     try {
@@ -164,8 +172,9 @@ class NewsService {
    */
   private async fetchHybridFeed(): Promise<NewsArticle[]> {
     try {
+      const primaryCountry = await this.getPrimaryCountry();
       const [primary, secondaryBatches] = await Promise.all([
-        this.fetchTopHeadlinesByCountry(this.PRIMARY_COUNTRY),
+        this.fetchTopHeadlinesByCountry(primaryCountry),
         Promise.all(this.SECONDARY_COUNTRIES.map((c) => this.fetchTopHeadlinesByCountry(c).catch(() => []))),
       ]);
 
@@ -188,13 +197,46 @@ class NewsService {
       const secCount = Math.min(sec.length, target - priCount);
       const blended = [...pri.slice(0, priCount), ...sec.slice(0, secCount)];
 
-      // Sort by recency
+      // Sort by recency first
       blended.sort((a, b) => Date.parse(b.publishedAt) - Date.parse(a.publishedAt));
+
+      // Personalization: boost favorite categories (stable re-rank)
+      const favorites = await preferencesService.getFavoriteCategories();
+      if (favorites.length) {
+        blended.sort((a, b) => {
+          const fa = favorites.includes(a.category) ? 1 : 0;
+          const fb = favorites.includes(b.category) ? 1 : 0;
+          if (fa === fb) return 0; // keep relative order from recency sort
+          return fb - fa; // favorites (1) come first
+        });
+      }
       return blended;
     } catch (e) {
       console.error('Hybrid feed error:', e);
       return this.getMockNewsByCategory('world');
     }
+  }
+
+  /**
+   * Resolve primary country (env override > cached detection > fresh detection > fallback 'gh').
+   */
+  private async getPrimaryCountry(): Promise<string> {
+    if (this.ENV_PRIMARY_COUNTRY) return this.ENV_PRIMARY_COUNTRY;
+    const now = Date.now();
+    if (this.detectedCountry && this.detectedAt && (now - this.detectedAt) < this.COUNTRY_TTL_MS) {
+      return this.detectedCountry;
+    }
+    try {
+      const country = await regionService.getPrimaryCountry(!this.detectedCountry);
+      if (country) {
+        this.detectedCountry = country;
+        this.detectedAt = now;
+        return country;
+      }
+    } catch (e) {
+      console.warn('getPrimaryCountry fallback', e);
+    }
+    return 'gh';
   }
 
   /**
