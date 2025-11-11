@@ -20,11 +20,12 @@ import {
   MessageCircle,
   Clock,
   ExternalLink,
-  Volume2,
-  VolumeX,
 } from 'lucide-react-native';
+import { Image, Alert } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { supabase } from '@/lib/supabase';
+import { preferencesService } from '@/lib/services/preferences-service';
+import { NEWS_SOURCES } from '@/lib/constants/news';
 import { NewsArticle } from '@/lib/types/news';
 import NewsCard from '@/components/news/NewsCard';
 
@@ -340,6 +341,9 @@ export default function ArticleDetailScreen() {
           {/* Meta Information */}
           <View style={styles.metaContainer}>
             <View style={styles.metaLeft}>
+              {article.source.logo ? (
+                <Image source={{ uri: article.source.logo }} style={styles.sourceLogo} />
+              ) : null}
               <Text style={styles.sourceName}>{article.source.name}</Text>
               {article.author && (
                 <>
@@ -347,6 +351,12 @@ export default function ArticleDetailScreen() {
                   <Text style={styles.authorName}>{article.author}</Text>
                 </>
               )}
+              {article.readTime ? (
+                <>
+                  <View style={styles.metaDot} />
+                  <Text style={styles.readTime}>{article.readTime} min read</Text>
+                </>
+              ) : null}
             </View>
             <View style={styles.metaRight}>
               <Clock size={14} color="#8E8E93" />
@@ -394,6 +404,40 @@ export default function ArticleDetailScreen() {
             <TouchableOpacity style={styles.engagementButton} onPress={handleShare}>
               <Share2 size={24} color="#8E8E93" />
               <Text style={styles.engagementText}>{article.shareCount || 0}</Text>
+            </TouchableOpacity>
+            
+            {/* Mute source & Favorite category quick actions */}
+            <TouchableOpacity
+              style={styles.engagementButton}
+              onPress={async () => {
+                try {
+                  const current = await preferencesService.getMutedSources();
+                  if (!current.includes(article.source.id)) {
+                    await preferencesService.setMutedSources([...current, article.source.id]);
+                    Alert.alert('Muted', `${article.source.name} muted. You will see fewer stories from this source.`);
+                  } else {
+                    Alert.alert('Already muted', `${article.source.name} is already muted.`);
+                  }
+                } catch {}
+              }}
+            >
+              <Text style={styles.engagementText}>Mute Source</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.engagementButton}
+              onPress={async () => {
+                try {
+                  const favs = await preferencesService.getFavoriteCategories();
+                  if (!favs.includes(article.category)) {
+                    await preferencesService.setFavoriteCategories([...favs, article.category]);
+                    Alert.alert('Added to Favorites', `${article.category} boosted in your feed.`);
+                  } else {
+                    Alert.alert('Already a Favorite', `${article.category} is already in your favorites.`);
+                  }
+                } catch {}
+              }}
+            >
+              <Text style={styles.engagementText}>Favorite Category</Text>
             </TouchableOpacity>
           </View>
 
@@ -552,6 +596,13 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     flex: 1,
   },
+  sourceLogo: {
+    width: 18,
+    height: 18,
+    borderRadius: 4,
+    marginRight: 8,
+    backgroundColor: '#F2F2F7',
+  },
   sourceName: {
     fontSize: 14,
     fontWeight: '600',
@@ -574,6 +625,10 @@ const styles = StyleSheet.create({
     gap: 4,
   },
   metaTime: {
+    fontSize: 13,
+    color: '#8E8E93',
+  },
+  readTime: {
     fontSize: 13,
     color: '#8E8E93',
   },

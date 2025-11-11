@@ -9,6 +9,7 @@ import {
   Animated 
 } from 'react-native';
 import { AlertCircle } from 'lucide-react-native';
+import { Image } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { NewsArticle } from '@/lib/types/news';
 
@@ -93,7 +94,12 @@ export default function BreakingNewsBanner({ articles, onArticlePress }: Breakin
               <View style={styles.articleContent}>
                 <View style={styles.sourceRow}>
                   <View style={styles.sourceBadge}>
-                    <Text style={styles.sourceText}>{article.source.name}</Text>
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                      {article.source.logo ? (
+                        <Image source={{ uri: article.source.logo }} style={{ width: 14, height: 14, borderRadius: 3 }} />
+                      ) : null}
+                      <Text style={styles.sourceText}>{article.source.name}</Text>
+                    </View>
                   </View>
                   <Text style={styles.timeText}>{formatTime(article.publishedAt)}</Text>
                 </View>
