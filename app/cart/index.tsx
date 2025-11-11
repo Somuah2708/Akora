@@ -190,11 +190,11 @@ export default function CartScreen() {
         style={styles.headerGradient}
       >
         <View style={styles.header}>
-          <TouchableOpacity onPress={() => router.push('/services')} style={styles.backButton}>
+          <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
             <ArrowLeft size={24} color="#FFFFFF" />
           </TouchableOpacity>
           <View style={styles.headerCenter}>
-            <Text style={styles.title}>Marketplace Cart</Text>
+            <Text style={styles.title}>Shopping Cart</Text>
           </View>
           <View style={styles.cartBadge}>
             <Text style={styles.cartBadgeText}>{cartItems.length}</Text>
@@ -234,7 +234,7 @@ export default function CartScreen() {
             <Sparkles size={32} color="#4169E1" style={styles.sparkleIcon} />
           </View>
           <Text style={styles.emptyTitle}>Your cart is empty</Text>
-          <Text style={styles.emptyText}>Browse the Marketplace and add items to your cart</Text>
+          <Text style={styles.emptyText}>Browse the marketplace and add items to your cart</Text>
           <TouchableOpacity
             style={styles.shopButton}
             onPress={() => router.push('/services')}
@@ -247,7 +247,7 @@ export default function CartScreen() {
               style={styles.shopButtonGradient}
             >
               <Sparkles size={20} color="#FFFFFF" />
-              <Text style={styles.shopButtonText}>Browse Marketplace</Text>
+              <Text style={styles.shopButtonText}>Shop Now</Text>
             </LinearGradient>
           </TouchableOpacity>
         </View>

@@ -498,7 +498,7 @@ export default function CirclesScreen() {
       <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
         {/* Header */}
         <View style={styles.header}>
-          <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
+          <TouchableOpacity onPress={() => router.push('/(tabs)')} style={styles.backButton}>
             <ArrowLeft size={24} color="#333" />
           </TouchableOpacity>
           <View style={styles.headerTextContainer}>

@@ -117,9 +117,9 @@ export default function CreateListingScreen() {
     }
     console.log('✅ Description valid');
     
-    if (!price.trim() || isNaN(Number(price)) || Number(price) < 0) {
+    if (!price.trim() || isNaN(Number(price)) || Number(price) <= 0) {
       console.log('❌ Validation failed: Invalid price');
-      Alert.alert('Error', 'Please enter a valid price (or 0 for free)');
+      Alert.alert('Error', 'Please enter a valid price greater than 0');
       return;
     }
     console.log('✅ Price valid');
@@ -153,11 +153,14 @@ export default function CreateListingScreen() {
     try {
       setIsSubmitting(true);
       
+      // Store price as numeric value only (currency not stored in DB yet)
+      const priceValue = Number(price.trim());
+      
       const listingData = {
         user_id: user?.id,
         title: title.trim(),
         description: description.trim(),
-      price: price.trim() ? `${currency} ${price}` : null,
+        price: priceValue,
         image_url: finalImageUrls.length > 0 ? JSON.stringify(finalImageUrls) : null,
         category_name: category,
         is_featured: false,
@@ -209,16 +212,18 @@ export default function CreateListingScreen() {
 
   // Debug: Check button state (email and location are optional)
   const isButtonDisabled = !title.trim() || !description.trim() || !price.trim() || !category || isSubmitting;
-  console.log('🔍 Button Disabled:', isButtonDisabled);
-  console.log('🔍 Form State:', {
-    hasTitle: !!title.trim(),
-    hasDescription: !!description.trim(),
-    hasPrice: !!price.trim(),
-    hasCategory: !!category,
-    email: email.trim() || '(optional)',
-    location: location.trim() || '(optional)',
-    isSubmitting
-  });
+  
+  // Log form state for debugging
+  useEffect(() => {
+    console.log('🔍 Form State Changed:', {
+      buttonDisabled: isButtonDisabled,
+      hasTitle: !!title.trim(),
+      hasDescription: !!description.trim(),
+      hasPrice: !!price.trim(),
+      hasCategory: !!category,
+      isSubmitting
+    });
+  }, [title, description, price, category, isSubmitting, isButtonDisabled]);
 
   return (
     <View style={styles.container}>
@@ -261,7 +266,7 @@ export default function CreateListingScreen() {
         {/* Success Badge */}
         <View style={styles.successBadge}>
           <Sparkles size={20} color="#10B981" />
-          <Text style={styles.successBadgeText}>List your service and reach thousands of potential customers!</Text>
+          <Text style={styles.successBadgeText}>List your service now and reach thousands of potential customers instantly!</Text>
         </View>
         
         <View style={styles.formGroup}>
@@ -293,7 +298,7 @@ export default function CreateListingScreen() {
               <TextInput style={{flex:1,padding:16,fontSize:18,fontFamily:'Inter-SemiBold',color:'#4169E1',backgroundColor:'#F8F9FA',borderRadius:8}} placeholder="0.00" placeholderTextColor="#999999" keyboardType="decimal-pad" value={price} onChangeText={setPrice}/>
               <Text style={{fontSize:14,color:'#4169E1',marginLeft:8,fontFamily:'Inter-SemiBold'}}>/hour</Text>
             </View>
-            <Text style={{fontSize:12,color:'#666666',marginTop:4,fontFamily:'Inter-Regular'}}>Enter the hourly rate in your selected currency</Text>
+            <Text style={{fontSize:12,color:'#666666',marginTop:4,fontFamily:'Inter-Regular'}}>Enter the hourly rate (Note: Only the number will be stored)</Text>
           </View>
         </View>
         
@@ -408,7 +413,7 @@ export default function CreateListingScreen() {
         <View style={styles.infoContainer}>
           <Info size={20} color="#4169E1" />
           <Text style={styles.infoText}>
-            Your listing will be reviewed and published within 24 hours. You can create unlimited free listings!
+            Your listing will be published immediately and visible to all users. Create unlimited free listings!
           </Text>
         </View>
 

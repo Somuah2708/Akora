@@ -241,8 +241,8 @@ export default function ServicesScreen() {
 
   return (
     <View style={styles.container}>
-      <ScrollView style={{ flex: 1 }} showsVerticalScrollIndicator={false}>
-      <View style={styles.header}>
+      <ScrollView style={styles.scrollView} showsVerticalScrollIndicator={false}>
+        <View style={styles.header}>
         <TouchableOpacity onPress={() => router.push('/(tabs)/hub')} style={styles.backButton}>
           <ArrowLeft size={24} color="#000000" />
         </TouchableOpacity>
@@ -434,9 +434,9 @@ export default function ServicesScreen() {
           )}
         </View>
       </View>
-      
       </ScrollView>
-      {/* Add Listing Button (sticky) */}
+      
+      {/* Add Listing Button - Fixed Position */}
       {user && (
         <TouchableOpacity 
           style={styles.floatingButton}
@@ -454,6 +454,9 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#FFFFFF',
+  },
+  scrollView: {
+    flex: 1,
   },
   header: {
     flexDirection: 'row',
@@ -757,7 +760,6 @@ const styles = StyleSheet.create({
     },
     shadowOpacity: 0.25,
     shadowRadius: 4,
-    zIndex: 10,
   },
   floatingButtonText: {
     color: '#FFFFFF',
