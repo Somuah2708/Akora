@@ -9,7 +9,8 @@ import {
 import { 
   NEWS_CACHE_DURATION, 
   NEWS_PAGE_SIZE,
-  DEFAULT_NEWS_IMAGE 
+  DEFAULT_NEWS_IMAGE,
+  NEWS_SOURCES,
 } from '../constants/news';
 import { regionService } from './region-service';
 import { preferencesService } from './preferences-service';
@@ -195,7 +196,13 @@ class NewsService {
       const target = NEWS_PAGE_SIZE;
       const priCount = Math.min(pri.length, Math.ceil(target * 0.6));
       const secCount = Math.min(sec.length, target - priCount);
-      const blended = [...pri.slice(0, priCount), ...sec.slice(0, secCount)];
+      let blended = [...pri.slice(0, priCount), ...sec.slice(0, secCount)];
+
+      // Filter out muted sources
+      const mutedSources = await preferencesService.getMutedSources();
+      if (mutedSources.length) {
+        blended = blended.filter(a => !mutedSources.includes(a.source.id));
+      }
 
       // Sort by recency first
       blended.sort((a, b) => Date.parse(b.publishedAt) - Date.parse(a.publishedAt));
@@ -243,28 +250,34 @@ class NewsService {
    * Transform API articles to our format
    */
   private transformArticles(articles: any[], isBreaking: boolean = false): NewsArticle[] {
-    return articles.map((article, index) => ({
-      id: this.generateArticleId(article),
-      title: article.title || 'Untitled',
-      description: article.description || '',
-      content: article.content || article.description || '',
-      url: article.url || '',
-      urlToImage: article.urlToImage || DEFAULT_NEWS_IMAGE,
-      publishedAt: article.publishedAt || new Date().toISOString(),
-      source: {
-        id: article.source?.id || 'unknown',
-        name: article.source?.name || 'Unknown Source',
-      },
-      author: article.author,
-      category: this.inferCategory(article),
-      isBreaking,
-      isTrending: !isBreaking && index < 5,
-      readTime: this.calculateReadTime(article.content || article.description || ''),
-      viewCount: Math.floor(Math.random() * 10000) + 1000,
-      likeCount: Math.floor(Math.random() * 1000) + 50,
-      commentCount: Math.floor(Math.random() * 100) + 5,
-      shareCount: Math.floor(Math.random() * 500) + 10,
-    }));
+    return articles.map((article, index) => {
+      const srcId = article.source?.id || 'unknown';
+      const srcName = article.source?.name || 'Unknown Source';
+      const known = NEWS_SOURCES.find(s => s.id === srcId) || NEWS_SOURCES.find(s => s.name === srcName);
+      return {
+        id: this.generateArticleId(article),
+        title: article.title || 'Untitled',
+        description: article.description || '',
+        content: article.content || article.description || '',
+        url: article.url || '',
+        urlToImage: article.urlToImage || DEFAULT_NEWS_IMAGE,
+        publishedAt: article.publishedAt || new Date().toISOString(),
+        source: {
+          id: srcId,
+          name: srcName,
+          logo: known?.logo,
+        },
+        author: article.author,
+        category: this.inferCategory(article),
+        isBreaking,
+        isTrending: !isBreaking && index < 5,
+        readTime: this.calculateReadTime(article.content || article.description || ''),
+        viewCount: Math.floor(Math.random() * 10000) + 1000,
+        likeCount: Math.floor(Math.random() * 1000) + 50,
+        commentCount: Math.floor(Math.random() * 100) + 5,
+        shareCount: Math.floor(Math.random() * 500) + 10,
+      };
+    });
   }
 
   /**

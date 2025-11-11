@@ -57,6 +57,21 @@ export default function NewsCard({
     return num.toString();
   };
 
+  const SourceBadge = () => (
+    <View style={styles.sourceBadgeRow} accessible accessibilityLabel={`Source ${article.source.name}`}>
+      {article.source.logo ? (
+        <Image source={{ uri: article.source.logo }} style={styles.sourceLogo} />
+      ) : null}
+      <Text style={styles.sourceNameText}>{article.source.name}</Text>
+      {article.readTime ? (
+        <>
+          <View style={styles.metaDot} />
+          <Text style={styles.readTimeText}>{article.readTime} min read</Text>
+        </>
+      ) : null}
+    </View>
+  );
+
   if (variant === 'featured') {
     return (
       <TouchableOpacity style={styles.featuredCard} onPress={onPress} activeOpacity={0.9}>
@@ -79,9 +94,10 @@ export default function NewsCard({
             </Text>
             <View style={styles.featuredMeta}>
               <View style={styles.sourceInfo}>
-                <Text style={styles.sourceName}>{article.source.name}</Text>
-                <View style={styles.metaDot} />
-                <Text style={styles.metaTime}>{formatTime(article.publishedAt)}</Text>
+                <SourceBadge />
+                <View style={styles.sourceTimeRow}>
+                  <Text style={styles.metaTime} accessibilityLabel={new Date(article.publishedAt).toLocaleString()}>{formatTime(article.publishedAt)}</Text>
+                </View>
               </View>
             </View>
           </View>
@@ -107,9 +123,8 @@ export default function NewsCard({
           </Text>
           <View style={styles.horizontalFooter}>
             <View style={styles.metaRow}>
-              <Text style={styles.sourceText}>{article.source.name}</Text>
-              <View style={styles.metaDot} />
-              <Text style={styles.timeText}>{formatTime(article.publishedAt)}</Text>
+              <SourceBadge />
+              <Text style={styles.timeText} accessibilityLabel={new Date(article.publishedAt).toLocaleString()}>{formatTime(article.publishedAt)}</Text>
             </View>
             <View style={styles.actionRow}>
               <TouchableOpacity onPress={onBookmark} style={styles.actionButton}>
@@ -170,9 +185,8 @@ export default function NewsCard({
         </Text>
         <View style={styles.verticalFooter}>
           <View style={styles.verticalMeta}>
-            <Text style={styles.verticalSource}>{article.source.name}</Text>
-            <View style={styles.metaDot} />
-            <Text style={styles.verticalTime}>{formatTime(article.publishedAt)}</Text>
+            <SourceBadge />
+            <Text style={styles.verticalTime} accessibilityLabel={new Date(article.publishedAt).toLocaleString()}>{formatTime(article.publishedAt)}</Text>
           </View>
           <View style={styles.verticalStats}>
             <View style={styles.statItem}>
@@ -256,6 +270,31 @@ const styles = StyleSheet.create({
   sourceInfo: {
     flexDirection: 'row',
     alignItems: 'center',
+  },
+  sourceBadgeRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  sourceLogo: {
+    width: 16,
+    height: 16,
+    borderRadius: 3,
+    backgroundColor: '#F2F2F7',
+  },
+  sourceNameText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#8E8E93',
+  },
+  readTimeText: {
+    fontSize: 12,
+    color: '#8E8E93',
+  },
+  sourceTimeRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginLeft: 8,
   },
   sourceName: {
     color: '#FFFFFF',
