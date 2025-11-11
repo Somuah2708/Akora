@@ -1,9 +1,13 @@
-import React, { useMemo, useState } from 'react';
-import { View, Text, StyleSheet, SectionList, TextInput, TouchableOpacity } from 'react-native';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { View, Text, StyleSheet, SectionList, TextInput, TouchableOpacity, ScrollView } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { COUNTRY_OUTLETS } from '@/lib/constants/news-outlets';
 import { CountryOutlets, NewsOutlet } from '@/lib/types/outlets';
 import OutletCard from '@/components/news/OutletCard';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { ChevronDown, ChevronRight, Star, Plus } from 'lucide-react-native';
+import { useAuth } from '@/hooks/useAuth';
 
 function flagEmoji(cc: string): string {
   if (!cc || cc.length !== 2) return '🏳️';
@@ -13,29 +17,115 @@ function flagEmoji(cc: string): string {
 
 export default function NewsOutletsDirectory() {
   const router = useRouter();
+  const { user, profile } = useAuth();
   const [query, setQuery] = useState('');
+  const insets = useSafeAreaInsets();
+  const listRef = useRef<SectionList<NewsOutlet>>(null);
+
+  const [favorites, setFavorites] = useState<Set<string>>(new Set());
+  const [expanded, setExpanded] = useState<Record<string, boolean>>({});
+
+  useEffect(() => {
+    const loadFavorites = async () => {
+      try {
+        const raw = await AsyncStorage.getItem('favoriteCountries');
+        if (raw) {
+          const arr: string[] = JSON.parse(raw);
+          const favSet = new Set(arr);
+          setFavorites(favSet);
+          setExpanded((prev) => {
+            const next = { ...prev } as Record<string, boolean>;
+            arr.forEach((cc) => { next[cc] = true; });
+            return next;
+          });
+        }
+      } catch {}
+    };
+    loadFavorites();
+  }, []);
+
+  const saveFavorites = async (fav: Set<string>) => {
+    try {
+      await AsyncStorage.setItem('favoriteCountries', JSON.stringify(Array.from(fav)));
+    } catch {}
+  };
+
+  const toggleFavorite = (countryCode: string) => {
+    setFavorites((prev) => {
+      const next = new Set(prev);
+      if (next.has(countryCode)) next.delete(countryCode); else next.add(countryCode);
+      saveFavorites(next);
+      return next;
+    });
+  };
+
+  const toggleExpanded = (countryCode: string) => {
+    setExpanded((prev) => ({ ...prev, [countryCode]: !prev[countryCode] }));
+  };
 
   const sections = useMemo(() => {
     const q = query.trim().toLowerCase();
-    const mapped = COUNTRY_OUTLETS.map((c) => {
-      let data = c.outlets;
-      if (q) {
-        data = c.outlets.filter(o => o.name.toLowerCase().includes(q) || o.url.toLowerCase().includes(q));
-      }
-      return {
-        title: `${flagEmoji(c.countryCode)} ${c.countryName}`,
-        countryCode: c.countryCode,
-        data,
-      };
-    }).filter(s => s.data.length > 0);
+    const byCode: Record<string, CountryOutlets> = Object.fromEntries(
+      COUNTRY_OUTLETS.map((c) => [c.countryCode, c])
+    );
+    let base = COUNTRY_OUTLETS.map((c) => {
+      const filtered = q
+        ? c.outlets.filter(
+            (o) => o.name.toLowerCase().includes(q) || o.url.toLowerCase().includes(q)
+          )
+        : c.outlets;
+      return { countryCode: c.countryCode, countryName: c.countryName, outlets: filtered };
+    }).filter((c) => c.outlets.length > 0);
+
+    base.sort((a, b) => {
+      const af = favorites.has(a.countryCode) ? 0 : 1;
+      const bf = favorites.has(b.countryCode) ? 0 : 1;
+      if (af !== bf) return af - bf;
+      return a.countryName.localeCompare(b.countryName);
+    });
+
+    const effectiveExpanded: Record<string, boolean> = { ...expanded };
+    if (q) {
+      base.forEach((c) => { effectiveExpanded[c.countryCode] = true; });
+    }
+
+    const mapped = base.map((c) => ({
+      title: `${flagEmoji(c.countryCode)} ${c.countryName}`,
+      countryCode: c.countryCode,
+      data: effectiveExpanded[c.countryCode] ? c.outlets : [],
+      count: c.outlets.length,
+    }));
     return mapped;
-  }, [query]);
+  }, [query, favorites, expanded]);
+
+  const scrollToCountry = (cc: string) => {
+    const idx = sections.findIndex((s: any) => s.countryCode === cc);
+    if (idx >= 0 && listRef.current) {
+      setExpanded((prev) => ({ ...prev, [cc]: true }));
+      setTimeout(() => {
+        listRef.current?.scrollToLocation({ sectionIndex: idx, itemIndex: 0, animated: true, viewOffset: 8 });
+      }, 50);
+    }
+  };
 
   return (
     <View style={styles.container}>
-      <View style={styles.header}>
-        <Text style={styles.title}>News Outlets Directory</Text>
-        <Text style={styles.subtitle}>Tap a publisher to open their official site</Text>
+      <View style={[styles.header, { paddingTop: Math.max(insets.top + 8, 12) }]}> 
+        <View style={styles.headerRow}>
+          <View>
+            <Text style={styles.title}>News Outlets Directory</Text>
+            <Text style={styles.subtitle}>Tap a publisher to open their official site</Text>
+          </View>
+          {(profile?.is_admin || profile?.role === 'admin') && (
+            <TouchableOpacity
+              onPress={() => router.push('/news/admin')}
+              style={styles.addButton}
+              accessibilityLabel="Add news outlet"
+            >
+              <Plus size={22} color="#FFFFFF" />
+            </TouchableOpacity>
+          )}
+        </View>
         <TextInput
           value={query}
           onChangeText={setQuery}
@@ -44,16 +134,54 @@ export default function NewsOutletsDirectory() {
           style={styles.search}
           returnKeyType="search"
         />
+        {favorites.size > 0 && (
+          <View style={styles.favRow}>
+            <Text style={styles.favLabel}>Favorite countries</Text>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.favChips}>
+              {Array.from(favorites).map((cc) => {
+                const info = COUNTRY_OUTLETS.find((c) => c.countryCode === cc);
+                if (!info) return null;
+                return (
+                  <TouchableOpacity key={cc} style={styles.chip} onPress={() => scrollToCountry(cc)}>
+                    <Text style={styles.chipText}>{`${flagEmoji(cc)} ${info.countryName}`}</Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </ScrollView>
+          </View>
+        )}
       </View>
       <SectionList
-        sections={sections}
+        ref={listRef}
+        sections={sections as any}
         keyExtractor={(item: NewsOutlet) => item.id}
         renderItem={({ item }) => <OutletCard outlet={item} />}
-        renderSectionHeader={({ section }) => (
-          <Text style={styles.sectionHeader}>{section.title}</Text>
-        )}
+        renderSectionHeader={({ section }) => {
+          const isFav = favorites.has(section.countryCode as string);
+          const isOpen = (expanded as any)[section.countryCode];
+          return (
+            <View>
+              <TouchableOpacity
+                accessibilityRole="button"
+                onPress={() => toggleExpanded(section.countryCode as string)}
+                style={styles.sectionHeaderRow}
+              >
+                {isOpen ? <ChevronDown size={18} color="#1C1C1E" /> : <ChevronRight size={18} color="#1C1C1E" />}
+                <Text style={styles.sectionHeader}>{section.title}</Text>
+                <Text style={styles.sectionCount}>({section.count})</Text>
+                <TouchableOpacity
+                  onPress={(e) => { e.stopPropagation?.(); toggleFavorite(section.countryCode as string); }}
+                  style={styles.favButton}
+                  accessibilityLabel={isFav ? 'Unfavorite country' : 'Favorite country'}
+                >
+                  <Star size={18} color={isFav ? '#FFD700' : '#C7C7CC'} fill={isFav ? '#FFD700' : 'transparent'} />
+                </TouchableOpacity>
+              </TouchableOpacity>
+            </View>
+          );
+        }}
         contentContainerStyle={styles.listContent}
-        stickySectionHeadersEnabled
+        stickySectionHeadersEnabled={false}
       />
     </View>
   );
@@ -69,6 +197,12 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingBottom: 8,
     backgroundColor: '#F8F9FB',
+  },
+  headerRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 8,
   },
   title: {
     fontSize: 22,
@@ -89,15 +223,58 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: '#E5E5EA',
   },
+  addButton: {
+    backgroundColor: '#007AFF',
+    borderRadius: 20,
+    padding: 8,
+  },
   listContent: {
     paddingHorizontal: 16,
     paddingTop: 10,
     paddingBottom: 24,
   },
+  sectionHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    paddingVertical: 6,
+  },
   sectionHeader: {
     fontSize: 16,
     fontWeight: '700',
     color: '#1C1C1E',
-    paddingVertical: 8,
+  },
+  sectionCount: {
+    marginLeft: 6,
+    color: '#8E8E93',
+    fontWeight: '600',
+  },
+  favButton: {
+    marginLeft: 'auto',
+    padding: 6,
+  },
+  favRow: {
+    marginTop: 10,
+  },
+  favLabel: {
+    color: '#636366',
+    fontSize: 12,
+    marginBottom: 6,
+  },
+  favChips: {
+    gap: 8,
+    paddingRight: 6,
+  },
+  chip: {
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1,
+    borderColor: '#E5E5EA',
+    borderRadius: 16,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+  },
+  chipText: {
+    color: '#1C1C1E',
+    fontWeight: '600',
   },
 });
