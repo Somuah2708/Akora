@@ -12,6 +12,7 @@ import {
   DEFAULT_NEWS_IMAGE,
   NEWS_SOURCES,
 } from '../constants/news';
+import { localNewsService } from './local-news-service';
 import { regionService } from './region-service';
 import { preferencesService } from './preferences-service';
 
@@ -174,12 +175,15 @@ class NewsService {
   private async fetchHybridFeed(): Promise<NewsArticle[]> {
     try {
       const primaryCountry = await this.getPrimaryCountry();
-      const [primary, secondaryBatches] = await Promise.all([
+      const [primary, secondaryBatches, localGhana] = await Promise.all([
         this.fetchTopHeadlinesByCountry(primaryCountry),
         Promise.all(this.SECONDARY_COUNTRIES.map((c) => this.fetchTopHeadlinesByCountry(c).catch(() => []))),
+        localNewsService.fetchGhanaLocalNews(Math.ceil(NEWS_PAGE_SIZE * 0.4)).catch(() => []),
       ]);
 
       const secondary = ([] as NewsArticle[]).concat(...secondaryBatches);
+      // Merge local Ghana articles (flagged isLocal) giving them priority within Ghana portion
+      const combinedPrimary = [...localGhana, ...primary];
       // De-duplicate by id/url
       const seen = new Set<string>();
       const uniq = (list: NewsArticle[]) => list.filter((a) => {
@@ -189,10 +193,10 @@ class NewsService {
         return true;
       });
 
-      const pri = uniq(primary);
+  const pri = uniq(combinedPrimary);
       const sec = uniq(secondary);
 
-      // Weight: 60% primary, 40% global
+  // Weight: 60% primary (including local), 40% global
       const target = NEWS_PAGE_SIZE;
       const priCount = Math.min(pri.length, Math.ceil(target * 0.6));
       const secCount = Math.min(sec.length, target - priCount);
@@ -204,8 +208,14 @@ class NewsService {
         blended = blended.filter(a => !mutedSources.includes(a.source.id));
       }
 
-      // Sort by recency first
+      // Sort by recency first, with slight boost for local articles
       blended.sort((a, b) => Date.parse(b.publishedAt) - Date.parse(a.publishedAt));
+      blended.sort((a, b) => {
+        const la = a.isLocal ? 1 : 0;
+        const lb = b.isLocal ? 1 : 0;
+        if (la === lb) return 0;
+        return lb - la; // local first while preserving overall recency ordering stability
+      });
 
       // Personalization: boost favorite categories (stable re-rank)
       const favorites = await preferencesService.getFavoriteCategories();
@@ -272,10 +282,8 @@ class NewsService {
         isBreaking,
         isTrending: !isBreaking && index < 5,
         readTime: this.calculateReadTime(article.content || article.description || ''),
-        viewCount: Math.floor(Math.random() * 10000) + 1000,
-        likeCount: Math.floor(Math.random() * 1000) + 50,
-        commentCount: Math.floor(Math.random() * 100) + 5,
-        shareCount: Math.floor(Math.random() * 500) + 10,
+        // Engagement counters intentionally omitted unless provided by backend
+        sourceType: 'newsapi',
       };
     });
   }
@@ -370,9 +378,9 @@ class NewsService {
   async clearCache(): Promise<void> {
     try {
       this.cache.clear();
-      const keys = await AsyncStorage.getAllKeys();
-      const cacheKeys = keys.filter(key => key.startsWith(this.CACHE_KEY_PREFIX));
-      await AsyncStorage.multiRemove(cacheKeys);
+      const keys: string[] = await (AsyncStorage as any).getAllKeys();
+      const cacheKeys = keys.filter((key: string) => key.startsWith(this.CACHE_KEY_PREFIX));
+      await (AsyncStorage as any).multiRemove(cacheKeys);
     } catch (error) {
       console.error('Error clearing cache:', error);
     }

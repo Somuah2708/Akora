@@ -1,5 +1,6 @@
 import { XMLParser } from 'fast-xml-parser';
 import { GHANA_LOCAL_SOURCES, DEFAULT_NEWS_IMAGE, NEWS_PAGE_SIZE } from '../constants/news';
+import { decode } from 'html-entities';
 import { NewsArticle } from '../types/news';
 
 type RssItem = {
@@ -26,13 +27,13 @@ function first<T>(arr: T | T[] | undefined): T | undefined {
 
 function stripHtml(html?: string): string {
   if (!html) return '';
-  return html
+  const text = html
     .replace(/<script[\s\S]*?>[\s\S]*?<\/script>/gi, '')
     .replace(/<style[\s\S]*?>[\s\S]*?<\/style>/gi, '')
     .replace(/<[^>]+>/g, '')
-    .replace(/&nbsp;/g, ' ')
-    .replace(/&amp;/g, '&')
+    .replace(/\s+/g, ' ')
     .trim();
+  return decode(text);
 }
 
 function extractImage(item: RssItem, content?: string): string {
@@ -86,13 +87,14 @@ class LocalNewsService {
       const items: RssItem[] = channel?.item || channel?.entry || [];
 
       for (const item of items) {
-        const title = (item as any).title?.['#text'] || (item as any).title || '';
+  const rawTitle = (item as any).title?.['#text'] || (item as any).title || '';
+  const title = decode(String(rawTitle)).trim();
         const link = (item as any).link?.href || (item as any).link || item.link || '';
         const guid = (typeof item.guid === 'string') ? item.guid : item.guid?.['#text'];
         const descHtml = (item as any)['content:encoded'] || item.description || '';
         const summary = stripHtml(descHtml).slice(0, 320);
         const img = extractImage(item, descHtml);
-        const published = item.pubDate || new Date().toISOString();
+  const published = item.pubDate || new Date().toISOString();
 
         const article: NewsArticle = {
           id: `${source.id}_${guid || link}`,
@@ -114,10 +116,6 @@ class LocalNewsService {
           isBreaking: false,
           isTrending: false,
           readTime: Math.max(1, Math.ceil(summary.split(/\s+/).length / 200)),
-          viewCount: Math.floor(Math.random() * 8000) + 500,
-          likeCount: Math.floor(Math.random() * 300) + 20,
-          commentCount: Math.floor(Math.random() * 50) + 3,
-          shareCount: Math.floor(Math.random() * 120) + 5,
           isLocal: true,
           sourceType: 'rss',
           summary,

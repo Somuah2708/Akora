@@ -128,9 +128,11 @@ export default function NewsCard({
           <Text style={styles.horizontalTitle} numberOfLines={3}>
             {article.title}
           </Text>
-          <Text style={styles.horizontalDescription} numberOfLines={2}>
-            {article.description}
-          </Text>
+          {Boolean(article.description) && (
+            <Text style={styles.horizontalDescription} numberOfLines={2}>
+              {article.description}
+            </Text>
+          )}
           <View style={styles.horizontalFooter}>
             <View style={styles.metaRow}>
               <SourceBadge />
@@ -196,24 +198,32 @@ export default function NewsCard({
         <Text style={styles.verticalTitle} numberOfLines={2}>
           {article.title}
         </Text>
-        <Text style={styles.verticalDescription} numberOfLines={2}>
-          {article.description}
-        </Text>
+        {Boolean(article.description) && (
+          <Text style={styles.verticalDescription} numberOfLines={2}>
+            {article.description}
+          </Text>
+        )}
         <View style={styles.verticalFooter}>
           <View style={styles.verticalMeta}>
             <SourceBadge />
             <Text style={styles.verticalTime} accessibilityLabel={new Date(article.publishedAt).toLocaleString()}>{formatTime(article.publishedAt)}</Text>
           </View>
-          <View style={styles.verticalStats}>
-            <View style={styles.statItem}>
-              <ThumbsUp size={12} color="#8E8E93" />
-              <Text style={styles.statText}>{formatNumber(article.likeCount || 0)}</Text>
+          {(typeof article.likeCount === 'number' || typeof article.commentCount === 'number') && (
+            <View style={styles.verticalStats}>
+              {typeof article.likeCount === 'number' && (
+                <View style={styles.statItem}>
+                  <ThumbsUp size={12} color="#8E8E93" />
+                  <Text style={styles.statText}>{formatNumber(article.likeCount)}</Text>
+                </View>
+              )}
+              {typeof article.commentCount === 'number' && (
+                <View style={styles.statItem}>
+                  <MessageCircle size={12} color="#8E8E93" />
+                  <Text style={styles.statText}>{formatNumber(article.commentCount)}</Text>
+                </View>
+              )}
             </View>
-            <View style={styles.statItem}>
-              <MessageCircle size={12} color="#8E8E93" />
-              <Text style={styles.statText}>{formatNumber(article.commentCount || 0)}</Text>
-            </View>
-          </View>
+          )}
         </View>
       </View>
     </TouchableOpacity>

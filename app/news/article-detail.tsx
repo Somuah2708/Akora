@@ -385,28 +385,12 @@ export default function ArticleDetailScreen() {
             <Text style={styles.originalButtonText}>Read Full Article on {article.source.name}</Text>
           </TouchableOpacity>
 
-          {/* Engagement Actions */}
+          {/* Actions (no synthetic counters) */}
           <View style={styles.engagementContainer}>
-            <TouchableOpacity style={styles.engagementButton} onPress={handleLike}>
-              <ThumbsUp
-                size={24}
-                color={isLiked ? '#FF3B30' : '#8E8E93'}
-                fill={isLiked ? '#FF3B30' : 'transparent'}
-              />
-              <Text style={styles.engagementText}>{article.likeCount || 0}</Text>
-            </TouchableOpacity>
-            
-            <TouchableOpacity style={styles.engagementButton}>
-              <MessageCircle size={24} color="#8E8E93" />
-              <Text style={styles.engagementText}>{article.commentCount || 0}</Text>
-            </TouchableOpacity>
-            
             <TouchableOpacity style={styles.engagementButton} onPress={handleShare}>
               <Share2 size={24} color="#8E8E93" />
-              <Text style={styles.engagementText}>{article.shareCount || 0}</Text>
+              <Text style={styles.engagementText}>Share</Text>
             </TouchableOpacity>
-            
-            {/* Mute source & Favorite category quick actions */}
             <TouchableOpacity
               style={styles.engagementButton}
               onPress={async () => {
@@ -414,9 +398,9 @@ export default function ArticleDetailScreen() {
                   const current = await preferencesService.getMutedSources();
                   if (!current.includes(article.source.id)) {
                     await preferencesService.setMutedSources([...current, article.source.id]);
-                    Alert.alert('Muted', `${article.source.name} muted. You will see fewer stories from this source.`);
+                    Alert.alert('Muted', `${article.source.name} muted.`);
                   } else {
-                    Alert.alert('Already muted', `${article.source.name} is already muted.`);
+                    Alert.alert('Already muted', `${article.source.name} already muted.`);
                   }
                 } catch {}
               }}
@@ -430,9 +414,9 @@ export default function ArticleDetailScreen() {
                   const favs = await preferencesService.getFavoriteCategories();
                   if (!favs.includes(article.category)) {
                     await preferencesService.setFavoriteCategories([...favs, article.category]);
-                    Alert.alert('Added to Favorites', `${article.category} boosted in your feed.`);
+                    Alert.alert('Favorited', `${article.category} will rank higher.`);
                   } else {
-                    Alert.alert('Already a Favorite', `${article.category} is already in your favorites.`);
+                    Alert.alert('Already favorite', `${article.category} already favored.`);
                   }
                 } catch {}
               }}
