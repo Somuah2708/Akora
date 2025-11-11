@@ -2,12 +2,14 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { View, Text, StyleSheet, SectionList, TextInput, TouchableOpacity, ScrollView } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
+import { useFocusEffect } from '@react-navigation/native';
 import { COUNTRY_OUTLETS } from '@/lib/constants/news-outlets';
 import { CountryOutlets, NewsOutlet } from '@/lib/types/outlets';
 import OutletCard from '@/components/news/OutletCard';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { ChevronDown, ChevronRight, Star, Plus } from 'lucide-react-native';
 import { useAuth } from '@/hooks/useAuth';
+import { supabase } from '@/lib/supabase';
 
 function flagEmoji(cc: string): string {
   if (!cc || cc.length !== 2) return '🏳️';
@@ -24,6 +26,7 @@ export default function NewsOutletsDirectory() {
 
   const [favorites, setFavorites] = useState<Set<string>>(new Set());
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
+  const [dbOutlets, setDbOutlets] = useState<Array<{ country_code: string; outlet: NewsOutlet }>>([]);
 
   useEffect(() => {
     const loadFavorites = async () => {
@@ -43,6 +46,37 @@ export default function NewsOutletsDirectory() {
     };
     loadFavorites();
   }, []);
+
+  // Refresh database outlets whenever screen comes into focus
+  useFocusEffect(
+    React.useCallback(() => {
+      fetchDbOutlets();
+    }, [])
+  );
+
+  const fetchDbOutlets = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('news_outlets')
+        .select('id, country_code, name, url, logo')
+        .order('country_code');
+      if (error) throw error;
+      if (data && data.length > 0) {
+        const mapped = data.map((d: any) => ({
+          country_code: d.country_code,
+          outlet: {
+            id: d.id,
+            name: d.name,
+            url: d.url,
+            logo: d.logo || undefined,
+          } as NewsOutlet,
+        }));
+        setDbOutlets(mapped);
+      }
+    } catch (e) {
+      console.log('fetchDbOutlets error', e);
+    }
+  };
 
   const saveFavorites = async (fav: Set<string>) => {
     try {
@@ -65,16 +99,42 @@ export default function NewsOutletsDirectory() {
 
   const sections = useMemo(() => {
     const q = query.trim().toLowerCase();
-    const byCode: Record<string, CountryOutlets> = Object.fromEntries(
-      COUNTRY_OUTLETS.map((c) => [c.countryCode, c])
-    );
-    let base = COUNTRY_OUTLETS.map((c) => {
+    
+    // Build a merged map of countries with outlets from both curated constants and database
+    const countryMap: Record<string, { countryName: string; outlets: NewsOutlet[] }> = {};
+    
+    // Add curated outlets
+    COUNTRY_OUTLETS.forEach((c) => {
+      if (!countryMap[c.countryCode]) {
+        countryMap[c.countryCode] = { countryName: c.countryName, outlets: [] };
+      }
+      countryMap[c.countryCode].outlets.push(...c.outlets);
+    });
+    
+    // Add database outlets
+    dbOutlets.forEach((item) => {
+      const cc = item.country_code.toLowerCase();
+      if (!countryMap[cc]) {
+        // Country not in curated list; create entry with country code as name
+        countryMap[cc] = { countryName: cc.toUpperCase(), outlets: [] };
+      }
+      // Check for duplicates by name and URL to avoid showing the same outlet twice
+      const exists = countryMap[cc].outlets.some(
+        (existing) => existing.name === item.outlet.name && existing.url === item.outlet.url
+      );
+      if (!exists) {
+        countryMap[cc].outlets.push(item.outlet);
+      }
+    });
+    
+    // Convert map to array and filter by search query
+    let base = Object.entries(countryMap).map(([code, info]) => {
       const filtered = q
-        ? c.outlets.filter(
+        ? info.outlets.filter(
             (o) => o.name.toLowerCase().includes(q) || o.url.toLowerCase().includes(q)
           )
-        : c.outlets;
-      return { countryCode: c.countryCode, countryName: c.countryName, outlets: filtered };
+        : info.outlets;
+      return { countryCode: code, countryName: info.countryName, outlets: filtered };
     }).filter((c) => c.outlets.length > 0);
 
     base.sort((a, b) => {
@@ -96,7 +156,7 @@ export default function NewsOutletsDirectory() {
       count: c.outlets.length,
     }));
     return mapped;
-  }, [query, favorites, expanded]);
+  }, [query, favorites, expanded, dbOutlets]);
 
   const scrollToCountry = (cc: string) => {
     const idx = sections.findIndex((s: any) => s.countryCode === cc);
