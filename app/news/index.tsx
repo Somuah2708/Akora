@@ -206,6 +206,9 @@ export default function NewsHomeScreen() {
 			<View style={styles.header}>
 				<Text style={styles.title}>News</Text>
 				<View style={styles.headerActions}>
+					<TouchableOpacity onPress={() => router.push('/news/outlets')} style={styles.iconButton}>
+						<Text style={{ fontWeight: '700', color: '#007AFF' }}>Outlets</Text>
+					</TouchableOpacity>
 					<TouchableOpacity onPress={() => router.push('/news/bookmarks')} style={styles.iconButton}>
 						<Bookmark size={22} color="#000" />
 					</TouchableOpacity>
