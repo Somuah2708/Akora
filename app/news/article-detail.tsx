@@ -10,6 +10,7 @@ import {
   Share as RNShare,
   Linking,
   Animated,
+  Alert,
 } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import {
@@ -21,7 +22,6 @@ import {
   Clock,
   ExternalLink,
 } from 'lucide-react-native';
-import { Image, Alert } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { supabase } from '@/lib/supabase';
 import { preferencesService } from '@/lib/services/preferences-service';
