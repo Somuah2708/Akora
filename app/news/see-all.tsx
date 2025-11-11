@@ -10,6 +10,19 @@ export default function SeeAllNewsScreen() {
   const [newsItems, setNewsItems] = useState<Array<{ id: string; title: string; category_name: string; image_url: string; description: string; link?: string }>>([]);
   const [loading, setLoading] = useState(true);
 
+  // Validate image URI
+  const getValidImageUri = (uri: string | undefined | null): string => {
+    if (!uri || uri.trim() === '') {
+      return 'https://images.unsplash.com/photo-1504711434969-e33886168f5c?w=800&auto=format&fit=crop&q=60';
+    }
+    try {
+      new URL(uri);
+      return uri;
+    } catch {
+      return 'https://images.unsplash.com/photo-1504711434969-e33886168f5c?w=800&auto=format&fit=crop&q=60';
+    }
+  };
+
   const styles = StyleSheet.create({
     container: { flex: 1, backgroundColor: '#fff' },
     header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', padding: 24 },
@@ -115,7 +128,7 @@ export default function SeeAllNewsScreen() {
         ) : (
           newsItems.map(item => (
             <View key={item.id} style={styles.card}>
-              <Image source={{ uri: item.image_url }} style={styles.image} />
+              <Image source={{ uri: getValidImageUri(item.image_url) }} style={styles.image} />
               <View style={styles.content}>
                 <Text style={styles.category}>{
                   item.category_name.replace('News - ', '').replace(/Alumni Events/i, 'Akora Events')

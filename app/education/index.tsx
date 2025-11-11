@@ -46,6 +46,10 @@ export default function EducationScreen() {
         .order('created_at', { ascending: false });
 
       if (error) throw error;
+      console.log('🎓 Fetched universities:', data?.length, 'items');
+      if (data && data.length > 0) {
+        console.log('🖼️ First university image_url:', data[0].image_url);
+      }
       setUniversities(data || []);
     } catch (error) {
       console.error('Error fetching universities:', error);
@@ -513,50 +517,63 @@ export default function EducationScreen() {
           {loading ? (
             <Text style={styles.loadingText}>Loading universities...</Text>
           ) : filteredUniversities.length > 0 ? (
-            filteredUniversities.map((university) => (
-              <TouchableOpacity 
-                key={university.id} 
-                style={styles.universityCard}
-                onPress={() => router.push(`/education/detail/${university.id}` as any)}
-              >
-                <Image 
-                  source={{ uri: university.image_url || 'https://images.unsplash.com/photo-1541339907198-e08756dedf3f?w=800' }} 
-                  style={styles.cardImage} 
-                />
+            filteredUniversities.map((university) => {
+              // Parse image_url if it's a JSON array
+              let imageUri = university.image_url || 'https://images.unsplash.com/photo-1541339907198-e08756dedf3f?w=800';
+              if (imageUri && imageUri.startsWith('[')) {
+                try {
+                  const parsed = JSON.parse(imageUri);
+                  imageUri = Array.isArray(parsed) && parsed.length > 0 ? parsed[0] : imageUri;
+                } catch (e) {
+                  // Keep original if parsing fails
+                }
+              }
+              
+              return (
                 <TouchableOpacity 
-                  style={styles.bookmarkIcon}
-                  onPress={(e) => {
-                    e?.preventDefault?.();
-                    e?.stopPropagation?.();
-                    toggleBookmark(university.id, e);
-                  }}
-                  activeOpacity={0.7}
-                  hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                  key={university.id} 
+                  style={styles.universityCard}
+                  onPress={() => router.push(`/education/detail/${university.id}` as any)}
                 >
-                  <Bookmark 
-                    size={20} 
-                    color={bookmarkedIds.includes(university.id) ? "#4169E1" : "#666666"} 
-                    fill={bookmarkedIds.includes(university.id) ? "#4169E1" : "none"}
+                  <Image 
+                    source={{ uri: imageUri }} 
+                    style={styles.cardImage} 
                   />
-                </TouchableOpacity>
-                <View style={styles.cardInfo}>
-                  <Text style={styles.cardTitle}>{university.title}</Text>
-                  <View style={styles.locationRow}>
-                    <MapPin size={14} color="#666666" />
-                    <Text style={styles.locationText}>{university.location || 'Ghana'}</Text>
-                  </View>
-                  <Text style={styles.cardDescription} numberOfLines={3}>
-                    {university.description}
-                  </Text>
-                  {university.application_url && (
-                    <View style={styles.linkRow}>
-                      <Globe size={14} color="#4169E1" />
-                      <Text style={styles.linkText}>Application Available</Text>
+                  <TouchableOpacity 
+                    style={styles.bookmarkIcon}
+                    onPress={(e) => {
+                      e?.preventDefault?.();
+                      e?.stopPropagation?.();
+                      toggleBookmark(university.id, e);
+                    }}
+                    activeOpacity={0.7}
+                    hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                  >
+                    <Bookmark 
+                      size={20} 
+                      color={bookmarkedIds.includes(university.id) ? "#4169E1" : "#666666"} 
+                      fill={bookmarkedIds.includes(university.id) ? "#4169E1" : "none"}
+                    />
+                  </TouchableOpacity>
+                  <View style={styles.cardInfo}>
+                    <Text style={styles.cardTitle}>{university.title}</Text>
+                    <View style={styles.locationRow}>
+                      <MapPin size={14} color="#666666" />
+                      <Text style={styles.locationText}>{university.location || 'Ghana'}</Text>
                     </View>
-                  )}
-                </View>
-              </TouchableOpacity>
-            ))
+                    <Text style={styles.cardDescription} numberOfLines={3}>
+                      {university.description}
+                    </Text>
+                    {university.application_url && (
+                      <View style={styles.linkRow}>
+                        <Globe size={14} color="#4169E1" />
+                        <Text style={styles.linkText}>Application Available</Text>
+                      </View>
+                    )}
+                  </View>
+                </TouchableOpacity>
+              );
+            })
           ) : (
             <View style={styles.emptyContainer}>
               <Building2 size={64} color="#CCCCCC" />

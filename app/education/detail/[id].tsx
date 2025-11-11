@@ -148,6 +148,17 @@ export default function EducationDetailScreen() {
   const isScholarship = opportunity.category_name === 'Scholarships';
   const daysLeft = opportunity.deadline_date ? calculateDaysLeft(opportunity.deadline_date) : null;
 
+  // Parse image_url if it's a JSON array
+  let imageUri = opportunity.image_url || 'https://images.unsplash.com/photo-1541339907198-e08756dedf3f?w=800';
+  if (imageUri && imageUri.startsWith('[')) {
+    try {
+      const parsed = JSON.parse(imageUri);
+      imageUri = Array.isArray(parsed) && parsed.length > 0 ? parsed[0] : imageUri;
+    } catch (e) {
+      // Keep original if parsing fails
+    }
+  }
+
   return (
     <View style={styles.container}>
       {/* Header */}
@@ -168,7 +179,7 @@ export default function EducationDetailScreen() {
       <ScrollView style={styles.scrollView} showsVerticalScrollIndicator={false}>
         {/* Main Image */}
         <Image 
-          source={{ uri: opportunity.image_url || 'https://images.unsplash.com/photo-1541339907198-e08756dedf3f?w=800' }} 
+          source={{ uri: imageUri }} 
           style={styles.mainImage} 
         />
 
