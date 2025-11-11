@@ -36,3 +36,63 @@ export const NEWS_SOURCES = [
   { id: 'the-guardian', name: 'The Guardian', logo: 'https://upload.wikimedia.org/wikipedia/commons/thumb/0/0e/The_Guardian.svg/1200px-The_Guardian.svg.png' },
   { id: 'associated-press', name: 'Associated Press', logo: 'https://upload.wikimedia.org/wikipedia/commons/thumb/0/0c/Associated_Press_logo_2012.svg/1200px-Associated_Press_logo_2012.svg.png' },
 ];
+
+// Curated Ghana local sources with likely RSS endpoints. These may vary; the app will try multiple per source.
+export const GHANA_LOCAL_SOURCES: Array<{
+  id: string;
+  name: string;
+  siteUrl: string;
+  logo?: string;
+  rss: string[];
+}> = [
+  {
+    id: 'ghanaweb',
+    name: 'GhanaWeb',
+    siteUrl: 'https://www.ghanaweb.com',
+    logo: 'https://www.ghanaweb.com/favicon-32x32.png',
+    rss: [
+      'https://www.ghanaweb.com/rss/',
+      'https://www.ghanaweb.com/GhanaHomePage/NewsArchive/rss',
+    ],
+  },
+  {
+    id: 'myjoyonline',
+    name: 'MyJoyOnline',
+    siteUrl: 'https://www.myjoyonline.com',
+    logo: 'https://www.myjoyonline.com/wp-content/uploads/fbrfg/favicon-32x32.png',
+    rss: [
+      'https://www.myjoyonline.com/feed/',
+      'https://www.myjoyonline.com/category/news/feed/',
+    ],
+  },
+  {
+    id: 'modernghana',
+    name: 'ModernGhana',
+    siteUrl: 'https://www.modernghana.com',
+    logo: 'https://www.modernghana.com/favicon.ico',
+    rss: [
+      'https://www.modernghana.com/rss/news.xml',
+      'https://www.modernghana.com/rss/ghana-news.xml',
+    ],
+  },
+  {
+    id: 'yen',
+    name: 'YEN.com.gh',
+    siteUrl: 'https://yen.com.gh',
+    logo: 'https://yen.com.gh/favicon-32x32.png',
+    rss: [
+      'https://yen.com.gh/rss',
+      'https://yen.com.gh/ghana-news/feed/',
+    ],
+  },
+  {
+    id: 'ghanaian-times',
+    name: 'Ghanaian Times',
+    siteUrl: 'https://ghanaiantimes.com.gh',
+    logo: 'https://ghanaiantimes.com.gh/wp-content/uploads/2022/06/cropped-cropped-GT-Icon-32x32.png',
+    rss: [
+      'https://ghanaiantimes.com.gh/feed/',
+      'https://ghanaiantimes.com.gh/category/general/feed/',
+    ],
+  },
+];

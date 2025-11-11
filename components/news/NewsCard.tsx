@@ -86,8 +86,15 @@ export default function NewsCard({
             </View>
           )}
           <View style={styles.featuredContent}>
-            <View style={styles.categoryBadge}>
-              <Text style={styles.categoryText}>{article.category.toUpperCase()}</Text>
+            <View style={styles.categoryRow}>
+              <View style={styles.categoryBadge}>
+                <Text style={styles.categoryText}>{article.category.toUpperCase()}</Text>
+              </View>
+              {article.isLocal && (
+                <View style={styles.localBadge}>
+                  <Text style={styles.localBadgeText}>LOCAL</Text>
+                </View>
+              )}
             </View>
             <Text style={styles.featuredTitle} numberOfLines={3}>
               {article.title}
@@ -113,6 +120,9 @@ export default function NewsCard({
         <View style={styles.horizontalContent}>
           <View style={styles.horizontalHeader}>
             <Text style={styles.categoryLabel}>{article.category.toUpperCase()}</Text>
+            {article.isLocal && (
+              <View style={styles.localPill}><Text style={styles.localPillText}>LOCAL</Text></View>
+            )}
             {article.isBreaking && <Text style={styles.breakingLabel}>🔴 LIVE</Text>}
           </View>
           <Text style={styles.horizontalTitle} numberOfLines={3}>
@@ -150,6 +160,7 @@ export default function NewsCard({
         <View style={styles.compactContent}>
           <View style={styles.compactHeader}>
             <Text style={styles.compactCategory}>{article.category.toUpperCase()}</Text>
+            {article.isLocal && <View style={styles.localDot} />}
             {article.isBreaking && <View style={styles.liveDot} />}
           </View>
           <Text style={styles.compactTitle} numberOfLines={2}>
@@ -176,7 +187,12 @@ export default function NewsCard({
         </View>
       )}
       <View style={styles.verticalContent}>
-        <Text style={styles.verticalCategory}>{article.category.toUpperCase()}</Text>
+        <View style={styles.verticalHeaderRow}>
+          <Text style={styles.verticalCategory}>{article.category.toUpperCase()}</Text>
+          {article.isLocal && (
+            <View style={styles.localPill}><Text style={styles.localPillText}>LOCAL</Text></View>
+          )}
+        </View>
         <Text style={styles.verticalTitle} numberOfLines={2}>
           {article.title}
         </Text>
@@ -230,6 +246,11 @@ const styles = StyleSheet.create({
   featuredContent: {
     gap: 8,
   },
+  categoryRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
   breakingBadge: {
     position: 'absolute',
     top: 16,
@@ -256,6 +277,18 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     fontSize: 11,
     fontWeight: '600',
+    letterSpacing: 0.5,
+  },
+  localBadge: {
+    backgroundColor: 'rgba(255,255,255,0.2)',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 6,
+  },
+  localBadgeText: {
+    color: '#FFFFFF',
+    fontSize: 10,
+    fontWeight: '700',
     letterSpacing: 0.5,
   },
   featuredTitle: {
@@ -342,6 +375,17 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 8,
   },
+  localPill: {
+    backgroundColor: '#E6F7EE',
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 6,
+  },
+  localPillText: {
+    color: '#1D9A6C',
+    fontSize: 10,
+    fontWeight: '700',
+  },
   categoryLabel: {
     fontSize: 10,
     fontWeight: '600',
@@ -409,6 +453,12 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
+  },
+  localDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: '#1D9A6C',
   },
   compactCategory: {
     fontSize: 10,
@@ -481,6 +531,12 @@ const styles = StyleSheet.create({
   },
   verticalContent: {
     padding: 16,
+  },
+  verticalHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginBottom: 6,
   },
   verticalCategory: {
     fontSize: 11,

@@ -18,6 +18,14 @@ export interface NewsArticle {
   likeCount?: number;
   commentCount?: number;
   shareCount?: number;
+  /** If article originated from a local RSS source */
+  isLocal?: boolean;
+  /** Distinguish source type for downstream analytics */
+  sourceType?: 'newsapi' | 'rss' | 'custom';
+  /** Preserve original URL if different from canonical url property */
+  originalUrl?: string;
+  /** Short cleaned summary extracted from RSS description */
+  summary?: string;
 }
 
 export interface NewsSource {
