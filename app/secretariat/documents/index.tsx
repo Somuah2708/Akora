@@ -68,6 +68,30 @@ const DOCUMENT_TYPES = [
   { label: 'Other', value: 'other' },
 ];
 
+const SORT_OPTIONS = [
+  { label: 'Newest First', value: 'newest' },
+  { label: 'Oldest First', value: 'oldest' },
+  { label: 'Most Viewed', value: 'views' },
+  { label: 'Most Downloaded', value: 'downloads' },
+  { label: 'A-Z', value: 'title_asc' },
+  { label: 'Z-A', value: 'title_desc' },
+];
+
+const DATE_RANGES = [
+  { label: 'All Time', value: 'all' },
+  { label: 'Last 7 Days', value: '7days' },
+  { label: 'Last 30 Days', value: '30days' },
+  { label: 'Last 3 Months', value: '3months' },
+  { label: 'Last Year', value: '1year' },
+];
+
+const FILE_SIZES = [
+  { label: 'All Sizes', value: 'all' },
+  { label: 'Small (<1MB)', value: 'small' },
+  { label: 'Medium (1-10MB)', value: 'medium' },
+  { label: 'Large (>10MB)', value: 'large' },
+];
+
 export default function DocumentCenterScreen() {
   const router = useRouter();
   const { user } = useAuth();
@@ -78,6 +102,9 @@ export default function DocumentCenterScreen() {
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('All');
   const [selectedType, setSelectedType] = useState('all');
+  const [selectedSort, setSelectedSort] = useState('newest');
+  const [selectedDateRange, setSelectedDateRange] = useState('all');
+  const [selectedFileSize, setSelectedFileSize] = useState('all');
   const [showFilters, setShowFilters] = useState(false);
 
   useEffect(() => {
@@ -86,7 +113,7 @@ export default function DocumentCenterScreen() {
 
   useEffect(() => {
     filterDocuments();
-  }, [searchQuery, selectedCategory, selectedType, documents]);
+  }, [searchQuery, selectedCategory, selectedType, selectedSort, selectedDateRange, selectedFileSize, documents]);
 
   const loadDocuments = async () => {
     try {
@@ -113,7 +140,7 @@ export default function DocumentCenterScreen() {
   };
 
   const filterDocuments = () => {
-    let filtered = documents;
+    let filtered = [...documents];
 
     // Filter by category
     if (selectedCategory !== 'All') {
@@ -133,6 +160,40 @@ export default function DocumentCenterScreen() {
       });
     }
 
+    // Filter by date range
+    if (selectedDateRange !== 'all') {
+      const now = new Date();
+      const cutoffDate = new Date();
+      
+      switch (selectedDateRange) {
+        case '7days':
+          cutoffDate.setDate(now.getDate() - 7);
+          break;
+        case '30days':
+          cutoffDate.setDate(now.getDate() - 30);
+          break;
+        case '3months':
+          cutoffDate.setMonth(now.getMonth() - 3);
+          break;
+        case '1year':
+          cutoffDate.setFullYear(now.getFullYear() - 1);
+          break;
+      }
+      
+      filtered = filtered.filter((doc) => new Date(doc.upload_date) >= cutoffDate);
+    }
+
+    // Filter by file size
+    if (selectedFileSize !== 'all') {
+      filtered = filtered.filter((doc) => {
+        const sizeInMB = doc.file_size / (1024 * 1024);
+        if (selectedFileSize === 'small') return sizeInMB < 1;
+        if (selectedFileSize === 'medium') return sizeInMB >= 1 && sizeInMB <= 10;
+        if (selectedFileSize === 'large') return sizeInMB > 10;
+        return true;
+      });
+    }
+
     // Filter by search query
     if (searchQuery.trim()) {
       const query = searchQuery.toLowerCase();
@@ -145,7 +206,46 @@ export default function DocumentCenterScreen() {
       );
     }
 
+    // Sort documents
+    filtered.sort((a, b) => {
+      switch (selectedSort) {
+        case 'newest':
+          return new Date(b.upload_date).getTime() - new Date(a.upload_date).getTime();
+        case 'oldest':
+          return new Date(a.upload_date).getTime() - new Date(b.upload_date).getTime();
+        case 'views':
+          return b.view_count - a.view_count;
+        case 'downloads':
+          return b.download_count - a.download_count;
+        case 'title_asc':
+          return a.title.localeCompare(b.title);
+        case 'title_desc':
+          return b.title.localeCompare(a.title);
+        default:
+          return 0;
+      }
+    });
+
     setFilteredDocuments(filtered);
+  };
+
+  const resetFilters = () => {
+    setSearchQuery('');
+    setSelectedCategory('All');
+    setSelectedType('all');
+    setSelectedSort('newest');
+    setSelectedDateRange('all');
+    setSelectedFileSize('all');
+  };
+
+  const getActiveFiltersCount = () => {
+    let count = 0;
+    if (selectedCategory !== 'All') count++;
+    if (selectedType !== 'all') count++;
+    if (selectedSort !== 'newest') count++;
+    if (selectedDateRange !== 'all') count++;
+    if (selectedFileSize !== 'all') count++;
+    return count;
   };
 
   const formatFileSize = (bytes: number) => {
@@ -232,12 +332,43 @@ export default function DocumentCenterScreen() {
             onPress={() => setShowFilters(!showFilters)}
           >
             <Filter size={20} color={showFilters ? '#4169E1' : '#666'} />
+            {getActiveFiltersCount() > 0 && (
+              <View style={styles.filterBadge}>
+                <Text style={styles.filterBadgeText}>{getActiveFiltersCount()}</Text>
+              </View>
+            )}
           </TouchableOpacity>
         </View>
 
         {/* Advanced Filters */}
         {showFilters && (
           <View style={styles.advancedFilters}>
+            {/* Sort By */}
+            <View style={styles.filterSection}>
+              <Text style={styles.filterLabel}>Sort By</Text>
+              <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+                {SORT_OPTIONS.map((option) => (
+                  <TouchableOpacity
+                    key={option.value}
+                    style={[
+                      styles.filterChip,
+                      selectedSort === option.value && styles.filterChipActive,
+                    ]}
+                    onPress={() => setSelectedSort(option.value)}
+                  >
+                    <Text
+                      style={[
+                        styles.filterChipText,
+                        selectedSort === option.value && styles.filterChipTextActive,
+                      ]}
+                    >
+                      {option.label}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </ScrollView>
+            </View>
+
             {/* Document Type Filter */}
             <View style={styles.filterSection}>
               <Text style={styles.filterLabel}>Document Type</Text>
@@ -262,6 +393,76 @@ export default function DocumentCenterScreen() {
                   </TouchableOpacity>
                 ))}
               </ScrollView>
+            </View>
+
+            {/* Date Range Filter */}
+            <View style={styles.filterSection}>
+              <Text style={styles.filterLabel}>Upload Date</Text>
+              <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+                {DATE_RANGES.map((range) => (
+                  <TouchableOpacity
+                    key={range.value}
+                    style={[
+                      styles.filterChip,
+                      selectedDateRange === range.value && styles.filterChipActive,
+                    ]}
+                    onPress={() => setSelectedDateRange(range.value)}
+                  >
+                    <Text
+                      style={[
+                        styles.filterChipText,
+                        selectedDateRange === range.value && styles.filterChipTextActive,
+                      ]}
+                    >
+                      {range.label}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </ScrollView>
+            </View>
+
+            {/* File Size Filter */}
+            <View style={styles.filterSection}>
+              <Text style={styles.filterLabel}>File Size</Text>
+              <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+                {FILE_SIZES.map((size) => (
+                  <TouchableOpacity
+                    key={size.value}
+                    style={[
+                      styles.filterChip,
+                      selectedFileSize === size.value && styles.filterChipActive,
+                    ]}
+                    onPress={() => setSelectedFileSize(size.value)}
+                  >
+                    <Text
+                      style={[
+                        styles.filterChipText,
+                        selectedFileSize === size.value && styles.filterChipTextActive,
+                      ]}
+                    >
+                      {size.label}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </ScrollView>
+            </View>
+
+            {/* Filter Actions */}
+            <View style={styles.filterActions}>
+              <TouchableOpacity
+                style={styles.resetButton}
+                onPress={resetFilters}
+              >
+                <Text style={styles.resetButtonText}>Reset All</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.applyButton}
+                onPress={() => setShowFilters(false)}
+              >
+                <Text style={styles.applyButtonText}>
+                  Apply {getActiveFiltersCount() > 0 && `(${getActiveFiltersCount()})`}
+                </Text>
+              </TouchableOpacity>
             </View>
           </View>
         )}
@@ -466,14 +667,33 @@ const styles = StyleSheet.create({
   filterButtonActive: {
     backgroundColor: '#EBF0FF',
   },
+  filterBadge: {
+    position: 'absolute',
+    top: -4,
+    right: -4,
+    backgroundColor: '#FF4444',
+    borderRadius: 10,
+    minWidth: 20,
+    height: 20,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 6,
+  },
+  filterBadgeText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#FFFFFF',
+  },
   advancedFilters: {
     paddingHorizontal: 16,
     paddingVertical: 12,
     backgroundColor: 'rgba(255, 255, 255, 0.1)',
     marginBottom: 12,
+    borderRadius: 12,
+    marginHorizontal: 16,
   },
   filterSection: {
-    marginBottom: 8,
+    marginBottom: 12,
   },
   filterLabel: {
     fontSize: 13,
@@ -498,6 +718,37 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
   },
   filterChipTextActive: {
+    color: '#4169E1',
+  },
+  filterActions: {
+    flexDirection: 'row',
+    gap: 12,
+    marginTop: 8,
+  },
+  resetButton: {
+    flex: 1,
+    backgroundColor: 'rgba(255, 255, 255, 0.2)',
+    paddingVertical: 12,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  resetButtonText: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: '#FFFFFF',
+  },
+  applyButton: {
+    flex: 1,
+    backgroundColor: '#FFFFFF',
+    paddingVertical: 12,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  applyButtonText: {
+    fontSize: 15,
+    fontWeight: '700',
     color: '#4169E1',
   },
   categoriesContainer: {
