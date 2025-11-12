@@ -1,5 +1,5 @@
 import { View, Text, StyleSheet, ScrollView, Image, TouchableOpacity, TextInput, Modal, FlatList, Alert, RefreshControl } from 'react-native';
-import { Search, Plus, MoveVertical as MoreVertical, X, MessageCircle, UserPlus, Check, CheckCheck, Users } from 'lucide-react-native';
+import { Search, Plus, MoveVertical as MoreVertical, X, MessageCircle, UserPlus, Check, CheckCheck, Users, ArrowLeft } from 'lucide-react-native';
 import { useFonts, Inter_400Regular, Inter_600SemiBold } from '@expo-google-fonts/inter';
 import { useEffect, useState } from 'react';
 import { SplashScreen, useRouter } from 'expo-router';
@@ -514,6 +514,12 @@ export default function ChatScreen() {
       {/* Modern Header with Gradient Effect */}
       <View style={styles.header}>
         <View style={styles.headerTop}>
+          <TouchableOpacity 
+            style={styles.backButton}
+            onPress={() => router.push('/hub')}
+          >
+            <ArrowLeft size={24} color="#1E293B" strokeWidth={2.5} />
+          </TouchableOpacity>
           <Text style={styles.title}>Akora Chats</Text>
           <View style={styles.headerActions}>
             <TouchableOpacity 
@@ -927,12 +933,29 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginBottom: 20,
   },
+  backButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: '#FFFFFF',
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: '#CBD5E1',
+    shadowColor: '#000000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 4,
+    elevation: 2,
+  },
   title: {
     fontSize: 32,
     fontFamily: 'Inter-SemiBold',
     color: '#1E293B',
     fontWeight: '700',
     letterSpacing: 0.5,
+    flex: 1,
+    marginLeft: 12,
   },
   headerActions: {
     flexDirection: 'row',
