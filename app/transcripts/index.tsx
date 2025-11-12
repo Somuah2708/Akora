@@ -1,7 +1,9 @@
-import { View, Text, StyleSheet, ScrollView, Image, TouchableOpacity, TextInput, Dimensions, Modal, Alert } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, Image, TouchableOpacity, TextInput, Dimensions, Modal, Alert, Linking } from 'react-native';
 import { useFonts, Inter_400Regular, Inter_600SemiBold } from '@expo-google-fonts/inter';
 import { useEffect, useState } from 'react';
 import { SplashScreen, useRouter } from 'expo-router';
+import { supabase } from '@/lib/supabase';
+import { useAuth } from '@/hooks/useAuth';
 import { ArrowLeft, FileText, Download, Clock, Mail, Search, Filter, ChevronRight, Bell, CircleCheck as CheckCircle, CircleAlert as AlertCircle, CircleHelp as HelpCircle, Star, Send, X, User, MapPin, Phone } from 'lucide-react-native';
 
 SplashScreen.preventAutoHideAsync();
@@ -71,6 +73,7 @@ const RECOMMENDATIONS = [
 
 export default function TranscriptsScreen() {
   const router = useRouter();
+  const { user } = useAuth();
   const [activeTab, setActiveTab] = useState('transcripts');
   const [showRequestModal, setShowRequestModal] = useState(false);
   const [selectedTranscript, setSelectedTranscript] = useState<any>(null);
@@ -104,35 +107,75 @@ export default function TranscriptsScreen() {
     setShowRequestModal(true);
   };
 
-  const handleSubmitRequest = () => {
+  const handleSubmitRequest = async () => {
     // Validate form
     if (!formData.fullName || !formData.studentId || !formData.email) {
       Alert.alert('Missing Information', 'Please fill in all required fields');
       return;
     }
+    try {
+      // Persist to Supabase (optional but recommended for tracking)
+      const payload = {
+        user_id: user?.id || null,
+        full_name: formData.fullName,
+        student_id: formData.studentId,
+        graduation_year: formData.graduationYear || null,
+        delivery_address: formData.deliveryAddress || null,
+        phone_number: formData.phoneNumber || null,
+        email: formData.email,
+        request_type: selectedTranscript?.title || 'Transcript',
+        additional_notes: formData.additionalNotes || null,
+      };
+      try {
+        await supabase.from('transcript_requests').insert(payload as any);
+      } catch (dbErr) {
+        console.log('transcript insert error', dbErr);
+        // Continue to WhatsApp even if DB fails
+      }
 
-    // Submit logic here
-    Alert.alert(
-      'Request Submitted', 
-      `Your ${selectedTranscript?.title} request has been submitted successfully. You will receive a confirmation email shortly.`,
-      [
-        {
-          text: 'OK',
-          onPress: () => {
-            setShowRequestModal(false);
-            setFormData({
-              fullName: '',
-              studentId: '',
-              graduationYear: '',
-              deliveryAddress: '',
-              phoneNumber: '',
-              email: '',
-              additionalNotes: '',
-            });
-          }
+      // WhatsApp integration (admin notification)
+      const adminNumber = process.env.EXPO_PUBLIC_TRANSCRIPTS_ADMIN_WHATSAPP || '';
+      const summary = `New ${payload.request_type} request\n` +
+        `Name: ${payload.full_name}\n` +
+        `Student ID: ${payload.student_id}\n` +
+        (payload.graduation_year ? `Graduation: ${payload.graduation_year}\n` : '') +
+        (payload.phone_number ? `Phone: ${payload.phone_number}\n` : '') +
+        `Email: ${payload.email}\n` +
+        (payload.delivery_address ? `Address: ${payload.delivery_address}\n` : '') +
+        (payload.additional_notes ? `Notes: ${payload.additional_notes}\n` : '');
+
+      if (adminNumber) {
+        const text = encodeURIComponent(summary);
+        const url = `https://wa.me/${adminNumber}?text=${text}`;
+        const can = await Linking.canOpenURL(url);
+        if (can) {
+          await Linking.openURL(url);
+        } else {
+          Alert.alert('WhatsApp not available', 'We could not open WhatsApp on this device. We still recorded your request.');
         }
-      ]
-    );
+      } else {
+        Alert.alert('Notice', 'Admin WhatsApp number not configured. Your request has been recorded.');
+      }
+
+      Alert.alert(
+        'Request Submitted', 
+        `Your ${selectedTranscript?.title} request has been submitted successfully. Our team will reach out soon.`,
+      );
+
+      setShowRequestModal(false);
+      setFormData({
+        fullName: '',
+        studentId: '',
+        graduationYear: '',
+        deliveryAddress: '',
+        phoneNumber: '',
+        email: '',
+        additionalNotes: '',
+      });
+    } catch (e: any) {
+      console.log('submit transcript error', e);
+      Alert.alert('Submit failed', e?.message || 'Could not submit your request. Please try again.');
+    }
   };
 
   return (
@@ -338,6 +381,7 @@ export default function TranscriptsScreen() {
                   <TextInput
                     style={styles.input}
                     placeholder="Enter your full name"
+                    placeholderTextColor="#8E8E93"
                     value={formData.fullName}
                     onChangeText={(text) => setFormData({...formData, fullName: text})}
                   />
@@ -351,6 +395,7 @@ export default function TranscriptsScreen() {
                   <TextInput
                     style={styles.input}
                     placeholder="Enter your student ID"
+                    placeholderTextColor="#8E8E93"
                     value={formData.studentId}
                     onChangeText={(text) => setFormData({...formData, studentId: text})}
                   />
@@ -364,6 +409,7 @@ export default function TranscriptsScreen() {
                   <TextInput
                     style={styles.input}
                     placeholder="e.g., 2024"
+                    placeholderTextColor="#8E8E93"
                     value={formData.graduationYear}
                     onChangeText={(text) => setFormData({...formData, graduationYear: text})}
                     keyboardType="numeric"
@@ -378,6 +424,7 @@ export default function TranscriptsScreen() {
                   <TextInput
                     style={styles.input}
                     placeholder="your.email@example.com"
+                    placeholderTextColor="#8E8E93"
                     value={formData.email}
                     onChangeText={(text) => setFormData({...formData, email: text})}
                     keyboardType="email-address"
@@ -393,6 +440,7 @@ export default function TranscriptsScreen() {
                   <TextInput
                     style={styles.input}
                     placeholder="+233 XX XXX XXXX"
+                    placeholderTextColor="#8E8E93"
                     value={formData.phoneNumber}
                     onChangeText={(text) => setFormData({...formData, phoneNumber: text})}
                     keyboardType="phone-pad"
@@ -407,6 +455,7 @@ export default function TranscriptsScreen() {
                   <TextInput
                     style={styles.input}
                     placeholder="Street address, City"
+                    placeholderTextColor="#8E8E93"
                     value={formData.deliveryAddress}
                     onChangeText={(text) => setFormData({...formData, deliveryAddress: text})}
                     multiline
@@ -419,6 +468,7 @@ export default function TranscriptsScreen() {
                 <TextInput
                   style={[styles.input, styles.textArea]}
                   placeholder="Any special instructions or requests..."
+                  placeholderTextColor="#8E8E93"
                   value={formData.additionalNotes}
                   onChangeText={(text) => setFormData({...formData, additionalNotes: text})}
                   multiline

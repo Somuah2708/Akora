@@ -1,8 +1,9 @@
-import { View, Text, StyleSheet, ScrollView, Image, TouchableOpacity, TextInput, Dimensions, ActivityIndicator } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, Image, TouchableOpacity, TextInput, Dimensions, ActivityIndicator, Share, Alert } from 'react-native';
 import { useFonts, Inter_400Regular, Inter_600SemiBold } from '@expo-google-fonts/inter';
 import { useEffect, useState, useCallback } from 'react';
 import { SplashScreen, useRouter, useFocusEffect } from 'expo-router';
 import { ArrowLeft, Search, Filter, MessageCircle, Users, ThumbsUp, Share2, Bookmark, Clock, Hash, Briefcase, Code, ChartLine as LineChart, Brain, Microscope, Palette, Building2, Globe, ChevronRight, Plus, Bell } from 'lucide-react-native';
+import { on } from '@/lib/eventBus';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/hooks/useAuth';
 
@@ -12,14 +13,15 @@ const { width } = Dimensions.get('window');
 const CARD_WIDTH = width - 48;
 
 const CATEGORIES = [
-  { id: '1', name: 'Technology', icon: Code, color: '#E4EAFF' },
-  { id: '2', name: 'Business', icon: Briefcase, color: '#FFE4E4' },
-  { id: '3', name: 'Finance', icon: LineChart, color: '#E4FFF4' },
-  { id: '4', name: 'Science', icon: Microscope, color: '#FFF4E4' },
-  { id: '5', name: 'Arts', icon: Palette, color: '#FFE4F4' },
-  { id: '6', name: 'Engineering', icon: Brain, color: '#E4F4FF' },
-  { id: '7', name: 'Architecture', icon: Building2, color: '#F4E4FF' },
-  { id: '8', name: 'International', icon: Globe, color: '#E4FFEA' },
+  { id: 'all', name: 'All', icon: Hash, color: '#F1F5F9' },
+  { id: 'technology', name: 'Technology', icon: Code, color: '#E4EAFF' },
+  { id: 'business', name: 'Business', icon: Briefcase, color: '#FFE4E4' },
+  { id: 'finance', name: 'Finance', icon: LineChart, color: '#E4FFF4' },
+  { id: 'science', name: 'Science', icon: Microscope, color: '#FFF4E4' },
+  { id: 'arts', name: 'Arts', icon: Palette, color: '#FFE4F4' },
+  { id: 'engineering', name: 'Engineering', icon: Brain, color: '#E4F4FF' },
+  { id: 'architecture', name: 'Architecture', icon: Building2, color: '#F4E4FF' },
+  { id: 'international', name: 'International', icon: Globe, color: '#E4FFEA' },
 ];
 
 const TRENDING_DISCUSSIONS = [
@@ -150,11 +152,19 @@ interface Discussion {
 export default function ForumScreen() {
   const router = useRouter();
   const { user } = useAuth();
-  const [activeCategory, setActiveCategory] = useState('all');
+  const [activeCategory, setActiveCategory] = useState('All');
   const [discussions, setDiscussions] = useState<Discussion[]>([]);
   const [trendingDiscussions, setTrendingDiscussions] = useState<Discussion[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
+  const [likedMap, setLikedMap] = useState<Record<string, boolean>>({});
+  const [savedMap, setSavedMap] = useState<Record<string, boolean>>({});
+  const [page, setPage] = useState(0);
+  const [pageSize] = useState(20);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [hasMore, setHasMore] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
   
   const [fontsLoaded] = useFonts({
     'Inter-Regular': Inter_400Regular,
@@ -167,17 +177,63 @@ export default function ForumScreen() {
     }
   }, [fontsLoaded]);
 
+  // Handlers that close over component state
+  const handleToggleLike = (discussion: Discussion) => {
+    if (!user) {
+      Alert.alert('Login required', 'Please sign in to like discussions.');
+      return;
+    }
+    handleToggleLikeInternal(
+      discussion,
+      user.id,
+      likedMap,
+      setLikedMap,
+      setDiscussions
+    );
+  };
+
+  const handleToggleSave = (discussion: Discussion) => {
+    if (!user) {
+      Alert.alert('Login required', 'Please sign in to save discussions.');
+      return;
+    }
+    handleToggleSaveInternal(
+      discussion,
+      user.id,
+      savedMap,
+      setSavedMap
+    );
+  };
+
   useFocusEffect(
     useCallback(() => {
-      loadDiscussions();
+      // Reset and load first page on focus
+      setPage(0);
+      setHasMore(true);
+      loadDiscussions(true);
     }, [])
   );
 
-  const loadDiscussions = async () => {
+  // Cross-screen sync: reflect bookmark changes from detail/saved screens
+  useEffect(() => {
+    const unsubscribe = on('forum:bookmarkChanged', ({ discussionId, saved }) => {
+      setSavedMap(prev => ({ ...prev, [discussionId]: saved }));
+    });
+    return unsubscribe;
+  }, []);
+
+  const loadDiscussions = async (reset = false) => {
     try {
-      setLoading(true);
+      if (reset) {
+        setLoading(true);
+      } else {
+        setLoadingMore(true);
+      }
 
       // Fetch all discussions with author info
+      const from = (reset ? 0 : page * pageSize);
+      const to = from + pageSize - 1;
+
       const { data, error } = await supabase
         .from('forum_discussions')
         .select(`
@@ -190,28 +246,60 @@ export default function ForumScreen() {
           )
         `)
         .order('created_at', { ascending: false })
-        .limit(20);
+        .range(from, to);
 
       if (error) throw error;
+      setErrorMessage(null);
 
       const formattedDiscussions = (data || []).map((d: any) => ({
         ...d,
         profiles: Array.isArray(d.profiles) ? d.profiles[0] : d.profiles,
       }));
 
-      setDiscussions(formattedDiscussions);
+      const merged = reset ? formattedDiscussions : [...discussions, ...formattedDiscussions];
+      setDiscussions(merged);
 
       // Get trending discussions (most liked + recent)
-      const trending = formattedDiscussions
+      const trending = (reset ? formattedDiscussions : merged)
         .filter((d: Discussion) => d.likes_count > 5 || d.comments_count > 10)
         .slice(0, 5);
       
       setTrendingDiscussions(trending);
 
-    } catch (error) {
+      // Determine if there's more data
+      if ((data || []).length < pageSize) {
+        setHasMore(false);
+      } else {
+        setHasMore(true);
+        if (!reset) setPage(prev => prev + 1);
+        if (reset) setPage(1);
+      }
+
+      // Fetch liked and saved state for current user in batch
+      if (user && merged.length > 0) {
+        const ids = merged.map(d => d.id);
+
+        const [{ data: likesData }, { data: savesData }] = await Promise.all([
+          supabase.from('forum_discussion_likes').select('discussion_id').in('discussion_id', ids).eq('user_id', user.id),
+          supabase.from('forum_discussion_bookmarks').select('discussion_id').in('discussion_id', ids).eq('user_id', user.id),
+        ]);
+
+        const likeMap: Record<string, boolean> = {};
+        (likesData || []).forEach((row: any) => { likeMap[row.discussion_id] = true; });
+        setLikedMap(likeMap);
+
+        const saveMap: Record<string, boolean> = {};
+        (savesData || []).forEach((row: any) => { saveMap[row.discussion_id] = true; });
+        setSavedMap(saveMap);
+      }
+
+    } catch (error: any) {
       console.error('Error loading discussions:', error);
+      setErrorMessage(error?.message || 'Unable to load discussions.');
     } finally {
       setLoading(false);
+      setLoadingMore(false);
+      setRefreshing(false);
     }
   };
 
@@ -228,7 +316,7 @@ export default function ForumScreen() {
   };
 
   const filteredDiscussions = discussions.filter(d => {
-    const matchesCategory = activeCategory === 'all' || d.category === activeCategory;
+    const matchesCategory = activeCategory === 'All' || d.category?.toLowerCase() === activeCategory.toLowerCase();
     const matchesSearch = !searchQuery || 
       d.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
       d.content.toLowerCase().includes(searchQuery.toLowerCase());
@@ -247,44 +335,58 @@ export default function ForumScreen() {
 
   if (loading) {
     return (
-      <View style={styles.loadingContainer}>
+      <ScrollView style={styles.container} contentContainerStyle={{ flexGrow: 1, justifyContent: 'center', alignItems: 'center' }}>
         <ActivityIndicator size="large" color="#4169E1" />
         <Text style={styles.loadingText}>Loading discussions...</Text>
-      </View>
+      </ScrollView>
     );
   }
 
   return (
     <ScrollView style={styles.container} showsVerticalScrollIndicator={false}>
+      {/* Header */}
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
-          <ArrowLeft size={24} color="#000000" />
-        </TouchableOpacity>
-        <Text style={styles.title}>Development Forum</Text>
-        <View style={styles.headerActions}>
-          <TouchableOpacity style={styles.iconButton}>
-            <Bell size={24} color="#000000" />
+        <View style={styles.headerSideLeft}>
+          <TouchableOpacity onPress={() => router.back()} style={styles.backButton} accessibilityLabel="Go back">
+            <ArrowLeft size={24} color="#111827" />
           </TouchableOpacity>
-          <TouchableOpacity style={styles.iconButton} onPress={() => router.push('/forum/new')}>
-            <Plus size={24} color="#000000" />
+        </View>
+        <View style={styles.headerCenter}>
+          <Text style={styles.headerTitle}>Development Forum</Text>
+          <Text style={styles.headerSubtitle}>Ideas, help, and discussions</Text>
+        </View>
+        <View style={[styles.headerSideRight, styles.headerActions]}>
+          <TouchableOpacity style={styles.iconButton} accessibilityLabel="Notifications">
+            <Bell size={20} color="#111827" />
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.iconButton} onPress={() => router.push('/forum/saved')} accessibilityLabel="View saved discussions">
+            <Bookmark size={20} color="#111827" />
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.iconButton} onPress={() => router.push('/forum/new')} accessibilityLabel="Create discussion">
+            <Plus size={20} color="#111827" />
           </TouchableOpacity>
         </View>
       </View>
 
+      {/* Search and Filter */}
       <View style={styles.searchContainer}>
         <View style={styles.searchInputContainer}>
           <Search size={20} color="#666666" />
           <TextInput
             style={styles.searchInput}
             placeholder="Search discussions..."
-          value={searchQuery}
-          onChangeText={setSearchQuery}
-        />
+            placeholderTextColor="#666666"
+            value={searchQuery}
+            onChangeText={setSearchQuery}
+          />
+        </View>
+        <TouchableOpacity style={styles.filterButton}>
+          <Filter size={20} color="#666666" />
+        </TouchableOpacity>
       </View>
-      <TouchableOpacity style={styles.filterButton}>
-        <Filter size={20} color="#666666" />
-      </TouchableOpacity>
-    </View>      <ScrollView
+
+      {/* Categories */}
+      <ScrollView
         horizontal
         showsHorizontalScrollIndicator={false}
         style={styles.categoriesScroll}
@@ -292,26 +394,18 @@ export default function ForumScreen() {
       >
         {CATEGORIES.map((category) => {
           const IconComponent = category.icon;
+          const isActive = activeCategory.toLowerCase() === category.name.toLowerCase();
           return (
             <TouchableOpacity
               key={category.id}
               style={[
                 styles.categoryButton,
-                { backgroundColor: category.color },
-                activeCategory === category.id && styles.activeCategoryButton,
+                { backgroundColor: isActive ? '#4169E1' : category.color },
               ]}
-              onPress={() => setActiveCategory(category.id)}
+              onPress={() => setActiveCategory(category.name)}
             >
-              <IconComponent
-                size={20}
-                color={activeCategory === category.id ? '#FFFFFF' : '#000000'}
-              />
-              <Text
-                style={[
-                  styles.categoryText,
-                  activeCategory === category.id && styles.activeCategoryText,
-                ]}
-              >
+              <IconComponent size={20} color={isActive ? '#FFFFFF' : '#000000'} />
+              <Text style={[styles.categoryText, isActive && styles.activeCategoryText]}>
                 {category.name}
               </Text>
             </TouchableOpacity>
@@ -319,6 +413,7 @@ export default function ForumScreen() {
         })}
       </ScrollView>
 
+      {/* Trending */}
       <View style={styles.section}>
         <View style={styles.sectionHeader}>
           <Text style={styles.sectionTitle}>Trending Discussions</Text>
@@ -327,80 +422,64 @@ export default function ForumScreen() {
             <ChevronRight size={16} color="#666666" />
           </TouchableOpacity>
         </View>
-
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          contentContainerStyle={styles.trendingContent}
-        >
-          {trendingDiscussions.length > 0 ? trendingDiscussions.map((discussion) => (
-            <TouchableOpacity
-              key={discussion.id}
-              style={styles.trendingCard}
-              onPress={() => router.push(`/forum/${discussion.id}` as any)}
-            >
-              <Image 
-                source={{ uri: 'https://images.unsplash.com/photo-1587854692152-cbe660dbde88?w=800&auto=format&fit=crop&q=60' }} 
-                style={styles.trendingImage} 
-              />
-              <View style={styles.trendingOverlay}>
-                <View style={styles.categoryTag}>
-                  <Hash size={14} color="#4169E1" />
-                  <Text style={styles.categoryTagText}>{discussion.category}</Text>
-                </View>
-                <Text style={styles.trendingTitle}>{discussion.title}</Text>
-                <View style={styles.authorInfo}>
-                  <Image 
-                    source={{ uri: discussion.profiles?.avatar_url || 'https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?w=400&auto=format&fit=crop&q=60' }} 
-                    style={styles.authorAvatar} 
-                  />
-                  <View style={styles.authorDetails}>
-                    <Text style={styles.authorName}>{discussion.profiles?.full_name || 'Anonymous'}</Text>
-                    <Text style={styles.authorRole}>Member</Text>
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.trendingContent}>
+          {trendingDiscussions.length > 0 ? (
+            trendingDiscussions.map((discussion) => (
+              <TouchableOpacity key={discussion.id} style={styles.trendingCard} onPress={() => router.push(`/forum/${discussion.id}` as any)}>
+                <Image source={{ uri: 'https://images.unsplash.com/photo-1587854692152-cbe660dbde88?w=800&auto=format&fit=crop&q=60' }} style={styles.trendingImage} />
+                <View style={styles.trendingOverlay}>
+                  <View style={styles.categoryTag}>
+                    <Hash size={14} color="#4169E1" />
+                    <Text style={styles.categoryTagText}>{discussion.category}</Text>
+                  </View>
+                  <Text style={styles.trendingTitle}>{discussion.title}</Text>
+                  <View style={styles.authorInfo}>
+                    <Image source={{ uri: discussion.profiles?.avatar_url || 'https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?w=400&auto=format&fit=crop&q=60' }} style={styles.authorAvatar} />
+                    <View style={styles.authorDetails}>
+                      <Text style={styles.authorName}>{discussion.profiles?.full_name || 'Anonymous'}</Text>
+                      <Text style={styles.authorRole}>Member</Text>
+                    </View>
+                  </View>
+                  <View style={styles.engagementInfo}>
+                    <View style={styles.engagementItem}>
+                      <ThumbsUp size={14} color="#FFFFFF" />
+                      <Text style={styles.engagementText}>{discussion.likes_count}</Text>
+                    </View>
+                    <View style={styles.engagementItem}>
+                      <MessageCircle size={14} color="#FFFFFF" />
+                      <Text style={styles.engagementText}>{discussion.comments_count}</Text>
+                    </View>
+                    <View style={styles.engagementItem}>
+                      <Clock size={14} color="#FFFFFF" />
+                      <Text style={styles.engagementText}>{getTimeAgo(discussion.created_at)}</Text>
+                    </View>
                   </View>
                 </View>
-                <View style={styles.engagementInfo}>
-                  <View style={styles.engagementItem}>
-                    <ThumbsUp size={14} color="#FFFFFF" />
-                    <Text style={styles.engagementText}>{discussion.likes_count}</Text>
-                  </View>
-                  <View style={styles.engagementItem}>
-                    <MessageCircle size={14} color="#FFFFFF" />
-                    <Text style={styles.engagementText}>{discussion.comments_count}</Text>
-                  </View>
-                  <View style={styles.engagementItem}>
-                    <Clock size={14} color="#FFFFFF" />
-                    <Text style={styles.engagementText}>{getTimeAgo(discussion.created_at)}</Text>
-                  </View>
-                </View>
-              </View>
-            </TouchableOpacity>
-          )) : (
+              </TouchableOpacity>
+            ))
+          ) : (
             <Text style={styles.emptyText}>No trending discussions yet</Text>
           )}
         </ScrollView>
       </View>
 
-      <View style={styles.section}>
-        <View style={styles.sectionHeader}>
-          <Text style={styles.sectionTitle}>Recent Discussions</Text>
-          <TouchableOpacity style={styles.seeAllButton}>
-            <Text style={styles.seeAllText}>See All</Text>
-            <ChevronRight size={16} color="#666666" />
+      {/* Recent */}
+      <View style={styles.sectionHeader}>
+        <Text style={styles.sectionTitle}>Recent Discussions</Text>
+      </View>
+      {errorMessage && (
+        <View style={{ paddingHorizontal: 16, marginBottom: 8 }}>
+          <Text style={[styles.seeAllText, { color: '#B91C1C' }]}>{errorMessage}</Text>
+          <TouchableOpacity onPress={() => { setPage(0); setHasMore(true); loadDiscussions(true); }} style={{ marginTop: 8, alignSelf: 'flex-start' }}>
+            <Text style={[styles.seeAllText, { color: '#4169E1' }]}>Retry</Text>
           </TouchableOpacity>
         </View>
-
-        {filteredDiscussions.slice(0, 10).map((discussion) => (
-          <TouchableOpacity
-            key={discussion.id}
-            style={styles.discussionCard}
-            onPress={() => router.push(`/forum/${discussion.id}` as any)}
-          >
+      )}
+      <View style={styles.section}>
+        {filteredDiscussions.map((discussion) => (
+          <TouchableOpacity key={discussion.id} style={styles.discussionCard} onPress={() => router.push(`/forum/${discussion.id}` as any)}>
             <View style={styles.discussionHeader}>
-              <Image 
-                source={{ uri: discussion.profiles?.avatar_url || 'https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?w=400&auto=format&fit=crop&q=60' }} 
-                style={styles.discussionAvatar} 
-              />
+              <Image source={{ uri: discussion.profiles?.avatar_url || 'https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?w=400&auto=format&fit=crop&q=60' }} style={styles.discussionAvatar} />
               <View style={styles.discussionAuthorInfo}>
                 <Text style={styles.discussionAuthorName}>{discussion.profiles?.full_name || 'Anonymous'}</Text>
                 <Text style={styles.discussionAuthorRole}>Member</Text>
@@ -415,7 +494,7 @@ export default function ForumScreen() {
             <View style={styles.discussionFooter}>
               <View style={styles.discussionEngagement}>
                 <View style={styles.engagementItem}>
-                  <ThumbsUp size={14} color="#666666" />
+                  <ThumbsUp size={14} color={likedMap[discussion.id] ? '#4169E1' : '#666666'} fill={likedMap[discussion.id] ? '#4169E1' : 'none'} />
                   <Text style={styles.engagementCount}>{discussion.likes_count}</Text>
                 </View>
                 <View style={styles.engagementItem}>
@@ -424,18 +503,37 @@ export default function ForumScreen() {
                 </View>
               </View>
               <View style={styles.discussionActions}>
-                <TouchableOpacity style={styles.actionButton}>
+                <TouchableOpacity style={styles.actionButton} onPress={() => handleToggleLike(discussion)}>
+                  <ThumbsUp size={20} color={likedMap[discussion.id] ? '#4169E1' : '#666666'} fill={likedMap[discussion.id] ? '#4169E1' : 'none'} />
+                </TouchableOpacity>
+                <TouchableOpacity style={styles.actionButton} onPress={() => handleShare(discussion)}>
                   <Share2 size={20} color="#666666" />
                 </TouchableOpacity>
-                <TouchableOpacity style={styles.actionButton}>
-                  <Bookmark size={20} color="#666666" />
+                <TouchableOpacity style={styles.actionButton} onPress={() => handleToggleSave(discussion)}>
+                  <Bookmark size={20} color={savedMap[discussion.id] ? '#4169E1' : '#666666'} fill={savedMap[discussion.id] ? '#4169E1' : 'none'} />
                 </TouchableOpacity>
               </View>
             </View>
           </TouchableOpacity>
         ))}
+
+        {hasMore && (
+          <View style={{ paddingHorizontal: 16, paddingVertical: 8 }}>
+            <TouchableOpacity style={[styles.seeAllButton, { alignSelf: 'center' }]} onPress={() => loadDiscussions(false)} disabled={loadingMore}>
+              {loadingMore ? (
+                <ActivityIndicator size="small" color="#4169E1" />
+              ) : (
+                <>
+                  <Text style={styles.seeAllText}>Load more</Text>
+                  <ChevronRight size={16} color="#666666" />
+                </>
+              )}
+            </TouchableOpacity>
+          </View>
+        )}
       </View>
 
+      {/* Active Members */}
       <View style={styles.section}>
         <View style={styles.sectionHeader}>
           <Text style={styles.sectionTitle}>Active Members</Text>
@@ -444,12 +542,7 @@ export default function ForumScreen() {
             <ChevronRight size={16} color="#666666" />
           </TouchableOpacity>
         </View>
-
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          contentContainerStyle={styles.membersContent}
-        >
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.membersContent}>
           {ACTIVE_MEMBERS.map((member) => (
             <TouchableOpacity key={member.id} style={styles.memberCard}>
               <Image source={{ uri: member.avatar }} style={styles.memberAvatar} />
@@ -463,9 +556,79 @@ export default function ForumScreen() {
           ))}
         </ScrollView>
       </View>
+
     </ScrollView>
   );
 }
+
+// Actions
+const handleShare = (discussion: Discussion) => {
+  Share.share({
+    title: discussion.title,
+    message: `${discussion.title}\n\n${discussion.content.slice(0, 140)}...`,
+  }).catch(() => {});
+};
+
+async function handleToggleLikeInternal(
+  discussion: Discussion,
+  userId: string,
+  likedMap: Record<string, boolean>,
+  setLikedMap: React.Dispatch<React.SetStateAction<Record<string, boolean>>>,
+  setDiscussions: React.Dispatch<React.SetStateAction<Discussion[]>>
+) {
+  const wasLiked = !!likedMap[discussion.id];
+  // Optimistic UI
+  setLikedMap(prev => ({ ...prev, [discussion.id]: !wasLiked }));
+  setDiscussions(prev => prev.map(d => d.id === discussion.id ? ({ ...d, likes_count: d.likes_count + (wasLiked ? -1 : 1) }) : d));
+
+  try {
+    if (wasLiked) {
+      await supabase
+        .from('forum_discussion_likes')
+        .delete()
+        .eq('discussion_id', discussion.id)
+        .eq('user_id', userId);
+    } else {
+      await supabase
+        .from('forum_discussion_likes')
+        .insert({ discussion_id: discussion.id, user_id: userId });
+    }
+  } catch (e) {
+    // Revert
+    setLikedMap(prev => ({ ...prev, [discussion.id]: wasLiked }));
+    setDiscussions(prev => prev.map(d => d.id === discussion.id ? ({ ...d, likes_count: d.likes_count + (wasLiked ? 1 : -1) }) : d));
+  }
+}
+
+async function handleToggleSaveInternal(
+  discussion: Discussion,
+  userId: string,
+  savedMap: Record<string, boolean>,
+  setSavedMap: React.Dispatch<React.SetStateAction<Record<string, boolean>>>
+) {
+  const wasSaved = !!savedMap[discussion.id];
+  // Optimistic UI
+  setSavedMap(prev => ({ ...prev, [discussion.id]: !wasSaved }));
+  try {
+    if (wasSaved) {
+      await supabase
+        .from('forum_discussion_bookmarks')
+        .delete()
+        .eq('discussion_id', discussion.id)
+        .eq('user_id', userId);
+    } else {
+      await supabase
+        .from('forum_discussion_bookmarks')
+        .insert({ discussion_id: discussion.id, user_id: userId });
+    }
+  } catch (e) {
+    // Revert
+    setSavedMap(prev => ({ ...prev, [discussion.id]: wasSaved }));
+  }
+}
+
+// (handlers defined inside component)
+
 
 const styles = StyleSheet.create({
   container: {
@@ -479,24 +642,22 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingTop: 60,
     paddingBottom: 16,
+    backgroundColor: '#FFFFFF',
+    borderBottomWidth: 1,
+    borderBottomColor: '#E5E7EB',
   },
-  backButton: {
-    padding: 8,
-  },
-  title: {
-    fontSize: 24,
-    fontFamily: 'Inter-SemiBold',
-    color: '#000000',
-  },
-  headerActions: {
-    flexDirection: 'row',
-    gap: 12,
-  },
+  headerSideLeft: { width: 72, alignItems: 'flex-start' },
+  headerSideRight: { width: 120, alignItems: 'flex-end' },
+  backButton: { padding: 8 },
+  headerCenter: { flex: 1, alignItems: 'center' },
+  headerTitle: { fontSize: 20, fontFamily: 'Inter-SemiBold', color: '#111827' },
+  headerSubtitle: { marginTop: 2, fontSize: 12, color: '#6B7280', fontFamily: 'Inter-Regular' },
+  headerActions: { flexDirection: 'row', gap: 8, justifyContent: 'flex-end' },
   iconButton: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: '#F1F5F9',
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: '#F3F4F6',
     justifyContent: 'center',
     alignItems: 'center',
   },

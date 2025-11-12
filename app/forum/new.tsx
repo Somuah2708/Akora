@@ -6,7 +6,7 @@ import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/hooks/useAuth';
 import * as ImagePicker from 'expo-image-picker';
 import * as DocumentPicker from 'expo-document-picker';
-import * as FileSystem from 'expo-file-system';
+import * as FileSystem from 'expo-file-system/legacy';
 import { decode } from 'base64-arraybuffer';
 
 const CATEGORIES = [
@@ -31,6 +31,34 @@ export default function NewDiscussion() {
   const [selectedCategory, setSelectedCategory] = useState('General');
   const [attachments, setAttachments] = useState<any[]>([]);
   const [posting, setPosting] = useState(false);
+  const MAX_FILE_BYTES = 10 * 1024 * 1024; // 10MB
+
+  const isAllowedImageExt = (ext?: string) => ['jpg','jpeg','png','webp'].includes((ext||'').toLowerCase());
+  const isAllowedDocExt = (ext?: string) => ['pdf','doc','docx'].includes((ext||'').toLowerCase());
+
+  const validatePickedFile = async (uri: string, name: string, type: 'image' | 'document') => {
+    try {
+      const info = await FileSystem.getInfoAsync(uri);
+      if (!info.exists) return false;
+      if (info.size && info.size > MAX_FILE_BYTES) {
+        Alert.alert('File too large', `${name} exceeds 10MB limit.`);
+        return false;
+      }
+      const ext = name.split('.').pop()?.toLowerCase();
+      if (type === 'image' && !isAllowedImageExt(ext)) {
+        Alert.alert('Unsupported image', `${name} must be jpg, jpeg, png, or webp.`);
+        return false;
+      }
+      if (type === 'document' && !isAllowedDocExt(ext)) {
+        Alert.alert('Unsupported document', `${name} must be pdf, doc, or docx.`);
+        return false;
+      }
+      return true;
+    } catch (e) {
+      console.error('validatePickedFile error', e);
+      return false;
+    }
+  };
 
   const handleImagePick = async () => {
     const result = await ImagePicker.launchImageLibraryAsync({
@@ -40,11 +68,10 @@ export default function NewDiscussion() {
     });
 
     if (!result.canceled && result.assets[0]) {
-      setAttachments([...attachments, {
-        uri: result.assets[0].uri,
-        type: 'image',
-        name: `image_${Date.now()}.jpg`,
-      }]);
+      const asset = result.assets[0];
+      const name = asset.uri.split('/').pop() || `image_${Date.now()}.jpg`;
+      const ok = await validatePickedFile(asset.uri, name, 'image');
+      if (ok) setAttachments([...attachments, { uri: asset.uri, type: 'image', name }]);
     }
   };
 
@@ -54,11 +81,10 @@ export default function NewDiscussion() {
     });
 
     if (!result.canceled && result.assets[0]) {
-      setAttachments([...attachments, {
-        uri: result.assets[0].uri,
-        type: 'document',
-        name: result.assets[0].name,
-      }]);
+      const asset = result.assets[0];
+      const name = asset.name || asset.uri.split('/').pop() || `document_${Date.now()}.pdf`;
+      const ok = await validatePickedFile(asset.uri, name, 'document');
+      if (ok) setAttachments([...attachments, { uri: asset.uri, type: 'document', name }]);
     }
   };
 
@@ -66,26 +92,51 @@ export default function NewDiscussion() {
     setAttachments(attachments.filter((_, i) => i !== index));
   };
 
+  const getMimeType = (name: string, type: 'image' | 'document') => {
+    const ext = name.split('.').pop()?.toLowerCase();
+    if (type === 'image') {
+      if (ext === 'png') return 'image/png';
+      if (ext === 'webp') return 'image/webp';
+      return 'image/jpeg';
+    }
+    if (ext === 'pdf') return 'application/pdf';
+    if (ext === 'doc') return 'application/msword';
+    if (ext === 'docx') return 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
+    return 'application/octet-stream';
+  };
+
   const uploadFile = async (file: any) => {
     try {
       console.log('Uploading file:', file.name);
       
       const fileExt = file.name.split('.').pop();
-      const fileName = `${user?.id}_${Date.now()}.${fileExt}`;
-      const filePath = `${fileName}`;
+      const fileName = `${Date.now()}-${Math.random().toString(36).slice(2,8)}.${fileExt}`;
+      const filePath = `${user?.id}/${fileName}`;
+      const contentType = getMimeType(file.name, file.type);
 
-      // Read file as base64
-      const base64 = await FileSystem.readAsStringAsync(file.uri, {
-        encoding: 'base64',
-      });
+      // Prefer fetch -> blob -> arrayBuffer to avoid base64 inflation
+      let arrayBuffer: ArrayBuffer | null = null;
+      try {
+        const res = await fetch(file.uri);
+        const blob = await res.blob();
+        arrayBuffer = await blob.arrayBuffer();
+      } catch (e) {
+        console.warn('fetch/blob arrayBuffer path failed, falling back to base64', e);
+      }
 
-      console.log('File read as base64, uploading to storage...');
+      if (!arrayBuffer) {
+        const base64 = await FileSystem.readAsStringAsync(file.uri, { encoding: 'base64' });
+        arrayBuffer = decode(base64);
+      }
+
+      console.log('Uploading to storage via arrayBuffer...');
 
       // Upload to Supabase storage
       const { data, error } = await supabase.storage
         .from('forum-attachments')
-        .upload(filePath, decode(base64), {
-          contentType: file.type === 'image' ? 'image/jpeg' : 'application/pdf',
+        .upload(filePath, arrayBuffer, {
+          contentType,
+          upsert: false,
         });
 
       if (error) {
@@ -113,7 +164,7 @@ export default function NewDiscussion() {
       return {
         url: urlData.publicUrl,
         name: file.name,
-        type: file.type,
+        type: contentType,
       };
     } catch (error) {
       console.error('Error uploading file:', error);
@@ -312,6 +363,11 @@ export default function NewDiscussion() {
                       </Text>
                     </View>
                   )}
+                  {posting && (
+                    <View style={styles.postingOverlay}>
+                      <ActivityIndicator size="small" color="#FFFFFF" />
+                    </View>
+                  )}
                   <TouchableOpacity
                     style={styles.removeButton}
                     onPress={() => removeAttachment(index)}
@@ -466,6 +522,17 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     padding: 8,
+  },
+  postingOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: 'rgba(0,0,0,0.35)',
+    borderRadius: 12,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   attachmentName: {
     fontSize: 10,
