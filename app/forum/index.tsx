@@ -2,7 +2,7 @@ import { View, Text, StyleSheet, ScrollView, Image, TouchableOpacity, TextInput,
 import { useFonts, Inter_400Regular, Inter_600SemiBold } from '@expo-google-fonts/inter';
 import { useEffect, useState, useCallback } from 'react';
 import { SplashScreen, useRouter, useFocusEffect } from 'expo-router';
-import { ArrowLeft, Search, Filter, MessageCircle, Users, ThumbsUp, Share2, Bookmark, Clock, Hash, Briefcase, Code, ChartLine as LineChart, Brain, Microscope, Palette, Building2, Globe, ChevronRight, Plus, Bell } from 'lucide-react-native';
+import { ArrowLeft, Search, Filter, MessageCircle, Users, ThumbsUp, Share2, Bookmark, Clock, Hash, Briefcase, Code, ChartLine as LineChart, Brain, Microscope, Palette, Building2, Globe, ChevronRight, Plus, Bell, TrendingUp, Activity } from 'lucide-react-native';
 import { on } from '@/lib/eventBus';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/hooks/useAuth';
@@ -24,111 +24,8 @@ const CATEGORIES = [
   { id: 'international', name: 'International', icon: Globe, color: '#E4FFEA' },
 ];
 
-const TRENDING_DISCUSSIONS = [
-  {
-    id: '1',
-    title: 'The Future of AI in Healthcare',
-    author: {
-      name: 'Dr. Sarah Chen',
-      avatar: 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=400&auto=format&fit=crop&q=60',
-      role: 'AI Researcher',
-    },
-    category: 'Technology',
-    timeAgo: '2 hours ago',
-    likes: 245,
-    comments: 89,
-    image: 'https://images.unsplash.com/photo-1587854692152-cbe660dbde88?w=800&auto=format&fit=crop&q=60',
-  },
-  {
-    id: '2',
-    title: 'Sustainable Architecture Trends 2024',
-    author: {
-      name: 'Michael Thompson',
-      avatar: 'https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?w=400&auto=format&fit=crop&q=60',
-      role: 'Architect',
-    },
-    category: 'Architecture',
-    timeAgo: '4 hours ago',
-    likes: 182,
-    comments: 56,
-    image: 'https://images.unsplash.com/photo-1503387762-592deb58ef4e?w=800&auto=format&fit=crop&q=60',
-  },
-];
-
-const RECENT_DISCUSSIONS = [
-  {
-    id: '1',
-    title: 'Emerging Markets Investment Strategies',
-    author: {
-      name: 'Emma Wilson',
-      avatar: 'https://images.unsplash.com/photo-1438761681033-6461ffad8d80?w=400&auto=format&fit=crop&q=60',
-      role: 'Investment Analyst',
-    },
-    preview: 'Looking at the current trends in emerging markets, particularly in Southeast Asia...',
-    category: 'Finance',
-    timeAgo: '1 hour ago',
-    engagement: {
-      likes: 56,
-      comments: 23,
-    },
-  },
-  {
-    id: '2',
-    title: 'Renewable Energy Solutions',
-    author: {
-      name: 'David Park',
-      avatar: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=400&auto=format&fit=crop&q=60',
-      role: 'Environmental Engineer',
-    },
-    preview: 'Discussing the latest innovations in solar and wind energy storage systems...',
-    category: 'Engineering',
-    timeAgo: '3 hours ago',
-    engagement: {
-      likes: 89,
-      comments: 34,
-    },
-  },
-  {
-    id: '3',
-    title: 'Digital Art and NFTs',
-    author: {
-      name: 'Lisa Chen',
-      avatar: 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=400&auto=format&fit=crop&q=60',
-      role: 'Digital Artist',
-    },
-    preview: 'Exploring the intersection of traditional art and blockchain technology...',
-    category: 'Arts',
-    timeAgo: '5 hours ago',
-    engagement: {
-      likes: 124,
-      comments: 45,
-    },
-  },
-];
-
-const ACTIVE_MEMBERS = [
-  {
-    id: '1',
-    name: 'Sarah Chen',
-    role: 'AI Researcher',
-    avatar: 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=400&auto=format&fit=crop&q=60',
-    contributions: 156,
-  },
-  {
-    id: '2',
-    name: 'Michael Thompson',
-    role: 'Architect',
-    avatar: 'https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?w=400&auto=format&fit=crop&q=60',
-    contributions: 142,
-  },
-  {
-    id: '3',
-    name: 'Emma Wilson',
-    role: 'Investment Analyst',
-    avatar: 'https://images.unsplash.com/photo-1438761681033-6461ffad8d80?w=400&auto=format&fit=crop&q=60',
-    contributions: 128,
-  },
-];
+// Real analytics fetchers
+import { fetchTrendingDiscussions, fetchActiveUsers, TrendingDiscussionRow, ActiveUserRow } from '@/lib/forum/analytics';
 
 interface Discussion {
   id: string;
@@ -149,12 +46,24 @@ interface Discussion {
   };
 }
 
+interface TrendingDiscussion extends Discussion, TrendingDiscussionRow {}
+interface ActiveUser extends ActiveUserRow {
+  profile?: {
+    id: string;
+    full_name: string;
+    avatar_url?: string;
+  };
+}
+
 export default function ForumScreen() {
   const router = useRouter();
   const { user } = useAuth();
   const [activeCategory, setActiveCategory] = useState('All');
   const [discussions, setDiscussions] = useState<Discussion[]>([]);
-  const [trendingDiscussions, setTrendingDiscussions] = useState<Discussion[]>([]);
+  const [trendingDiscussions, setTrendingDiscussions] = useState<TrendingDiscussion[]>([]);
+  const [activeUsers, setActiveUsers] = useState<ActiveUser[]>([]);
+  const [trendingLoading, setTrendingLoading] = useState(false);
+  const [activeLoading, setActiveLoading] = useState(false);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
   const [likedMap, setLikedMap] = useState<Record<string, boolean>>({});
@@ -259,12 +168,86 @@ export default function ForumScreen() {
       const merged = reset ? formattedDiscussions : [...discussions, ...formattedDiscussions];
       setDiscussions(merged);
 
-      // Get trending discussions (most liked + recent)
-      const trending = (reset ? formattedDiscussions : merged)
-        .filter((d: Discussion) => d.likes_count > 5 || d.comments_count > 10)
-        .slice(0, 5);
-      
-      setTrendingDiscussions(trending);
+      // Initial trending fetch (actual analytics view / fallback)
+      refreshTrending();
+      refreshActiveUsers();
+  // Load analytics: trending discussions
+  const refreshTrending = async () => {
+    setTrendingLoading(true);
+    try {
+      const rows = await fetchTrendingDiscussions(5);
+      if (!rows.length) {
+        setTrendingDiscussions([]);
+        return;
+      }
+      // Map profiles for author display
+      const authorIds = rows.map(r => r.author_id);
+      const { data: profs } = await supabase
+        .from('profiles')
+        .select('id, full_name, avatar_url')
+        .in('id', authorIds);
+      const profileMap: Record<string, any> = {};
+      (profs || []).forEach(p => { profileMap[p.id] = p; });
+      const merged: TrendingDiscussion[] = rows.map(r => {
+        const baseDiscussion = discussions.find(d => d.id === r.id); // may be undefined if not in current page
+        return {
+          ...(baseDiscussion || {
+            id: r.id,
+            title: '(Loading title...)',
+            content: '',
+            category: 'General',
+            author_id: r.author_id,
+            likes_count: r.likes_count,
+            comments_count: r.comments_count,
+            views_count: r.views_count,
+            is_pinned: r.is_pinned,
+            created_at: r.created_at,
+            profiles: profileMap[r.author_id] || { id: r.author_id, full_name: 'Member' },
+          }),
+          // analytics fields
+          distinct_comment_authors: r.distinct_comment_authors,
+          distinct_bookmarkers: r.distinct_bookmarkers,
+          distinct_likers: r.distinct_likers,
+          trending_score: r.trending_score,
+          last_activity_at: r.last_activity_at,
+        } as TrendingDiscussion;
+      });
+      setTrendingDiscussions(merged);
+    } finally {
+      setTrendingLoading(false);
+    }
+  };
+
+  // Load analytics: active users
+  const refreshActiveUsers = async () => {
+    setActiveLoading(true);
+    try {
+      const rows = await fetchActiveUsers(8);
+      if (!rows.length) {
+        setActiveUsers([]);
+        return;
+      }
+      const ids = rows.map(r => r.user_id);
+      const { data: profs } = await supabase
+        .from('profiles')
+        .select('id, full_name, avatar_url')
+        .in('id', ids);
+      const profileMap: Record<string, any> = {};
+      (profs || []).forEach(p => { profileMap[p.id] = p; });
+      setActiveUsers(rows.map(r => ({ ...r, profile: profileMap[r.user_id] })));
+    } finally {
+      setActiveLoading(false);
+    }
+  };
+
+  // Periodic light refresh every 60s
+  useEffect(() => {
+    const interval = setInterval(() => {
+      refreshTrending();
+      refreshActiveUsers();
+    }, 60000);
+    return () => clearInterval(interval);
+  }, [discussions]);
 
       // Determine if there's more data
       if ((data || []).length < pageSize) {
@@ -413,7 +396,7 @@ export default function ForumScreen() {
         })}
       </ScrollView>
 
-      {/* Trending */}
+      {/* Trending (Real analytics) */}
       <View style={styles.section}>
         <View style={styles.sectionHeader}>
           <Text style={styles.sectionTitle}>Trending Discussions</Text>
@@ -423,43 +406,49 @@ export default function ForumScreen() {
           </TouchableOpacity>
         </View>
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.trendingContent}>
-          {trendingDiscussions.length > 0 ? (
-            trendingDiscussions.map((discussion) => (
-              <TouchableOpacity key={discussion.id} style={styles.trendingCard} onPress={() => router.push(`/forum/${discussion.id}` as any)}>
-                <Image source={{ uri: 'https://images.unsplash.com/photo-1587854692152-cbe660dbde88?w=800&auto=format&fit=crop&q=60' }} style={styles.trendingImage} />
-                <View style={styles.trendingOverlay}>
-                  <View style={styles.categoryTag}>
-                    <Hash size={14} color="#4169E1" />
-                    <Text style={styles.categoryTagText}>{discussion.category}</Text>
-                  </View>
-                  <Text style={styles.trendingTitle}>{discussion.title}</Text>
-                  <View style={styles.authorInfo}>
-                    <Image source={{ uri: discussion.profiles?.avatar_url || 'https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?w=400&auto=format&fit=crop&q=60' }} style={styles.authorAvatar} />
-                    <View style={styles.authorDetails}>
-                      <Text style={styles.authorName}>{discussion.profiles?.full_name || 'Anonymous'}</Text>
-                      <Text style={styles.authorRole}>Member</Text>
-                    </View>
-                  </View>
-                  <View style={styles.engagementInfo}>
-                    <View style={styles.engagementItem}>
-                      <ThumbsUp size={14} color="#FFFFFF" />
-                      <Text style={styles.engagementText}>{discussion.likes_count}</Text>
-                    </View>
-                    <View style={styles.engagementItem}>
-                      <MessageCircle size={14} color="#FFFFFF" />
-                      <Text style={styles.engagementText}>{discussion.comments_count}</Text>
-                    </View>
-                    <View style={styles.engagementItem}>
-                      <Clock size={14} color="#FFFFFF" />
-                      <Text style={styles.engagementText}>{getTimeAgo(discussion.created_at)}</Text>
-                    </View>
+          {trendingLoading && (
+            <ActivityIndicator style={{ marginLeft:16 }} size="small" color="#4169E1" />
+          )}
+          {!trendingLoading && trendingDiscussions.length === 0 && (
+            <Text style={styles.emptyText}>No trending data</Text>
+          )}
+          {trendingDiscussions.map((discussion, idx) => (
+            <TouchableOpacity key={discussion.id} style={styles.trendingCard} onPress={() => router.push(`/forum/${discussion.id}` as any)}>
+              <Image source={{ uri: discussion.profiles?.avatar_url || 'https://images.unsplash.com/photo-1587854692152-cbe660dbde88?w=800&auto=format&fit=crop&q=60' }} style={styles.trendingImage} />
+              <View style={styles.trendingOverlay}>
+                <View style={[styles.categoryTag, discussion.is_pinned && { backgroundColor:'#FFE8B4' }]}>
+                  <TrendingUp size={14} color="#4169E1" />
+                  <Text style={styles.categoryTagText}>#{idx+1}</Text>
+                </View>
+                <Text style={styles.trendingTitle} numberOfLines={2}>{discussion.title}</Text>
+                <View style={styles.authorInfo}>
+                  <Image source={{ uri: discussion.profiles?.avatar_url || 'https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?w=400&auto=format&fit=crop&q=60' }} style={styles.authorAvatar} />
+                  <View style={styles.authorDetails}>
+                    <Text style={styles.authorName}>{discussion.profiles?.full_name || 'Anonymous'}</Text>
+                    <Text style={styles.authorRole}>{getTimeAgo(discussion.last_activity_at)}</Text>
                   </View>
                 </View>
-              </TouchableOpacity>
-            ))
-          ) : (
-            <Text style={styles.emptyText}>No trending discussions yet</Text>
-          )}
+                <View style={styles.engagementInfo}>
+                  <View style={styles.engagementItem}>
+                    <ThumbsUp size={14} color="#FFFFFF" />
+                    <Text style={styles.engagementText}>{discussion.likes_count}</Text>
+                  </View>
+                  <View style={styles.engagementItem}>
+                    <MessageCircle size={14} color="#FFFFFF" />
+                    <Text style={styles.engagementText}>{discussion.comments_count}</Text>
+                  </View>
+                  <View style={styles.engagementItem}>
+                    <Activity size={14} color="#FFFFFF" />
+                    <Text style={styles.engagementText}>{discussion.trending_score.toFixed(2)}</Text>
+                  </View>
+                </View>
+                {/* Score bar */}
+                <View style={{ marginTop: 12, height: 6, backgroundColor: 'rgba(255,255,255,0.2)', borderRadius: 3, overflow:'hidden' }}>
+                  <View style={{ width: Math.min(100, (discussion.trending_score / (trendingDiscussions[0]?.trending_score||1))*100) + '%', backgroundColor:'#FFFFFF', height:'100%' }} />
+                </View>
+              </View>
+            </TouchableOpacity>
+          ))}
         </ScrollView>
       </View>
 
@@ -533,7 +522,7 @@ export default function ForumScreen() {
         )}
       </View>
 
-      {/* Active Members */}
+      {/* Active Members (Real analytics) */}
       <View style={styles.section}>
         <View style={styles.sectionHeader}>
           <Text style={styles.sectionTitle}>Active Members</Text>
@@ -543,14 +532,23 @@ export default function ForumScreen() {
           </TouchableOpacity>
         </View>
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.membersContent}>
-          {ACTIVE_MEMBERS.map((member) => (
-            <TouchableOpacity key={member.id} style={styles.memberCard}>
-              <Image source={{ uri: member.avatar }} style={styles.memberAvatar} />
-              <Text style={styles.memberName}>{member.name}</Text>
-              <Text style={styles.memberRole}>{member.role}</Text>
+          {activeLoading && <ActivityIndicator style={{ marginLeft:16 }} size="small" color="#4169E1" />}
+          {!activeLoading && activeUsers.length === 0 && (
+            <Text style={styles.emptyText}>No active users</Text>
+          )}
+          {activeUsers.map(u => (
+            <TouchableOpacity key={u.user_id} style={styles.memberCard} onPress={() => router.push(`/user-profile/${u.user_id}` as any)}>
+              <Image source={{ uri: u.profile?.avatar_url || 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=400&auto=format&fit=crop&q=60' }} style={styles.memberAvatar} />
+              <Text style={styles.memberName} numberOfLines={1}>{u.profile?.full_name || 'Member'}</Text>
+              <Text style={styles.memberRole}>{getTimeAgo(u.last_activity_at)}</Text>
               <View style={styles.contributionBadge}>
-                <MessageCircle size={12} color="#4169E1" />
-                <Text style={styles.contributionText}>{member.contributions} posts</Text>
+                <Activity size={12} color="#4169E1" />
+                <Text style={styles.contributionText}>{u.activity_score.toFixed(2)}</Text>
+              </View>
+              <View style={{ marginTop:8, alignSelf:'stretch' }}>
+                <View style={{ height:6, backgroundColor:'#EBF0FF', borderRadius:3, overflow:'hidden' }}>
+                  <View style={{ height:'100%', width: Math.min(100,(u.activity_score/(activeUsers[0]?.activity_score||1))*100)+'%', backgroundColor:'#4169E1' }} />
+                </View>
               </View>
             </TouchableOpacity>
           ))}
