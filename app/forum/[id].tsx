@@ -23,7 +23,8 @@ import { useRouter, useLocalSearchParams } from 'expo-router';
 import * as WebBrowser from 'expo-web-browser';
 import * as ImagePicker from 'expo-image-picker';
 import * as DocumentPicker from 'expo-document-picker';
-import * as FileSystem from 'expo-file-system';
+// Use legacy FileSystem import to avoid deprecated getInfoAsync warning until full migration to new File/Directory API
+import * as FileSystem from 'expo-file-system/legacy';
 import * as LinkingExpo from 'expo-linking';
 import { decode } from 'base64-arraybuffer';
 import { useAuth } from '@/hooks/useAuth';
@@ -137,6 +138,7 @@ export default function DiscussionDetailScreen() {
 
   const validatePickedFile = async (uri: string, name: string, kind: 'image' | 'document') => {
     try {
+      // getInfoAsync is still used via legacy module; when migrating remove this and adopt File.fromURI()
       const info = await FileSystem.getInfoAsync(uri);
       const ext = name.split('.').pop()?.toLowerCase();
       if (!info.exists) return false;
@@ -154,7 +156,7 @@ export default function DiscussionDetailScreen() {
       }
       return true;
     } catch (e) {
-      console.error('validatePickedFile error', e);
+      console.error('validatePickedFile error (legacy FS)', e);
       return false;
     }
   };

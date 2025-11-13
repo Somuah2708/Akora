@@ -11,7 +11,7 @@ SplashScreen.preventAutoHideAsync();
 const { width } = Dimensions.get('window');
 const CARD_WIDTH = width - 48;
 
-type TabType = 'universities' | 'scholarships' | 'mentors' | 'resources' | 'courses' | 'study-groups' | 'events';
+type TabType = 'universities' | 'scholarships' | 'mentors';
 
 export default function EducationScreen() {
   const router = useRouter();
@@ -212,23 +212,11 @@ export default function EducationScreen() {
       case 'mentors':
         fetchMentors();
         break;
-      case 'resources':
-        fetchResources();
-        break;
-      case 'courses':
-        fetchCourses();
-        break;
-      case 'study-groups':
-        fetchStudyGroups();
-        break;
-      case 'events':
-        fetchEvents();
-        break;
     }
     if (user) {
       fetchBookmarks();
     }
-  }, [activeTab, fetchUniversities, fetchScholarships, fetchMentors, fetchResources, fetchCourses, fetchStudyGroups, fetchEvents, user, fetchBookmarks]);
+  }, [activeTab, fetchUniversities, fetchScholarships, fetchMentors, user, fetchBookmarks]);
 
   useEffect(() => {
     if (fontsLoaded) {
@@ -364,7 +352,10 @@ export default function EducationScreen() {
         <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
           <ArrowLeft size={24} color="#000000" />
         </TouchableOpacity>
-        <Text style={styles.title}>Schools & Scholarships</Text>
+        <View style={{ flex: 1, alignItems: 'center' }}>
+          <Text style={styles.title}>Universities, Scholarships & Alumni Mentors</Text>
+          <Text style={styles.subtitle}>Discover schools, secure funding, and get guidance from alumni mentors</Text>
+        </View>
         {(profile?.is_admin || profile?.role === 'admin') ? (
           <TouchableOpacity 
             style={styles.addButton}
@@ -384,7 +375,7 @@ export default function EducationScreen() {
           <Search size={20} color="#666666" />
           <TextInput
             style={styles.searchInput}
-            placeholder="Search universities, scholarships..."
+            placeholder="Search universities, scholarships, mentors..."
             placeholderTextColor="#666666"
             value={searchQuery}
             onChangeText={setSearchQuery}
@@ -393,13 +384,13 @@ export default function EducationScreen() {
       </View>
       {/* Quick Actions */}
       <View style={styles.quickActions}>
-        <Link href="/education/my-applications/index" asChild>
+        <Link href="/education/my-applications" asChild>
           <TouchableOpacity style={styles.quickActionButton}>
             <FileText size={18} color="#4169E1" />
             <Text style={styles.quickActionText}>My Applications</Text>
           </TouchableOpacity>
         </Link>
-        <Link href="/education/saved-opportunities/index" asChild>
+        <Link href="/education/saved-opportunities" asChild>
           <TouchableOpacity style={styles.quickActionButton}>
             <Bookmark size={18} color="#4169E1" />
             <Text style={styles.quickActionText}>Saved</Text>
@@ -453,57 +444,9 @@ export default function EducationScreen() {
           </Text>
         </TouchableOpacity>
 
-        <TouchableOpacity
-          style={[styles.tabButton, activeTab === 'resources' && styles.activeTabButton]}
-          onPress={() => {
-            setActiveTab('resources');
-            setSearchQuery('');
-          }}
-        >
-          <BookOpen size={20} color={activeTab === 'resources' ? '#FFFFFF' : '#666666'} />
-          <Text style={[styles.tabText, activeTab === 'resources' && styles.activeTabText]}>
-            Study Resources ({resources.length})
-          </Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity
-          style={[styles.tabButton, activeTab === 'courses' && styles.activeTabButton]}
-          onPress={() => {
-            setActiveTab('courses');
-            setSearchQuery('');
-          }}
-        >
-          <GraduationCap size={20} color={activeTab === 'courses' ? '#FFFFFF' : '#666666'} />
-          <Text style={[styles.tabText, activeTab === 'courses' && styles.activeTabText]}>
-            Courses ({courses.length})
-          </Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity
-          style={[styles.tabButton, activeTab === 'study-groups' && styles.activeTabButton]}
-          onPress={() => {
-            setActiveTab('study-groups');
-            setSearchQuery('');
-          }}
-        >
-          <Users size={20} color={activeTab === 'study-groups' ? '#FFFFFF' : '#666666'} />
-          <Text style={[styles.tabText, activeTab === 'study-groups' && styles.activeTabText]}>
-            Study Groups ({studyGroups.length})
-          </Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity
-          style={[styles.tabButton, activeTab === 'events' && styles.activeTabButton]}
-          onPress={() => {
-            setActiveTab('events');
-            setSearchQuery('');
-          }}
-        >
-          <Clock size={20} color={activeTab === 'events' ? '#FFFFFF' : '#666666'} />
-          <Text style={[styles.tabText, activeTab === 'events' && styles.activeTabText]}>
-            Events ({events.length})
-          </Text>
-        </TouchableOpacity>
+        {false && (
+          <View />
+        )}
       </ScrollView>
 
       {/* Universities Tab Content */}
@@ -594,16 +537,31 @@ export default function EducationScreen() {
           {loading ? (
             <Text style={styles.loadingText}>Loading scholarships...</Text>
           ) : filteredScholarships.length > 0 ? (
-            filteredScholarships.map((scholarship) => (
+            filteredScholarships.map((scholarship) => {
+              // Parse image_url if it's a JSON array
+              let imageUri = scholarship.image_url || 'https://images.unsplash.com/photo-1523050854058-8df90110c9f1?w=800';
+              if (imageUri && typeof imageUri === 'string' && imageUri.startsWith('[')) {
+                try {
+                  const parsed = JSON.parse(imageUri);
+                  imageUri = Array.isArray(parsed) && parsed.length > 0 ? parsed[0] : imageUri;
+                } catch (e) {
+                  // Keep original if parsing fails
+                }
+              }
+              const currencySymbol = scholarship.funding_currency === 'GHS' ? '₵' : '$';
+              return (
               <TouchableOpacity 
                 key={scholarship.id} 
                 style={styles.scholarshipCard}
                 onPress={() => router.push(`/education/detail/${scholarship.id}` as any)}
               >
-                <Image 
-                  source={{ uri: scholarship.image_url || 'https://images.unsplash.com/photo-1523050854058-8df90110c9f1?w=800' }} 
-                  style={styles.scholarshipImage} 
-                />
+                <View style={styles.scholarshipImageContainer}>
+                  <Image 
+                    source={{ uri: imageUri }} 
+                    style={styles.scholarshipImage}
+                    resizeMode="cover"
+                  />
+                </View>
                 <TouchableOpacity 
                   style={styles.bookmarkIconSmall}
                   onPress={(e) => {
@@ -633,10 +591,10 @@ export default function EducationScreen() {
                     {scholarship.funding_amount && (
                       <View style={styles.detailItem}>
                         <Wallet size={14} color="#4CAF50" />
-                        <Text style={styles.detailText}>${scholarship.funding_amount}</Text>
+                        <Text style={styles.detailText}>{currencySymbol}{scholarship.funding_amount}</Text>
                       </View>
                     )}
-                    {scholarship.deadline_date && (
+                    {scholarship.deadline_date ? (
                       <View style={styles.detailItem}>
                         <Clock size={14} color="#FF6B6B" />
                         <Text style={styles.deadlineText}>
@@ -645,11 +603,16 @@ export default function EducationScreen() {
                             : 'Expired'}
                         </Text>
                       </View>
-                    )}
+                    ) : scholarship.deadline_text ? (
+                      <View style={styles.detailItem}>
+                        <Clock size={14} color="#FF6B6B" />
+                        <Text style={styles.deadlineText}>{scholarship.deadline_text}</Text>
+                      </View>
+                    ) : null}
                   </View>
                 </View>
               </TouchableOpacity>
-            ))
+            )})
           ) : (
             <View style={styles.emptyContainer}>
               <Award size={64} color="#CCCCCC" />
@@ -707,193 +670,7 @@ export default function EducationScreen() {
         </View>
       )}
 
-      {/* Study Resources Tab Content */}
-      {activeTab === 'resources' && (
-        <View style={styles.section}>
-          <View style={styles.sectionHeader}>
-            <Text style={styles.sectionTitle}>📚 Study Resources</Text>
-            <Text style={styles.sectionCount}>{filteredResources.length} resources</Text>
-          </View>
-
-          {loading ? (
-            <Text style={styles.loadingText}>Loading resources...</Text>
-          ) : filteredResources.length > 0 ? (
-            filteredResources.map((resource) => (
-              <TouchableOpacity 
-                key={resource.id} 
-                style={styles.resourceCard}
-                onPress={() => router.push(`/education/detail/${resource.id}` as any)}
-              >
-                <View style={styles.resourceIcon}>
-                  <BookOpen size={24} color="#4169E1" />
-                </View>
-                <View style={styles.resourceInfo}>
-                  <Text style={styles.resourceTitle}>{resource.title}</Text>
-                  <Text style={styles.resourceDescription} numberOfLines={2}>
-                    {resource.description}
-                  </Text>
-                  {resource.price && (
-                    <Text style={styles.resourcePrice}>
-                      {resource.price === '0' ? 'Free' : `GH₵${resource.price}`}
-                    </Text>
-                  )}
-                </View>
-                <ChevronRight size={20} color="#666666" />
-              </TouchableOpacity>
-            ))
-          ) : (
-            <View style={styles.emptyContainer}>
-              <BookOpen size={64} color="#CCCCCC" />
-              <Text style={styles.emptyText}>No study resources yet</Text>
-              <Text style={styles.emptySubtext}>Resources will appear here</Text>
-            </View>
-          )}
-        </View>
-      )}
-
-      {/* Courses Tab Content */}
-      {activeTab === 'courses' && (
-        <View style={styles.section}>
-          <View style={styles.sectionHeader}>
-            <Text style={styles.sectionTitle}>🎓 Courses & Programs</Text>
-            <Text style={styles.sectionCount}>{filteredCourses.length} courses</Text>
-          </View>
-
-          {loading ? (
-            <Text style={styles.loadingText}>Loading courses...</Text>
-          ) : filteredCourses.length > 0 ? (
-            filteredCourses.map((course) => (
-              <TouchableOpacity 
-                key={course.id} 
-                style={styles.courseCard}
-                onPress={() => router.push(`/education/detail/${course.id}` as any)}
-              >
-                <Image 
-                  source={{ uri: course.image_url || 'https://images.unsplash.com/photo-1501504905252-473c47e087f8?w=800' }} 
-                  style={styles.courseImage} 
-                />
-                <View style={styles.courseInfo}>
-                  <Text style={styles.courseTitle}>{course.title}</Text>
-                  <Text style={styles.courseDescription} numberOfLines={2}>
-                    {course.description}
-                  </Text>
-                  <View style={styles.courseFooter}>
-                    {course.duration && (
-                      <View style={styles.courseDuration}>
-                        <Clock size={14} color="#666666" />
-                        <Text style={styles.courseDurationText}>{course.duration}</Text>
-                      </View>
-                    )}
-                  </View>
-                </View>
-              </TouchableOpacity>
-            ))
-          ) : (
-            <View style={styles.emptyContainer}>
-              <GraduationCap size={64} color="#CCCCCC" />
-              <Text style={styles.emptyText}>No courses available</Text>
-              <Text style={styles.emptySubtext}>Check back for new programs</Text>
-            </View>
-          )}
-        </View>
-      )}
-
-      {/* Study Groups Tab Content */}
-      {activeTab === 'study-groups' && (
-        <View style={styles.section}>
-          <View style={styles.sectionHeader}>
-            <Text style={styles.sectionTitle}>👥 Study Groups</Text>
-            <Text style={styles.sectionCount}>{filteredStudyGroups.length} groups</Text>
-          </View>
-
-          {loading ? (
-            <Text style={styles.loadingText}>Loading study groups...</Text>
-          ) : filteredStudyGroups.length > 0 ? (
-            filteredStudyGroups.map((group) => (
-              <TouchableOpacity 
-                key={group.id} 
-                style={styles.studyGroupCard}
-                onPress={() => router.push(`/education/detail/${group.id}` as any)}
-              >
-                <View style={styles.studyGroupHeader}>
-                  <View style={styles.studyGroupIcon}>
-                    <Users size={24} color="#4169E1" />
-                  </View>
-                  <View style={styles.studyGroupInfo}>
-                    <Text style={styles.studyGroupTitle}>{group.title}</Text>
-                    <Text style={styles.studyGroupDescription} numberOfLines={2}>
-                      {group.description}
-                    </Text>
-                  </View>
-                </View>
-                <View style={styles.studyGroupFooter}>
-                  <Text style={styles.studyGroupMembers}>
-                    {group.member_count || 0} members
-                  </Text>
-                  <TouchableOpacity style={styles.joinButton}>
-                    <Text style={styles.joinButtonText}>Join Group</Text>
-                  </TouchableOpacity>
-                </View>
-              </TouchableOpacity>
-            ))
-          ) : (
-            <View style={styles.emptyContainer}>
-              <Users size={64} color="#CCCCCC" />
-              <Text style={styles.emptyText}>No study groups yet</Text>
-              <Text style={styles.emptySubtext}>Create or join a study group</Text>
-            </View>
-          )}
-        </View>
-      )}
-
-      {/* Educational Events Tab Content */}
-      {activeTab === 'events' && (
-        <View style={styles.section}>
-          <View style={styles.sectionHeader}>
-            <Text style={styles.sectionTitle}>📅 Educational Events</Text>
-            <Text style={styles.sectionCount}>{filteredEvents.length} events</Text>
-          </View>
-
-          {loading ? (
-            <Text style={styles.loadingText}>Loading events...</Text>
-          ) : filteredEvents.length > 0 ? (
-            filteredEvents.map((event) => (
-              <TouchableOpacity 
-                key={event.id} 
-                style={styles.eventCard}
-                onPress={() => router.push(`/education/detail/${event.id}` as any)}
-              >
-                <View style={styles.eventDateBox}>
-                  <Text style={styles.eventMonth}>
-                    {event.event_date ? new Date(event.event_date).toLocaleString('default', { month: 'short' }) : 'TBD'}
-                  </Text>
-                  <Text style={styles.eventDay}>
-                    {event.event_date ? new Date(event.event_date).getDate() : '--'}
-                  </Text>
-                </View>
-                <View style={styles.eventInfo}>
-                  <Text style={styles.eventTitle}>{event.title}</Text>
-                  <Text style={styles.eventDescription} numberOfLines={2}>
-                    {event.description}
-                  </Text>
-                  {event.location && (
-                    <View style={styles.locationRow}>
-                      <MapPin size={12} color="#666666" />
-                      <Text style={styles.eventLocation}>{event.location}</Text>
-                    </View>
-                  )}
-                </View>
-              </TouchableOpacity>
-            ))
-          ) : (
-            <View style={styles.emptyContainer}>
-              <Clock size={64} color="#CCCCCC" />
-              <Text style={styles.emptyText}>No upcoming events</Text>
-              <Text style={styles.emptySubtext}>Check back for workshops and seminars</Text>
-            </View>
-          )}
-        </View>
-      )}
+      {/* Other sections removed to focus on Universities, Scholarships, and Alumni Mentors */}
     </ScrollView>
   );
 }
@@ -919,6 +696,13 @@ const styles = StyleSheet.create({
     fontSize: 24,
     fontFamily: 'Inter-SemiBold',
     color: '#000000',
+  },
+  subtitle: {
+    fontSize: 13,
+    fontFamily: 'Inter-Regular',
+    color: '#666666',
+    marginTop: 4,
+    textAlign: 'center',
   },
   addButton: {
     padding: 8,
@@ -1092,8 +876,13 @@ const styles = StyleSheet.create({
     borderColor: '#FFF9E6',
   },
   scholarshipImage: {
+    flex: 1,
+    width: '100%',
+  },
+  scholarshipImageContainer: {
     width: 120,
-    height: 140,
+    alignSelf: 'stretch',
+    backgroundColor: '#F0F4FF',
   },
   scholarshipInfo: {
     flex: 1,

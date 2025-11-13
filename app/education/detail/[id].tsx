@@ -210,11 +210,11 @@ export default function EducationDetailScreen() {
               </Text>
             </View>
           )}
-          {/* Show raw deadline text if available but not valid ISO */}
-          {daysLeft === null && opportunity.deadline_date && (
+          {/* Show deadline_text if provided (freeform) or fallback to raw deadline_date */}
+          {daysLeft === null && (opportunity.deadline_text || opportunity.deadline_date) && (
             <View style={styles.infoRow}>
               <Calendar size={18} color="#666666" />
-              <Text style={styles.infoText}>Deadline: {opportunity.deadline_date}</Text>
+              <Text style={styles.infoText}>Deadline: {opportunity.deadline_text || opportunity.deadline_date}</Text>
             </View>
           )}
 
@@ -224,7 +224,7 @@ export default function EducationDetailScreen() {
               <DollarSign size={20} color="#4CAF50" />
               <View>
                 <Text style={styles.fundingLabel}>Funding Amount</Text>
-                <Text style={styles.fundingAmount}>${opportunity.funding_amount}</Text>
+                <Text style={styles.fundingAmount}>{opportunity.funding_currency === 'GHS' ? '₵' : '$'}{opportunity.funding_amount}</Text>
               </View>
             </View>
           )}

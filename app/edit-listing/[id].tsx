@@ -63,6 +63,7 @@ export default function EditListing() {
   const [deadlineDate, setDeadlineDate] = useState('');
   const [eligibility, setEligibility] = useState('');
   const [fundingAmount, setFundingAmount] = useState('');
+  const [fundingCurrency, setFundingCurrency] = useState<'USD' | 'GHS'>('USD');
 
   const [fontsLoaded] = useFonts({
     'Inter-Regular': Inter_400Regular,
@@ -131,9 +132,11 @@ export default function EditListing() {
       if (data.application_url || data.application_link) {
         setApplicationUrl((data.application_url || data.application_link) as string);
       }
-      if (data.website_url) setWebsiteUrl(String(data.website_url));
-      if (data.funding_amount != null) setFundingAmount(String(data.funding_amount));
-      if (data.deadline_date) setDeadlineDate(String(data.deadline_date));
+  if (data.website_url) setWebsiteUrl(String(data.website_url));
+  if (data.funding_amount != null) setFundingAmount(String(data.funding_amount));
+  if (data.funding_currency) setFundingCurrency(String(data.funding_currency) === 'GHS' ? 'GHS' : 'USD');
+  if (data.deadline_date) setDeadlineDate(String(data.deadline_date));
+  else if (data.deadline_text) setDeadlineDate(String(data.deadline_text));
       if (data.eligibility_criteria) setEligibility(String(data.eligibility_criteria));
       if (data.contact_email) setContactEmail(String(data.contact_email));
       if (data.location) setLocation(String(data.location));
@@ -220,19 +223,43 @@ export default function EditListing() {
           };
           if (isEducationUpdate) {
             updates.application_url = applicationUrl.trim();
+            // Persist website_url if provided (requires DB migration adding website_url TEXT)
             if (websiteUrl.trim()) updates.website_url = websiteUrl.trim();
+            else updates.website_url = null;
             updates.contact_email = contactEmail.trim() || null;
             updates.location = location.trim() || null;
-            // sanitize deadline: only accept YYYY-MM-DD for date logic; otherwise store as plain text
+            // Validate deadline_date: only save if it's a valid ISO date (YYYY-MM-DD)
+            // If not valid, store as deadline_text so it can still display in UI
             const dd = deadlineDate.trim();
             if (dd) {
-              // Store raw value; front-end decides if it's ISO for countdown
-              updates.deadline_date = dd;
+              const isoDateRegex = /^\d{4}-\d{2}-\d{2}$/;
+              if (isoDateRegex.test(dd)) {
+                const testDate = new Date(dd);
+                if (!isNaN(testDate.getTime())) {
+                  updates.deadline_date = dd; // TIMESTAMPTZ will parse YYYY-MM-DD
+                  updates.deadline_text = null;
+                } else {
+                  updates.deadline_text = dd;
+                  updates.deadline_date = null;
+                }
+              } else {
+                updates.deadline_text = dd;
+                updates.deadline_date = null;
+              }
+            } else {
+              // If cleared, null out both fields
+              updates.deadline_date = null;
+              updates.deadline_text = null;
             }
             if (eligibility.trim()) updates.eligibility_criteria = eligibility.trim();
-            if (category === 'Scholarships' && fundingAmount.trim()) {
-              const amt = Number(fundingAmount.replace(/[^0-9.]/g, ''));
-              if (!Number.isNaN(amt)) updates.funding_amount = amt;
+            if (category === 'Scholarships') {
+              if (fundingAmount.trim()) {
+                const amt = Number(fundingAmount.replace(/[^0-9.]/g, ''));
+                if (!Number.isNaN(amt)) updates.funding_amount = amt;
+              } else {
+                updates.funding_amount = null;
+              }
+              updates.funding_currency = fundingCurrency;
             }
           } else {
             updates.price = Number(price.trim());
@@ -439,14 +466,27 @@ export default function EditListing() {
             {category === 'Scholarships' && (
               <View style={styles.formGroup}>
                 <Text style={styles.label}>Funding Amount (Optional)</Text>
-                <TextInput
-                  style={styles.input}
-                  placeholder="e.g., 5000"
-                  placeholderTextColor="#999999"
-                  value={fundingAmount}
-                  onChangeText={setFundingAmount}
-                  keyboardType="decimal-pad"
-                />
+                <View style={{backgroundColor:'#F8F9FA',borderRadius:16,padding:14,marginBottom:10,borderWidth:1,borderColor:'#E2E8F0'}}>
+                  <View style={{flexDirection:'row',gap:12,marginBottom:10}}>
+                    <TouchableOpacity style={[styles.currencyButton,fundingCurrency==='USD'&&styles.currencyButtonActive]} onPress={()=>setFundingCurrency('USD')}>
+                      <Text style={[{fontSize:16,fontFamily:'Inter-SemiBold',color:'#4169E1'},fundingCurrency==='USD'&&{color:'#FFFFFF',fontWeight:'bold'}]}>$ USD</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity style={[styles.currencyButton,fundingCurrency==='GHS'&&styles.currencyButtonActive]} onPress={()=>setFundingCurrency('GHS')}>
+                      <Text style={[{fontSize:16,fontFamily:'Inter-SemiBold',color:'#4169E1'},fundingCurrency==='GHS'&&{color:'#FFFFFF',fontWeight:'bold'}]}>₵ GHS</Text>
+                    </TouchableOpacity>
+                  </View>
+                  <View style={{flexDirection:'row',alignItems:'center',backgroundColor:'#FFFFFF',borderRadius:12,paddingHorizontal:16,borderWidth:1,borderColor:'#E2E8F0'}}>
+                    <Text style={{fontSize:20,fontFamily:'Inter-Bold',color:'#4169E1',marginRight:8}}>{fundingCurrency==='USD'?'$':'₵'}</Text>
+                    <TextInput
+                      style={{flex:1,paddingVertical:12,fontSize:16,fontFamily:'Inter-SemiBold',color:'#1F2937'}}
+                      placeholder="0.00"
+                      placeholderTextColor="#999999"
+                      value={fundingAmount}
+                      onChangeText={setFundingAmount}
+                      keyboardType="decimal-pad"
+                    />
+                  </View>
+                </View>
               </View>
             )}
             <View style={styles.formGroup}>
@@ -475,12 +515,15 @@ export default function EditListing() {
               <Text style={styles.label}>Deadline (Optional)</Text>
               <TextInput
                 style={styles.input}
-                placeholder="YYYY-MM-DD or a simple note"
+                placeholder="YYYY-MM-DD (e.g., 2025-12-15)"
                 placeholderTextColor="#999999"
                 value={deadlineDate}
                 onChangeText={setDeadlineDate}
                 autoCapitalize="none"
               />
+              <Text style={styles.helperText}>
+                Enter a valid date in YYYY-MM-DD format. Other formats will be saved as text.
+              </Text>
             </View>
             <View style={styles.formGroup}>
               <Text style={styles.label}>Eligibility (Optional)</Text>
@@ -497,37 +540,39 @@ export default function EditListing() {
           </>
         )}
         
-        <View style={styles.formGroup}>
-          <Text style={styles.label}>Category *</Text>
-          <ScrollView 
-            horizontal 
-            showsHorizontalScrollIndicator={false}
-            contentContainerStyle={styles.categoriesContainer}
-          >
-            {CATEGORIES.map((cat) => (
-              <TouchableOpacity
-                key={cat.id}
-                style={[
-                  styles.categoryChip,
-                  category === cat.name && styles.selectedCategoryChip
-                ]}
-                onPress={() => setCategory(cat.name)}
-              >
-                {category === cat.name && (
-                  <CheckCircle size={16} color="#FFFFFF" style={styles.checkIcon} />
-                )}
-                <Text 
+        {!isEducation && (
+          <View style={styles.formGroup}>
+            <Text style={styles.label}>Category *</Text>
+            <ScrollView 
+              horizontal 
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={styles.categoriesContainer}
+            >
+              {CATEGORIES.map((cat) => (
+                <TouchableOpacity
+                  key={cat.id}
                   style={[
-                    styles.categoryChipText,
-                    category === cat.name && styles.selectedCategoryChipText
+                    styles.categoryChip,
+                    category === cat.name && styles.selectedCategoryChip
                   ]}
+                  onPress={() => setCategory(cat.name)}
                 >
-                  {cat.name}
-                </Text>
-              </TouchableOpacity>
-            ))}
-          </ScrollView>
-        </View>
+                  {category === cat.name && (
+                    <CheckCircle size={16} color="#FFFFFF" style={styles.checkIcon} />
+                  )}
+                  <Text 
+                    style={[
+                      styles.categoryChipText,
+                      category === cat.name && styles.selectedCategoryChipText
+                    ]}
+                  >
+                    {cat.name}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
+          </View>
+        )}
 
         <View style={styles.formGroup}>
           <Text style={styles.label}>Contact Email (Optional)</Text>
