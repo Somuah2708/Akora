@@ -1,112 +1,121 @@
 import { useEffect, useState, useCallback } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator, Alert } from 'react-native';
 import { useRouter } from 'expo-router';
-import { FileText, Plus, Clock, CheckCircle2 } from 'lucide-react-native';
+import { Users, Plus, Clock, CheckCircle2 } from 'lucide-react-native';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/hooks/useAuth';
 
-type TranscriptRequest = {
+type Status = 'pending' | 'accepted' | 'declined' | 'in_progress' | 'submitted';
+type Purpose = 'job' | 'scholarship' | 'graduate_school' | 'other';
+
+type RecReq = {
   id: string;
-  user_id: string;
-  request_type: 'official' | 'unofficial';
-  purpose: string;
-  recipient_email: string;
-  status: 'pending' | 'payment_provided' | 'processing' | 'ready' | 'delivered' | 'rejected';
-  payment_proof_url?: string | null;
-  document_url?: string | null;
+  requester_id: string;
+  recommender_id: string | null;
+  recommender_email: string;
+  purpose: Purpose;
+  organization_name?: string | null;
+  deadline?: string | null; // DATE
+  context?: string | null;
+  status: Status;
   created_at?: string;
 };
 
-const statusColors: Record<TranscriptRequest['status'], string> = {
-  pending: '#999999',
-  payment_provided: '#4169E1',
-  processing: '#A66BFF',
-  ready: '#1E90FF',
-  delivered: '#2E8B57',
-  rejected: '#CC3333',
+const statusColors: Record<Status, string> = {
+  pending: '#999',
+  accepted: '#4169E1',
+  declined: '#CC3333',
+  in_progress: '#A66BFF',
+  submitted: '#2E8B57',
 };
 
-export default function TranscriptListScreen() {
+export default function RecommendationListScreen() {
   const router = useRouter();
   const { user } = useAuth();
-  const [items, setItems] = useState<TranscriptRequest[]>([]);
+  const [items, setItems] = useState<RecReq[]>([]);
   const [loading, setLoading] = useState(true);
 
-  const fetchItems = useCallback(async () => {
+  const load = useCallback(async () => {
     if (!user) return;
     try {
       setLoading(true);
       const { data, error } = await supabase
-        .from('transcript_requests')
+        .from('recommendation_requests')
         .select('*')
-        .eq('user_id', user.id)
+        .eq('requester_id', user.id)
         .order('created_at', { ascending: false });
       if (error) throw error;
-      setItems((data as TranscriptRequest[]) || []);
+      setItems((data as RecReq[]) || []);
     } catch (err) {
-      console.error('Failed to fetch transcript requests', err);
-      Alert.alert('Error', 'Could not load your transcript requests.');
+      console.error('Load recommendations failed', err);
+      Alert.alert('Error', 'Could not load your recommendation requests.');
     } finally {
       setLoading(false);
     }
   }, [user]);
 
-  useEffect(() => {
-    fetchItems();
-  }, [fetchItems]);
+  useEffect(() => { load(); }, [load]);
 
   if (!user) {
     return (
       <View style={styles.center}>
         <Text style={styles.title}>Sign in required</Text>
-        <Text style={styles.subtitle}>Please sign in to view your transcript requests.</Text>
+        <Text style={styles.subtitle}>Please sign in to view recommendation requests.</Text>
       </View>
     );
   }
 
   return (
     <View style={styles.container}>
-      <View style={styles.header}>        
-        <Text style={styles.title}>Transcript Requests</Text>
-        <TouchableOpacity style={styles.addButton} onPress={() => router.push('/transcripts/new')}>
+      <View style={styles.header}>
+        <Text style={styles.title}>Recommendation Requests</Text>
+        <TouchableOpacity style={styles.addButton} onPress={() => router.push('/recommendations/new')}>
           <Plus size={20} color="#4169E1" />
           <Text style={styles.addText}>New</Text>
         </TouchableOpacity>
       </View>
 
       {loading ? (
-        <View style={styles.center}>          
-          <ActivityIndicator size="small" color="#4169E1" />
-        </View>
+        <View style={styles.center}><ActivityIndicator color="#4169E1" /></View>
       ) : items.length === 0 ? (
         <View style={styles.empty}>
-          <FileText size={36} color="#999" />
-          <Text style={styles.emptyTitle}>No transcript requests yet</Text>
-          <Text style={styles.emptySub}>Create your first request to get started.</Text>
-          <TouchableOpacity style={styles.cta} onPress={() => router.push('/transcripts/new')}>
+          <Users size={36} color="#999" />
+          <Text style={styles.emptyTitle}>No recommendation requests yet</Text>
+          <Text style={styles.emptySub}>Create a request to invite a recommender.</Text>
+          <TouchableOpacity style={styles.cta} onPress={() => router.push('/recommendations/new')}>
             <Plus size={18} color="#fff" />
-            <Text style={styles.ctaText}>Request Transcript</Text>
+            <Text style={styles.ctaText}>Request Recommendation</Text>
           </TouchableOpacity>
         </View>
       ) : (
         <ScrollView contentContainerStyle={{ padding: 16 }}>
           {items.map((it) => (
-            <TouchableOpacity key={it.id} style={styles.card} onPress={() => router.push(`/transcripts/${it.id}`)}>
+            <View key={it.id} style={styles.card}>
               <View style={{ flex: 1 }}>
-                <Text style={styles.cardTitle}>{it.request_type === 'official' ? 'Official' : 'Unofficial'} Transcript</Text>
-                <Text style={styles.cardSub}>{it.purpose}</Text>
-                <Text style={styles.cardSubSmall}>Recipient: {it.recipient_email}</Text>
+                <Text style={styles.cardTitle}>{labelPurpose(it.purpose)}</Text>
+                <Text style={styles.cardSub}>To: {it.recommender_email}</Text>
+                {it.organization_name ? <Text style={styles.cardSubSmall}>Org: {it.organization_name}</Text> : null}
+                {it.deadline ? <Text style={styles.cardSubSmall}>Deadline: {it.deadline}</Text> : null}
               </View>
-              <View style={[styles.statusPill, { backgroundColor: statusColors[it.status] }] }>
-                {it.status === 'delivered' ? <CheckCircle2 size={14} color="#fff" /> : <Clock size={14} color="#fff" />}
-                <Text style={styles.statusText}>{it.status.replace('_', ' ')}</Text>
+              <View style={[styles.statusPill, { backgroundColor: statusColors[it.status] }]}>
+                {it.status === 'submitted' ? <CheckCircle2 size={14} color="#fff" /> : <Clock size={14} color="#fff" />}
+                <Text style={styles.statusText}>{it.status.replace('_',' ')}</Text>
               </View>
-            </TouchableOpacity>
+            </View>
           ))}
         </ScrollView>
       )}
     </View>
   );
+}
+
+function labelPurpose(p: Purpose) {
+  switch (p) {
+    case 'job': return 'Job Recommendation';
+    case 'scholarship': return 'Scholarship Recommendation';
+    case 'graduate_school': return 'Graduate School Recommendation';
+    default: return 'Recommendation';
+  }
 }
 
 const styles = StyleSheet.create({
@@ -129,4 +138,3 @@ const styles = StyleSheet.create({
   statusPill: { paddingVertical: 6, paddingHorizontal: 10, borderRadius: 999, flexDirection: 'row', alignItems: 'center', gap: 6 },
   statusText: { color: '#fff', fontSize: 12, fontWeight: '600', textTransform: 'capitalize' },
 });
- 
