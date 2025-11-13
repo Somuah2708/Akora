@@ -67,7 +67,18 @@ export async function fetchActiveUsers(limit = 8): Promise<ActiveUserRow[]> {
     limit_count: limit,
     offset_count: 0,
   });
-  if (!error && data) return data as ActiveUserRow[];
+  if (!error && data) {
+    const rows = (data as ActiveUserRow[]).filter(r => {
+      const ts = r?.last_activity_at;
+      if (!ts) return false;
+      const normalized = /\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}/.test(ts) && !/[zZ]$/.test(ts)
+        ? ts.replace(' ', 'T') + 'Z'
+        : ts;
+      const ms = Date.parse(normalized as any);
+      return r.activity_score > 0 && !Number.isNaN(ms) && ms > 0;
+    });
+    return rows;
+  }
 
   // Fallback: approximate using counts from profiles joined discussions/comments
   const { data: discussions } = await supabase
@@ -96,5 +107,14 @@ export async function fetchActiveUsers(limit = 8): Promise<ActiveUserRow[]> {
   });
   return Object.values(aggregate)
     .sort((a, b) => b.activity_score - a.activity_score)
+    .filter(r => {
+      const ts = r?.last_activity_at;
+      if (!ts) return false;
+      const normalized = /\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}/.test(ts) && !/[zZ]$/.test(ts)
+        ? ts.replace(' ', 'T') + 'Z'
+        : ts;
+      const ms = Date.parse(normalized as any);
+      return r.activity_score > 0 && !Number.isNaN(ms) && ms > 0;
+    })
     .slice(0, limit);
 }

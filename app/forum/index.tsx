@@ -123,31 +123,38 @@ export default function ForumScreen() {
         setTrendingDiscussions([]);
         return;
       }
-      // Map profiles for author display
+      // Fetch titles/categories and author profiles for all trending items
+      const ids = rows.map(r => r.id);
       const authorIds = rows.map(r => r.author_id);
-      const { data: profs } = await supabase
-        .from('profiles')
-        .select('id, full_name, avatar_url')
-        .in('id', authorIds);
+      const [{ data: details }, { data: profs }] = await Promise.all([
+        supabase
+          .from('forum_discussions')
+          .select('id, title, category')
+          .in('id', ids),
+        supabase
+          .from('profiles')
+          .select('id, full_name, avatar_url')
+          .in('id', authorIds),
+      ]);
+      const detailsMap: Record<string, any> = {};
+      (details || []).forEach((d: any) => { detailsMap[d.id] = d; });
       const profileMap: Record<string, any> = {};
       (profs || []).forEach(p => { profileMap[p.id] = p; });
+
       const merged: TrendingDiscussion[] = rows.map(r => {
-        const baseDiscussion = discussions.find(d => d.id === r.id); // may be undefined if not in current page
+        const info = detailsMap[r.id] || {};
         return {
-          ...(baseDiscussion || {
-            id: r.id,
-            title: '(Loading title...)',
-            content: '',
-            category: 'General',
-            author_id: r.author_id,
-            likes_count: r.likes_count,
-            comments_count: r.comments_count,
-            views_count: r.views_count,
-            is_pinned: r.is_pinned,
-            created_at: r.created_at,
-            profiles: profileMap[r.author_id] || { id: r.author_id, full_name: 'Member' },
-          }),
-          // analytics fields
+          id: r.id,
+          title: info.title || '(Untitled discussion)',
+          content: '',
+          category: info.category || 'General',
+          author_id: r.author_id,
+          likes_count: r.likes_count,
+          comments_count: r.comments_count,
+          views_count: r.views_count,
+          is_pinned: r.is_pinned,
+          created_at: r.created_at,
+          profiles: profileMap[r.author_id] || { id: r.author_id, full_name: 'Member' },
           distinct_comment_authors: r.distinct_comment_authors,
           distinct_bookmarkers: r.distinct_bookmarkers,
           distinct_likers: r.distinct_likers,
@@ -210,6 +217,29 @@ export default function ForumScreen() {
       refreshActiveUsers();
     }, 60000);
     return () => clearInterval(interval);
+  }, []);
+
+  // Realtime updates: refresh analytics when discussions/comments/likes change
+  useEffect(() => {
+    let pending: NodeJS.Timeout | null = null;
+    const trigger = () => {
+      if (pending) return;
+      pending = setTimeout(() => {
+        pending = null;
+        refreshTrending();
+        refreshActiveUsers();
+      }, 800);
+    };
+    const channel = supabase
+      .channel('forum-analytics-realtime')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'forum_discussions' }, trigger)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'forum_comments' }, trigger)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'forum_discussion_likes' }, trigger)
+      .subscribe();
+    return () => {
+      try { supabase.removeChannel(channel); } catch {}
+      if (pending) clearTimeout(pending as any);
+    };
   }, []);
 
   const loadDiscussions = async (reset = false) => {
@@ -287,7 +317,11 @@ export default function ForumScreen() {
   };
 
   const getTimeAgo = (dateString: string) => {
-    const date = new Date(dateString);
+    // Normalize timestamps without timezone (e.g., '2025-11-13 12:00:00') to UTC
+    const normalized = (dateString && /\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}/.test(dateString) && !/[zZ]$/.test(dateString))
+      ? dateString.replace(' ', 'T') + 'Z'
+      : dateString;
+    const date = new Date(normalized);
     const now = new Date();
     const diffInSeconds = Math.floor((now.getTime() - date.getTime()) / 1000);
     
@@ -414,6 +448,11 @@ export default function ForumScreen() {
           )}
           {trendingDiscussions.map((discussion, idx) => (
             <TouchableOpacity key={discussion.id} style={styles.trendingCard} onPress={() => router.push(`/forum/${discussion.id}` as any)}>
+              {/* subtle rank accent */}
+              <View style={[
+                styles.accentBar,
+                idx === 0 ? styles.accentGold : idx === 1 ? styles.accentSilver : idx === 2 ? styles.accentBronze : styles.accentMuted
+              ]} />
               <View style={styles.trendingHeaderRow}>
                 <View style={styles.rankBadge}><Text style={styles.rankText}>#{idx+1}</Text></View>
                 {discussion.is_pinned && <View style={[styles.chip, { backgroundColor:'#FFF4D6' }]}><Text style={[styles.chipText,{ color:'#8B5E00'}]}>Pinned</Text></View>}
@@ -431,20 +470,7 @@ export default function ForumScreen() {
                 <Text style={styles.dot}>•</Text>
                 <Text style={styles.timeText}>{getTimeAgo(discussion.last_activity_at)}</Text>
               </View>
-              <View style={styles.metricRow}>
-                <View style={styles.metricPill}>
-                  <ThumbsUp size={12} color="#1F2937" />
-                  <Text style={styles.metricText}>{discussion.likes_count}</Text>
-                </View>
-                <View style={styles.metricPill}>
-                  <MessageCircle size={12} color="#1F2937" />
-                  <Text style={styles.metricText}>{discussion.comments_count}</Text>
-                </View>
-                <View style={[styles.metricPill, { marginLeft: 'auto' }]}>
-                  <Activity size={12} color="#1F2937" />
-                  <Text style={styles.metricText}>{discussion.trending_score.toFixed(2)}</Text>
-                </View>
-              </View>
+              {/* cleaner card without metrics */}
             </TouchableOpacity>
           ))}
         </ScrollView>
@@ -539,18 +565,6 @@ export default function ForumScreen() {
               <Image source={{ uri: u.profile?.avatar_url || 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=400&auto=format&fit=crop&q=60' }} style={styles.memberAvatar} />
               <Text style={styles.memberName} numberOfLines={1}>{u.profile?.full_name || 'Member'}</Text>
               <Text style={styles.memberRole}>{getTimeAgo(u.last_activity_at)}</Text>
-              <View style={styles.contributionBadge}>
-                <Activity size={12} color="#4169E1" />
-                <Text style={styles.contributionText}>{u.activity_score.toFixed(2)}</Text>
-              </View>
-              <View style={{ marginTop:8, alignSelf:'stretch' }}>
-                <View style={{ height:6, backgroundColor:'#EBF0FF', borderRadius:3, overflow:'hidden' }}>
-                  {(() => {
-                    const pct = Math.min(100,(u.activity_score/(activeUsers[0]?.activity_score||1))*100);
-                    return <View style={{ height:'100%', width: (pct + '%') as any, backgroundColor:'#4169E1' }} />
-                  })()}
-                </View>
-              </View>
             </TouchableOpacity>
           ))}
         </ScrollView>
@@ -751,6 +765,8 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     overflow: 'hidden',
     backgroundColor: '#FFFFFF',
+    borderWidth: 1,
+    borderColor: '#F3F4F6',
     shadowColor: '#000000',
     shadowOffset: {
       width: 0,
@@ -761,6 +777,11 @@ const styles = StyleSheet.create({
     elevation: 3,
     padding: 16,
   },
+  accentBar: { height: 4, borderTopLeftRadius: 16, borderTopRightRadius: 16, marginHorizontal: -16, marginTop: -16, marginBottom: 12 },
+  accentGold: { backgroundColor: '#F59E0B' },
+  accentSilver: { backgroundColor: '#9CA3AF' },
+  accentBronze: { backgroundColor: '#B45309' },
+  accentMuted: { backgroundColor: '#E5E7EB' },
   trendingHeaderRow: {
     flexDirection: 'row',
     alignItems: 'center',

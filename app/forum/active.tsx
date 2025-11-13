@@ -1,7 +1,7 @@
 import { useEffect, useState, useCallback } from 'react';
 import { View, Text, StyleSheet, FlatList, TouchableOpacity, Image, ActivityIndicator, RefreshControl } from 'react-native';
 import { useRouter } from 'expo-router';
-import { ArrowLeft, Activity as ActivityIcon } from 'lucide-react-native';
+import { ArrowLeft } from 'lucide-react-native';
 import { fetchActiveUsers, ActiveUserRow } from '@/lib/forum/analytics';
 import { supabase } from '@/lib/supabase';
 
@@ -16,7 +16,10 @@ export default function ActiveMembersScreen() {
   const [refreshing, setRefreshing] = useState(false);
 
   const getTimeAgo = (dateString: string) => {
-    const date = new Date(dateString);
+    const normalized = (dateString && /\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}/.test(dateString) && !/[zZ]$/.test(dateString))
+      ? dateString.replace(' ', 'T') + 'Z'
+      : dateString;
+    const date = new Date(normalized);
     const now = new Date();
     const diffInSeconds = Math.floor((now.getTime() - date.getTime()) / 1000);
     if (diffInSeconds < 60) return `${diffInSeconds}s ago`;
@@ -82,21 +85,9 @@ export default function ActiveMembersScreen() {
                   <Text style={styles.name} numberOfLines={1}>{item.profile?.full_name || 'Member'}</Text>
                   <Text style={styles.time}>{getTimeAgo(item.last_activity_at)}</Text>
                 </View>
-                <View style={styles.pill}> 
-                  <ActivityIcon size={12} color="#1F2937" />
-                  <Text style={styles.pillText}>{item.activity_score.toFixed(2)}</Text>
-                </View>
+                  {/* metrics removed for a cleaner UI */}
               </View>
-              <View style={{ marginTop:8 }}>
-                <View style={{ height: 6, backgroundColor: '#EBF0FF', borderRadius: 3, overflow: 'hidden' }}>
-                  {(() => {
-                    const pct = Math.min(100, (item.activity_score / (rows[0]?.activity_score || 1)) * 100);
-                    return (
-                      <View style={{ height: '100%', width: (pct + '%') as any, backgroundColor: '#4169E1' }} />
-                    );
-                  })()}
-                </View>
-              </View>
+                {/* progress bar removed */}
             </TouchableOpacity>
           )}
         />
@@ -120,4 +111,5 @@ const styles = StyleSheet.create({
   time: { fontSize:12, color:'#6B7280', fontFamily:'Inter-Regular' },
   pill: { flexDirection:'row', alignItems:'center', backgroundColor:'#F3F4F6', paddingHorizontal:10, paddingVertical:6, borderRadius:999, gap:6 },
   pillText: { fontSize:12, fontFamily:'Inter-SemiBold', color:'#1F2937' },
+    // removed pill styles
 });

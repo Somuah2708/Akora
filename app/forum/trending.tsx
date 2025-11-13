@@ -1,7 +1,7 @@
 import { useEffect, useState, useCallback } from 'react';
 import { View, Text, StyleSheet, FlatList, TouchableOpacity, Image, ActivityIndicator, RefreshControl } from 'react-native';
 import { useRouter } from 'expo-router';
-import { ArrowLeft, Hash, ThumbsUp, MessageCircle, Activity as ActivityIcon } from 'lucide-react-native';
+import { ArrowLeft, Hash } from 'lucide-react-native';
 import { fetchTrendingDiscussions, TrendingDiscussionRow } from '@/lib/forum/analytics';
 import { supabase } from '@/lib/supabase';
 
@@ -18,7 +18,10 @@ export default function TrendingListScreen() {
   const [refreshing, setRefreshing] = useState(false);
 
   const getTimeAgo = (dateString: string) => {
-    const date = new Date(dateString);
+    const normalized = (dateString && /\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}/.test(dateString) && !/[zZ]$/.test(dateString))
+      ? dateString.replace(' ', 'T') + 'Z'
+      : dateString;
+    const date = new Date(normalized);
     const now = new Date();
     const diffInSeconds = Math.floor((now.getTime() - date.getTime()) / 1000);
     if (diffInSeconds < 60) return `${diffInSeconds}s ago`;
@@ -99,20 +102,7 @@ export default function TrendingListScreen() {
                 <Text style={styles.dot}>•</Text>
                 <Text style={styles.time}>{getTimeAgo(item.last_activity_at)}</Text>
               </View>
-              <View style={styles.metrics}>
-                <View style={styles.pill}>
-                  <ThumbsUp size={12} color="#1F2937" />
-                  <Text style={styles.pillText}>{item.likes_count}</Text>
-                </View>
-                <View style={styles.pill}>
-                  <MessageCircle size={12} color="#1F2937" />
-                  <Text style={styles.pillText}>{item.comments_count}</Text>
-                </View>
-                <View style={[styles.pill, { marginLeft: 'auto' }]}>
-                  <ActivityIcon size={12} color="#1F2937" />
-                  <Text style={styles.pillText}>{item.trending_score.toFixed(2)}</Text>
-                </View>
-              </View>
+              {/* Metrics removed for a cleaner list per feedback */}
             </TouchableOpacity>
           )}
         />
