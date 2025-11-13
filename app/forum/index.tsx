@@ -114,64 +114,7 @@ export default function ForumScreen() {
     );
   };
 
-  useFocusEffect(
-    useCallback(() => {
-      // Reset and load first page on focus
-      setPage(0);
-      setHasMore(true);
-      loadDiscussions(true);
-    }, [])
-  );
-
-  // Cross-screen sync: reflect bookmark changes from detail/saved screens
-  useEffect(() => {
-    const unsubscribe = on('forum:bookmarkChanged', ({ discussionId, saved }) => {
-      setSavedMap(prev => ({ ...prev, [discussionId]: saved }));
-    });
-    return unsubscribe;
-  }, []);
-
-  const loadDiscussions = async (reset = false) => {
-    try {
-      if (reset) {
-        setLoading(true);
-      } else {
-        setLoadingMore(true);
-      }
-
-      // Fetch all discussions with author info
-      const from = (reset ? 0 : page * pageSize);
-      const to = from + pageSize - 1;
-
-      const { data, error } = await supabase
-        .from('forum_discussions')
-        .select(`
-          *,
-          profiles!forum_discussions_author_id_fkey (
-            id,
-            username,
-            full_name,
-            avatar_url
-          )
-        `)
-        .order('created_at', { ascending: false })
-        .range(from, to);
-
-      if (error) throw error;
-      setErrorMessage(null);
-
-      const formattedDiscussions = (data || []).map((d: any) => ({
-        ...d,
-        profiles: Array.isArray(d.profiles) ? d.profiles[0] : d.profiles,
-      }));
-
-      const merged = reset ? formattedDiscussions : [...discussions, ...formattedDiscussions];
-      setDiscussions(merged);
-
-      // Initial trending fetch (actual analytics view / fallback)
-      refreshTrending();
-      refreshActiveUsers();
-  // Load analytics: trending discussions
+  // Load analytics: trending discussions (defined before usage)
   const refreshTrending = async () => {
     setTrendingLoading(true);
     try {
@@ -240,14 +183,71 @@ export default function ForumScreen() {
     }
   };
 
-  // Periodic light refresh every 60s
+  useFocusEffect(
+    useCallback(() => {
+      // Reset and load first page on focus
+      setPage(0);
+      setHasMore(true);
+      loadDiscussions(true);
+      // Kick off analytics refresh on focus
+      refreshTrending();
+      refreshActiveUsers();
+    }, [])
+  );
+
+  // Cross-screen sync: reflect bookmark changes from detail/saved screens
+  useEffect(() => {
+    const unsubscribe = on('forum:bookmarkChanged', ({ discussionId, saved }) => {
+      setSavedMap(prev => ({ ...prev, [discussionId]: saved }));
+    });
+    return unsubscribe;
+  }, []);
+
+  // Periodic light refresh every 60s (top-level hook)
   useEffect(() => {
     const interval = setInterval(() => {
       refreshTrending();
       refreshActiveUsers();
     }, 60000);
     return () => clearInterval(interval);
-  }, [discussions]);
+  }, []);
+
+  const loadDiscussions = async (reset = false) => {
+    try {
+      if (reset) {
+        setLoading(true);
+      } else {
+        setLoadingMore(true);
+      }
+
+      // Fetch all discussions with author info
+      const from = (reset ? 0 : page * pageSize);
+      const to = from + pageSize - 1;
+
+      const { data, error } = await supabase
+        .from('forum_discussions')
+        .select(`
+          *,
+          profiles!forum_discussions_author_id_fkey (
+            id,
+            username,
+            full_name,
+            avatar_url
+          )
+        `)
+        .order('created_at', { ascending: false })
+        .range(from, to);
+
+      if (error) throw error;
+      setErrorMessage(null);
+
+      const formattedDiscussions = (data || []).map((d: any) => ({
+        ...d,
+        profiles: Array.isArray(d.profiles) ? d.profiles[0] : d.profiles,
+      }));
+
+      const merged = reset ? formattedDiscussions : [...discussions, ...formattedDiscussions];
+      setDiscussions(merged);
 
       // Determine if there's more data
       if ((data || []).length < pageSize) {
@@ -400,7 +400,7 @@ export default function ForumScreen() {
       <View style={styles.section}>
         <View style={styles.sectionHeader}>
           <Text style={styles.sectionTitle}>Trending Discussions</Text>
-          <TouchableOpacity style={styles.seeAllButton}>
+          <TouchableOpacity style={styles.seeAllButton} onPress={() => router.push('/forum/trending' as any)}>
             <Text style={styles.seeAllText}>See All</Text>
             <ChevronRight size={16} color="#666666" />
           </TouchableOpacity>
@@ -414,37 +414,35 @@ export default function ForumScreen() {
           )}
           {trendingDiscussions.map((discussion, idx) => (
             <TouchableOpacity key={discussion.id} style={styles.trendingCard} onPress={() => router.push(`/forum/${discussion.id}` as any)}>
-              <Image source={{ uri: discussion.profiles?.avatar_url || 'https://images.unsplash.com/photo-1587854692152-cbe660dbde88?w=800&auto=format&fit=crop&q=60' }} style={styles.trendingImage} />
-              <View style={styles.trendingOverlay}>
-                <View style={[styles.categoryTag, discussion.is_pinned && { backgroundColor:'#FFE8B4' }]}>
-                  <TrendingUp size={14} color="#4169E1" />
-                  <Text style={styles.categoryTagText}>#{idx+1}</Text>
+              <View style={styles.trendingHeaderRow}>
+                <View style={styles.rankBadge}><Text style={styles.rankText}>#{idx+1}</Text></View>
+                {discussion.is_pinned && <View style={[styles.chip, { backgroundColor:'#FFF4D6' }]}><Text style={[styles.chipText,{ color:'#8B5E00'}]}>Pinned</Text></View>}
+                {!!discussion.category && (
+                  <View style={[styles.chip, { marginLeft: 'auto' }]}>
+                    <Hash size={12} color="#4169E1" />
+                    <Text style={[styles.chipText, { color:'#4169E1'}]}>{discussion.category}</Text>
+                  </View>
+                )}
+              </View>
+              <Text style={styles.trendingTitle} numberOfLines={2}>{discussion.title}</Text>
+              <View style={styles.authorRow}>
+                <Image source={{ uri: discussion.profiles?.avatar_url || 'https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?w=400&auto=format&fit=crop&q=60' }} style={styles.authorAvatar} />
+                <Text style={styles.authorNameDark} numberOfLines={1}>{discussion.profiles?.full_name || 'Anonymous'}</Text>
+                <Text style={styles.dot}>•</Text>
+                <Text style={styles.timeText}>{getTimeAgo(discussion.last_activity_at)}</Text>
+              </View>
+              <View style={styles.metricRow}>
+                <View style={styles.metricPill}>
+                  <ThumbsUp size={12} color="#1F2937" />
+                  <Text style={styles.metricText}>{discussion.likes_count}</Text>
                 </View>
-                <Text style={styles.trendingTitle} numberOfLines={2}>{discussion.title}</Text>
-                <View style={styles.authorInfo}>
-                  <Image source={{ uri: discussion.profiles?.avatar_url || 'https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?w=400&auto=format&fit=crop&q=60' }} style={styles.authorAvatar} />
-                  <View style={styles.authorDetails}>
-                    <Text style={styles.authorName}>{discussion.profiles?.full_name || 'Anonymous'}</Text>
-                    <Text style={styles.authorRole}>{getTimeAgo(discussion.last_activity_at)}</Text>
-                  </View>
+                <View style={styles.metricPill}>
+                  <MessageCircle size={12} color="#1F2937" />
+                  <Text style={styles.metricText}>{discussion.comments_count}</Text>
                 </View>
-                <View style={styles.engagementInfo}>
-                  <View style={styles.engagementItem}>
-                    <ThumbsUp size={14} color="#FFFFFF" />
-                    <Text style={styles.engagementText}>{discussion.likes_count}</Text>
-                  </View>
-                  <View style={styles.engagementItem}>
-                    <MessageCircle size={14} color="#FFFFFF" />
-                    <Text style={styles.engagementText}>{discussion.comments_count}</Text>
-                  </View>
-                  <View style={styles.engagementItem}>
-                    <Activity size={14} color="#FFFFFF" />
-                    <Text style={styles.engagementText}>{discussion.trending_score.toFixed(2)}</Text>
-                  </View>
-                </View>
-                {/* Score bar */}
-                <View style={{ marginTop: 12, height: 6, backgroundColor: 'rgba(255,255,255,0.2)', borderRadius: 3, overflow:'hidden' }}>
-                  <View style={{ width: Math.min(100, (discussion.trending_score / (trendingDiscussions[0]?.trending_score||1))*100) + '%', backgroundColor:'#FFFFFF', height:'100%' }} />
+                <View style={[styles.metricPill, { marginLeft: 'auto' }]}>
+                  <Activity size={12} color="#1F2937" />
+                  <Text style={styles.metricText}>{discussion.trending_score.toFixed(2)}</Text>
                 </View>
               </View>
             </TouchableOpacity>
@@ -526,7 +524,7 @@ export default function ForumScreen() {
       <View style={styles.section}>
         <View style={styles.sectionHeader}>
           <Text style={styles.sectionTitle}>Active Members</Text>
-          <TouchableOpacity style={styles.seeAllButton}>
+          <TouchableOpacity style={styles.seeAllButton} onPress={() => router.push('/forum/active' as any)}>
             <Text style={styles.seeAllText}>See All</Text>
             <ChevronRight size={16} color="#666666" />
           </TouchableOpacity>
@@ -547,7 +545,10 @@ export default function ForumScreen() {
               </View>
               <View style={{ marginTop:8, alignSelf:'stretch' }}>
                 <View style={{ height:6, backgroundColor:'#EBF0FF', borderRadius:3, overflow:'hidden' }}>
-                  <View style={{ height:'100%', width: Math.min(100,(u.activity_score/(activeUsers[0]?.activity_score||1))*100)+'%', backgroundColor:'#4169E1' }} />
+                  {(() => {
+                    const pct = Math.min(100,(u.activity_score/(activeUsers[0]?.activity_score||1))*100);
+                    return <View style={{ height:'100%', width: (pct + '%') as any, backgroundColor:'#4169E1' }} />
+                  })()}
                 </View>
               </View>
             </TouchableOpacity>
@@ -746,7 +747,7 @@ const styles = StyleSheet.create({
   },
   trendingCard: {
     width: CARD_WIDTH,
-    height: 320,
+    minHeight: 180,
     borderRadius: 16,
     overflow: 'hidden',
     backgroundColor: '#FFFFFF',
@@ -758,42 +759,46 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.1,
     shadowRadius: 4,
     elevation: 3,
-  },
-  trendingImage: {
-    width: '100%',
-    height: '100%',
-  },
-  trendingOverlay: {
-    position: 'absolute',
-    bottom: 0,
-    left: 0,
-    right: 0,
     padding: 16,
-    backgroundColor: 'rgba(0, 0, 0, 0.6)',
   },
-  categoryTag: {
+  trendingHeaderRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#FFFFFF',
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 20,
-    alignSelf: 'flex-start',
-    gap: 4,
     marginBottom: 12,
+    gap: 8,
   },
-  categoryTagText: {
+  rankBadge: {
+    backgroundColor: '#EEF2FF',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 8,
+  },
+  rankText: {
     fontSize: 12,
     fontFamily: 'Inter-SemiBold',
-    color: '#4169E1',
+    color: '#3730A3',
+  },
+  chip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#EBF0FF',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 12,
+    gap: 6,
+  },
+  chipText: {
+    fontSize: 12,
+    fontFamily: 'Inter-SemiBold',
+    color: '#111827',
   },
   trendingTitle: {
     fontSize: 18,
     fontFamily: 'Inter-SemiBold',
-    color: '#FFFFFF',
-    marginBottom: 12,
+    color: '#111827',
+    marginBottom: 8,
   },
-  authorInfo: {
+  authorRow: {
     flexDirection: 'row',
     alignItems: 'center',
     marginBottom: 12,
@@ -804,23 +809,33 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     marginRight: 8,
   },
-  authorDetails: {
-    flex: 1,
-  },
-  authorName: {
+  authorNameDark: {
     fontSize: 14,
     fontFamily: 'Inter-SemiBold',
-    color: '#FFFFFF',
+    color: '#111827',
+    maxWidth: 180,
   },
-  authorRole: {
-    fontSize: 12,
-    fontFamily: 'Inter-Regular',
-    color: '#FFFFFF',
-    opacity: 0.8,
-  },
-  engagementInfo: {
+  dot: { marginHorizontal: 6, color: '#9CA3AF' },
+  timeText: { fontSize: 12, color: '#6B7280', fontFamily: 'Inter-Regular' },
+  metricRow: {
     flexDirection: 'row',
-    gap: 16,
+    alignItems: 'center',
+    marginTop: 4,
+    gap: 8,
+  },
+  metricPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#F3F4F6',
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 999,
+    gap: 6,
+  },
+  metricText: {
+    fontSize: 12,
+    fontFamily: 'Inter-SemiBold',
+    color: '#1F2937',
   },
   engagementItem: {
     flexDirection: 'row',
