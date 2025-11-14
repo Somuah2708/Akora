@@ -225,20 +225,20 @@ export default function NewTranscriptScreen() {
           style={styles.input}
         />
 
-  <Text style={styles.label}>Index Number (optional)</Text>
+        <Text style={styles.label}>Index Number (optional)</Text>
+        <TextInput
+          value={indexNumber}
+          onChangeText={setIndexNumber}
+          placeholder="Index number if available"
+          style={styles.input}
+        />
+
         <Text style={styles.label}>Phone Number</Text>
         <TextInput
           value={phoneNumber}
           onChangeText={setPhoneNumber}
           placeholder="e.g., 0241234567"
           keyboardType="phone-pad"
-          style={styles.input}
-        />
-
-        <TextInput
-          value={indexNumber}
-          onChangeText={setIndexNumber}
-          placeholder="Index number if available"
           style={styles.input}
         />
 

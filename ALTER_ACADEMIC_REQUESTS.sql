@@ -3,13 +3,39 @@
 -- Run in Supabase SQL editor.
 
 -- 1) transcript_requests: request_kind + identity + pricing
+
+-- First, drop ALL NOT NULL constraints on transcript_requests except essential ones (id, user_id, status, created_at)
+DO $$
+DECLARE
+  col record;
+BEGIN
+  FOR col IN 
+    SELECT column_name 
+    FROM information_schema.columns 
+    WHERE table_name = 'transcript_requests' 
+      AND is_nullable = 'NO'
+      AND column_name NOT IN ('id', 'user_id', 'status', 'created_at', 'updated_at')
+  LOOP
+    EXECUTE format('ALTER TABLE transcript_requests ALTER COLUMN %I DROP NOT NULL', col.column_name);
+  END LOOP;
+END$$;
+
+-- Drop and recreate the status CHECK constraint with updated values
+ALTER TABLE transcript_requests DROP CONSTRAINT IF EXISTS transcript_requests_status_check;
+ALTER TABLE transcript_requests ADD CONSTRAINT transcript_requests_status_check 
+  CHECK (status IN ('pending', 'payment_provided', 'processing', 'ready', 'delivered', 'rejected'));
+
+-- Add new columns
 ALTER TABLE transcript_requests
   ADD COLUMN IF NOT EXISTS request_kind TEXT CHECK (request_kind IN ('transcript','wassce')),
+  ADD COLUMN IF NOT EXISTS request_type TEXT,
   ADD COLUMN IF NOT EXISTS full_name TEXT,
   ADD COLUMN IF NOT EXISTS class_name TEXT,
   ADD COLUMN IF NOT EXISTS graduation_year INT,
   ADD COLUMN IF NOT EXISTS index_number TEXT,
   ADD COLUMN IF NOT EXISTS phone_number TEXT,
+  ADD COLUMN IF NOT EXISTS purpose TEXT,
+  ADD COLUMN IF NOT EXISTS recipient_email TEXT,
   ADD COLUMN IF NOT EXISTS price_amount NUMERIC,
   ADD COLUMN IF NOT EXISTS price_currency TEXT DEFAULT 'GHS';
 
@@ -25,19 +51,19 @@ BEGIN
     WHERE table_name = 'transcript_requests' AND column_name = 'request_type'
   ) THEN
     -- request_type present: differentiate official vs others
-    EXECUTE $$UPDATE transcript_requests SET price_amount =
+    UPDATE transcript_requests SET price_amount =
       COALESCE(price_amount, CASE
         WHEN request_kind = 'wassce' THEN 40
         WHEN request_type = 'official' THEN 50
         ELSE 0
-      END), price_currency = COALESCE(price_currency,'GHS')$$;
+      END), price_currency = COALESCE(price_currency,'GHS');
   ELSE
     -- request_type absent: fall back to request_kind only
-    EXECUTE $$UPDATE transcript_requests SET price_amount =
+    UPDATE transcript_requests SET price_amount =
       COALESCE(price_amount, CASE
         WHEN request_kind = 'wassce' THEN 40
         ELSE 0
-      END), price_currency = COALESCE(price_currency,'GHS')$$;
+      END), price_currency = COALESCE(price_currency,'GHS');
   END IF;
 END$$;
 
