@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { View, Text, TextInput, StyleSheet, TouchableOpacity, Alert, ActivityIndicator, KeyboardAvoidingView, Platform } from 'react-native';
+import { View, Text, TextInput, StyleSheet, TouchableOpacity, Alert, ActivityIndicator, KeyboardAvoidingView, Platform, ScrollView } from 'react-native';
 import { useRouter } from 'expo-router';
 import { ArrowLeft, Send, Plus, X, Upload, DollarSign, Copy } from 'lucide-react-native';
 import * as Clipboard from 'expo-clipboard';
@@ -144,7 +144,7 @@ export default function NewRecommendationScreen() {
         <View style={{ width: 24 }} />
       </View>
 
-      <View style={styles.content}>
+      <ScrollView style={styles.scrollContainer} contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
         <Text style={styles.label}>Full Name</Text>
         <TextInput value={fullName} onChangeText={setFullName} placeholder="Your full name" style={styles.input} />
 
@@ -238,7 +238,7 @@ export default function NewRecommendationScreen() {
           {submitting ? <ActivityIndicator size="small" color="#fff" /> : <Send size={18} color="#fff" />}
           <Text style={styles.submitText}>{submitting ? 'Sending...' : 'Send Request'}</Text>
         </TouchableOpacity>
-      </View>
+      </ScrollView>
     </KeyboardAvoidingView>
   );
 }
@@ -258,7 +258,8 @@ const styles = StyleSheet.create({
   backButton: { padding: 6 },
   title: { fontSize: 18, fontWeight: '600' },
   subtitle: { fontSize: 14, color: '#666' },
-  content: { padding: 16 },
+  scrollContainer: { flex: 1 },
+  content: { padding: 16, paddingBottom: 40 },
   label: { marginTop: 12, fontSize: 14, fontWeight: '600' },
   input: { marginTop: 6, borderWidth: 1, borderColor: '#E2E8F0', borderRadius: 10, paddingHorizontal: 12, paddingVertical: 10, fontSize: 14 },
   segment: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 8 },

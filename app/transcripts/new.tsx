@@ -1,5 +1,5 @@
 import { useState, useMemo } from 'react';
-import { View, Text, TextInput, StyleSheet, TouchableOpacity, Alert, ActivityIndicator, KeyboardAvoidingView, Platform } from 'react-native';
+import { View, Text, TextInput, StyleSheet, TouchableOpacity, Alert, ActivityIndicator, KeyboardAvoidingView, Platform, ScrollView } from 'react-native';
 import { useRouter } from 'expo-router';
 import { ArrowLeft, FilePlus2, Upload, DollarSign, Copy } from 'lucide-react-native';
 import * as Clipboard from 'expo-clipboard';
@@ -158,25 +158,42 @@ export default function NewTranscriptScreen() {
         <View style={{ width: 24 }} />
       </View>
 
-      <View style={styles.content}>
-        <Text style={styles.label}>Request Kind</Text>
-        <View style={styles.segment}>
-          <TouchableOpacity onPress={() => setRequestKind('transcript')} style={[styles.segmentBtn, requestKind==='transcript' && styles.segmentBtnActive]}>          
-            <Text style={[styles.segmentText, requestKind==='transcript' && styles.segmentTextActive]}>Transcript</Text>
-          </TouchableOpacity>
-          <TouchableOpacity onPress={() => setRequestKind('wassce')} style={[styles.segmentBtn, requestKind==='wassce' && styles.segmentBtnActive]}>          
-            <Text style={[styles.segmentText, requestKind==='wassce' && styles.segmentTextActive]}>WASSCE Certificate</Text>
-          </TouchableOpacity>
-        </View>
+      <ScrollView style={styles.scrollContainer} showsVerticalScrollIndicator={false}>
+        <View style={styles.content}>
+          <Text style={styles.label}>Request Kind</Text>
+          <ScrollView 
+            horizontal 
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.segmentScroll}
+          >
+            <TouchableOpacity 
+              onPress={() => setRequestKind('transcript')} 
+              style={[styles.segmentBtn, requestKind==='transcript' && styles.segmentBtnActive]}
+            >          
+              <Text style={[styles.segmentText, requestKind==='transcript' && styles.segmentTextActive]}>Transcript</Text>
+            </TouchableOpacity>
+            <TouchableOpacity 
+              onPress={() => setRequestKind('wassce')} 
+              style={[styles.segmentBtn, requestKind==='wassce' && styles.segmentBtnActive]}
+            >          
+              <Text style={[styles.segmentText, requestKind==='wassce' && styles.segmentTextActive]}>WASSCE Certificate</Text>
+            </TouchableOpacity>
+            <TouchableOpacity 
+              onPress={() => router.push('/recommendations/new')} 
+              style={styles.segmentBtn}
+            >          
+              <Text style={styles.segmentText}>Recommendations</Text>
+            </TouchableOpacity>
+          </ScrollView>
 
         {requestKind === 'transcript' && (
           <>
             <Text style={styles.label}>Transcript Type</Text>
-            <View style={styles.segment}>
-              <TouchableOpacity onPress={() => setRequestType('official')} style={[styles.segmentBtn, requestType==='official' && styles.segmentBtnActive]}>          
+            <View style={styles.typeSegment}>
+              <TouchableOpacity onPress={() => setRequestType('official')} style={[styles.typeSegmentBtn, requestType==='official' && styles.segmentBtnActive]}>          
                 <Text style={[styles.segmentText, requestType==='official' && styles.segmentTextActive]}>Official</Text>
               </TouchableOpacity>
-              <TouchableOpacity onPress={() => setRequestType('unofficial')} style={[styles.segmentBtn, requestType==='unofficial' && styles.segmentBtnActive]}>          
+              <TouchableOpacity onPress={() => setRequestType('unofficial')} style={[styles.typeSegmentBtn, requestType==='unofficial' && styles.segmentBtnActive]}>          
                 <Text style={[styles.segmentText, requestType==='unofficial' && styles.segmentTextActive]}>Unofficial</Text>
               </TouchableOpacity>
             </View>
@@ -290,7 +307,8 @@ export default function NewTranscriptScreen() {
           {submitting ? <ActivityIndicator size="small" color="#fff" /> : <FilePlus2 size={18} color="#fff" />}
           <Text style={styles.submitText}>{submitting ? 'Submitting...' : 'Submit & Continue'}</Text>
         </TouchableOpacity>
-      </View>
+        </View>
+      </ScrollView>
     </KeyboardAvoidingView>
   );
 }
@@ -301,13 +319,16 @@ const styles = StyleSheet.create({
   backButton: { padding: 6 },
   title: { fontSize: 18, fontWeight: '600' },
   subtitle: { fontSize: 14, color: '#666' },
-  content: { padding: 16 },
+  scrollContainer: { flex: 1 },
+  content: { padding: 16, paddingBottom: 40 },
   label: { marginTop: 12, fontSize: 14, fontWeight: '600' },
   input: { marginTop: 6, borderWidth: 1, borderColor: '#E2E8F0', borderRadius: 10, paddingHorizontal: 12, paddingVertical: 10, fontSize: 14 },
-  segment: { flexDirection: 'row', gap: 8, marginTop: 8 },
-  segmentBtn: { flex: 1, paddingVertical: 10, borderWidth: 1, borderColor: '#E2E8F0', borderRadius: 10, alignItems: 'center' },
+  segmentScroll: { gap: 8, marginTop: 8, paddingRight: 16 },
+  segmentBtn: { paddingVertical: 10, paddingHorizontal: 20, borderWidth: 1, borderColor: '#E2E8F0', borderRadius: 10, alignItems: 'center', minWidth: 140 },
+  typeSegment: { flexDirection: 'row', gap: 8, marginTop: 8 },
+  typeSegmentBtn: { flex: 1, paddingVertical: 10, borderWidth: 1, borderColor: '#E2E8F0', borderRadius: 10, alignItems: 'center' },
   segmentBtnActive: { backgroundColor: '#4169E1', borderColor: '#4169E1' },
-  segmentText: { color: '#111', fontWeight: '600' },
+  segmentText: { color: '#111', fontWeight: '600', fontSize: 14 },
   segmentTextActive: { color: '#fff' },
   priceBox: { marginTop: 20, backgroundColor: '#EBF3FF', borderWidth: 1.5, borderColor: '#B6D3FF', borderRadius: 14, padding: 16 },
   priceMain: { fontSize: 20, fontWeight: '700', color: '#1F3B7A' },
