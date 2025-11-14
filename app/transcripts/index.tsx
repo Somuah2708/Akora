@@ -115,7 +115,7 @@ export default function TranscriptListScreen() {
                   <Text style={styles.cardSub}>{it.purpose}</Text>
                   <Text style={styles.cardSubSmall}>Recipient: {it.recipient_email}</Text>
                   {identityLine ? <Text style={styles.cardMeta}>{identityLine}</Text> : null}
-                  {priceLine ? <Text style={styles.cardPrice}>{priceLine}</Text> : null}
+                  {priceLine ? <Text style={styles.cardPrice}>Cost of Service: {priceLine}</Text> : null}
                 </View>
                 <View style={[styles.statusPill, { backgroundColor: statusColors[it.status] }] }>
                   {it.status === 'delivered' ? <CheckCircle2 size={14} color="#fff" /> : <Clock size={14} color="#fff" />}

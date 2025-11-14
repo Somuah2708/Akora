@@ -21,9 +21,11 @@ type RecReq = {
   class_name?: string | null;
   graduation_year?: number | null;
   index_number?: string | null;
+  phone_number?: string | null;
   teachers?: string[] | null;
   activities?: string | null;
   activity_docs?: string[] | null;
+  payment_proof_url?: string | null;
   price_amount?: number | null;
   price_currency?: string | null;
 };
@@ -199,7 +201,9 @@ export default function AdminRecommendationsScreen() {
                   <Text style={styles.cardSubSmall}>Ref: {it.id.slice(0,8)} · Code: {it.verification_code}</Text>
                   {identityLine ? <Text style={styles.cardMeta}>{identityLine}</Text> : null}
                   {it.index_number ? <Text style={styles.cardMeta}>Index: {it.index_number}</Text> : null}
-                  <Text style={styles.cardPrice}>Price: {priceLine}</Text>
+                  {it.phone_number ? <Text style={styles.cardMeta}>Phone: {it.phone_number}</Text> : null}
+                  <Text style={styles.cardPrice}>Cost of Service: {priceLine}</Text>
+                  {it.payment_proof_url ? <Text style={styles.cardMeta}>Payment Proof Uploaded</Text> : null}
                   {it.teachers && it.teachers.length ? (
                     <View style={styles.chipsWrap}>
                       {it.teachers.map(t => (

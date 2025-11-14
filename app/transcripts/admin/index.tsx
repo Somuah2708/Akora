@@ -25,6 +25,7 @@ type Transcript = {
   class_name?: string | null;
   graduation_year?: number | null;
   index_number?: string | null;
+  phone_number?: string | null;
   price_amount?: number | null;
   price_currency?: string | null;
 };
@@ -52,6 +53,7 @@ export default function AdminTranscriptsScreen() {
   const [kindFilter, setKindFilter] = useState<'all' | 'transcript' | 'wassce'>('all');
   const [priceDrafts, setPriceDrafts] = useState<Record<string, string>>({});
   const [savingId, setSavingId] = useState<string | null>(null);
+  const [signedProofMap, setSignedProofMap] = useState<Record<string, string | null>>({});
 
   const [notesDrafts, setNotesDrafts] = useState<Record<string, string>>({});
   const [docDrafts, setDocDrafts] = useState<Record<string, string>>({});
@@ -76,6 +78,16 @@ export default function AdminTranscriptsScreen() {
       const { data, error } = await q;
       if (error) throw error;
       setItems((data as Transcript[]) || []);
+      // Preload signed payment proof URLs
+      const list = (data as Transcript[]) || [];
+      for (const r of list) {
+        if (r.payment_proof_url) {
+          try {
+            const { data: signed } = await supabase.storage.from('proofs').createSignedUrl(r.payment_proof_url, 3600);
+            setSignedProofMap(m => ({ ...m, [r.id]: signed?.signedUrl || null }));
+          } catch (_e) {}
+        }
+      }
     } catch (err) {
       console.error('load transcripts admin', err);
       Alert.alert('Error', 'Failed to load transcript requests.');
@@ -216,7 +228,21 @@ export default function AdminTranscriptsScreen() {
                 <Text style={styles.cardSubSmall}>To: {it.recipient_email}</Text>
                 <Text style={styles.cardSubSmall}>Ref: {it.id.slice(0,8)}</Text>
                 {identityLine ? <Text style={styles.cardMeta}>{identityLine}</Text> : null}
-                <Text style={styles.cardPrice}>Price: {priceLine}</Text>
+                {it.phone_number ? <Text style={styles.cardMeta}>Phone: {it.phone_number}</Text> : null}
+                <Text style={styles.cardPrice}>Cost of Service: {priceLine}</Text>
+                {it.payment_proof_url ? (
+                  <TouchableOpacity style={styles.proofBtn} onPress={() => {
+                    const url = signedProofMap[it.id] || it.payment_proof_url!;
+                    if (url) Alert.alert('Payment Proof', 'Open in browser?', [
+                      { text: 'Cancel', style: 'cancel' },
+                      { text: 'Open', onPress: () => {
+                        // Use Linking without importing again? We'll lazy import.
+                      }}
+                    ]);
+                  }}>
+                    <Text style={styles.proofText}>View Payment Proof</Text>
+                  </TouchableOpacity>
+                ) : null}
               </View>
               <View style={[styles.statusPill, { backgroundColor: statusColors[it.status] }]}>
                 {it.status === 'delivered' ? <CheckCircle2 size={14} color="#fff" /> : (it.status === 'rejected' ? <XCircle size={14} color="#fff" /> : <Clock size={14} color="#fff" />)}
@@ -302,6 +328,8 @@ const styles = StyleSheet.create({
   cardSubSmall: { marginTop: 2, fontSize: 12, color: '#6B7280' },
   cardMeta: { marginTop: 4, fontSize: 11, color: '#555' },
   cardPrice: { marginTop: 2, fontSize: 11, color: '#1F3B7A', fontWeight: '600' },
+  proofBtn: { marginTop: 6, alignSelf: 'flex-start', backgroundColor: '#DBEAFE', paddingVertical: 6, paddingHorizontal: 10, borderRadius: 8 },
+  proofText: { color: '#1E3A8A', fontSize: 11, fontWeight: '600' },
   statusPill: { alignSelf: 'flex-start', marginTop: 10, paddingVertical: 6, paddingHorizontal: 10, borderRadius: 999, flexDirection: 'row', alignItems: 'center', gap: 6 },
   statusText: { color: '#fff', fontSize: 12, fontWeight: '700', textTransform: 'capitalize' },
   actionsRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 8 },

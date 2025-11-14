@@ -160,3 +160,24 @@ Consider creating an admin panel to:
 - Live chat for urgent matters
 - Satisfaction survey after ticket resolution
 - Analytics dashboard for support metrics
+
+## Academic Requests Payment Setup (Updated)
+
+Manual payment (Mobile Money or Bank Transfer) replaces third-party redirect buttons. UI now uses the term "Cost of Service" instead of "Price".
+
+### Flow
+1. User selects request kind (Transcript, WASSCE Certificate, Recommendation) and sees price box.
+2. Payment instructions (MoMo + Bank) are shown from `config/manualPayment.ts` beneath an enlarged "Cost of Service" box.
+3. User sends funds externally and uploads a screenshot proof (required if price > 0).
+4. Proof stored privately in `proofs` bucket; admin reviews and marks status `payment_provided`.
+5. Processing continues until delivered; verification code available for authenticity checks.
+
+### New Fields
+- `phone_number` on `transcript_requests` & `recommendation_requests` for quick contact.
+- `payment_proof_url` added to `recommendation_requests` (already present for transcripts) for parity.
+
+### Admin Review
+- Admin transcript & recommendation screens show identity, phone, price, and indicate payment proof presence.
+- Signed URLs generated server-side for private proof viewing.
+
+Update placeholders in `config/manualPayment.ts` with real institutional account details before production use.

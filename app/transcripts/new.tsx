@@ -1,13 +1,13 @@
 import { useState, useMemo } from 'react';
 import { View, Text, TextInput, StyleSheet, TouchableOpacity, Alert, ActivityIndicator, KeyboardAvoidingView, Platform } from 'react-native';
 import { useRouter } from 'expo-router';
-import * as WebBrowser from 'expo-web-browser';
-import { ArrowLeft, FilePlus2, Upload, DollarSign, ExternalLink } from 'lucide-react-native';
+import { ArrowLeft, FilePlus2, Upload, DollarSign, Copy } from 'lucide-react-native';
+import * as Clipboard from 'expo-clipboard';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/hooks/useAuth';
 import { pickDocument } from '@/lib/media';
 import { uploadProofFromUri } from '@/lib/storage';
-import { PAYSTACK_REDIRECT_URL, STRIPE_CHECKOUT_URL } from '@/config/payments';
+import { MOBILE_MONEY, BANK_ACCOUNT, PAYMENT_HELP_TEXT } from '@/config/manualPayment';
 import { resolveTranscriptPrice, resolveWasscePrice, formatPrice } from '@/config/academicPricing';
 
 type RequestType = 'official' | 'unofficial';
@@ -29,6 +29,7 @@ export default function NewTranscriptScreen() {
   const [className, setClassName] = useState('');
   const [graduationYear, setGraduationYear] = useState(''); // store as string then parseInt
   const [indexNumber, setIndexNumber] = useState(''); // optional
+  const [phoneNumber, setPhoneNumber] = useState(''); // required for quick contact
 
   // Derived price based on kind + transcript type
   const price = useMemo(() => {
@@ -56,6 +57,10 @@ export default function NewTranscriptScreen() {
     }
     if (!graduationYear.trim() || !/^[0-9]{4}$/.test(graduationYear.trim())) {
       Alert.alert('Invalid graduation year', 'Enter a 4-digit graduation year.');
+      return false;
+    }
+    if (!phoneNumber.trim()) {
+      Alert.alert('Missing phone', 'Please provide a phone number we can reach.');
       return false;
     }
     if (!purpose.trim()) {
@@ -93,6 +98,11 @@ export default function NewTranscriptScreen() {
       const effectiveRequestType = requestKind === 'wassce' ? 'official' : requestType;
       const price_amount = price.amount;
       const price_currency = price.currency;
+      if (price.amount > 0 && !pickedProof) {
+        Alert.alert('Payment proof required', 'Upload a screenshot of your payment before submitting.');
+        setSubmitting(false);
+        return;
+      }
       const { data, error } = await supabase
         .from('transcript_requests')
         .insert({
@@ -106,6 +116,7 @@ export default function NewTranscriptScreen() {
           class_name: className.trim(),
           graduation_year: parseInt(graduationYear.trim(), 10),
           index_number: indexNumber.trim() || null,
+          phone_number: phoneNumber.trim(),
           price_amount,
           price_currency,
         })
@@ -180,7 +191,7 @@ export default function NewTranscriptScreen() {
           style={styles.input}
         />
 
-        <Text style={styles.label}>Class</Text>
+  <Text style={styles.label}>Class</Text>
         <TextInput
           value={className}
           onChangeText={setClassName}
@@ -188,7 +199,7 @@ export default function NewTranscriptScreen() {
           style={styles.input}
         />
 
-        <Text style={styles.label}>Graduation Year</Text>
+  <Text style={styles.label}>Graduation Year</Text>
         <TextInput
           value={graduationYear}
           onChangeText={setGraduationYear}
@@ -197,7 +208,16 @@ export default function NewTranscriptScreen() {
           style={styles.input}
         />
 
-        <Text style={styles.label}>Index Number (optional)</Text>
+  <Text style={styles.label}>Index Number (optional)</Text>
+        <Text style={styles.label}>Phone Number</Text>
+        <TextInput
+          value={phoneNumber}
+          onChangeText={setPhoneNumber}
+          placeholder="e.g., 0241234567"
+          keyboardType="phone-pad"
+          style={styles.input}
+        />
+
         <TextInput
           value={indexNumber}
           onChangeText={setIndexNumber}
@@ -223,24 +243,44 @@ export default function NewTranscriptScreen() {
           style={styles.input}
         />
 
-        <View style={styles.callout}>
-          <DollarSign size={16} color="#4169E1" />
-          <Text style={styles.calloutText}>Price: {formatPrice(price)}. After payment, optionally upload a proof. Admins verify before processing.</Text>
+        <View style={styles.priceBox}>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+            <DollarSign size={20} color="#1F3B7A" />
+            <Text style={styles.priceMain}>Cost of Service: {formatPrice(price)}</Text>
+          </View>
+          <Text style={styles.priceSub}>{PAYMENT_HELP_TEXT}</Text>
         </View>
 
-  <Text style={styles.label}>Pay Online</Text>
-        <View style={styles.payRow}>
-          <TouchableOpacity style={styles.payBtn} onPress={() => WebBrowser.openBrowserAsync(PAYSTACK_REDIRECT_URL)}>
-            <ExternalLink size={16} color="#fff" />
-            <Text style={styles.payText}>Pay with Paystack</Text>
+        <Text style={styles.label}>Payment Methods</Text>
+        <View style={styles.methodBox}>
+          <Text style={styles.methodTitle}>Mobile Money</Text>
+          <Text style={styles.methodLine}>{MOBILE_MONEY.provider} · {MOBILE_MONEY.number}</Text>
+          <Text style={styles.methodLine}>{MOBILE_MONEY.accountName}</Text>
+          {MOBILE_MONEY.notes ? <Text style={styles.methodNotes}>{MOBILE_MONEY.notes}</Text> : null}
+          <TouchableOpacity style={styles.copyBtn} onPress={async () => {
+            try { await Clipboard.setStringAsync(MOBILE_MONEY.number); Alert.alert('Copied', 'Mobile Money number copied to clipboard.'); } catch { Alert.alert('Copy failed','Please copy manually.'); }
+          }}> 
+            <Copy size={14} color="#fff" />
+            <Text style={styles.copyText}>Copy Number</Text>
           </TouchableOpacity>
-          <TouchableOpacity style={[styles.payBtn, { backgroundColor: '#111827' }]} onPress={() => WebBrowser.openBrowserAsync(STRIPE_CHECKOUT_URL)}>
-            <ExternalLink size={16} color="#fff" />
-            <Text style={styles.payText}>Pay with Stripe</Text>
+        </View>
+        <View style={styles.methodBox}>
+          <Text style={styles.methodTitle}>Bank Transfer</Text>
+          <Text style={styles.methodLine}>{BANK_ACCOUNT.bankName}</Text>
+          <Text style={styles.methodLine}>{BANK_ACCOUNT.accountName}</Text>
+          <Text style={styles.methodLine}>{BANK_ACCOUNT.accountNumber}</Text>
+          {BANK_ACCOUNT.branch ? <Text style={styles.methodLine}>Branch: {BANK_ACCOUNT.branch}</Text> : null}
+          {BANK_ACCOUNT.swiftCode ? <Text style={styles.methodLine}>SWIFT: {BANK_ACCOUNT.swiftCode}</Text> : null}
+          {BANK_ACCOUNT.notes ? <Text style={styles.methodNotes}>{BANK_ACCOUNT.notes}</Text> : null}
+          <TouchableOpacity style={styles.copyBtn} onPress={async () => {
+            try { await Clipboard.setStringAsync(BANK_ACCOUNT.accountNumber); Alert.alert('Copied', 'Bank account number copied to clipboard.'); } catch { Alert.alert('Copy failed','Please copy manually.'); }
+          }}> 
+            <Copy size={14} color="#fff" />
+            <Text style={styles.copyText}>Copy Account Number</Text>
           </TouchableOpacity>
         </View>
 
-  <Text style={styles.label}>Proof of Payment (optional)</Text>
+        <Text style={styles.label}>Payment Proof {price.amount > 0 ? '(required)' : '(optional)'}</Text>
         <TouchableOpacity onPress={handlePickProof} style={styles.pickBtn}>          
           <Upload size={18} color="#4169E1" />
           <Text style={styles.pickText}>{pickedProof ? pickedProof.name : 'Pick file (PDF/Image)'}</Text>
@@ -269,13 +309,17 @@ const styles = StyleSheet.create({
   segmentBtnActive: { backgroundColor: '#4169E1', borderColor: '#4169E1' },
   segmentText: { color: '#111', fontWeight: '600' },
   segmentTextActive: { color: '#fff' },
-  callout: { marginTop: 16, backgroundColor: '#F0F5FF', borderWidth: 1, borderColor: '#D6E2FF', borderRadius: 10, padding: 12, flexDirection: 'row', gap: 8, alignItems: 'center' },
-  calloutText: { flex: 1, fontSize: 13, color: '#1F3B7A' },
+  priceBox: { marginTop: 20, backgroundColor: '#EBF3FF', borderWidth: 1.5, borderColor: '#B6D3FF', borderRadius: 14, padding: 16 },
+  priceMain: { fontSize: 20, fontWeight: '700', color: '#1F3B7A' },
+  priceSub: { marginTop: 8, fontSize: 12, color: '#1F3B7A' },
+  methodBox: { marginTop: 14, backgroundColor: '#F8FAFF', borderWidth: 1, borderColor: '#E0E7FF', borderRadius: 12, padding: 12, gap: 4 },
+  methodTitle: { fontSize: 14, fontWeight: '700', color: '#1F3B7A' },
+  methodLine: { fontSize: 12, color: '#1F3B7A' },
+  methodNotes: { fontSize: 11, color: '#374151', marginTop: 4 },
+  copyBtn: { marginTop: 8, alignSelf: 'flex-start', flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: '#4169E1', paddingVertical: 6, paddingHorizontal: 10, borderRadius: 8 },
+  copyText: { color: '#fff', fontWeight: '600', fontSize: 12 },
   pickBtn: { marginTop: 8, borderWidth: 1, borderColor: '#4169E1', borderRadius: 10, paddingVertical: 10, paddingHorizontal: 12, flexDirection: 'row', gap: 8, alignItems: 'center' },
   pickText: { color: '#4169E1', fontWeight: '600' },
-  payRow: { flexDirection: 'row', gap: 8, marginTop: 8 },
-  payBtn: { flex: 1, backgroundColor: '#2563EB', paddingVertical: 10, borderRadius: 10, alignItems: 'center', flexDirection: 'row', justifyContent: 'center', gap: 8 },
-  payText: { color: '#fff', fontWeight: '700', fontSize: 12 },
   submitBtn: { marginTop: 20, backgroundColor: '#4169E1', paddingVertical: 12, borderRadius: 10, alignItems: 'center', flexDirection: 'row', justifyContent: 'center', gap: 8 },
   submitText: { color: '#fff', fontWeight: '700' },
   center: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 24 },

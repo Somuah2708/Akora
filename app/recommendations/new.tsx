@@ -1,7 +1,8 @@
 import { useState } from 'react';
 import { View, Text, TextInput, StyleSheet, TouchableOpacity, Alert, ActivityIndicator, KeyboardAvoidingView, Platform } from 'react-native';
 import { useRouter } from 'expo-router';
-import { ArrowLeft, Send, Plus, X, Upload, DollarSign } from 'lucide-react-native';
+import { ArrowLeft, Send, Plus, X, Upload, DollarSign, Copy } from 'lucide-react-native';
+import * as Clipboard from 'expo-clipboard';
 import { supabase } from '@/lib/supabase';
 import { resolveRecommendationPrice, formatPrice } from '@/config/academicPricing';
 import { pickDocument } from '@/lib/media';
@@ -24,6 +25,7 @@ export default function NewRecommendationScreen() {
   const [className, setClassName] = useState('');
   const [graduationYear, setGraduationYear] = useState('');
   const [indexNumber, setIndexNumber] = useState('');
+  const [phoneNumber, setPhoneNumber] = useState('');
   // Teachers list & activities description
   const [teacherInput, setTeacherInput] = useState('');
   const [teachers, setTeachers] = useState<string[]>([]);
@@ -44,7 +46,8 @@ export default function NewRecommendationScreen() {
 
   const validate = () => {
     if (!fullName.trim()) { Alert.alert('Missing full name', 'Provide your full name.'); return false; }
-    if (!className.trim()) { Alert.alert('Missing class', 'Provide your class.'); return false; }
+  if (!className.trim()) { Alert.alert('Missing class', 'Provide your class.'); return false; }
+  if (!phoneNumber.trim()) { Alert.alert('Missing phone', 'Provide a phone number.'); return false; }
     if (!graduationYear.trim() || !/^[0-9]{4}$/.test(graduationYear.trim())) { Alert.alert('Invalid graduation year', 'Use YYYY format.'); return false; }
     const email = recommenderEmail.trim();
     if (!email) { Alert.alert('Missing email', 'Please enter the recommender email.'); return false; }
@@ -77,6 +80,7 @@ export default function NewRecommendationScreen() {
           class_name: className.trim(),
           graduation_year: parseInt(graduationYear.trim(), 10),
           index_number: indexNumber.trim() || null,
+          phone_number: phoneNumber.trim(),
           teachers: teachers.length ? teachers : null,
           activities: activities.trim() || null,
           price_amount,
@@ -150,8 +154,11 @@ export default function NewRecommendationScreen() {
         <Text style={styles.label}>Graduation Year</Text>
         <TextInput value={graduationYear} onChangeText={setGraduationYear} placeholder="YYYY" keyboardType="number-pad" style={styles.input} />
 
-        <Text style={styles.label}>Index Number (optional)</Text>
+  <Text style={styles.label}>Index Number (optional)</Text>
         <TextInput value={indexNumber} onChangeText={setIndexNumber} placeholder="Index number" style={styles.input} />
+
+  <Text style={styles.label}>Phone Number</Text>
+  <TextInput value={phoneNumber} onChangeText={setPhoneNumber} placeholder="e.g., 0241234567" keyboardType="phone-pad" style={styles.input} />
 
         <Text style={styles.label}>Recommender Email</Text>
         <TextInput value={recommenderEmail} onChangeText={setRecommenderEmail} placeholder="recommender@example.com" autoCapitalize="none" keyboardType="email-address" style={styles.input} />
@@ -215,9 +222,16 @@ export default function NewRecommendationScreen() {
           </View>
         ) : null}
 
-        <View style={styles.callout}>          
-          <DollarSign size={16} color="#4169E1" />
-          <Text style={styles.calloutText}>Price: {formatPrice(price)} (recommendations currently free).</Text>
+        <View style={styles.priceBox}>          
+          <View style={{ flexDirection:'row', alignItems:'center', gap:8 }}>
+            <DollarSign size={20} color="#1F3B7A" />
+            <Text style={styles.priceMain}>Cost of Service: {formatPrice(price)}</Text>
+          </View>
+          <Text style={styles.priceSub}>Currently free. If a cost is introduced later, payment instructions & proof upload will appear here.</Text>
+          <TouchableOpacity style={styles.copyBtn} onPress={async () => { try { await Clipboard.setStringAsync(String(price.amount)); Alert.alert('Copied','Base cost value copied (currently 0).'); } catch { Alert.alert('Copy failed','Please copy manually.'); }}}>
+            <Copy size={14} color="#fff" />
+            <Text style={styles.copyText}>Copy Cost</Text>
+          </TouchableOpacity>
         </View>
 
         <TouchableOpacity disabled={submitting} onPress={handleSubmit} style={[styles.submitBtn, submitting && { opacity: 0.7 }]}>
@@ -264,8 +278,11 @@ const styles = StyleSheet.create({
   fileRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', backgroundColor: '#F0F5FF', paddingHorizontal: 12, paddingVertical: 8, borderRadius: 8 },
   fileName: { fontSize: 12, color: '#1F3B7A', flex: 1, marginRight: 8 },
   removeFileBtn: { backgroundColor: '#CC3333', padding: 6, borderRadius: 8 },
-  callout: { marginTop: 16, backgroundColor: '#F0F5FF', borderWidth: 1, borderColor: '#D6E2FF', borderRadius: 10, padding: 12, flexDirection: 'row', gap: 8, alignItems: 'center' },
-  calloutText: { flex: 1, fontSize: 13, color: '#1F3B7A' },
+  priceBox: { marginTop: 20, backgroundColor: '#EBF3FF', borderWidth: 1.5, borderColor: '#B6D3FF', borderRadius: 14, padding: 16 },
+  priceMain: { fontSize: 20, fontWeight: '700', color: '#1F3B7A' },
+  priceSub: { marginTop: 8, fontSize: 12, color: '#1F3B7A' },
+  copyBtn: { marginTop: 12, alignSelf: 'flex-start', flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: '#4169E1', paddingVertical: 6, paddingHorizontal: 10, borderRadius: 8 },
+  copyText: { color: '#fff', fontWeight: '600', fontSize: 12 },
   submitBtn: { marginTop: 20, backgroundColor: '#4169E1', paddingVertical: 12, borderRadius: 10, alignItems: 'center', flexDirection: 'row', justifyContent: 'center', gap: 8 },
   submitText: { color: '#fff', fontWeight: '700' },
   center: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 24 },

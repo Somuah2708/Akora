@@ -25,6 +25,7 @@ type TranscriptRequest = {
   class_name?: string | null;
   graduation_year?: number | null;
   index_number?: string | null;
+  phone_number?: string | null;
   price_amount?: number | null;
   price_currency?: string | null;
   created_at?: string;
@@ -136,10 +137,11 @@ export default function TranscriptDetailScreen() {
                 .join(' · ') || '—'}
             </Text>
             {req.index_number ? <Text style={styles.meta}>Index: {req.index_number}</Text> : null}
+            {req.phone_number ? <Text style={styles.meta}>Phone: {req.phone_number}</Text> : null}
           </View>
 
           <View style={styles.section}>
-            <Text style={styles.label}>Pricing</Text>
+            <Text style={styles.label}>Cost of Service</Text>
             <Text style={styles.value}>
               {req.price_currency && typeof req.price_amount === 'number'
                 ? `${req.price_currency} ${req.price_amount}`
