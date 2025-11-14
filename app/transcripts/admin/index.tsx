@@ -13,6 +13,7 @@ type Transcript = {
   id: string;
   user_id: string;
   request_type: 'official' | 'unofficial';
+  request_kind?: 'transcript' | 'wassce';
   purpose: string;
   recipient_email: string;
   status: Status;
@@ -20,6 +21,12 @@ type Transcript = {
   document_url?: string | null;
   admin_notes?: string | null;
   created_at?: string;
+  full_name?: string | null;
+  class_name?: string | null;
+  graduation_year?: number | null;
+  index_number?: string | null;
+  price_amount?: number | null;
+  price_currency?: string | null;
 };
 
 type Profile = { id: string; role?: string | null };
@@ -42,6 +49,8 @@ export default function AdminTranscriptsScreen() {
   const [loading, setLoading] = useState(true);
   const [items, setItems] = useState<Transcript[]>([]);
   const [filter, setFilter] = useState<Status | 'all'>('payment_provided');
+  const [kindFilter, setKindFilter] = useState<'all' | 'transcript' | 'wassce'>('all');
+  const [priceDrafts, setPriceDrafts] = useState<Record<string, string>>({});
   const [savingId, setSavingId] = useState<string | null>(null);
 
   const [notesDrafts, setNotesDrafts] = useState<Record<string, string>>({});
@@ -63,6 +72,7 @@ export default function AdminTranscriptsScreen() {
       setLoading(true);
       let q = supabase.from('transcript_requests').select('*').order('created_at', { ascending: false });
       if (filter !== 'all') q = q.eq('status', filter);
+      if (kindFilter !== 'all') q = q.eq('request_kind', kindFilter);
       const { data, error } = await q;
       if (error) throw error;
       setItems((data as Transcript[]) || []);
@@ -136,6 +146,24 @@ export default function AdminTranscriptsScreen() {
     }
   };
 
+  const savePrice = async (id: string) => {
+    try {
+      setSavingId(id);
+      const raw = priceDrafts[id];
+      const amount = raw ? parseFloat(raw) : NaN;
+      if (isNaN(amount)) { Alert.alert('Invalid price', 'Enter a numeric amount.'); return; }
+      const { error } = await supabase.from('transcript_requests').update({ price_amount: amount, price_currency: 'GHS' }).eq('id', id);
+      if (error) throw error;
+      await fetchItems();
+      Alert.alert('Saved', 'Price updated.');
+    } catch (err) {
+      console.error('save price', err);
+      Alert.alert('Error', 'Could not save price.');
+    } finally {
+      setSavingId(null);
+    }
+  };
+
   if (notAdmin) {
     return (
       <View style={styles.center}> 
@@ -148,8 +176,8 @@ export default function AdminTranscriptsScreen() {
   return (
     <View style={styles.container}>
       <View style={styles.header}>
-        <Text style={styles.title}>Transcripts Admin</Text>
-        <Text style={styles.subtitle}>Filter</Text>
+        <Text style={styles.title}>Academic Requests (Transcripts & WASSCE)</Text>
+        <Text style={styles.subtitle}>Filters</Text>
       </View>
 
       <ScrollView horizontal contentContainerStyle={styles.filters} showsHorizontalScrollIndicator={false}>
@@ -160,17 +188,35 @@ export default function AdminTranscriptsScreen() {
         ))}
       </ScrollView>
 
+      <ScrollView horizontal contentContainerStyle={[styles.filters,{paddingTop:0}]} showsHorizontalScrollIndicator={false}>
+        {(['all','transcript','wassce'] as ('all'|'transcript'|'wassce')[]).map((k) => (
+          <TouchableOpacity key={k} style={[styles.filterPill, kindFilter===k && styles.filterPillActive]} onPress={() => setKindFilter(k)}>
+            <Text style={[styles.filterText, kindFilter===k && styles.filterTextActive]}>{k==='all' ? 'All Kinds' : (k==='transcript' ? 'Transcripts' : 'WASSCE')}</Text>
+          </TouchableOpacity>
+        ))}
+      </ScrollView>
+
       {loading ? (
         <View style={styles.center}><ActivityIndicator color="#4169E1" /></View>
       ) : (
         <ScrollView contentContainerStyle={{ padding: 16 }}>
-          {items.map((it) => (
+          {items.map((it) => {
+            const title = it.request_kind === 'wassce'
+              ? 'WASSCE Certificate'
+              : `${it.request_type === 'official' ? 'Official' : 'Unofficial'} Transcript`;
+            const identityLine = [it.full_name, it.class_name, it.graduation_year ? `Class of ${it.graduation_year}` : null]
+              .filter(Boolean)
+              .join(' · ');
+            const priceLine = (it.price_currency && typeof it.price_amount === 'number') ? `${it.price_currency} ${it.price_amount}` : '—';
+            return (
             <View key={it.id} style={styles.card}>
               <View style={{ flex: 1 }}>
-                <Text style={styles.cardTitle}>{it.request_type === 'official' ? 'Official' : 'Unofficial'} Transcript</Text>
+                <Text style={styles.cardTitle}>{title}</Text>
                 <Text style={styles.cardSub}>{it.purpose}</Text>
                 <Text style={styles.cardSubSmall}>To: {it.recipient_email}</Text>
                 <Text style={styles.cardSubSmall}>Ref: {it.id.slice(0,8)}</Text>
+                {identityLine ? <Text style={styles.cardMeta}>{identityLine}</Text> : null}
+                <Text style={styles.cardPrice}>Price: {priceLine}</Text>
               </View>
               <View style={[styles.statusPill, { backgroundColor: statusColors[it.status] }]}>
                 {it.status === 'delivered' ? <CheckCircle2 size={14} color="#fff" /> : (it.status === 'rejected' ? <XCircle size={14} color="#fff" /> : <Clock size={14} color="#fff" />)}
@@ -178,6 +224,20 @@ export default function AdminTranscriptsScreen() {
               </View>
 
               <View style={styles.rowGap} />
+
+              <Text style={styles.label}>Edit Price (GHS)</Text>
+              <View style={{ flexDirection:'row', alignItems:'center', gap:8 }}>
+                <TextInput
+                  style={[styles.input,{flex:1}]}
+                  placeholder="Amount"
+                  keyboardType="numeric"
+                  value={priceDrafts[it.id] ?? (it.price_amount?.toString() ?? '')}
+                  onChangeText={(v) => setPriceDrafts((d) => ({ ...d, [it.id]: v }))}
+                />
+                <TouchableOpacity style={[styles.saveBtn, savingId===it.id && { opacity:0.6 }]} onPress={() => savePrice(it.id)} disabled={savingId===it.id}>
+                  <Text style={styles.saveText}>Save</Text>
+                </TouchableOpacity>
+              </View>
 
               <View style={styles.actionsRow}>
                 {quickStatuses.map((s) => (
@@ -215,7 +275,7 @@ export default function AdminTranscriptsScreen() {
                 <Text style={styles.saveText}>Save Document URL</Text>
               </TouchableOpacity>
             </View>
-          ))}
+          )})}
           {items.length === 0 && (
             <View style={styles.center}><Text>No requests for this filter.</Text></View>
           )}
@@ -240,6 +300,8 @@ const styles = StyleSheet.create({
   cardTitle: { fontSize: 16, fontWeight: '600' },
   cardSub: { marginTop: 2, fontSize: 13, color: '#374151' },
   cardSubSmall: { marginTop: 2, fontSize: 12, color: '#6B7280' },
+  cardMeta: { marginTop: 4, fontSize: 11, color: '#555' },
+  cardPrice: { marginTop: 2, fontSize: 11, color: '#1F3B7A', fontWeight: '600' },
   statusPill: { alignSelf: 'flex-start', marginTop: 10, paddingVertical: 6, paddingHorizontal: 10, borderRadius: 999, flexDirection: 'row', alignItems: 'center', gap: 6 },
   statusText: { color: '#fff', fontSize: 12, fontWeight: '700', textTransform: 'capitalize' },
   actionsRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 8 },

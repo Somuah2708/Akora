@@ -65,6 +65,21 @@ export default function EditListing() {
   const [fundingAmount, setFundingAmount] = useState('');
   const [fundingCurrency, setFundingCurrency] = useState<'USD' | 'GHS'>('USD');
 
+  // Alumni mentor fields
+  const [mentorHeadline, setMentorHeadline] = useState('');
+  const [mentorLinkedInUrl, setMentorLinkedInUrl] = useState('');
+  const [mentorWebsiteUrl, setMentorWebsiteUrl] = useState('');
+  const [mentorCompany, setMentorCompany] = useState('');
+  const [mentorRole, setMentorRole] = useState('');
+  const [mentorTimezone, setMentorTimezone] = useState('');
+  const [mentorAvailability, setMentorAvailability] = useState('');
+  const [mentorMeetingFormats, setMentorMeetingFormats] = useState<string[]>([]); // ['Chat','Audio','Video']
+  const [mentorLanguages, setMentorLanguages] = useState(''); // comma separated
+  const [mentorExpertise, setMentorExpertise] = useState(''); // comma separated
+  const [mentorIsProBono, setMentorIsProBono] = useState(false);
+  const [mentorRate, setMentorRate] = useState('');
+  const [mentorMaxMentees, setMentorMaxMentees] = useState('');
+
   const [fontsLoaded] = useFonts({
     'Inter-Regular': Inter_400Regular,
     'Inter-SemiBold': Inter_600SemiBold,
@@ -140,6 +155,21 @@ export default function EditListing() {
       if (data.eligibility_criteria) setEligibility(String(data.eligibility_criteria));
       if (data.contact_email) setContactEmail(String(data.contact_email));
       if (data.location) setLocation(String(data.location));
+
+      // Prefill mentor fields
+      if (data.mentor_headline) setMentorHeadline(String(data.mentor_headline));
+      if (data.mentor_linkedin_url) setMentorLinkedInUrl(String(data.mentor_linkedin_url));
+      if (data.mentor_website_url) setMentorWebsiteUrl(String(data.mentor_website_url));
+      if (data.mentor_company) setMentorCompany(String(data.mentor_company));
+      if (data.mentor_role) setMentorRole(String(data.mentor_role));
+      if (data.mentor_timezone) setMentorTimezone(String(data.mentor_timezone));
+      if (data.mentor_availability) setMentorAvailability(String(data.mentor_availability));
+      if (Array.isArray(data.mentor_meeting_formats)) setMentorMeetingFormats(data.mentor_meeting_formats as string[]);
+      if (Array.isArray(data.mentor_languages)) setMentorLanguages((data.mentor_languages as string[]).join(', '));
+      if (Array.isArray(data.mentor_expertise)) setMentorExpertise((data.mentor_expertise as string[]).join(', '));
+      if (typeof data.mentor_is_pro_bono === 'boolean') setMentorIsProBono(!!data.mentor_is_pro_bono);
+      if (data.mentor_rate != null) setMentorRate(String(data.mentor_rate));
+      if (data.mentor_max_mentees != null) setMentorMaxMentees(String(data.mentor_max_mentees));
     } catch (err) {
       console.error('Failed to fetch listing', err);
       Alert.alert('Error', 'Failed to load listing');
@@ -179,6 +209,8 @@ export default function EditListing() {
     }
 
     const isEducation = category === 'Universities' || category === 'Scholarships';
+    const isMentor = category === 'Alumni Mentors';
+    const isListing = !isEducation && !isMentor;
     // Validation
     if (!title.trim()) {
       Alert.alert('Error', 'Please enter a title');
@@ -197,7 +229,7 @@ export default function EditListing() {
         Alert.alert('Error', 'Please provide the Application Link');
         return;
       }
-    } else {
+    } else if (isListing) {
       if (!price.trim() || isNaN(Number(price)) || Number(price) < 0) {
         Alert.alert('Error', 'Please enter a valid price (or 0 for free)');
         return;
@@ -215,6 +247,7 @@ export default function EditListing() {
           // Filter out blob URLs
           const validImageUrls = finalImageUrls.filter(url => url && !url.startsWith('blob:'));
           const isEducationUpdate = category === 'Universities' || category === 'Scholarships';
+          const isMentorUpdate = category === 'Alumni Mentors';
           const updates: any = {
             title: title.trim(),
             description: description.trim(),
@@ -261,9 +294,27 @@ export default function EditListing() {
               }
               updates.funding_currency = fundingCurrency;
             }
+          } else if (isMentorUpdate) {
+            updates.contact_email = contactEmail.trim() || null;
+            updates.location = location.trim() || null;
+            updates.mentor_headline = mentorHeadline.trim() || null;
+            updates.mentor_linkedin_url = mentorLinkedInUrl.trim() || null;
+            updates.mentor_website_url = mentorWebsiteUrl.trim() || null;
+            updates.mentor_company = mentorCompany.trim() || null;
+            updates.mentor_role = mentorRole.trim() || null;
+            updates.mentor_timezone = mentorTimezone.trim() || null;
+            updates.mentor_availability = mentorAvailability.trim() || null;
+            updates.mentor_meeting_formats = mentorMeetingFormats.length ? mentorMeetingFormats : null;
+            updates.mentor_languages = mentorLanguages.trim() ? mentorLanguages.split(',').map(s=>s.trim()).filter(Boolean) : null;
+            updates.mentor_expertise = mentorExpertise.trim() ? mentorExpertise.split(',').map(s=>s.trim()).filter(Boolean) : null;
+            updates.mentor_is_pro_bono = mentorIsProBono;
+            updates.mentor_rate = mentorRate.trim() ? Number(mentorRate) : null;
+            updates.mentor_max_mentees = mentorMaxMentees.trim() ? Number(mentorMaxMentees) : null;
           } else {
+            // Regular listing (products/services)
             updates.price = Number(price.trim());
-            updates.currency = currency;
+            // Note: 'currency' column doesn't exist in products_services schema
+            // Store price as-is; UI can display currency separately
           }
           console.log('📝 Updating listing:', updates);
           const { error } = await supabase
@@ -276,7 +327,7 @@ export default function EditListing() {
           }
           Alert.alert('✅ Success!', 'Your listing has been updated successfully!');
           setTimeout(() => {
-            if (isEducationUpdate && (profile?.is_admin || profile?.role === 'admin')) {
+            if ((isEducationUpdate || isMentorUpdate) && (profile?.is_admin || profile?.role === 'admin')) {
               router.replace('/education/admin');
             } else {
               router.replace('/my-listings');
@@ -341,7 +392,7 @@ export default function EditListing() {
         console.log('✅ Listing deleted successfully');
         
         // Navigate to my-listings page
-        if ((category === 'Universities' || category === 'Scholarships') && (profile?.is_admin || profile?.role === 'admin')) {
+        if ((category === 'Universities' || category === 'Scholarships' || category === 'Alumni Mentors') && (profile?.is_admin || profile?.role === 'admin')) {
           router.push('/education/admin');
         } else {
           router.push('/my-listings');
@@ -374,7 +425,9 @@ export default function EditListing() {
   }
 
   const isEducation = category === 'Universities' || category === 'Scholarships';
-  const isButtonDisabled = !title.trim() || !description.trim() || !category || (isEducation ? !applicationUrl.trim() : !price.trim()) || saving;
+  const isMentor = category === 'Alumni Mentors';
+  const isListing = !isEducation && !isMentor;
+  const isButtonDisabled = !title.trim() || !description.trim() || !category || (isEducation ? !applicationUrl.trim() : isListing ? !price.trim() : false) || saving;
 
   return (
     <View style={styles.container}>
@@ -392,7 +445,7 @@ export default function EditListing() {
           >
             <ArrowLeft size={24} color="#FFFFFF" />
           </TouchableOpacity>
-          <Text style={styles.headerTitle}>Edit {isEducation ? (category === 'Universities' ? 'University' : 'Scholarship') : 'Listing'}</Text>
+          <Text style={styles.headerTitle}>Edit {isEducation ? (category === 'Universities' ? 'University' : 'Scholarship') : isMentor ? 'Alumni Mentor' : 'Listing'}</Text>
           <TouchableOpacity 
             style={[
               styles.submitButton, 
@@ -535,6 +588,151 @@ export default function EditListing() {
                 value={eligibility}
                 onChangeText={setEligibility}
                 textAlignVertical="top"
+              />
+            </View>
+          </>
+        )}
+
+        {category === 'Alumni Mentors' && (
+          <>
+            <View style={styles.formGroup}>
+              <Text style={styles.label}>Headline (Optional)</Text>
+              <TextInput
+                style={styles.input}
+                placeholder="e.g., Senior Data Engineer at Stripe"
+                placeholderTextColor="#999999"
+                value={mentorHeadline}
+                onChangeText={setMentorHeadline}
+              />
+            </View>
+            <View style={styles.formGroup}>
+              <Text style={styles.label}>LinkedIn URL (Optional)</Text>
+              <TextInput
+                style={styles.input}
+                placeholder="https://www.linkedin.com/in/username"
+                placeholderTextColor="#999999"
+                value={mentorLinkedInUrl}
+                onChangeText={setMentorLinkedInUrl}
+                autoCapitalize="none"
+              />
+            </View>
+            <View style={styles.formGroup}>
+              <Text style={styles.label}>Personal Website (Optional)</Text>
+              <TextInput
+                style={styles.input}
+                placeholder="https://your-site.com"
+                placeholderTextColor="#999999"
+                value={mentorWebsiteUrl}
+                onChangeText={setMentorWebsiteUrl}
+                autoCapitalize="none"
+              />
+            </View>
+            <View style={styles.formGroup}>
+              <Text style={styles.label}>Company / Organization (Optional)</Text>
+              <TextInput
+                style={styles.input}
+                placeholder="e.g., Microsoft"
+                placeholderTextColor="#999999"
+                value={mentorCompany}
+                onChangeText={setMentorCompany}
+              />
+            </View>
+            <View style={styles.formGroup}>
+              <Text style={styles.label}>Role / Title (Optional)</Text>
+              <TextInput
+                style={styles.input}
+                placeholder="e.g., Staff Engineer"
+                placeholderTextColor="#999999"
+                value={mentorRole}
+                onChangeText={setMentorRole}
+              />
+            </View>
+            <View style={styles.formGroup}>
+              <Text style={styles.label}>Timezone (Optional)</Text>
+              <TextInput
+                style={styles.input}
+                placeholder="e.g., GMT, UTC+1"
+                placeholderTextColor="#999999"
+                value={mentorTimezone}
+                onChangeText={setMentorTimezone}
+              />
+            </View>
+            <View style={styles.formGroup}>
+              <Text style={styles.label}>Availability (Optional)</Text>
+              <TextInput
+                style={styles.input}
+                placeholder="e.g., Weekdays 6–8pm, Sat mornings"
+                placeholderTextColor="#999999"
+                value={mentorAvailability}
+                onChangeText={setMentorAvailability}
+              />
+            </View>
+            <View style={styles.formGroup}>
+              <Text style={styles.label}>Meeting Formats (Optional)</Text>
+              <View style={{flexDirection:'row', gap:8}}>
+                {['Chat','Audio','Video'].map(mode => {
+                  const active = mentorMeetingFormats.includes(mode);
+                  return (
+                    <TouchableOpacity key={mode} style={[styles.currencyButton, active && styles.currencyButtonActive]} onPress={() => setMentorMeetingFormats(prev => active ? prev.filter(m=>m!==mode) : [...prev, mode])}>
+                      <Text style={{color: active ? '#FFFFFF' : '#4169E1', fontFamily:'Inter-SemiBold'}}>{mode}</Text>
+                    </TouchableOpacity>
+                  );
+                })}
+              </View>
+            </View>
+            <View style={styles.formGroup}>
+              <Text style={styles.label}>Expertise (Comma-separated)</Text>
+              <TextInput
+                style={styles.input}
+                placeholder="e.g., React, Grants, Interview prep"
+                placeholderTextColor="#999999"
+                value={mentorExpertise}
+                onChangeText={setMentorExpertise}
+              />
+            </View>
+            <View style={styles.formGroup}>
+              <Text style={styles.label}>Languages (Comma-separated)</Text>
+              <TextInput
+                style={styles.input}
+                placeholder="e.g., English, French"
+                placeholderTextColor="#999999"
+                value={mentorLanguages}
+                onChangeText={setMentorLanguages}
+              />
+            </View>
+            <View style={styles.formGroup}>
+              <Text style={styles.label}>Mentoring Type</Text>
+              <View style={{flexDirection:'row',gap:8}}>
+                <TouchableOpacity style={[styles.currencyButton, mentorIsProBono && styles.currencyButtonActive]} onPress={()=>setMentorIsProBono(true)}>
+                  <Text style={{color: mentorIsProBono ? '#FFFFFF':'#4169E1', fontFamily:'Inter-SemiBold'}}>Pro bono</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={[styles.currencyButton, !mentorIsProBono && styles.currencyButtonActive]} onPress={()=>setMentorIsProBono(false)}>
+                  <Text style={{color: !mentorIsProBono ? '#FFFFFF':'#4169E1', fontFamily:'Inter-SemiBold'}}>Paid</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+            {!mentorIsProBono && (
+              <View style={styles.formGroup}>
+                <Text style={styles.label}>Rate (Optional)</Text>
+                <TextInput
+                  style={styles.input}
+                  placeholder="e.g., 20 (per session/hour)"
+                  placeholderTextColor="#999999"
+                  value={mentorRate}
+                  onChangeText={setMentorRate}
+                  keyboardType="decimal-pad"
+                />
+              </View>
+            )}
+            <View style={styles.formGroup}>
+              <Text style={styles.label}>Max Mentees (Optional)</Text>
+              <TextInput
+                style={styles.input}
+                placeholder="e.g., 3"
+                placeholderTextColor="#999999"
+                value={mentorMaxMentees}
+                onChangeText={setMentorMaxMentees}
+                keyboardType="number-pad"
               />
             </View>
           </>

@@ -1,8 +1,10 @@
 import { useEffect, useState, useCallback } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, ActivityIndicator, Alert, TextInput, KeyboardAvoidingView, Platform } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, ActivityIndicator, Alert, TextInput, KeyboardAvoidingView, Platform, Linking } from 'react-native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
-import { ArrowLeft, Check, XCircle, Send } from 'lucide-react-native';
+import { ArrowLeft, Check, XCircle, Send, Link as LinkIcon } from 'lucide-react-native';
 import { supabase } from '@/lib/supabase';
+import { getSignedEvidenceUrls } from '@/lib/evidence';
+import { formatPrice } from '@/config/academicPricing';
 import { useAuth } from '@/hooks/useAuth';
 
 type Status = 'pending' | 'accepted' | 'declined' | 'in_progress' | 'submitted';
@@ -18,6 +20,15 @@ type RecReq = {
   context?: string | null;
   status: Status;
   verification_code?: string | null;
+  full_name?: string | null;
+  class_name?: string | null;
+  graduation_year?: number | null;
+  index_number?: string | null;
+  teachers?: string[] | null;
+  activities?: string | null;
+  activity_docs?: string[] | null;
+  price_amount?: number | null;
+  price_currency?: string | null;
 };
 
 export default function RecommenderPortalScreen() {
@@ -29,6 +40,7 @@ export default function RecommenderPortalScreen() {
   const [submitting, setSubmitting] = useState(false);
   const [letterContent, setLetterContent] = useState('');
   const [signatureName, setSignatureName] = useState('');
+  const [signedEvidence, setSignedEvidence] = useState<(string | null)[] | null>(null);
 
   const id = String(params.id);
 
@@ -41,7 +53,18 @@ export default function RecommenderPortalScreen() {
         .eq('id', id)
         .single();
       if (error) throw error;
-      setReq(data as RecReq);
+      const r = data as RecReq;
+      setReq(r);
+      if (r.activity_docs && r.activity_docs.length) {
+        try {
+          const signed = await getSignedEvidenceUrls(r.activity_docs);
+          setSignedEvidence(signed);
+        } catch (_e) {
+          setSignedEvidence(null);
+        }
+      } else {
+        setSignedEvidence(null);
+      }
     } catch (err) {
       console.error('Load rec request failed', err);
       Alert.alert('Error', 'Unable to load the recommendation request.');
@@ -139,6 +162,51 @@ export default function RecommenderPortalScreen() {
             <Text style={styles.label}>Purpose</Text>
             <Text style={styles.value}>{labelPurpose(req.purpose)}</Text>
           </View>
+          <View style={styles.section}>
+            <Text style={styles.label}>Requester Identity</Text>
+            <Text style={styles.value}>
+              {[req.full_name, req.class_name, req.graduation_year ? `Class of ${req.graduation_year}` : null]
+                .filter(Boolean)
+                .join(' · ') || '—'}
+            </Text>
+            {req.index_number ? <Text style={styles.meta}>Index: {req.index_number}</Text> : null}
+          </View>
+          <View style={styles.section}>
+            <Text style={styles.label}>Pricing</Text>
+            <Text style={styles.value}>{req.price_currency && typeof req.price_amount === 'number' ? formatPrice({ amount: req.price_amount, currency: req.price_currency }) : 'Not set'}</Text>
+          </View>
+          {req.teachers && req.teachers.length ? (
+            <View style={styles.section}>
+              <Text style={styles.label}>Listed Teachers</Text>
+              <View style={styles.chipsWrap}>
+                {req.teachers.map(t => (
+                  <View key={t} style={styles.chip}><Text style={styles.chipText}>{t}</Text></View>
+                ))}
+              </View>
+            </View>
+          ) : null}
+          {req.activities ? (
+            <View style={styles.section}>
+              <Text style={styles.label}>Activities / Achievements</Text>
+              <Text style={styles.value}>{req.activities}</Text>
+            </View>
+          ) : null}
+          {req.activity_docs && req.activity_docs.length ? (
+            <View style={styles.section}>
+              <Text style={styles.label}>Evidence Documents</Text>
+              <View style={styles.filesList}>
+                {req.activity_docs.map((p, i) => {
+                  const url = signedEvidence ? signedEvidence[i] || p : p;
+                  return (
+                    <TouchableOpacity key={p} style={styles.fileRow} onPress={() => url && Linking.openURL(url)}>
+                      <LinkIcon size={14} color="#4169E1" />
+                      <Text style={styles.fileName}>{p.split('/').pop()}</Text>
+                    </TouchableOpacity>
+                  );
+                })}
+              </View>
+            </View>
+          ) : null}
           {req.organization_name ? (
             <View style={styles.section}><Text style={styles.label}>Organization</Text><Text style={styles.value}>{req.organization_name}</Text></View>
           ) : null}
@@ -201,6 +269,13 @@ const styles = StyleSheet.create({
   section: { marginTop: 16 },
   label: { fontSize: 13, color: '#666', marginBottom: 4 },
   value: { fontSize: 14 },
+  meta: { marginTop: 4, fontSize: 11, color: '#555' },
+  chipsWrap: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 4 },
+  chip: { backgroundColor: '#4169E1', paddingHorizontal: 10, paddingVertical: 6, borderRadius: 999 },
+  chipText: { fontSize: 11, color: '#fff', fontWeight: '600' },
+  filesList: { marginTop: 8, gap: 8 },
+  fileRow: { flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: '#F0F5FF', paddingVertical: 6, paddingHorizontal: 10, borderRadius: 8 },
+  fileName: { fontSize: 12, color: '#1F3B7A', flex: 1 },
   input: { marginTop: 6, borderWidth: 1, borderColor: '#E2E8F0', borderRadius: 10, paddingHorizontal: 12, paddingVertical: 10, fontSize: 14 },
   primaryBtn: { backgroundColor: '#4169E1', paddingVertical: 12, paddingHorizontal: 14, borderRadius: 10, flexDirection: 'row', alignItems: 'center', gap: 8 },
   primaryText: { color: '#fff', fontWeight: '700' },

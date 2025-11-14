@@ -1,8 +1,10 @@
 import { useEffect, useState, useCallback } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, ActivityIndicator, Alert, ScrollView } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, ActivityIndicator, Alert, ScrollView, Linking } from 'react-native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
-import { ArrowLeft, FileText, CheckCircle2, Clock } from 'lucide-react-native';
+import { ArrowLeft, FileText, CheckCircle2, Clock, Link as LinkIcon } from 'lucide-react-native';
 import { supabase } from '@/lib/supabase';
+import { getSignedEvidenceUrls } from '@/lib/evidence';
+import { formatPrice } from '@/config/academicPricing';
 import { useAuth } from '@/hooks/useAuth';
 
 type Status = 'pending' | 'accepted' | 'declined' | 'in_progress' | 'submitted';
@@ -19,6 +21,16 @@ type RecommendationRequest = {
   status: Status;
   verification_code?: string | null;
   created_at?: string;
+  // New identity & context fields
+  full_name?: string | null;
+  class_name?: string | null;
+  graduation_year?: number | null;
+  index_number?: string | null;
+  teachers?: string[] | null;
+  activities?: string | null;
+  activity_docs?: string[] | null;
+  price_amount?: number | null;
+  price_currency?: string | null;
 };
 
 type RecommendationLetter = {
@@ -46,6 +58,7 @@ export default function RecommendationDetailScreen() {
   const [req, setReq] = useState<RecommendationRequest | null>(null);
   const [letter, setLetter] = useState<RecommendationLetter | null>(null);
   const [loading, setLoading] = useState(true);
+  const [signedEvidence, setSignedEvidence] = useState<(string | null)[] | null>(null);
 
   const id = String(params.id);
 
@@ -64,6 +77,13 @@ export default function RecommendationDetailScreen() {
         throw new Error('Not authorized');
       }
       setReq(r);
+      // Resolve signed evidence URLs if present
+      if (r.activity_docs && r.activity_docs.length) {
+        const signed = await getSignedEvidenceUrls(r.activity_docs);
+        setSignedEvidence(signed);
+      } else {
+        setSignedEvidence(null);
+      }
 
       if (r.status === 'submitted') {
         const { data: letters, error: lerr } = await supabase
@@ -105,6 +125,57 @@ export default function RecommendationDetailScreen() {
         <ScrollView contentContainerStyle={styles.content}>
           <Text style={styles.h1}>{req.purpose.replace('_',' ')} Recommendation</Text>
           <Text style={styles.mono}>Ref: {req.id.slice(0,8)} · Code: {req.verification_code}</Text>
+
+          <View style={styles.section}>
+            <Text style={styles.label}>Identity</Text>
+            <Text style={styles.value}>
+              {[req.full_name, req.class_name, req.graduation_year ? `Class of ${req.graduation_year}` : null]
+                .filter(Boolean)
+                .join(' · ') || '—'}
+            </Text>
+            {req.index_number ? <Text style={styles.meta}>Index: {req.index_number}</Text> : null}
+          </View>
+
+            <View style={styles.section}>
+              <Text style={styles.label}>Pricing</Text>
+              <Text style={styles.value}>{req.price_currency && typeof req.price_amount === 'number' ? formatPrice({ amount: req.price_amount, currency: req.price_currency }) : 'Not set'}</Text>
+            </View>
+          {req.teachers && req.teachers.length ? (
+            <View style={styles.section}>
+              <Text style={styles.label}>Teachers</Text>
+              <View style={styles.chipsWrap}>
+                {req.teachers.map(t => (
+                  <View key={t} style={styles.chip}>
+                    <Text style={styles.chipText}>{t}</Text>
+                  </View>
+                ))}
+              </View>
+            </View>
+          ) : null}
+
+          {req.activities ? (
+            <View style={styles.section}>
+              <Text style={styles.label}>Activities / Achievements</Text>
+              <Text style={styles.value}>{req.activities}</Text>
+            </View>
+          ) : null}
+
+          {req.activity_docs && req.activity_docs.length ? (
+            <View style={styles.section}>
+              <Text style={styles.label}>Evidence Documents</Text>
+              <View style={styles.filesList}>
+                {req.activity_docs.map((p, i) => {
+                  const url = signedEvidence ? signedEvidence[i] || p : p;
+                  return (
+                    <TouchableOpacity key={p} style={styles.fileRow} onPress={() => url && Linking.openURL(url)}>
+                      <LinkIcon size={14} color="#4169E1" />
+                      <Text style={styles.fileName}>{p.split('/').pop()}</Text>
+                    </TouchableOpacity>
+                  );
+                })}
+              </View>
+            </View>
+          ) : null}
 
           {req.organization_name ? (
             <View style={styles.section}>
@@ -178,6 +249,13 @@ const styles = StyleSheet.create({
   section: { marginTop: 16 },
   label: { fontSize: 13, color: '#666', marginBottom: 4 },
   value: { fontSize: 14 },
+  meta: { marginTop: 4, fontSize: 11, color: '#555' },
+  chipsWrap: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 4 },
+  chip: { backgroundColor: '#4169E1', paddingHorizontal: 10, paddingVertical: 6, borderRadius: 999 },
+  chipText: { fontSize: 11, color: '#fff', fontWeight: '600' },
+  filesList: { marginTop: 8, gap: 8 },
+  fileRow: { flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: '#F0F5FF', paddingVertical: 6, paddingHorizontal: 10, borderRadius: 8 },
+  fileName: { fontSize: 12, color: '#1F3B7A', flex: 1 },
   timeline: { marginTop: 8, gap: 8 },
   timelineItem: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   timelineText: { fontSize: 13, color: '#333' },

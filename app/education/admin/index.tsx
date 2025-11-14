@@ -5,11 +5,11 @@ import { useFonts, Inter_400Regular, Inter_600SemiBold } from '@expo-google-font
 import { SplashScreen } from 'expo-router';
 import { useAuth } from '@/hooks/useAuth';
 import { supabase } from '@/lib/supabase';
-import { ArrowLeft, Plus, Search, ShieldCheck, ShieldOff, Edit3, Trash2, RefreshCw, GraduationCap, Award } from 'lucide-react-native';
+import { ArrowLeft, Plus, Search, ShieldCheck, ShieldOff, Edit3, Trash2, RefreshCw, GraduationCap, Award, Users } from 'lucide-react-native';
 
 SplashScreen.preventAutoHideAsync();
 
-type Tab = 'universities' | 'scholarships';
+type Tab = 'universities' | 'scholarships' | 'mentors';
 
 type EduItem = {
   id: string;
@@ -51,7 +51,7 @@ export default function EducationAdminScreen() {
   const fetchItems = useCallback(async () => {
     try {
       setLoading(true);
-      const category = activeTab === 'universities' ? 'Universities' : 'Scholarships';
+  const category = activeTab === 'universities' ? 'Universities' : activeTab === 'scholarships' ? 'Scholarships' : 'Alumni Mentors';
       const { data, error } = await supabase
         .from('products_services')
         .select('*')
@@ -121,7 +121,88 @@ export default function EducationAdminScreen() {
   };
 
   const goAdd = () => {
-    router.push('/create-educational-listing');
+    Alert.alert(
+      'Add New Item',
+      'What would you like to add?',
+      [
+        {
+          text: 'University',
+          onPress: async () => {
+            try {
+              const { data, error } = await supabase
+                .from('products_services')
+                .insert({
+                  user_id: user.id,
+                  category_name: 'Universities',
+                  title: '',
+                  description: '',
+                  price: 0,
+                  is_approved: false
+                })
+                .select('id')
+                .single();
+              if (error) throw error;
+              router.push(`/edit-listing/${data.id}` as any);
+            } catch (e) {
+              console.error('Failed to create university', e);
+              Alert.alert('Error', 'Failed to create new university');
+            }
+          }
+        },
+        {
+          text: 'Scholarship',
+          onPress: async () => {
+            try {
+              const { data, error } = await supabase
+                .from('products_services')
+                .insert({
+                  user_id: user.id,
+                  category_name: 'Scholarships',
+                  title: '',
+                  description: '',
+                  price: 0,
+                  is_approved: false
+                })
+                .select('id')
+                .single();
+              if (error) throw error;
+              router.push(`/edit-listing/${data.id}` as any);
+            } catch (e) {
+              console.error('Failed to create scholarship', e);
+              Alert.alert('Error', 'Failed to create new scholarship');
+            }
+          }
+        },
+        {
+          text: 'Alumni Mentor',
+          onPress: async () => {
+            try {
+              const { data, error } = await supabase
+                .from('products_services')
+                .insert({
+                  user_id: user.id,
+                  category_name: 'Alumni Mentors',
+                  title: '',
+                  description: '',
+                  price: 0,
+                  is_approved: false
+                })
+                .select('id')
+                .single();
+              if (error) throw error;
+              router.push(`/edit-listing/${data.id}` as any);
+            } catch (e) {
+              console.error('Failed to create mentor', e);
+              Alert.alert('Error', 'Failed to create new mentor');
+            }
+          }
+        },
+        {
+          text: 'Cancel',
+          style: 'cancel'
+        }
+      ]
+    );
   };
 
   if (!fontsLoaded) return null;
@@ -165,6 +246,10 @@ export default function EducationAdminScreen() {
         <TouchableOpacity onPress={() => setActiveTab('scholarships')} style={[styles.tab, activeTab==='scholarships' && styles.tabActive]}>
           <Award size={18} color={activeTab==='scholarships' ? '#FFFFFF' : '#4169E1'} />
           <Text style={[styles.tabText, activeTab==='scholarships' && styles.tabTextActive]}>Scholarships</Text>
+        </TouchableOpacity>
+        <TouchableOpacity onPress={() => setActiveTab('mentors')} style={[styles.tab, activeTab==='mentors' && styles.tabActive]}>
+          <Users size={18} color={activeTab==='mentors' ? '#FFFFFF' : '#4169E1'} />
+          <Text style={[styles.tabText, activeTab==='mentors' && styles.tabTextActive]}>Alumni Mentors</Text>
         </TouchableOpacity>
         <TouchableOpacity onPress={fetchItems} style={styles.refresh}>
           <RefreshCw size={18} color="#4169E1" />

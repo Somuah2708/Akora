@@ -13,6 +13,7 @@ type TranscriptRequest = {
   id: string;
   user_id: string;
   request_type: 'official' | 'unofficial';
+  request_kind?: 'transcript' | 'wassce';
   purpose: string;
   recipient_email: string;
   status: Status;
@@ -20,6 +21,12 @@ type TranscriptRequest = {
   document_url?: string | null;
   admin_notes?: string | null;
   verification_code?: string | null;
+  full_name?: string | null;
+  class_name?: string | null;
+  graduation_year?: number | null;
+  index_number?: string | null;
+  price_amount?: number | null;
+  price_currency?: string | null;
   created_at?: string;
 };
 
@@ -104,7 +111,7 @@ export default function TranscriptDetailScreen() {
         <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
           <ArrowLeft size={22} color="#000" />
         </TouchableOpacity>
-        <Text style={styles.title}>Transcript Detail</Text>
+  <Text style={styles.title}>Academic Request Detail</Text>
         <View style={{ width: 24 }} />
       </View>
 
@@ -114,8 +121,31 @@ export default function TranscriptDetailScreen() {
         <View style={styles.center}><Text>Not found</Text></View>
       ) : (
         <View style={styles.content}>
-          <Text style={styles.h1}>{req.request_type === 'official' ? 'Official' : 'Unofficial'} Transcript</Text>
+          <Text style={styles.h1}>
+            {req.request_kind === 'wassce'
+              ? 'WASSCE Certificate'
+              : `${req.request_type === 'official' ? 'Official' : 'Unofficial'} Transcript`}
+          </Text>
           <Text style={styles.mono}>Ref: {req.id.slice(0, 8)} · Code: {req.verification_code}</Text>
+
+          <View style={styles.section}>
+            <Text style={styles.label}>Identity</Text>
+            <Text style={styles.value}>
+              {[req.full_name, req.class_name, req.graduation_year ? `Class of ${req.graduation_year}` : null]
+                .filter(Boolean)
+                .join(' · ') || '—'}
+            </Text>
+            {req.index_number ? <Text style={styles.meta}>Index: {req.index_number}</Text> : null}
+          </View>
+
+          <View style={styles.section}>
+            <Text style={styles.label}>Pricing</Text>
+            <Text style={styles.value}>
+              {req.price_currency && typeof req.price_amount === 'number'
+                ? `${req.price_currency} ${req.price_amount}`
+                : 'Not set'}
+            </Text>
+          </View>
 
           <View style={styles.section}>
             <Text style={styles.label}>Purpose</Text>
@@ -204,6 +234,7 @@ const styles = StyleSheet.create({
   section: { marginTop: 16 },
   label: { fontSize: 13, color: '#666', marginBottom: 4 },
   value: { fontSize: 14 },
+  meta: { marginTop: 4, fontSize: 11, color: '#555' },
   timeline: { marginTop: 8, gap: 8 },
   timelineItem: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   timelineText: { fontSize: 13, color: '#333', textTransform: 'capitalize' },

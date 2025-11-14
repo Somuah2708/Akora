@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { View, Text, TextInput, StyleSheet, TouchableOpacity, Alert, ActivityIndicator, KeyboardAvoidingView, Platform } from 'react-native';
 import { useRouter } from 'expo-router';
 import * as WebBrowser from 'expo-web-browser';
@@ -8,17 +8,33 @@ import { useAuth } from '@/hooks/useAuth';
 import { pickDocument } from '@/lib/media';
 import { uploadProofFromUri } from '@/lib/storage';
 import { PAYSTACK_REDIRECT_URL, STRIPE_CHECKOUT_URL } from '@/config/payments';
+import { resolveTranscriptPrice, resolveWasscePrice, formatPrice } from '@/config/academicPricing';
 
 type RequestType = 'official' | 'unofficial';
+type RequestKind = 'transcript' | 'wassce';
 
 export default function NewTranscriptScreen() {
   const router = useRouter();
   const { user } = useAuth();
+  // Transcript specific sub-type (official/unofficial)
   const [requestType, setRequestType] = useState<RequestType>('official');
+  // Kind: transcript or wassce certificate request
+  const [requestKind, setRequestKind] = useState<RequestKind>('transcript');
   const [purpose, setPurpose] = useState('Application Review');
   const [recipientEmail, setRecipientEmail] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [pickedProof, setPickedProof] = useState<{ uri: string; name: string; mimeType: string } | null>(null);
+  // Identity fields
+  const [fullName, setFullName] = useState('');
+  const [className, setClassName] = useState('');
+  const [graduationYear, setGraduationYear] = useState(''); // store as string then parseInt
+  const [indexNumber, setIndexNumber] = useState(''); // optional
+
+  // Derived price based on kind + transcript type
+  const price = useMemo(() => {
+    if (requestKind === 'transcript') return resolveTranscriptPrice(requestType);
+    return resolveWasscePrice('certificate');
+  }, [requestKind, requestType]);
 
   if (!user) {
     return (
@@ -30,6 +46,18 @@ export default function NewTranscriptScreen() {
   }
 
   const validate = () => {
+    if (!fullName.trim()) {
+      Alert.alert('Missing full name', 'Please provide your full name.');
+      return false;
+    }
+    if (!className.trim()) {
+      Alert.alert('Missing class', 'Please provide your class name.');
+      return false;
+    }
+    if (!graduationYear.trim() || !/^[0-9]{4}$/.test(graduationYear.trim())) {
+      Alert.alert('Invalid graduation year', 'Enter a 4-digit graduation year.');
+      return false;
+    }
     if (!purpose.trim()) {
       Alert.alert('Missing purpose', 'Please enter a short purpose.');
       return false;
@@ -61,14 +89,25 @@ export default function NewTranscriptScreen() {
     setSubmitting(true);
     try {
       // 1) Create request (pending by default)
+      // NOTE: For WASSCE we still need request_type column (schema) -> default to 'official'
+      const effectiveRequestType = requestKind === 'wassce' ? 'official' : requestType;
+      const price_amount = price.amount;
+      const price_currency = price.currency;
       const { data, error } = await supabase
         .from('transcript_requests')
         .insert({
           user_id: user.id,
-          request_type: requestType,
+          request_kind: requestKind,
+          request_type: effectiveRequestType,
           purpose: purpose.trim(),
           recipient_email: recipientEmail.trim(),
           status: 'pending',
+          full_name: fullName.trim(),
+          class_name: className.trim(),
+          graduation_year: parseInt(graduationYear.trim(), 10),
+          index_number: indexNumber.trim() || null,
+          price_amount,
+          price_currency,
         })
         .select('id')
         .single();
@@ -87,7 +126,7 @@ export default function NewTranscriptScreen() {
         if (upErr) throw upErr;
       }
 
-      Alert.alert('Submitted', 'Your transcript request has been submitted.', [
+      Alert.alert('Submitted', 'Your academic request has been submitted.', [
         { text: 'View', onPress: () => router.replace(`/transcripts/${id}`) },
       ]);
     } catch (err: any) {
@@ -104,20 +143,67 @@ export default function NewTranscriptScreen() {
         <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
           <ArrowLeft size={22} color="#000" />
         </TouchableOpacity>
-        <Text style={styles.title}>Request Transcript</Text>
+        <Text style={styles.title}>Academic Request</Text>
         <View style={{ width: 24 }} />
       </View>
 
       <View style={styles.content}>
-        <Text style={styles.label}>Transcript Type</Text>
+        <Text style={styles.label}>Request Kind</Text>
         <View style={styles.segment}>
-          <TouchableOpacity onPress={() => setRequestType('official')} style={[styles.segmentBtn, requestType==='official' && styles.segmentBtnActive]}>          
-            <Text style={[styles.segmentText, requestType==='official' && styles.segmentTextActive]}>Official</Text>
+          <TouchableOpacity onPress={() => setRequestKind('transcript')} style={[styles.segmentBtn, requestKind==='transcript' && styles.segmentBtnActive]}>          
+            <Text style={[styles.segmentText, requestKind==='transcript' && styles.segmentTextActive]}>Transcript</Text>
           </TouchableOpacity>
-          <TouchableOpacity onPress={() => setRequestType('unofficial')} style={[styles.segmentBtn, requestType==='unofficial' && styles.segmentBtnActive]}>          
-            <Text style={[styles.segmentText, requestType==='unofficial' && styles.segmentTextActive]}>Unofficial</Text>
+          <TouchableOpacity onPress={() => setRequestKind('wassce')} style={[styles.segmentBtn, requestKind==='wassce' && styles.segmentBtnActive]}>          
+            <Text style={[styles.segmentText, requestKind==='wassce' && styles.segmentTextActive]}>WASSCE Certificate</Text>
           </TouchableOpacity>
         </View>
+
+        {requestKind === 'transcript' && (
+          <>
+            <Text style={styles.label}>Transcript Type</Text>
+            <View style={styles.segment}>
+              <TouchableOpacity onPress={() => setRequestType('official')} style={[styles.segmentBtn, requestType==='official' && styles.segmentBtnActive]}>          
+                <Text style={[styles.segmentText, requestType==='official' && styles.segmentTextActive]}>Official</Text>
+              </TouchableOpacity>
+              <TouchableOpacity onPress={() => setRequestType('unofficial')} style={[styles.segmentBtn, requestType==='unofficial' && styles.segmentBtnActive]}>          
+                <Text style={[styles.segmentText, requestType==='unofficial' && styles.segmentTextActive]}>Unofficial</Text>
+              </TouchableOpacity>
+            </View>
+          </>
+        )}
+
+        <Text style={styles.label}>Full Name</Text>
+        <TextInput
+          value={fullName}
+          onChangeText={setFullName}
+          placeholder="Your full legal name"
+          style={styles.input}
+        />
+
+        <Text style={styles.label}>Class</Text>
+        <TextInput
+          value={className}
+          onChangeText={setClassName}
+          placeholder="e.g., Science A"
+          style={styles.input}
+        />
+
+        <Text style={styles.label}>Graduation Year</Text>
+        <TextInput
+          value={graduationYear}
+          onChangeText={setGraduationYear}
+          placeholder="e.g., 2024"
+          keyboardType="number-pad"
+          style={styles.input}
+        />
+
+        <Text style={styles.label}>Index Number (optional)</Text>
+        <TextInput
+          value={indexNumber}
+          onChangeText={setIndexNumber}
+          placeholder="Index number if available"
+          style={styles.input}
+        />
 
         <Text style={styles.label}>Purpose</Text>
         <TextInput
@@ -139,10 +225,10 @@ export default function NewTranscriptScreen() {
 
         <View style={styles.callout}>
           <DollarSign size={16} color="#4169E1" />
-          <Text style={styles.calloutText}>After payment, upload a proof (receipt or screenshot). An admin will verify and process your request.</Text>
+          <Text style={styles.calloutText}>Price: {formatPrice(price)}. After payment, optionally upload a proof. Admins verify before processing.</Text>
         </View>
 
-        <Text style={styles.label}>Pay for Transcript</Text>
+  <Text style={styles.label}>Pay Online</Text>
         <View style={styles.payRow}>
           <TouchableOpacity style={styles.payBtn} onPress={() => WebBrowser.openBrowserAsync(PAYSTACK_REDIRECT_URL)}>
             <ExternalLink size={16} color="#fff" />
@@ -154,7 +240,7 @@ export default function NewTranscriptScreen() {
           </TouchableOpacity>
         </View>
 
-        <Text style={styles.label}>Proof of Payment (optional)</Text>
+  <Text style={styles.label}>Proof of Payment (optional)</Text>
         <TouchableOpacity onPress={handlePickProof} style={styles.pickBtn}>          
           <Upload size={18} color="#4169E1" />
           <Text style={styles.pickText}>{pickedProof ? pickedProof.name : 'Pick file (PDF/Image)'}</Text>

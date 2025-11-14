@@ -645,11 +645,24 @@ export default function EducationScreen() {
                 />
                 <View style={styles.mentorInfo}>
                   <Text style={styles.mentorName}>{mentor.title}</Text>
-                  <Text style={styles.mentorRole} numberOfLines={1}>{mentor.description}</Text>
+                  {mentor.mentor_headline ? (
+                    <Text style={styles.mentorRole} numberOfLines={1}>{mentor.mentor_headline}</Text>
+                  ) : (
+                    <Text style={styles.mentorRole} numberOfLines={1}>{mentor.description}</Text>
+                  )}
                   {mentor.location && (
                     <View style={styles.locationRow}>
                       <MapPin size={12} color="#666666" />
                       <Text style={styles.mentorLocation}>{mentor.location}</Text>
+                    </View>
+                  )}
+                  {Array.isArray(mentor.mentor_meeting_formats) && mentor.mentor_meeting_formats.length > 0 && (
+                    <View style={{flexDirection:'row', flexWrap:'wrap', gap:6, marginTop:4}}>
+                      {mentor.mentor_meeting_formats.map((m:string) => (
+                        <View key={m} style={{backgroundColor:'#EAF2FF', paddingHorizontal:8, paddingVertical:4, borderRadius:8, borderWidth:1, borderColor:'#D6E1FF'}}>
+                          <Text style={{fontSize:11, color:'#4169E1', fontFamily:'Inter-SemiBold'}}>{m}</Text>
+                        </View>
+                      ))}
                     </View>
                   )}
                   <View style={styles.mentorActions}>

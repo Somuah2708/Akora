@@ -2,7 +2,7 @@ import { View, Text, StyleSheet, ScrollView, Image, TouchableOpacity, ActivityIn
 import { useFonts, Inter_400Regular, Inter_600SemiBold } from '@expo-google-fonts/inter';
 import { useEffect, useState } from 'react';
 import { SplashScreen, useRouter, useLocalSearchParams } from 'expo-router';
-import { ArrowLeft, MapPin, Globe, Mail, Award, Calendar, DollarSign, BookOpen, Share2, Bookmark, ExternalLink } from 'lucide-react-native';
+import { ArrowLeft, MapPin, Globe, Mail, Award, Calendar, Wallet, BookOpen, Share2, Bookmark, ExternalLink } from 'lucide-react-native';
 import { supabase } from '../../../lib/supabase';
 import { useAuth } from '../../../hooks/useAuth';
 
@@ -146,6 +146,7 @@ export default function EducationDetailScreen() {
   }
 
   const isScholarship = opportunity.category_name === 'Scholarships';
+  const isMentor = opportunity.category_name === 'Alumni Mentors';
   const daysLeft = opportunity.deadline_date ? calculateDaysLeft(opportunity.deadline_date) : null;
 
   // Parse image_url if it's a JSON array
@@ -221,7 +222,7 @@ export default function EducationDetailScreen() {
           {/* Funding Amount (for Scholarships) */}
           {isScholarship && opportunity.funding_amount && (
             <View style={styles.fundingCard}>
-              <DollarSign size={20} color="#4CAF50" />
+              <Wallet size={20} color="#4CAF50" />
               <View>
                 <Text style={styles.fundingLabel}>Funding Amount</Text>
                 <Text style={styles.fundingAmount}>{opportunity.funding_currency === 'GHS' ? '₵' : '$'}{opportunity.funding_amount}</Text>
@@ -234,6 +235,64 @@ export default function EducationDetailScreen() {
             <Text style={styles.sectionTitle}>About</Text>
             <Text style={styles.description}>{opportunity.description}</Text>
           </View>
+
+          {/* Mentor Details */}
+          {isMentor && (
+            <View style={styles.section}>
+              {opportunity.mentor_headline && (
+                <View style={styles.infoRow}>
+                  <Text style={styles.infoText}>{opportunity.mentor_headline}</Text>
+                </View>
+              )}
+              {(opportunity.mentor_company || opportunity.mentor_role) && (
+                <View style={styles.infoRow}>
+                  <Text style={styles.infoText}>{[opportunity.mentor_role, opportunity.mentor_company].filter(Boolean).join(' • ')}</Text>
+                </View>
+              )}
+              {(Array.isArray(opportunity.mentor_meeting_formats) && opportunity.mentor_meeting_formats.length>0) && (
+                <View style={{flexDirection:'row', flexWrap:'wrap', gap:8, marginBottom:8}}>
+                  {opportunity.mentor_meeting_formats.map((m:string) => (
+                    <View key={m} style={{backgroundColor:'#EAF2FF', paddingHorizontal:10, paddingVertical:6, borderRadius:10, borderWidth:1, borderColor:'#D6E1FF'}}>
+                      <Text style={{fontSize:12, color:'#4169E1', fontFamily:'Inter-SemiBold'}}>{m}</Text>
+                    </View>
+                  ))}
+                </View>
+              )}
+              {(opportunity.mentor_timezone || opportunity.mentor_availability) && (
+                <View style={styles.infoRow}>
+                  <Text style={styles.infoText}>Availability: {[opportunity.mentor_timezone, opportunity.mentor_availability].filter(Boolean).join(' • ')}</Text>
+                </View>
+              )}
+              {(Array.isArray(opportunity.mentor_expertise) && opportunity.mentor_expertise.length>0) && (
+                <View style={{marginTop:8}}>
+                  <Text style={styles.sectionTitle}>Expertise</Text>
+                  <Text style={styles.description}>{opportunity.mentor_expertise.join(', ')}</Text>
+                </View>
+              )}
+              {(Array.isArray(opportunity.mentor_languages) && opportunity.mentor_languages.length>0) && (
+                <View style={{marginTop:12}}>
+                  <Text style={styles.sectionTitle}>Languages</Text>
+                  <Text style={styles.description}>{opportunity.mentor_languages.join(', ')}</Text>
+                </View>
+              )}
+              {(opportunity.mentor_linkedin_url || opportunity.mentor_website_url) && (
+                <View style={{marginTop:12}}>
+                  {opportunity.mentor_linkedin_url && (
+                    <TouchableOpacity style={styles.contactButton} onPress={() => Linking.openURL(opportunity.mentor_linkedin_url)}>
+                      <Globe size={18} color="#4169E1" />
+                      <Text style={styles.contactText}>View LinkedIn</Text>
+                    </TouchableOpacity>
+                  )}
+                  {opportunity.mentor_website_url && (
+                    <TouchableOpacity style={styles.contactButton} onPress={() => Linking.openURL(opportunity.mentor_website_url)}>
+                      <Globe size={18} color="#4169E1" />
+                      <Text style={styles.contactText}>Visit Website</Text>
+                    </TouchableOpacity>
+                  )}
+                </View>
+              )}
+            </View>
+          )}
 
           {/* Eligibility Criteria */}
           {opportunity.eligibility_criteria && (

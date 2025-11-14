@@ -9,11 +9,18 @@ type TranscriptRequest = {
   id: string;
   user_id: string;
   request_type: 'official' | 'unofficial';
+  request_kind?: 'transcript' | 'wassce';
   purpose: string;
   recipient_email: string;
   status: 'pending' | 'payment_provided' | 'processing' | 'ready' | 'delivered' | 'rejected';
   payment_proof_url?: string | null;
   document_url?: string | null;
+  full_name?: string | null;
+  class_name?: string | null;
+  graduation_year?: number | null;
+  index_number?: string | null;
+  price_amount?: number | null;
+  price_currency?: string | null;
   created_at?: string;
 };
 
@@ -67,7 +74,7 @@ export default function TranscriptListScreen() {
   return (
     <View style={styles.container}>
       <View style={styles.header}>        
-        <Text style={styles.title}>Transcript Requests</Text>
+  <Text style={styles.title}>Academic Requests</Text>
         <TouchableOpacity style={styles.addButton} onPress={() => router.push('/transcripts/new')}>
           <Plus size={20} color="#4169E1" />
           <Text style={styles.addText}>New</Text>
@@ -90,19 +97,33 @@ export default function TranscriptListScreen() {
         </View>
       ) : (
         <ScrollView contentContainerStyle={{ padding: 16 }}>
-          {items.map((it) => (
-            <TouchableOpacity key={it.id} style={styles.card} onPress={() => router.push(`/transcripts/${it.id}`)}>
-              <View style={{ flex: 1 }}>
-                <Text style={styles.cardTitle}>{it.request_type === 'official' ? 'Official' : 'Unofficial'} Transcript</Text>
-                <Text style={styles.cardSub}>{it.purpose}</Text>
-                <Text style={styles.cardSubSmall}>Recipient: {it.recipient_email}</Text>
-              </View>
-              <View style={[styles.statusPill, { backgroundColor: statusColors[it.status] }] }>
-                {it.status === 'delivered' ? <CheckCircle2 size={14} color="#fff" /> : <Clock size={14} color="#fff" />}
-                <Text style={styles.statusText}>{it.status.replace('_', ' ')}</Text>
-              </View>
-            </TouchableOpacity>
-          ))}
+          {items.map((it) => {
+            const kind = it.request_kind || 'transcript';
+            const title = kind === 'wassce'
+              ? 'WASSCE Certificate'
+              : `${it.request_type === 'official' ? 'Official' : 'Unofficial'} Transcript`;
+            const identityLine = [it.full_name, it.class_name, it.graduation_year ? `Class of ${it.graduation_year}` : null]
+              .filter(Boolean)
+              .join(' · ');
+            const priceLine = (it.price_currency && typeof it.price_amount === 'number')
+              ? `${it.price_currency} ${it.price_amount}`
+              : null;
+            return (
+              <TouchableOpacity key={it.id} style={styles.card} onPress={() => router.push(`/transcripts/${it.id}`)}>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.cardTitle}>{title}</Text>
+                  <Text style={styles.cardSub}>{it.purpose}</Text>
+                  <Text style={styles.cardSubSmall}>Recipient: {it.recipient_email}</Text>
+                  {identityLine ? <Text style={styles.cardMeta}>{identityLine}</Text> : null}
+                  {priceLine ? <Text style={styles.cardPrice}>{priceLine}</Text> : null}
+                </View>
+                <View style={[styles.statusPill, { backgroundColor: statusColors[it.status] }] }>
+                  {it.status === 'delivered' ? <CheckCircle2 size={14} color="#fff" /> : <Clock size={14} color="#fff" />}
+                  <Text style={styles.statusText}>{it.status.replace('_', ' ')}</Text>
+                </View>
+              </TouchableOpacity>
+            );
+          })}
         </ScrollView>
       )}
     </View>
@@ -126,6 +147,8 @@ const styles = StyleSheet.create({
   cardTitle: { fontSize: 16, fontWeight: '600' },
   cardSub: { marginTop: 2, fontSize: 13, color: '#444' },
   cardSubSmall: { marginTop: 2, fontSize: 12, color: '#666' },
+  cardMeta: { marginTop: 4, fontSize: 11, color: '#555' },
+  cardPrice: { marginTop: 2, fontSize: 11, color: '#1F3B7A', fontWeight: '600' },
   statusPill: { paddingVertical: 6, paddingHorizontal: 10, borderRadius: 999, flexDirection: 'row', alignItems: 'center', gap: 6 },
   statusText: { color: '#fff', fontSize: 12, fontWeight: '600', textTransform: 'capitalize' },
 });

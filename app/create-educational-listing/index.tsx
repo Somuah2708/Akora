@@ -1,7 +1,7 @@
 import { View, Text, StyleSheet, TextInput, TouchableOpacity, ScrollView, Alert, ActivityIndicator, Image } from 'react-native';
 import { useFonts, Inter_400Regular, Inter_600SemiBold } from '@expo-google-fonts/inter';
 import { useEffect, useState } from 'react';
-import { SplashScreen, useRouter } from 'expo-router';
+import { SplashScreen, useRouter, useLocalSearchParams } from 'expo-router';
 import { ArrowLeft, Image as ImageIcon, Send, DollarSign, Tag, Info, GraduationCap } from 'lucide-react-native';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/hooks/useAuth';
@@ -12,20 +12,19 @@ SplashScreen.preventAutoHideAsync();
 const CATEGORIES = [
   { id: '1', name: 'Universities' },
   { id: '2', name: 'Scholarships' },
-  { id: '3', name: 'Research Grants' },
-  { id: '4', name: 'Exchange Programs' },
-  { id: '5', name: 'Summer Schools' },
+  { id: '3', name: 'Alumni Mentors' },
 ];
 
 export default function CreateEducationalListingScreen() {
   const router = useRouter();
   const { user } = useAuth();
   const { isVerified, isChecking } = useRequireAuth();
+  const { category: urlCategory } = useLocalSearchParams();
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
   const [price, setPrice] = useState('');
   const [imageUrl, setImageUrl] = useState('');
-  const [category, setCategory] = useState('');
+  const [category, setCategory] = useState(String(urlCategory || ''));
   const [isSubmitting, setIsSubmitting] = useState(false);
   
   const [fontsLoaded] = useFonts({

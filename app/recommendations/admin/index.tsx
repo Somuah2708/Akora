@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator, Alert } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator, Alert, TextInput, Linking } from 'react-native';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/hooks/useAuth';
 
@@ -17,6 +17,15 @@ type RecReq = {
   status: Status;
   verification_code?: string | null;
   created_at?: string;
+  full_name?: string | null;
+  class_name?: string | null;
+  graduation_year?: number | null;
+  index_number?: string | null;
+  teachers?: string[] | null;
+  activities?: string | null;
+  activity_docs?: string[] | null;
+  price_amount?: number | null;
+  price_currency?: string | null;
 };
 
 type Profile = { id: string; role?: string | null };
@@ -38,6 +47,8 @@ export default function AdminRecommendationsScreen() {
   const [items, setItems] = useState<RecReq[]>([]);
   const [filter, setFilter] = useState<Status | 'all'>('pending');
   const [savingId, setSavingId] = useState<string | null>(null);
+  const [priceDrafts, setPriceDrafts] = useState<Record<string, string>>({});
+  const [signedEvidenceMap, setSignedEvidenceMap] = useState<Record<string, (string | null)[]>>({});
 
   const fetchRole = useCallback(async () => {
     if (!user) return;
@@ -57,7 +68,19 @@ export default function AdminRecommendationsScreen() {
       if (filter !== 'all') q = q.eq('status', filter);
       const { data, error } = await q;
       if (error) throw error;
-      setItems((data as RecReq[]) || []);
+      const list = (data as RecReq[]) || [];
+      setItems(list);
+      for (const r of list) {
+        if (r.activity_docs && r.activity_docs.length) {
+          try {
+            const { data: signedRaw } = await supabase.storage.from('evidence').createSignedUrls(
+              r.activity_docs.map(p => ({ path: p, expiresIn: 3600 })) as any
+            );
+            const urls: (string | null)[] = Array.isArray(signedRaw) ? signedRaw.map((x: any) => x.signedUrl || null) : [];
+            setSignedEvidenceMap(m => ({ ...m, [r.id]: urls }));
+          } catch (_e) {}
+        }
+      }
     } catch (err) {
       console.error('load recommendations admin', err);
       Alert.alert('Error', 'Failed to load recommendation requests.');
@@ -114,6 +137,27 @@ export default function AdminRecommendationsScreen() {
     }
   };
 
+  const savePrice = async (id: string) => {
+    try {
+      setSavingId(id);
+      const raw = priceDrafts[id];
+      const amount = raw ? parseFloat(raw) : NaN;
+      if (isNaN(amount)) { Alert.alert('Invalid price', 'Enter a numeric amount.'); return; }
+      const { error } = await supabase
+        .from('recommendation_requests')
+        .update({ price_amount: amount, price_currency: 'GHS' })
+        .eq('id', id);
+      if (error) throw error;
+      await fetchItems();
+      Alert.alert('Saved', 'Price updated.');
+    } catch (err) {
+      console.error('save price rec', err);
+      Alert.alert('Error', 'Could not save price.');
+    } finally {
+      setSavingId(null);
+    }
+  };
+
   if (notAdmin) {
     return (
       <View style={styles.center}>
@@ -142,34 +186,77 @@ export default function AdminRecommendationsScreen() {
         <View style={styles.center}><ActivityIndicator color="#4169E1" /></View>
       ) : (
         <ScrollView contentContainerStyle={{ padding: 16 }}>
-          {items.map((it) => (
-            <View key={it.id} style={styles.card}>
-              <View style={{ flex: 1 }}>
-                <Text style={styles.cardTitle}>{labelPurpose(it.purpose)}</Text>
-                {it.organization_name ? <Text style={styles.cardSub}>{it.organization_name}</Text> : null}
-                {it.recommender_email ? <Text style={styles.cardSubSmall}>Recommender: {it.recommender_email}</Text> : null}
-                <Text style={styles.cardSubSmall}>Ref: {it.id.slice(0,8)} · Code: {it.verification_code}</Text>
-              </View>
-              <View style={[styles.statusPill, { backgroundColor: statusColors[it.status] }]}>
-                <Text style={styles.statusText}>{it.status.replace('_',' ')}</Text>
-              </View>
+          {items.map((it) => {
+            const identityLine = [it.full_name, it.class_name, it.graduation_year ? `Class of ${it.graduation_year}` : null].filter(Boolean).join(' · ');
+            const priceLine = (it.price_currency && typeof it.price_amount === 'number') ? `${it.price_currency} ${it.price_amount}` : '—';
+            const evidenceSigned = signedEvidenceMap[it.id];
+            return (
+              <View key={it.id} style={styles.card}>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.cardTitle}>{labelPurpose(it.purpose)}</Text>
+                  {it.organization_name ? <Text style={styles.cardSub}>{it.organization_name}</Text> : null}
+                  {it.recommender_email ? <Text style={styles.cardSubSmall}>Recommender: {it.recommender_email}</Text> : null}
+                  <Text style={styles.cardSubSmall}>Ref: {it.id.slice(0,8)} · Code: {it.verification_code}</Text>
+                  {identityLine ? <Text style={styles.cardMeta}>{identityLine}</Text> : null}
+                  {it.index_number ? <Text style={styles.cardMeta}>Index: {it.index_number}</Text> : null}
+                  <Text style={styles.cardPrice}>Price: {priceLine}</Text>
+                  {it.teachers && it.teachers.length ? (
+                    <View style={styles.chipsWrap}>
+                      {it.teachers.map(t => (
+                        <View key={t} style={styles.chip}><Text style={styles.chipText}>{t}</Text></View>
+                      ))}
+                    </View>
+                  ) : null}
+                  {it.activities ? <Text style={styles.activities}>{it.activities}</Text> : null}
+                  {it.activity_docs && it.activity_docs.length ? (
+                    <View style={styles.filesList}>
+                      {it.activity_docs.map((p, idx) => {
+                        const url = evidenceSigned ? evidenceSigned[idx] || p : p;
+                        return (
+                          <TouchableOpacity key={p} style={styles.fileRow} onPress={() => url && Linking.openURL(url)}>
+                            <Text style={styles.fileName}>{p.split('/').pop()}</Text>
+                          </TouchableOpacity>
+                        );
+                      })}
+                    </View>
+                  ) : null}
+                </View>
+                <View style={[styles.statusPill, { backgroundColor: statusColors[it.status] }]}>
+                  <Text style={styles.statusText}>{it.status.replace('_',' ')}</Text>
+                </View>
 
-              <View style={styles.rowGap} />
+                <View style={styles.rowGap} />
 
-              <View style={styles.actionsRow}>
-                {quickStatuses.map((s) => (
-                  <TouchableOpacity key={s} style={[styles.smallBtn, savingId===it.id && { opacity: 0.6 }]} onPress={() => updateStatus(it.id, s)} disabled={savingId===it.id}>
-                    <Text style={styles.smallBtnText}>{s.replace('_',' ')}</Text>
+                <View style={styles.actionsRow}>
+                  {quickStatuses.map((s) => (
+                    <TouchableOpacity key={s} style={[styles.smallBtn, savingId===it.id && { opacity: 0.6 }]} onPress={() => updateStatus(it.id, s)} disabled={savingId===it.id}>
+                      <Text style={styles.smallBtnText}>{s.replace('_',' ')}</Text>
+                    </TouchableOpacity>
+                  ))}
+                  {it.status === 'submitted' && (
+                    <TouchableOpacity style={[styles.smallBtn, { backgroundColor: '#ECFEFF', borderColor: '#67E8F9' }]} onPress={() => viewLetter(it.id)}>
+                      <Text style={[styles.smallBtnText, { color: '#0E7490' }]}>View Letter</Text>
+                    </TouchableOpacity>
+                  )}
+                </View>
+
+                <View style={styles.rowGap} />
+                <Text style={styles.label}>Edit Price (GHS)</Text>
+                <View style={{ flexDirection:'row', alignItems:'center', gap:8 }}>
+                  <TextInput
+                    style={[styles.input,{flex:1}]}
+                    placeholder="Amount"
+                    keyboardType="numeric"
+                    value={priceDrafts[it.id] ?? (it.price_amount?.toString() ?? '')}
+                    onChangeText={(v) => setPriceDrafts(d => ({ ...d, [it.id]: v }))}
+                  />
+                  <TouchableOpacity style={[styles.saveBtn, savingId===it.id && { opacity:0.6 }]} onPress={() => savePrice(it.id)} disabled={savingId===it.id}>
+                    <Text style={styles.saveText}>Save</Text>
                   </TouchableOpacity>
-                ))}
-                {it.status === 'submitted' && (
-                  <TouchableOpacity style={[styles.smallBtn, { backgroundColor: '#ECFEFF', borderColor: '#67E8F9' }]} onPress={() => viewLetter(it.id)}>
-                    <Text style={[styles.smallBtnText, { color: '#0E7490' }]}>View Letter</Text>
-                  </TouchableOpacity>
-                )}
+                </View>
               </View>
-            </View>
-          ))}
+            );
+          })}
           {items.length === 0 && (
             <View style={styles.center}><Text>No requests for this filter.</Text></View>
           )}
@@ -203,10 +290,23 @@ const styles = StyleSheet.create({
   cardTitle: { fontSize: 16, fontWeight: '600' },
   cardSub: { marginTop: 2, fontSize: 13, color: '#374151' },
   cardSubSmall: { marginTop: 2, fontSize: 12, color: '#6B7280' },
+  cardMeta: { marginTop: 4, fontSize: 11, color: '#555' },
+  cardPrice: { marginTop: 2, fontSize: 11, color: '#1F3B7A', fontWeight: '600' },
   statusPill: { alignSelf: 'flex-start', marginTop: 10, paddingVertical: 6, paddingHorizontal: 10, borderRadius: 999, flexDirection: 'row', alignItems: 'center' },
   statusText: { color: '#fff', fontSize: 12, fontWeight: '700', textTransform: 'capitalize' },
   actionsRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 8 },
   smallBtn: { paddingVertical: 8, paddingHorizontal: 10, backgroundColor: '#EEF2FF', borderRadius: 8, borderWidth: 1, borderColor: '#E5E7EB' },
   smallBtnText: { color: '#111827', fontWeight: '600', fontSize: 12, textTransform: 'capitalize' },
   rowGap: { height: 10 },
+  chipsWrap: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginTop: 6 },
+  chip: { backgroundColor: '#4169E1', paddingHorizontal: 10, paddingVertical: 6, borderRadius: 999 },
+  chipText: { fontSize: 11, color: '#fff', fontWeight: '600' },
+  activities: { marginTop: 6, fontSize: 12, color: '#374151' },
+  filesList: { marginTop: 8, gap: 6 },
+  fileRow: { flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: '#F0F5FF', paddingVertical: 6, paddingHorizontal: 10, borderRadius: 8 },
+  fileName: { fontSize: 12, color: '#1F3B7A', flex: 1 },
+  input: { borderWidth: 1, borderColor: '#E5E7EB', borderRadius: 8, backgroundColor: '#fff', padding: 8, fontSize: 13 },
+  saveBtn: { backgroundColor: '#111827', paddingVertical: 8, paddingHorizontal: 12, borderRadius: 8 },
+  saveText: { color: '#fff', fontWeight: '700', fontSize: 12 },
+  label: { fontSize: 12, color: '#6B7280', marginTop: 8, marginBottom: 6 },
 });
