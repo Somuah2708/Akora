@@ -13,8 +13,10 @@
       "infoPlist": {
         "NSPhotoLibraryUsageDescription": "We need access to your photos to let you share images and videos in chat.",
         "NSCameraUsageDescription": "We need access to your camera to let you capture photos and videos in chat.",
-        "NSMicrophoneUsageDescription": "We need access to your microphone to let you send voice notes."
-      }
+        "NSMicrophoneUsageDescription": "We need access to your microphone to let you send voice notes.",
+        "ITSAppUsesNonExemptEncryption": false
+      },
+      "bundleIdentifier": "com.akora.app"
     },
     "web": {
       "bundler": "metro",
@@ -64,10 +66,11 @@
     "android": {
       "package": "com.somuah_2708.boltexponativewind",
       "permissions": [
-        "CAMERA",
-        "READ_EXTERNAL_STORAGE",
-        "WRITE_EXTERNAL_STORAGE",
-        "RECORD_AUDIO"
+        "android.permission.CAMERA",
+        "android.permission.READ_EXTERNAL_STORAGE",
+        "android.permission.WRITE_EXTERNAL_STORAGE",
+        "android.permission.RECORD_AUDIO",
+        "android.permission.MODIFY_AUDIO_SETTINGS"
       ],
       "adaptiveIcon": {
         "foregroundImage": "./assets/images/icon.png",

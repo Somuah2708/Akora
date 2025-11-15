@@ -1,5 +1,6 @@
 import { useState, useMemo } from 'react';
 import { View, Text, TextInput, StyleSheet, TouchableOpacity, Alert, ActivityIndicator, KeyboardAvoidingView, Platform, ScrollView } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { ArrowLeft, FilePlus2, Upload, DollarSign, Copy } from 'lucide-react-native';
 import * as Clipboard from 'expo-clipboard';
@@ -8,10 +9,10 @@ import { useAuth } from '@/hooks/useAuth';
 import { pickDocument } from '@/lib/media';
 import { uploadProofFromUri } from '@/lib/storage';
 import { MOBILE_MONEY, BANK_ACCOUNT, PAYMENT_HELP_TEXT } from '@/config/manualPayment';
-import { resolveTranscriptPrice, resolveWasscePrice, formatPrice } from '@/config/academicPricing';
+import { resolveTranscriptPrice, resolveWasscePrice, resolveProficiencyPrice, formatPrice } from '@/config/academicPricing';
 
 type RequestType = 'official' | 'unofficial';
-type RequestKind = 'transcript' | 'wassce';
+type RequestKind = 'transcript' | 'wassce' | 'proficiency';
 
 export default function NewTranscriptScreen() {
   const router = useRouter();
@@ -30,11 +31,16 @@ export default function NewTranscriptScreen() {
   const [graduationYear, setGraduationYear] = useState(''); // store as string then parseInt
   const [indexNumber, setIndexNumber] = useState(''); // optional
   const [phoneNumber, setPhoneNumber] = useState(''); // required for quick contact
+  // Proficiency test specific fields
+  const [testSubject, setTestSubject] = useState(''); // e.g., English, Mathematics
+  const [testLevel, setTestLevel] = useState('Basic'); // Basic, Intermediate, Advanced
+  const [preferredTestDate, setPreferredTestDate] = useState(''); // When they want to take the test
 
   // Derived price based on kind + transcript type
   const price = useMemo(() => {
     if (requestKind === 'transcript') return resolveTranscriptPrice(requestType);
-    return resolveWasscePrice('certificate');
+    if (requestKind === 'wassce') return resolveWasscePrice('certificate');
+    return resolveProficiencyPrice();
   }, [requestKind, requestType]);
 
   if (!user) {
@@ -62,6 +68,17 @@ export default function NewTranscriptScreen() {
     if (!phoneNumber.trim()) {
       Alert.alert('Missing phone', 'Please provide a phone number we can reach.');
       return false;
+    }
+    // Proficiency-specific validation
+    if (requestKind === 'proficiency') {
+      if (!testSubject.trim()) {
+        Alert.alert('Missing subject', 'Please specify which subject/test you need.');
+        return false;
+      }
+      if (!preferredTestDate.trim()) {
+        Alert.alert('Missing test date', 'Please provide your preferred test date.');
+        return false;
+      }
     }
     if (!purpose.trim()) {
       Alert.alert('Missing purpose', 'Please enter a short purpose.');
@@ -94,8 +111,8 @@ export default function NewTranscriptScreen() {
     setSubmitting(true);
     try {
       // 1) Create request (pending by default)
-      // NOTE: For WASSCE we still need request_type column (schema) -> default to 'official'
-      const effectiveRequestType = requestKind === 'wassce' ? 'official' : requestType;
+      // NOTE: For WASSCE and Proficiency we still need request_type column (schema) -> default to 'official'
+      const effectiveRequestType = (requestKind === 'wassce' || requestKind === 'proficiency') ? 'official' : requestType;
       const price_amount = price.amount;
       const price_currency = price.currency;
       if (price.amount > 0 && !pickedProof) {
@@ -103,23 +120,32 @@ export default function NewTranscriptScreen() {
         setSubmitting(false);
         return;
       }
+      const insertData: any = {
+        user_id: user.id,
+        request_kind: requestKind,
+        request_type: effectiveRequestType,
+        purpose: purpose.trim(),
+        recipient_email: recipientEmail.trim(),
+        status: 'pending',
+        full_name: fullName.trim(),
+        class_name: className.trim(),
+        graduation_year: parseInt(graduationYear.trim(), 10),
+        index_number: indexNumber.trim() || null,
+        phone_number: phoneNumber.trim(),
+        price_amount,
+        price_currency,
+      };
+
+      // Add proficiency-specific fields if applicable
+      if (requestKind === 'proficiency') {
+        insertData.test_subject = testSubject.trim();
+        insertData.test_level = testLevel;
+        insertData.preferred_test_date = preferredTestDate.trim();
+      }
+
       const { data, error } = await supabase
         .from('transcript_requests')
-        .insert({
-          user_id: user.id,
-          request_kind: requestKind,
-          request_type: effectiveRequestType,
-          purpose: purpose.trim(),
-          recipient_email: recipientEmail.trim(),
-          status: 'pending',
-          full_name: fullName.trim(),
-          class_name: className.trim(),
-          graduation_year: parseInt(graduationYear.trim(), 10),
-          index_number: indexNumber.trim() || null,
-          phone_number: phoneNumber.trim(),
-          price_amount,
-          price_currency,
-        })
+        .insert(insertData)
         .select('id')
         .single();
 
@@ -149,8 +175,9 @@ export default function NewTranscriptScreen() {
   };
 
   return (
-    <KeyboardAvoidingView style={styles.container} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-      <View style={styles.header}>
+    <SafeAreaView style={styles.container} edges={['top']}>
+      <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+        <View style={styles.header}>
         <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
           <ArrowLeft size={22} color="#000" />
         </TouchableOpacity>
@@ -177,6 +204,12 @@ export default function NewTranscriptScreen() {
               style={[styles.segmentBtn, requestKind==='wassce' && styles.segmentBtnActive]}
             >          
               <Text style={[styles.segmentText, requestKind==='wassce' && styles.segmentTextActive]}>WASSCE Certificate</Text>
+            </TouchableOpacity>
+            <TouchableOpacity 
+              onPress={() => setRequestKind('proficiency')} 
+              style={[styles.segmentBtn, requestKind==='proficiency' && styles.segmentBtnActive]}
+            >          
+              <Text style={[styles.segmentText, requestKind==='proficiency' && styles.segmentTextActive]}>Proficiency Test</Text>
             </TouchableOpacity>
             <TouchableOpacity 
               onPress={() => router.push('/recommendations/new')} 
@@ -241,6 +274,48 @@ export default function NewTranscriptScreen() {
           keyboardType="phone-pad"
           style={styles.input}
         />
+
+        {requestKind === 'proficiency' && (
+          <>
+            <Text style={styles.label}>Test Subject *</Text>
+            <TextInput
+              value={testSubject}
+              onChangeText={setTestSubject}
+              placeholder="e.g., English Language, Mathematics, Science"
+              style={styles.input}
+            />
+
+            <Text style={styles.label}>Test Level</Text>
+            <View style={styles.typeSegment}>
+              <TouchableOpacity 
+                onPress={() => setTestLevel('Basic')} 
+                style={[styles.typeSegmentBtn, testLevel==='Basic' && styles.segmentBtnActive]}
+              >          
+                <Text style={[styles.segmentText, testLevel==='Basic' && styles.segmentTextActive]}>Basic</Text>
+              </TouchableOpacity>
+              <TouchableOpacity 
+                onPress={() => setTestLevel('Intermediate')} 
+                style={[styles.typeSegmentBtn, testLevel==='Intermediate' && styles.segmentBtnActive]}
+              >          
+                <Text style={[styles.segmentText, testLevel==='Intermediate' && styles.segmentTextActive]}>Intermediate</Text>
+              </TouchableOpacity>
+              <TouchableOpacity 
+                onPress={() => setTestLevel('Advanced')} 
+                style={[styles.typeSegmentBtn, testLevel==='Advanced' && styles.segmentBtnActive]}
+              >          
+                <Text style={[styles.segmentText, testLevel==='Advanced' && styles.segmentTextActive]}>Advanced</Text>
+              </TouchableOpacity>
+            </View>
+
+            <Text style={styles.label}>Preferred Test Date *</Text>
+            <TextInput
+              value={preferredTestDate}
+              onChangeText={setPreferredTestDate}
+              placeholder="e.g., December 2025 or ASAP"
+              style={styles.input}
+            />
+          </>
+        )}
 
         <Text style={styles.label}>Purpose</Text>
         <TextInput
@@ -308,8 +383,9 @@ export default function NewTranscriptScreen() {
           <Text style={styles.submitText}>{submitting ? 'Submitting...' : 'Submit & Continue'}</Text>
         </TouchableOpacity>
         </View>
-      </ScrollView>
-    </KeyboardAvoidingView>
+        </ScrollView>
+      </KeyboardAvoidingView>
+    </SafeAreaView>
   );
 }
 

@@ -1,5 +1,6 @@
 import { useEffect, useState, useCallback } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator, Alert } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { FileText, Plus, Clock, CheckCircle2 } from 'lucide-react-native';
 import { supabase } from '@/lib/supabase';
@@ -38,6 +39,46 @@ export default function TranscriptListScreen() {
   const { user } = useAuth();
   const [items, setItems] = useState<TranscriptRequest[]>([]);
   const [loading, setLoading] = useState(true);
+  const [isAdmin, setIsAdmin] = useState(false);
+  const [checkingAdmin, setCheckingAdmin] = useState(true);
+
+  // Check if user is admin and redirect to admin panel
+  useEffect(() => {
+    async function checkAdminStatus() {
+      if (!user) {
+        setCheckingAdmin(false);
+        return;
+      }
+      
+      try {
+        const { data, error } = await supabase
+          .from('profiles')
+          .select('is_admin, role')
+          .eq('id', user.id)
+          .single();
+        
+        if (error) {
+          console.error('Failed to check admin status:', error);
+          setCheckingAdmin(false);
+          return;
+        }
+        
+        const isUserAdmin = data?.is_admin === true || data?.role === 'admin' || data?.role === 'staff';
+        setIsAdmin(isUserAdmin);
+        
+        if (isUserAdmin) {
+          // Redirect to admin panel
+          router.replace('/transcripts/admin');
+        }
+      } catch (err) {
+        console.error('Error checking admin status:', err);
+      } finally {
+        setCheckingAdmin(false);
+      }
+    }
+    
+    checkAdminStatus();
+  }, [user, router]);
 
   const fetchItems = useCallback(async () => {
     if (!user) return;
@@ -59,8 +100,10 @@ export default function TranscriptListScreen() {
   }, [user]);
 
   useEffect(() => {
-    fetchItems();
-  }, [fetchItems]);
+    if (!checkingAdmin && !isAdmin) {
+      fetchItems();
+    }
+  }, [fetchItems, checkingAdmin, isAdmin]);
 
   if (!user) {
     return (
@@ -71,10 +114,29 @@ export default function TranscriptListScreen() {
     );
   }
 
+  // Show loading while checking admin status
+  if (checkingAdmin) {
+    return (
+      <View style={styles.center}>
+        <ActivityIndicator size="small" color="#4169E1" />
+        <Text style={styles.subtitle}>Loading...</Text>
+      </View>
+    );
+  }
+
+  // Don't render anything if admin (will redirect)
+  if (isAdmin) {
+    return (
+      <View style={styles.center}>
+        <ActivityIndicator size="small" color="#4169E1" />
+      </View>
+    );
+  }
+
   return (
-    <View style={styles.container}>
-      <View style={styles.header}>        
-  <Text style={styles.title}>Academic Requests</Text>
+    <SafeAreaView style={styles.container} edges={['top']}>
+      <View style={styles.header}>
+        <Text style={styles.title}>Academic Requests</Text>
         <TouchableOpacity style={styles.addButton} onPress={() => router.push('/transcripts/new')}>
           <Plus size={20} color="#4169E1" />
           <Text style={styles.addText}>New</Text>
@@ -126,7 +188,7 @@ export default function TranscriptListScreen() {
           })}
         </ScrollView>
       )}
-    </View>
+    </SafeAreaView>
   );
 }
 

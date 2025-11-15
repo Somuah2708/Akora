@@ -1,7 +1,8 @@
 import { useEffect, useState, useCallback } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, ActivityIndicator, Alert, Linking } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, ActivityIndicator, Alert, Linking, ScrollView } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter, useLocalSearchParams } from 'expo-router';
-import { ArrowLeft, Clock, CheckCircle2, Upload, Link as LinkIcon, FileText } from 'lucide-react-native';
+import { ArrowLeft, Clock, CheckCircle2, Upload, Link as LinkIcon, FileText, XCircle } from 'lucide-react-native';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/hooks/useAuth';
 import { pickDocument } from '@/lib/media';
@@ -107,12 +108,12 @@ export default function TranscriptDetailScreen() {
   };
 
   return (
-    <View style={styles.container}>
+    <SafeAreaView style={styles.container} edges={['top']}>
       <View style={styles.header}>
         <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
           <ArrowLeft size={22} color="#000" />
         </TouchableOpacity>
-  <Text style={styles.title}>Academic Request Detail</Text>
+        <Text style={styles.title}>Academic Request Detail</Text>
         <View style={{ width: 24 }} />
       </View>
 
@@ -121,7 +122,81 @@ export default function TranscriptDetailScreen() {
       ) : !req ? (
         <View style={styles.center}><Text>Not found</Text></View>
       ) : (
-        <View style={styles.content}>
+        <ScrollView style={styles.scrollContent} showsVerticalScrollIndicator={false}>
+          <View style={styles.content}>
+          {/* Status Banner */}
+          {req.status === 'pending' && (
+            <View style={[styles.statusBanner, { backgroundColor: '#FFF4E6' }]}>
+              <Clock size={20} color="#F59E0B" />
+              <View style={{ flex: 1, marginLeft: 12 }}>
+                <Text style={[styles.statusTitle, { color: '#F59E0B' }]}>Payment Verification Pending</Text>
+                <Text style={styles.statusDesc}>
+                  Your payment proof is being verified. This typically takes up to 24 hours. You'll be notified once confirmed.
+                </Text>
+              </View>
+            </View>
+          )}
+          
+          {req.status === 'payment_provided' && (
+            <View style={[styles.statusBanner, { backgroundColor: '#FFF4E6' }]}>
+              <Clock size={20} color="#F59E0B" />
+              <View style={{ flex: 1, marginLeft: 12 }}>
+                <Text style={[styles.statusTitle, { color: '#F59E0B' }]}>Payment Verification Pending</Text>
+                <Text style={styles.statusDesc}>
+                  Your payment proof is being verified. This typically takes up to 24 hours. You'll be notified once confirmed.
+                </Text>
+              </View>
+            </View>
+          )}
+
+          {req.status === 'processing' && (
+            <View style={[styles.statusBanner, { backgroundColor: '#EFF6FF' }]}>
+              <Clock size={20} color="#3B82F6" />
+              <View style={{ flex: 1, marginLeft: 12 }}>
+                <Text style={[styles.statusTitle, { color: '#3B82F6' }]}>Request Being Processed</Text>
+                <Text style={styles.statusDesc}>
+                  Payment confirmed! Your request is being processed. This typically takes 3-5 business days.
+                </Text>
+              </View>
+            </View>
+          )}
+
+          {req.status === 'ready' && (
+            <View style={[styles.statusBanner, { backgroundColor: '#F0FDF4' }]}>
+              <CheckCircle2 size={20} color="#10B981" />
+              <View style={{ flex: 1, marginLeft: 12 }}>
+                <Text style={[styles.statusTitle, { color: '#10B981' }]}>Ready for Collection</Text>
+                <Text style={styles.statusDesc}>
+                  Your document is ready! Check below for the download link or collection instructions.
+                </Text>
+              </View>
+            </View>
+          )}
+
+          {req.status === 'delivered' && (
+            <View style={[styles.statusBanner, { backgroundColor: '#F0FDF4' }]}>
+              <CheckCircle2 size={20} color="#10B981" />
+              <View style={{ flex: 1, marginLeft: 12 }}>
+                <Text style={[styles.statusTitle, { color: '#10B981' }]}>Delivered</Text>
+                <Text style={styles.statusDesc}>
+                  Your request has been completed and delivered.
+                </Text>
+              </View>
+            </View>
+          )}
+
+          {req.status === 'rejected' && (
+            <View style={[styles.statusBanner, { backgroundColor: '#FEF2F2' }]}>
+              <XCircle size={20} color="#EF4444" />
+              <View style={{ flex: 1, marginLeft: 12 }}>
+                <Text style={[styles.statusTitle, { color: '#EF4444' }]}>Request Rejected</Text>
+                <Text style={styles.statusDesc}>
+                  Your request could not be processed. Check admin notes below for details.
+                </Text>
+              </View>
+            </View>
+          )}
+
           <Text style={styles.h1}>
             {req.request_kind === 'wassce'
               ? 'WASSCE Certificate'
@@ -218,9 +293,10 @@ export default function TranscriptDetailScreen() {
               <Text style={styles.primaryText}>{uploading ? 'Uploading...' : (req.payment_proof_url ? 'Replace Proof' : 'Upload Proof')}</Text>
             </TouchableOpacity>
           )}
-        </View>
+          </View>
+        </ScrollView>
       )}
-    </View>
+    </SafeAreaView>
   );
 }
 
@@ -229,7 +305,8 @@ const styles = StyleSheet.create({
   header: { paddingHorizontal: 16, paddingVertical: 12, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', borderBottomWidth: 1, borderBottomColor: '#EEE' },
   backButton: { padding: 6 },
   title: { fontSize: 18, fontWeight: '600' },
-  content: { padding: 16 },
+  scrollContent: { flex: 1 },
+  content: { padding: 16, paddingBottom: 40 },
   center: { flex: 1, alignItems: 'center', justifyContent: 'center' },
   h1: { fontSize: 18, fontWeight: '700' },
   mono: { marginTop: 4, fontSize: 12, color: '#666' },
@@ -244,4 +321,7 @@ const styles = StyleSheet.create({
   linkText: { color: '#4169E1', fontWeight: '600' },
   primaryBtn: { marginTop: 24, backgroundColor: '#4169E1', paddingVertical: 12, borderRadius: 10, alignItems: 'center', flexDirection: 'row', justifyContent: 'center', gap: 8 },
   primaryText: { color: '#fff', fontWeight: '700' },
+  statusBanner: { marginBottom: 20, padding: 16, borderRadius: 12, flexDirection: 'row', alignItems: 'flex-start' },
+  statusTitle: { fontSize: 15, fontWeight: '700', marginBottom: 4 },
+  statusDesc: { fontSize: 13, color: '#666', lineHeight: 18 },
 });

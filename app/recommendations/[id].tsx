@@ -1,7 +1,7 @@
 import { useEffect, useState, useCallback } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, ActivityIndicator, Alert, ScrollView, Linking } from 'react-native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
-import { ArrowLeft, FileText, CheckCircle2, Clock, Link as LinkIcon } from 'lucide-react-native';
+import { ArrowLeft, FileText, CheckCircle2, Clock, Link as LinkIcon, XCircle } from 'lucide-react-native';
 import { supabase } from '@/lib/supabase';
 import { getSignedEvidenceUrls } from '@/lib/evidence';
 import { formatPrice } from '@/config/academicPricing';
@@ -123,6 +123,67 @@ export default function RecommendationDetailScreen() {
         <View style={styles.center}><Text>Not found</Text></View>
       ) : (
         <ScrollView contentContainerStyle={styles.content}>
+          {/* Status Banner */}
+          {req.status === 'pending' && (
+            <View style={[styles.statusBanner, { backgroundColor: '#FFF4E6' }]}>
+              <Clock size={20} color="#F59E0B" />
+              <View style={{ flex: 1, marginLeft: 12 }}>
+                <Text style={[styles.statusTitle, { color: '#F59E0B' }]}>Awaiting Teacher Response</Text>
+                <Text style={styles.statusDesc}>
+                  Your recommendation request has been sent to the teacher. You'll be notified once they respond.
+                </Text>
+              </View>
+            </View>
+          )}
+
+          {req.status === 'accepted' && (
+            <View style={[styles.statusBanner, { backgroundColor: '#EFF6FF' }]}>
+              <CheckCircle2 size={20} color="#3B82F6" />
+              <View style={{ flex: 1, marginLeft: 12 }}>
+                <Text style={[styles.statusTitle, { color: '#3B82F6' }]}>Teacher Accepted</Text>
+                <Text style={styles.statusDesc}>
+                  The teacher has accepted your request and is working on your recommendation letter.
+                </Text>
+              </View>
+            </View>
+          )}
+
+          {req.status === 'in_progress' && (
+            <View style={[styles.statusBanner, { backgroundColor: '#EFF6FF' }]}>
+              <Clock size={20} color="#3B82F6" />
+              <View style={{ flex: 1, marginLeft: 12 }}>
+                <Text style={[styles.statusTitle, { color: '#3B82F6' }]}>Letter in Progress</Text>
+                <Text style={styles.statusDesc}>
+                  The teacher is currently writing your recommendation letter. This typically takes 3-5 business days.
+                </Text>
+              </View>
+            </View>
+          )}
+
+          {req.status === 'submitted' && (
+            <View style={[styles.statusBanner, { backgroundColor: '#F0FDF4' }]}>
+              <CheckCircle2 size={20} color="#10B981" />
+              <View style={{ flex: 1, marginLeft: 12 }}>
+                <Text style={[styles.statusTitle, { color: '#10B981' }]}>Letter Submitted</Text>
+                <Text style={styles.statusDesc}>
+                  Your recommendation letter has been completed and is ready for download.
+                </Text>
+              </View>
+            </View>
+          )}
+
+          {req.status === 'declined' && (
+            <View style={[styles.statusBanner, { backgroundColor: '#FEF2F2' }]}>
+              <XCircle size={20} color="#EF4444" />
+              <View style={{ flex: 1, marginLeft: 12 }}>
+                <Text style={[styles.statusTitle, { color: '#EF4444' }]}>Request Declined</Text>
+                <Text style={styles.statusDesc}>
+                  The teacher was unable to fulfill this recommendation request.
+                </Text>
+              </View>
+            </View>
+          )}
+
           <Text style={styles.h1}>{req.purpose.replace('_',' ')} Recommendation</Text>
           <Text style={styles.mono}>Ref: {req.id.slice(0,8)} · Code: {req.verification_code}</Text>
 
@@ -262,4 +323,7 @@ const styles = StyleSheet.create({
   letterBox: { marginTop: 8, padding: 12, backgroundColor: '#FAFAFA', borderRadius: 8, borderWidth: 1, borderColor: '#EEE' },
   letter: { fontSize: 14, lineHeight: 20, color: '#111' },
   signature: { marginTop: 8, fontStyle: 'italic', color: '#444' },
+  statusBanner: { marginBottom: 20, padding: 16, borderRadius: 12, flexDirection: 'row', alignItems: 'flex-start' },
+  statusTitle: { fontSize: 15, fontWeight: '700', marginBottom: 4 },
+  statusDesc: { fontSize: 13, color: '#666', lineHeight: 18 },
 });

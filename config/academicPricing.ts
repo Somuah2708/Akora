@@ -2,7 +2,7 @@
 // NOTE: Keep amounts in lowest stable currency unit (here plain GHS values; extend later if fractional).
 // Schema columns: price_amount NUMERIC, price_currency TEXT DEFAULT 'GHS'.
 
-export type AcademicKind = 'transcript' | 'wassce' | 'recommendation';
+export type AcademicKind = 'transcript' | 'wassce' | 'recommendation' | 'proficiency';
 export type TranscriptType = 'official' | 'unofficial';
 
 export interface PriceResult {
@@ -15,6 +15,7 @@ const PRICING: {
   transcript: Record<TranscriptType, PriceResult> & { default: PriceResult };
   wassce: { certificate: PriceResult; default: PriceResult };
   recommendation: { base: PriceResult };
+  proficiency: { test: PriceResult };
 } = {
   transcript: {
     official: { amount: 50, currency: 'GHS' },
@@ -27,6 +28,9 @@ const PRICING: {
   },
   recommendation: {
     base: { amount: 0, currency: 'GHS' }, // recommendations currently free
+  },
+  proficiency: {
+    test: { amount: 35, currency: 'GHS' }, // proficiency test pricing
   },
 };
 
@@ -59,6 +63,9 @@ export function getAcademicPrice(input: AcademicPriceInput): PriceResult {
       case 'recommendation': {
         return PRICING.recommendation.base;
       }
+      case 'proficiency': {
+        return PRICING.proficiency.test;
+      }
       default:
         return { amount: 0, currency: 'GHS' };
     }
@@ -78,6 +85,10 @@ export function resolveWasscePrice(subtype: string = 'certificate'): PriceResult
 
 export function resolveRecommendationPrice(): PriceResult {
   return getAcademicPrice({ kind: 'recommendation' });
+}
+
+export function resolveProficiencyPrice(): PriceResult {
+  return getAcademicPrice({ kind: 'proficiency' });
 }
 
 /** Format price for UI */
