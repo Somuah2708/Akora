@@ -43,7 +43,7 @@ export async function pickMedia(): Promise<ImagePicker.ImagePickerAsset | null> 
     if (!hasPermission) return null;
 
     const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ImagePicker.MediaTypeOptions.All,
+      mediaTypes: (ImagePicker as any).MediaType?.all ?? (ImagePicker as any).MediaTypeOptions?.All ?? ImagePicker.MediaTypeOptions.All,
       allowsEditing: false,
       quality: 0.8,
       selectionLimit: 1,
@@ -68,7 +68,7 @@ export async function takeMedia(): Promise<ImagePicker.ImagePickerAsset | null> 
     if (!hasPermission) return null;
 
     const result = await ImagePicker.launchCameraAsync({
-      mediaTypes: ImagePicker.MediaTypeOptions.All,
+      mediaTypes: (ImagePicker as any).MediaType?.all ?? (ImagePicker as any).MediaTypeOptions?.All ?? ImagePicker.MediaTypeOptions.All,
       allowsEditing: false,
       quality: 0.8,
       videoMaxDuration: 60,
@@ -157,12 +157,13 @@ export async function uploadMedia(
     const safeFileName = `${userId}_${timestamp}.${finalExt}`;
     const filePath = `messages/media/${userId}/${safeFileName}`;
 
-    // Fetch the file
+    // Fetch the file as ArrayBuffer (React Native)
     const response = await fetch(uri);
-    const blob = await response.blob();
+    const arrayBuffer = await response.arrayBuffer();
+    const bytes = new Uint8Array(arrayBuffer);
 
     // Size guard (prevents 413 Payload too large)
-    const size = blob.size;
+    const size = bytes.byteLength;
     const max = type === 'image' ? IMAGE_MAX_BYTES : VIDEO_MAX_BYTES;
     if (size > max) {
       Alert.alert(
@@ -175,7 +176,7 @@ export async function uploadMedia(
     // Upload to Supabase Storage
     const { data, error } = await supabase.storage
       .from('chat-media')
-      .upload(filePath, blob, {
+      .upload(filePath, bytes, {
         contentType: mimeType || (type === 'image' ? 'image/jpeg' : 'video/mp4'),
         upsert: false,
       });
@@ -215,14 +216,15 @@ export async function uploadDocument(
     const sanitizedFileName = fileName.replace(/[^a-zA-Z0-9._-]/g, '_');
     const filePath = `messages/documents/${userId}/${timestamp}_${sanitizedFileName}`;
 
-    // Fetch the file
+    // Fetch the file as ArrayBuffer (React Native)
     console.log('Fetching file from URI...');
     const response = await fetch(uri);
-    const blob = await response.blob();
-    console.log('File fetched, size:', blob.size, 'bytes');
+    const arrayBuffer = await response.arrayBuffer();
+    const bytes = new Uint8Array(arrayBuffer);
+    console.log('File fetched, size:', bytes.byteLength, 'bytes');
 
     // Size guard
-    const size = blob.size;
+    const size = bytes.byteLength;
     if (size > DOCUMENT_MAX_BYTES) {
       console.log('File too large:', size, '>', DOCUMENT_MAX_BYTES);
       Alert.alert(
@@ -236,7 +238,7 @@ export async function uploadDocument(
     console.log('Uploading to Supabase Storage:', filePath);
     const { data, error } = await supabase.storage
       .from('chat-media')
-      .upload(filePath, blob, {
+      .upload(filePath, bytes, {
         contentType: mimeType,
         upsert: false,
       });

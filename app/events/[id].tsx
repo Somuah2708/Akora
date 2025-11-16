@@ -9,6 +9,10 @@ import {
   Alert,
   Linking,
   ActivityIndicator,
+  Modal,
+  Dimensions,
+  Share,
+  Platform,
 } from 'react-native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { 
@@ -23,9 +27,11 @@ import {
   Bookmark,
   ExternalLink 
 } from 'lucide-react-native';
+import { Video } from 'expo-av';
 import { LinearGradient } from 'expo-linear-gradient';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/hooks/useAuth';
+import { exportEventToCalendar } from '@/lib/ics-export';
 
 interface Event {
   id: string;
@@ -58,6 +64,15 @@ export default function EventDetailScreen() {
   const [isInterested, setIsInterested] = useState(false);
   const [loading, setLoading] = useState(true);
   const [bookmarkId, setBookmarkId] = useState<string | null>(null);
+  const [supaEvent, setSupaEvent] = useState<any | null>(null);
+  const [fullscreenMedia, setFullscreenMedia] = useState<{
+    url: string;
+    type: 'image' | 'video';
+  } | null>(null);
+  const [rsvpStatus, setRsvpStatus] = useState<'attending' | 'maybe' | 'not_attending' | null>(null);
+  const [rsvpId, setRsvpId] = useState<string | null>(null);
+  const [rsvpCount, setRsvpCount] = useState(0);
+  const [viewTracked, setViewTracked] = useState(false);
 
   // All events data
   const allEventsData: Event[] = [
@@ -449,9 +464,42 @@ export default function EventDetailScreen() {
   ];
 
   useEffect(() => {
+    let active = true;
+    (async () => {
+      try {
+        // Prefer sample if present
+        const sample = allEventsData.find(e => e.id === eventId);
+        if (sample) {
+          if (active) { setEvent(sample); setSupaEvent(null); setLoading(false); }
+          return;
+        }
+        setLoading(true);
+        const { data, error } = await supabase
+          .from('akora_events')
+          .select('*')
+          .eq('id', eventId)
+          .single();
+        if (error) throw error;
+        if (active) {
+          setSupaEvent(data);
+        }
+      } catch (e) {
+        console.log('load event detail', e);
+        if (active) Alert.alert('Error', 'Failed to load event');
+      } finally {
+        if (active) setLoading(false);
+      }
+    })();
+    return () => { active = false; };
+  }, [eventId]);
+
+  useEffect(() => {
     loadEvent();
     checkBookmarkStatus();
     incrementViewCount();
+    checkRsvpStatus();
+    loadRsvpCount();
+    trackView();
   }, [eventId, user?.id]);
 
   const incrementViewCount = async () => {
@@ -641,11 +689,390 @@ export default function EventDetailScreen() {
     }
   };
 
+  const trackView = async () => {
+    if (viewTracked || !eventId) return;
+    try {
+      // Increment view count
+      const { error } = await supabase.rpc('increment_event_views', { event_id: eventId });
+      if (!error) setViewTracked(true);
+    } catch (error) {
+      console.error('Error tracking view:', error);
+    }
+  };
+
+  const checkRsvpStatus = async () => {
+    try {
+      if (!user?.id || !eventId) return;
+
+      const { data, error } = await supabase
+        .from('event_rsvps')
+        .select('id, status')
+        .eq('user_id', user.id)
+        .eq('event_id', eventId)
+        .maybeSingle();
+
+      if (!error && data) {
+        setRsvpStatus(data.status);
+        setRsvpId(data.id);
+      }
+    } catch (error) {
+      console.error('Error checking RSVP:', error);
+    }
+  };
+
+  const loadRsvpCount = async () => {
+    try {
+      if (!eventId) return;
+
+      const { count, error } = await supabase
+        .from('event_rsvps')
+        .select('*', { count: 'exact', head: true })
+        .eq('event_id', eventId)
+        .eq('status', 'attending');
+
+      if (!error) setRsvpCount(count || 0);
+    } catch (error) {
+      console.error('Error loading RSVP count:', error);
+    }
+  };
+
+  const handleRsvp = async (status: 'attending' | 'maybe' | 'not_attending') => {
+    try {
+      if (!user?.id) {
+        Alert.alert('Login Required', 'Please login to RSVP');
+        return;
+      }
+
+      if (rsvpId) {
+        // Update existing RSVP
+        const { error } = await supabase
+          .from('event_rsvps')
+          .update({ status, updated_at: new Date().toISOString() })
+          .eq('id', rsvpId);
+
+        if (error) throw error;
+        setRsvpStatus(status);
+        Alert.alert('Success', `Your RSVP has been updated to "${status}"`);
+      } else {
+        // Create new RSVP
+        const { data, error } = await supabase
+          .from('event_rsvps')
+          .insert({
+            event_id: eventId,
+            user_id: user.id,
+            status,
+          })
+          .select()
+          .single();
+
+        if (error) throw error;
+        setRsvpStatus(status);
+        setRsvpId(data.id);
+        Alert.alert('Success', `You are now ${status}!`);
+      }
+      
+      // Reload RSVP count
+      loadRsvpCount();
+    } catch (error: any) {
+      console.error('Error updating RSVP:', error);
+      Alert.alert('Error', error.message || 'Failed to update RSVP');
+    }
+  };
+
+  const handleShare = async () => {
+    try {
+      const title = supaEvent?.title || event?.title || 'Event';
+      const message = `Check out this event: ${title}\n\n${supaEvent?.description || event?.description || ''}`;
+      
+      const result = await Share.share({
+        message,
+        title,
+        ...(Platform.OS === 'ios' && { url: `https://akora.app/events/${eventId}` }),
+      });
+
+      if (result.action === Share.sharedAction) {
+        if (result.activityType) {
+          console.log('Shared via', result.activityType);
+        } else {
+          console.log('Shared successfully');
+        }
+      }
+    } catch (error: any) {
+      console.error('Error sharing:', error);
+      Alert.alert('Error', 'Failed to share event');
+    }
+  };
+
+  const handleAddToCalendar = async () => {
+    try {
+      const title = supaEvent?.title || event?.title || 'Event';
+      const description = supaEvent?.description || event?.description || '';
+      const location = supaEvent?.location || event?.location || 'TBA';
+      const startTime = supaEvent?.start_time || event?.date;
+      const endTime = supaEvent?.end_time || (startTime ? new Date(new Date(startTime).getTime() + 3600000).toISOString() : undefined);
+      
+      if (!startTime) {
+        Alert.alert('Error', 'Event start time is not available');
+        return;
+      }
+
+      await exportEventToCalendar({
+        id: eventId,
+        title,
+        description,
+        location,
+        start_date: startTime,
+        end_date: endTime || startTime,
+        organizer_name: supaEvent?.organizer_name || event?.organizer || 'Event Organizer',
+        organizer_email: supaEvent?.organizer_email || event?.contactEmail || 'events@akora.app',
+      });
+      
+      Alert.alert('Success', 'Event has been added to your calendar!');
+    } catch (error: any) {
+      console.error('Calendar export error:', error);
+      Alert.alert('Error', 'Failed to add event to calendar. Please try again.');
+    }
+  };
+
+  const getCapacityWarning = () => {
+    const capacity = supaEvent?.capacity || event?.capacity;
+    if (!capacity || rsvpCount === 0) return null;
+
+    const percentFull = (rsvpCount / capacity) * 100;
+    
+    if (percentFull >= 100) {
+      return { message: '🚫 Event is at full capacity', color: '#EF4444', canRsvp: false };
+    } else if (percentFull >= 80) {
+      return { message: `⚠️ Only ${capacity - rsvpCount} spots left!`, color: '#F59E0B', canRsvp: true };
+    }
+    return null;
+  };
+
   if (loading) {
     return (
       <View style={[styles.container, styles.centered]}>
         <ActivityIndicator size="large" color="#4169E1" />
         <Text style={styles.loadingText}>Loading event...</Text>
+      </View>
+    );
+  }
+
+  // Render Supabase-backed Akora/OAA event with media (video, gallery)
+  if (supaEvent) {
+    const startLabel = supaEvent.start_time ? new Date(supaEvent.start_time).toLocaleString() : null;
+    const locationLabel = supaEvent.location || 'Location TBA';
+    const titleLabel = supaEvent.title || 'Event';
+    const desc = supaEvent.description || '';
+    const banner = supaEvent.banner_url || null;
+    const video = supaEvent.video_url || null;
+    const gallery: string[] = Array.isArray(supaEvent.gallery_urls) ? supaEvent.gallery_urls : [];
+    return (
+      <View style={styles.container}>
+        <ScrollView showsVerticalScrollIndicator={false}>
+          <View style={styles.mediaBox}>
+            {video ? (
+              <Video
+                source={{ uri: video }}
+                style={styles.detailMedia}
+                useNativeControls
+                resizeMode={"cover" as any}
+                shouldPlay={false}
+                isLooping={false}
+                usePoster={!!banner}
+                posterSource={banner ? { uri: banner } : undefined}
+              />
+            ) : banner ? (
+              <Image source={{ uri: banner }} style={styles.detailMedia} />
+            ) : (
+              <View style={[styles.detailMedia, { backgroundColor: '#F3F4F6', alignItems: 'center', justifyContent: 'center' }]}>
+                <Text style={{ color: '#6B7280' }}>No media</Text>
+              </View>
+            )}
+            <TouchableOpacity style={styles.detailBack} onPress={() => router.back()}>
+              <View style={styles.backButtonCircle}>
+                <ArrowLeft size={22} color="#333" />
+              </View>
+            </TouchableOpacity>
+          </View>
+          <View style={styles.detailBody}>
+            <Text style={styles.detailTitle}>{titleLabel}</Text>
+            {startLabel ? (
+              <View style={styles.detailRow}><Calendar size={16} color="#1F2937" /><Text style={styles.detailMeta}>{startLabel}</Text></View>
+            ) : null}
+            <View style={styles.detailRow}><MapPin size={16} color="#1F2937" /><Text style={styles.detailMeta}>{locationLabel}</Text></View>
+            
+            {/* Analytics */}
+            <View style={styles.analyticsRow}>
+              <View style={styles.analyticsBadge}>
+                <Users size={14} color="#4169E1" />
+                <Text style={styles.analyticsText}>{rsvpCount} attending</Text>
+              </View>
+              {supaEvent.capacity && (
+                <View style={styles.analyticsBadge}>
+                  <Users size={14} color="#6B7280" />
+                  <Text style={styles.analyticsText}>Capacity: {supaEvent.capacity}</Text>
+                </View>
+              )}
+            </View>
+
+            {/* Capacity Warning */}
+            {(() => {
+              const warning = getCapacityWarning();
+              if (warning) {
+                return (
+                  <View style={[styles.capacityWarning, { backgroundColor: warning.color + '20', borderColor: warning.color }]}>
+                    <Text style={[styles.capacityWarningText, { color: warning.color }]}>
+                      {warning.message}
+                    </Text>
+                  </View>
+                );
+              }
+              return null;
+            })()}
+
+            {!!desc && <Text style={styles.detailDesc}>{desc}</Text>}
+
+            {/* RSVP Buttons */}
+            {(() => {
+              const warning = getCapacityWarning();
+              const canRsvp = !warning || warning.canRsvp;
+              return (
+                <View style={styles.rsvpContainer}>
+                  <Text style={styles.rsvpTitle}>Are you attending?</Text>
+                  <View style={styles.rsvpButtons}>
+                    <TouchableOpacity
+                      style={[styles.rsvpButton, rsvpStatus === 'attending' && styles.rsvpButtonActive]}
+                      onPress={() => handleRsvp('attending')}
+                      disabled={!canRsvp}
+                    >
+                      <Text style={[styles.rsvpButtonText, rsvpStatus === 'attending' && styles.rsvpButtonTextActive]}>
+                        ✓ Attending
+                      </Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      style={[styles.rsvpButton, rsvpStatus === 'maybe' && styles.rsvpButtonActive]}
+                      onPress={() => handleRsvp('maybe')}
+                    >
+                      <Text style={[styles.rsvpButtonText, rsvpStatus === 'maybe' && styles.rsvpButtonTextActive]}>
+                        ? Maybe
+                      </Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      style={[styles.rsvpButton, rsvpStatus === 'not_attending' && styles.rsvpButtonActive]}
+                      onPress={() => handleRsvp('not_attending')}
+                    >
+                      <Text style={[styles.rsvpButtonText, rsvpStatus === 'not_attending' && styles.rsvpButtonTextActive]}>
+                        ✗ Can't Go
+                      </Text>
+                    </TouchableOpacity>
+                  </View>
+                </View>
+              );
+            })()}
+
+            {/* Share Button */}
+            <TouchableOpacity style={styles.shareButton} onPress={handleShare}>
+              <Share2 size={18} color="#4169E1" />
+              <Text style={styles.shareButtonText}>Share Event</Text>
+            </TouchableOpacity>
+
+            {/* Add to Calendar Button */}
+            <TouchableOpacity style={styles.calendarButton} onPress={handleAddToCalendar}>
+              <Calendar size={18} color="#4169E1" />
+              <Text style={styles.calendarButtonText}>Add to Calendar</Text>
+            </TouchableOpacity>
+
+            {/* Actions */}
+            {supaEvent.registration_url ? (
+              <TouchableOpacity style={styles.registerCta} onPress={() => Linking.openURL(supaEvent.registration_url)}>
+                <Text style={styles.registerCtaText}>Register</Text>
+              </TouchableOpacity>
+            ) : null}
+            {(supaEvent.organizer_email || supaEvent.organizer_phone) && (
+              <View style={{ flexDirection: 'row', gap: 12, marginTop: 8 }}>
+                {supaEvent.organizer_email ? (
+                  <TouchableOpacity style={styles.contactCta} onPress={() => Linking.openURL(`mailto:${supaEvent.organizer_email}`)}>
+                    <Text style={styles.contactCtaText}>Email Organizer</Text>
+                  </TouchableOpacity>
+                ) : null}
+                {supaEvent.organizer_phone ? (
+                  <TouchableOpacity style={styles.contactCta} onPress={() => Linking.openURL(`tel:${supaEvent.organizer_phone}`)}>
+                    <Text style={styles.contactCtaText}>Call Organizer</Text>
+                  </TouchableOpacity>
+                ) : null}
+              </View>
+            )}
+
+            {/* Full Gallery Section (Images & Videos) */}
+            {gallery.length > 0 && (
+              <View style={styles.gallerySection}>
+                <Text style={styles.gallerySectionTitle}>Event Gallery</Text>
+                <View style={styles.galleryGrid}>
+                  {gallery.map((url, i) => {
+                    const isVideo = url.toLowerCase().includes('.mp4') || url.toLowerCase().includes('.mov') || url.toLowerCase().includes('video');
+                    const item = { url, type: isVideo ? 'video' as const : 'image' as const };
+                    return (
+                      <TouchableOpacity key={i} activeOpacity={0.9} onPress={() => setFullscreenMedia(item)}>
+                        {isVideo ? (
+                          <Video
+                            source={{ uri: url }}
+                            style={styles.galleryItem}
+                            resizeMode={"cover" as any}
+                            shouldPlay={false}
+                          />
+                        ) : (
+                          <Image source={{ uri: url }} style={styles.galleryItem} />
+                        )}
+                      </TouchableOpacity>
+                    );
+                  })}
+                </View>
+              </View>
+            )}
+          </View>
+        </ScrollView>
+        {/* Fullscreen Media Modal */}
+        {fullscreenMedia && (
+          <Modal
+            visible={!!fullscreenMedia}
+            transparent
+            animationType="fade"
+            onRequestClose={() => setFullscreenMedia(null)}
+          >
+            <TouchableOpacity
+              activeOpacity={1}
+              style={styles.modalOverlay}
+              onPress={() => setFullscreenMedia(null)}
+            >
+              <TouchableOpacity
+                activeOpacity={1}
+                style={styles.modalMediaContainer}
+                onPress={(e) => e.stopPropagation()}
+              >
+                {fullscreenMedia.type === 'video' ? (
+                  <Video
+                    source={{ uri: fullscreenMedia.url }}
+                    style={styles.modalMedia}
+                    useNativeControls
+                    resizeMode={"contain" as any}
+                    shouldPlay
+                  />
+                ) : (
+                  <Image
+                    source={{ uri: fullscreenMedia.url }}
+                    style={styles.modalMedia}
+                    resizeMode="contain"
+                  />
+                )}
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.modalClose} onPress={() => setFullscreenMedia(null)}>
+                <View style={styles.backButtonCircle}>
+                  <ArrowLeft size={22} color="#333" />
+                </View>
+              </TouchableOpacity>
+            </TouchableOpacity>
+          </Modal>
+        )}
       </View>
     );
   }
@@ -669,10 +1096,6 @@ export default function EventDetailScreen() {
       pathname: '/event-registration/[id]',
       params: { id: eventId }
     });
-  };
-
-  const handleShare = () => {
-    Alert.alert('Share Event', 'Sharing functionality will be implemented soon!');
   };
 
   const handleContact = (type: 'email' | 'phone') => {
@@ -1194,6 +1617,27 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     color: '#fff',
   },
+  // Supabase detail additions
+  mediaBox: { position: 'relative' },
+  detailMedia: { width: '100%', height: 240 },
+  detailBack: { position: 'absolute', top: 16, left: 16 },
+  detailBody: { padding: 16 },
+  detailTitle: { fontSize: 22, fontWeight: '800', color: '#111827' },
+  detailRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 8 },
+  detailMeta: { fontSize: 14, color: '#374151' },
+  detailDesc: { marginTop: 12, fontSize: 15, color: '#4B5563', lineHeight: 22 },
+  registerCta: { marginTop: 16, backgroundColor: '#4169E1', paddingVertical: 12, paddingHorizontal: 16, borderRadius: 10, alignSelf: 'flex-start' },
+  registerCtaText: { color: '#fff', fontWeight: '700' },
+  contactCta: { backgroundColor: '#EEF2FF', borderWidth: 1, borderColor: '#C7D2FE', paddingVertical: 10, paddingHorizontal: 14, borderRadius: 10 },
+  contactCtaText: { color: '#3730A3', fontWeight: '700' },
+  gallerySection: { marginTop: 24, paddingTop: 24, borderTopWidth: 1, borderTopColor: '#E5E7EB' },
+  gallerySectionTitle: { fontSize: 18, fontWeight: '700', color: '#111827', marginBottom: 12 },
+  galleryGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
+  galleryItem: { width: (Dimensions.get('window').width - 48) / 2, height: 180, borderRadius: 12, backgroundColor: '#F3F4F6' },
+  modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.95)', justifyContent: 'center', alignItems: 'center' },
+  modalClose: { position: 'absolute', top: 50, right: 16 },
+  modalMediaContainer: { width: Dimensions.get('window').width, height: Dimensions.get('window').height, justifyContent: 'center', alignItems: 'center' },
+  modalMedia: { width: Dimensions.get('window').width, height: Dimensions.get('window').height * 0.8 },
   centered: {
     justifyContent: 'center',
     alignItems: 'center',
@@ -1219,5 +1663,105 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '600',
     color: '#FFFFFF',
+  },
+  analyticsRow: {
+    flexDirection: 'row',
+    gap: 12,
+    marginTop: 12,
+    marginBottom: 8,
+  },
+  analyticsBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    backgroundColor: '#F3F4F6',
+    borderRadius: 20,
+  },
+  analyticsText: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#374151',
+  },
+  capacityWarning: {
+    marginTop: 12,
+    padding: 12,
+    borderRadius: 8,
+    borderWidth: 1,
+  },
+  capacityWarningText: {
+    fontSize: 14,
+    fontWeight: '700',
+    textAlign: 'center',
+  },
+  rsvpContainer: {
+    marginTop: 16,
+    marginBottom: 16,
+    padding: 16,
+    backgroundColor: '#F9FAFB',
+    borderRadius: 12,
+  },
+  rsvpTitle: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#1F2937',
+    marginBottom: 12,
+  },
+  rsvpButtons: {
+    flexDirection: 'row',
+    gap: 8,
+  },
+  rsvpButton: {
+    flex: 1,
+    paddingVertical: 12,
+    paddingHorizontal: 8,
+    backgroundColor: '#FFFFFF',
+    borderWidth: 2,
+    borderColor: '#E5E7EB',
+    borderRadius: 8,
+    alignItems: 'center',
+  },
+  rsvpButtonActive: {
+    backgroundColor: '#4169E1',
+    borderColor: '#4169E1',
+  },
+  rsvpButtonText: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#6B7280',
+  },
+  rsvpButtonTextActive: {
+    color: '#FFFFFF',
+  },
+  shareButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    paddingVertical: 12,
+    backgroundColor: '#EBF0FF',
+    borderRadius: 8,
+    marginBottom: 16,
+  },
+  shareButtonText: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#4169E1',
+  },
+  calendarButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    paddingVertical: 12,
+    backgroundColor: '#EBF0FF',
+    borderRadius: 8,
+    marginBottom: 16,
+  },
+  calendarButtonText: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#4169E1',
   },
 });

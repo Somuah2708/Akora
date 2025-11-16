@@ -20,14 +20,15 @@ const mimeByExt: Record<string, string> = {
 
 export async function uploadProofFromUri(uri: string, userId: string): Promise<{ path: string }> {
   const res = await fetch(uri);
-  const blob = await res.blob();
+  const arrayBuffer = await res.arrayBuffer();
+  const bytes = new Uint8Array(arrayBuffer);
   const extGuess = (uri.split('.').pop() || 'pdf').toLowerCase();
   const contentType = mimeByExt[extGuess] || 'application/octet-stream';
 
   const fileName = `${randomId()}.${extGuess}`;
   const path = `${userId}/${fileName}`;
 
-  const { error } = await supabase.storage.from('proofs').upload(path, blob, {
+  const { error } = await supabase.storage.from('proofs').upload(path, bytes, {
     contentType,
     upsert: false,
   });
