@@ -1,4 +1,4 @@
-import { View, Text, StyleSheet, ScrollView, Image, TouchableOpacity, TextInput, Dimensions, Alert } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, Image, TouchableOpacity, TextInput, Dimensions, Alert, ActivityIndicator } from 'react-native';
 import { useFonts, Inter_400Regular, Inter_600SemiBold } from '@expo-google-fonts/inter';
 import { useEffect, useState, useCallback } from 'react';
 import { SplashScreen, useRouter, Link } from 'expo-router';
@@ -16,6 +16,10 @@ type TabType = 'universities' | 'scholarships' | 'mentors';
 export default function EducationScreen() {
   const router = useRouter();
   const { user, profile } = useAuth();
+  
+  console.log('[Education] Component mounted/rendered');
+  console.log('[Education] Initial user:', !!user, 'profile:', !!profile);
+  
   const [activeTab, setActiveTab] = useState<TabType>('universities');
   const [universities, setUniversities] = useState<any[]>([]);
   const [scholarships, setScholarships] = useState<any[]>([]);
@@ -27,11 +31,65 @@ export default function EducationScreen() {
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
   const [bookmarkedIds, setBookmarkedIds] = useState<string[]>([]);
+  const [isAdmin, setIsAdmin] = useState(false);
+  const [checkingAdmin, setCheckingAdmin] = useState(true);
   
   const [fontsLoaded] = useFonts({
     'Inter-Regular': Inter_400Regular,
     'Inter-SemiBold': Inter_600SemiBold,
   });
+
+  // Check if user is admin (same pattern as events screen)
+  const loadRole = useCallback(async () => {
+    console.log('[Education] loadRole called');
+    console.log('[Education] user exists:', !!user);
+    console.log('[Education] user.id:', user?.id);
+    
+    if (!user) {
+      console.log('[Education] No user, skipping admin check');
+      setCheckingAdmin(false);
+      return;
+    }
+    
+    try {
+      console.log('[Education] Fetching profile for user:', user.id);
+      const { data, error } = await supabase
+        .from('profiles')
+        .select('is_admin, role')
+        .eq('id', user.id)
+        .single();
+      
+      if (error) {
+        console.error('[Education] Error fetching profile:', error);
+        setIsAdmin(false);
+        setCheckingAdmin(false);
+        return;
+      }
+      
+      console.log('[Education] Profile data:', data);
+      console.log('[Education] is_admin:', data?.is_admin);
+      console.log('[Education] role:', data?.role);
+      
+      const admin = data?.is_admin === true || data?.role === 'admin';
+      console.log('[Education] Computed admin status:', admin);
+      
+      setIsAdmin(!!admin);
+      
+      // Don't auto-redirect admins - let them see the content
+      // They can access admin panel via the button if needed
+      
+      setCheckingAdmin(false);
+    } catch (err) {
+      console.error('[Education] Exception in loadRole:', err);
+      setIsAdmin(false);
+      setCheckingAdmin(false);
+    }
+  }, [user, router]);
+
+  useEffect(() => {
+    console.log('[Education] useEffect for loadRole triggered');
+    loadRole();
+  }, [loadRole]);
 
   // Fetch Ghanaian universities only
   const fetchUniversities = useCallback(async () => {
@@ -80,18 +138,18 @@ export default function EducationScreen() {
     }
   }, []);
 
-  // Fetch alumni mentors
+  // Fetch alumni mentors from new dedicated table
   const fetchMentors = useCallback(async () => {
     try {
       setLoading(true);
       const { data, error } = await supabase
-        .from('products_services')
+        .from('alumni_mentors')
         .select('*')
-        .eq('is_approved', true)
-        .eq('category_name', 'Alumni Mentors')
+        .eq('status', 'approved')
         .order('created_at', { ascending: false });
 
       if (error) throw error;
+      console.log('👨‍🎓 Fetched mentors:', data?.length, 'items');
       setMentors(data || []);
     } catch (error) {
       console.error('Error fetching mentors:', error);
@@ -228,6 +286,16 @@ export default function EducationScreen() {
     return null;
   }
 
+  // Show loading while checking admin status
+  if (checkingAdmin) {
+    return (
+      <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
+        <ActivityIndicator size="small" color="#4169E1" />
+        <Text style={{ marginTop: 8, fontSize: 14, color: '#666' }}>Loading...</Text>
+      </View>
+    );
+  }
+
   // Filter based on search query
   const filteredUniversities = universities.filter(u => {
     if (!searchQuery) return true;
@@ -296,12 +364,17 @@ export default function EducationScreen() {
   });
 
   const handleAddOpportunity = () => {
-    // Only admins can access admin dashboard
-    if (!user || !profile || !(profile.is_admin || profile.role === 'admin')) {
+    console.log('[Education] handleAddOpportunity called, isAdmin:', isAdmin, 'checkingAdmin:', checkingAdmin);
+    console.log('[Education] user:', !!user, 'profile:', profile);
+    
+    // Check if user is admin
+    if (!isAdmin) {
       Alert.alert('Admins only', 'You need admin access to manage Schools & Scholarships.');
       return;
     }
-    router.push('/education/admin');
+    // Redirect to admin panel
+    console.log('[Education] Admin verified, redirecting to admin panel');
+    router.replace('/education/admin');
   };
 
   // Toggle bookmark
@@ -625,9 +698,46 @@ export default function EducationScreen() {
       {/* Alumni Mentors Tab Content */}
       {activeTab === 'mentors' && (
         <View style={styles.section}>
-          <View style={styles.sectionHeader}>
-            <Text style={styles.sectionTitle}>👨‍🎓 Alumni Mentors & Lecturers</Text>
-            <Text style={styles.sectionCount}>{filteredMentors.length} mentors</Text>
+          {/* Header with Action Buttons */}
+          <View style={styles.mentorsHeader}>
+            <View style={{flex: 1}}>
+              <Text style={styles.sectionTitle}>👨‍🎓 Free Alumni Mentors</Text>
+              <Text style={styles.sectionCount}>{filteredMentors.length} mentors available</Text>
+            </View>
+            <View style={{flexDirection: 'row', gap: 8}}>
+              {/* My Requests Button */}
+              <TouchableOpacity 
+                style={styles.myRequestsButton}
+                onPress={() => router.push('/my-mentorship-requests' as any)}
+              >
+                <FileText size={16} color="#4169E1" />
+                <Text style={styles.myRequestsButtonText}>My Requests</Text>
+              </TouchableOpacity>
+              
+              {/* Mentor Dashboard Button (only show if user is a mentor) */}
+              <TouchableOpacity 
+                style={styles.mentorDashboardButton}
+                onPress={() => router.push('/mentor-dashboard' as any)}
+              >
+                <Users size={16} color="#8B5CF6" />
+              </TouchableOpacity>
+              
+              {/* Volunteer Button */}
+              <TouchableOpacity 
+                style={styles.volunteerButton}
+                onPress={() => router.push('/education/volunteer-mentor' as any)}
+              >
+                <Plus size={16} color="#FFFFFF" />
+                <Text style={styles.volunteerButtonText}>Volunteer</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+
+          {/* Info Banner */}
+          <View style={styles.mentorInfoBanner}>
+            <Text style={styles.mentorInfoText}>
+              💡 Connect with experienced alumni offering free mentorship to anyone seeking career guidance and growth
+            </Text>
           </View>
 
           {loading ? (
@@ -637,37 +747,51 @@ export default function EducationScreen() {
               <TouchableOpacity 
                 key={mentor.id} 
                 style={styles.mentorCard}
-                onPress={() => router.push(`/education/detail/${mentor.id}` as any)}
+                onPress={() => router.push(`/education/mentor/${mentor.id}` as any)}
               >
                 <Image 
-                  source={{ uri: mentor.image_url || 'https://images.unsplash.com/photo-1568602471122-7832951cc4c5?w=800' }} 
+                  source={{ uri: mentor.profile_photo_url || 'https://images.unsplash.com/photo-1568602471122-7832951cc4c5?w=800' }} 
                   style={styles.mentorAvatar} 
                 />
                 <View style={styles.mentorInfo}>
-                  <Text style={styles.mentorName}>{mentor.title}</Text>
-                  {mentor.mentor_headline ? (
-                    <Text style={styles.mentorRole} numberOfLines={1}>{mentor.mentor_headline}</Text>
-                  ) : (
-                    <Text style={styles.mentorRole} numberOfLines={1}>{mentor.description}</Text>
-                  )}
-                  {mentor.location && (
-                    <View style={styles.locationRow}>
-                      <MapPin size={12} color="#666666" />
-                      <Text style={styles.mentorLocation}>{mentor.location}</Text>
+                  <Text style={styles.mentorName}>{mentor.full_name}</Text>
+                  <Text style={styles.mentorRole} numberOfLines={1}>{mentor.current_title}</Text>
+                  {mentor.company && (
+                    <View style={styles.companyRow}>
+                      <Building2 size={12} color="#666666" />
+                      <Text style={styles.mentorCompany}>{mentor.company}</Text>
                     </View>
                   )}
-                  {Array.isArray(mentor.mentor_meeting_formats) && mentor.mentor_meeting_formats.length > 0 && (
-                    <View style={{flexDirection:'row', flexWrap:'wrap', gap:6, marginTop:4}}>
-                      {mentor.mentor_meeting_formats.map((m:string) => (
-                        <View key={m} style={{backgroundColor:'#EAF2FF', paddingHorizontal:8, paddingVertical:4, borderRadius:8, borderWidth:1, borderColor:'#D6E1FF'}}>
-                          <Text style={{fontSize:11, color:'#4169E1', fontFamily:'Inter-SemiBold'}}>{m}</Text>
+                  {mentor.expertise_areas && mentor.expertise_areas.length > 0 && (
+                    <View style={{flexDirection:'row', flexWrap:'wrap', gap:6, marginTop:6}}>
+                      {mentor.expertise_areas.slice(0, 3).map((area:string, idx: number) => (
+                        <View key={idx} style={{backgroundColor:'#EAF2FF', paddingHorizontal:8, paddingVertical:4, borderRadius:8, borderWidth:1, borderColor:'#D6E1FF'}}>
+                          <Text style={{fontSize:11, color:'#4169E1', fontFamily:'Inter-SemiBold'}}>{area}</Text>
                         </View>
+                      ))}
+                      {mentor.expertise_areas.length > 3 && (
+                        <View style={{backgroundColor:'#F3F4F6', paddingHorizontal:8, paddingVertical:4, borderRadius:8}}>
+                          <Text style={{fontSize:11, color:'#666666', fontFamily:'Inter-SemiBold'}}>+{mentor.expertise_areas.length - 3}</Text>
+                        </View>
+                      )}
+                    </View>
+                  )}
+                  {mentor.meeting_formats && mentor.meeting_formats.length > 0 && (
+                    <View style={{flexDirection:'row', flexWrap:'wrap', gap:4, marginTop:6}}>
+                      {mentor.meeting_formats.map((format:string, idx: number) => (
+                        <Text key={idx} style={{fontSize:11, color:'#666666'}}>
+                          {format === 'Video Call' ? '📹' : format === 'In-Person' ? '🤝' : format === 'Phone' ? '📞' : '📧'} {format}
+                        </Text>
                       ))}
                     </View>
                   )}
-                  <View style={styles.mentorActions}>
-                    <TouchableOpacity style={styles.messageButton}>
-                      <Text style={styles.messageButtonText}>Send Message</Text>
+                  <View style={styles.mentorFooter}>
+                    <View style={styles.availabilityBadge}>
+                      <Clock size={12} color="#10B981" />
+                      <Text style={styles.availabilityText}>{mentor.available_hours || 'Flexible'}</Text>
+                    </View>
+                    <TouchableOpacity style={styles.connectButton}>
+                      <Text style={styles.connectButtonText}>Request Mentorship</Text>
                     </TouchableOpacity>
                   </View>
                 </View>
@@ -677,7 +801,13 @@ export default function EducationScreen() {
             <View style={styles.emptyContainer}>
               <Users size={64} color="#CCCCCC" />
               <Text style={styles.emptyText}>No mentors available yet</Text>
-              <Text style={styles.emptySubtext}>Check back soon for alumni mentors</Text>
+              <Text style={styles.emptySubtext}>Be the first to volunteer as a mentor!</Text>
+              <TouchableOpacity 
+                style={styles.emptyButton}
+                onPress={() => router.push('/education/volunteer-mentor' as any)}
+              >
+                <Text style={styles.emptyButtonText}>Volunteer as Mentor</Text>
+              </TouchableOpacity>
             </View>
           )}
         </View>
@@ -1199,6 +1329,136 @@ const styles = StyleSheet.create({
     fontFamily: 'Inter-SemiBold',
     color: '#FFFFFF',
     letterSpacing: 0.3,
+  },
+  // New mentor styles
+  mentorsHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+    paddingHorizontal: 16,
+    marginBottom: 12,
+  },
+  myRequestsButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    backgroundColor: '#EAF2FF',
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: '#D6E1FF',
+  },
+  myRequestsButtonText: {
+    fontSize: 13,
+    fontFamily: 'Inter-SemiBold',
+    color: '#4169E1',
+  },
+  mentorDashboardButton: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#F5F3FF',
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: '#E9D5FF',
+  },
+  volunteerButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#10B981',
+    paddingVertical: 10,
+    paddingHorizontal: 16,
+    borderRadius: 12,
+    gap: 6,
+    shadowColor: '#10B981',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.2,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  volunteerButtonText: {
+    fontSize: 13,
+    fontFamily: 'Inter-SemiBold',
+    color: '#FFFFFF',
+  },
+  mentorInfoBanner: {
+    backgroundColor: '#EFF6FF',
+    borderRadius: 12,
+    padding: 14,
+    marginHorizontal: 16,
+    marginBottom: 16,
+    borderWidth: 1,
+    borderColor: '#DBEAFE',
+  },
+  mentorInfoText: {
+    fontSize: 13,
+    fontFamily: 'Inter-Regular',
+    color: '#1E40AF',
+    lineHeight: 18,
+  },
+  companyRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    marginTop: 2,
+  },
+  mentorCompany: {
+    fontSize: 12,
+    fontFamily: 'Inter-Regular',
+    color: '#666666',
+  },
+  mentorFooter: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginTop: 12,
+    paddingTop: 12,
+    borderTopWidth: 1,
+    borderTopColor: '#F3F4F6',
+  },
+  availabilityBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: '#D1FAE5',
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 8,
+  },
+  availabilityText: {
+    fontSize: 11,
+    fontFamily: 'Inter-SemiBold',
+    color: '#10B981',
+  },
+  connectButton: {
+    backgroundColor: '#4169E1',
+    paddingVertical: 8,
+    paddingHorizontal: 14,
+    borderRadius: 10,
+  },
+  connectButtonText: {
+    fontSize: 12,
+    fontFamily: 'Inter-SemiBold',
+    color: '#FFFFFF',
+  },
+  emptyButton: {
+    backgroundColor: '#4169E1',
+    paddingVertical: 12,
+    paddingHorizontal: 24,
+    borderRadius: 12,
+    marginTop: 16,
+    shadowColor: '#4169E1',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.2,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  emptyButtonText: {
+    fontSize: 14,
+    fontFamily: 'Inter-SemiBold',
+    color: '#FFFFFF',
   },
   // Resource Card Styles
   resourceCard: {
