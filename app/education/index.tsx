@@ -32,6 +32,7 @@ export default function EducationScreen() {
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
   const [bookmarkedIds, setBookmarkedIds] = useState<string[]>([]);
+  const [favoriteMentorIds, setFavoriteMentorIds] = useState<string[]>([]);
   const [isAdmin, setIsAdmin] = useState(false);
   const [checkingAdmin, setCheckingAdmin] = useState(true);
   
@@ -260,6 +261,23 @@ export default function EducationScreen() {
     }
   }, [user]);
 
+  // Fetch favorite mentors
+  const fetchFavoriteMentors = useCallback(async () => {
+    if (!user) return;
+    try {
+      const { data, error } = await supabase
+        .from('mentor_favorites')
+        .select('mentor_id')
+        .eq('user_id', user.id);
+
+      if (error) throw error;
+      setFavoriteMentorIds(data?.map(f => f.mentor_id) || []);
+      console.log('📚 Loaded favorite mentors:', data?.length || 0);
+    } catch (error) {
+      console.error('Error fetching favorite mentors:', error);
+    }
+  }, [user]);
+
   useEffect(() => {
     switch (activeTab) {
       case 'universities':
@@ -274,8 +292,9 @@ export default function EducationScreen() {
     }
     if (user) {
       fetchBookmarks();
+      fetchFavoriteMentors();
     }
-  }, [activeTab, fetchUniversities, fetchScholarships, fetchMentors, user, fetchBookmarks]);
+  }, [activeTab, fetchUniversities, fetchScholarships, fetchMentors, user, fetchBookmarks, fetchFavoriteMentors]);
 
   useEffect(() => {
     if (fontsLoaded) {
@@ -378,6 +397,45 @@ export default function EducationScreen() {
     // Redirect to admin panel
     console.log('[Education] Admin verified, redirecting to admin panel');
     router.replace('/education/admin');
+  };
+
+  // Toggle favorite mentor
+  const toggleFavoriteMentor = async (mentorId: string, event: any) => {
+    event.stopPropagation(); // Prevent card click
+    
+    if (!user) {
+      Alert.alert('Login Required', 'Please sign in to favorite mentors.');
+      return;
+    }
+
+    const isFavorited = favoriteMentorIds.includes(mentorId);
+    
+    try {
+      if (isFavorited) {
+        const { error } = await supabase
+          .from('mentor_favorites')
+          .delete()
+          .eq('user_id', user.id)
+          .eq('mentor_id', mentorId);
+
+        if (error) throw error;
+        
+        setFavoriteMentorIds(prev => prev.filter(id => id !== mentorId));
+        console.log('❤️ Removed mentor from favorites');
+      } else {
+        const { error } = await supabase
+          .from('mentor_favorites')
+          .insert({ user_id: user.id, mentor_id: mentorId });
+
+        if (error) throw error;
+        
+        setFavoriteMentorIds(prev => [...prev, mentorId]);
+        console.log('❤️ Added mentor to favorites');
+      }
+    } catch (error: any) {
+      console.error('Error toggling favorite:', error);
+      Alert.alert('Error', error.message || 'Failed to update favorites');
+    }
   };
 
   // Toggle bookmark
@@ -756,6 +814,16 @@ export default function EducationScreen() {
                   source={{ uri: mentor.profile_photo_url || 'https://images.unsplash.com/photo-1568602471122-7832951cc4c5?w=800' }} 
                   style={styles.mentorAvatar} 
                 />
+                <TouchableOpacity
+                  style={styles.mentorFavoriteButton}
+                  onPress={(e) => toggleFavoriteMentor(mentor.id, e)}
+                >
+                  <Bookmark
+                    size={20}
+                    color={favoriteMentorIds.includes(mentor.id) ? '#EF4444' : '#9CA3AF'}
+                    fill={favoriteMentorIds.includes(mentor.id) ? '#EF4444' : 'none'}
+                  />
+                </TouchableOpacity>
                 <View style={styles.mentorInfo}>
                   <Text style={styles.mentorName}>{mentor.full_name}</Text>
                   <Text style={styles.mentorRole} numberOfLines={1}>{mentor.current_title}</Text>
@@ -1278,6 +1346,7 @@ const styles = StyleSheet.create({
   },
   // Mentor Card Styles
   mentorCard: {
+    position: 'relative',
     flexDirection: 'row',
     backgroundColor: '#FFFFFF',
     borderRadius: 20,
@@ -1292,6 +1361,20 @@ const styles = StyleSheet.create({
     gap: 16,
     borderWidth: 1,
     borderColor: '#F0F4FF',
+  },
+  mentorFavoriteButton: {
+    position: 'absolute',
+    top: 12,
+    right: 12,
+    padding: 8,
+    backgroundColor: '#fff',
+    borderRadius: 20,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
+    zIndex: 10,
   },
   mentorAvatar: {
     width: 70,
