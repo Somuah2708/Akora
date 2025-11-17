@@ -17,8 +17,10 @@ import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/hooks/useAuth';
 import { EXPERTISE_OPTIONS, MEETING_FORMATS, DAYS_OPTIONS, INDUSTRY_OPTIONS } from '@/constants/mentorConstants';
 import { CSVExporter, MentorCSVColumns, MentorRequestCSVColumns, MentorApplicationCSVColumns } from '@/utils/csvExporter';
+import BulkActionsModal from '@/components/BulkActionsModal';
+import AnalyticsDashboard from '@/components/AnalyticsDashboard';
 
-type TabType = 'mentors' | 'applications' | 'requests';
+type TabType = 'mentors' | 'applications' | 'requests' | 'analytics';
 
 interface Mentor {
   id: string;
@@ -79,6 +81,15 @@ export default function AdminAlumniMentorsScreen() {
   const [showAddMentorModal, setShowAddMentorModal] = useState(false);
   const [editingMentor, setEditingMentor] = useState<Mentor | null>(null);
   const [selectedApplication, setSelectedApplication] = useState<Application | null>(null);
+  
+  // Bulk actions states
+  const [selectedMentorIds, setSelectedMentorIds] = useState<string[]>([]);
+  const [selectedApplicationIds, setSelectedApplicationIds] = useState<string[]>([]);
+  const [selectedRequestIds, setSelectedRequestIds] = useState<string[]>([]);
+  const [bulkActionModalVisible, setBulkActionModalVisible] = useState(false);
+  const [bulkActionType, setBulkActionType] = useState<'approve' | 'reject' | 'decline' | 'complete' | 'delete'>('approve');
+  const [bulkActionTitle, setBulkActionTitle] = useState('');
+  const [selectionMode, setSelectionMode] = useState(false);
 
   // Statistics
   const [stats, setStats] = useState({
@@ -210,6 +221,106 @@ export default function AdminAlumniMentorsScreen() {
       Alert.alert('Export Error', 'Failed to export requests data');
       console.error('Export error:', error);
     }
+  };
+
+  // Bulk action handlers
+  const handleBulkAction = async (ids: string[], reason?: string) => {
+    try {
+      let result;
+      
+      switch (bulkActionType) {
+        case 'approve':
+          result = await supabase.rpc('bulk_approve_applications', {
+            application_ids: ids,
+          });
+          break;
+          
+        case 'reject':
+          result = await supabase.rpc('bulk_reject_applications', {
+            application_ids: ids,
+            rejection_reason: reason || 'Application did not meet requirements',
+          });
+          break;
+          
+        case 'decline':
+          result = await supabase.rpc('bulk_decline_requests', {
+            request_ids: ids,
+            decline_reason: reason || 'Unable to accept at this time',
+          });
+          break;
+          
+        case 'complete':
+          result = await supabase.rpc('bulk_complete_requests', {
+            request_ids: ids,
+          });
+          break;
+          
+        case 'delete':
+          result = await supabase.rpc('bulk_delete_applications', {
+            application_ids: ids,
+          });
+          break;
+      }
+
+      if (result?.error) throw result.error;
+
+      const data = result?.data?.[0];
+      const successCount = data?.approved_count || data?.rejected_count || data?.declined_count || data?.completed_count || data?.deleted_count || 0;
+      const failedCount = data?.failed_count || 0;
+
+      Alert.alert(
+        'Bulk Action Complete',
+        `Successfully processed ${successCount} item(s). ${failedCount > 0 ? `${failedCount} failed.` : ''}`,
+        [{ text: 'OK', onPress: () => {
+          setSelectionMode(false);
+          setSelectedMentorIds([]);
+          setSelectedApplicationIds([]);
+          setSelectedRequestIds([]);
+          fetchAllData();
+        }}]
+      );
+    } catch (error) {
+      console.error('Bulk action error:', error);
+      Alert.alert('Error', 'Failed to complete bulk action');
+    }
+  };
+
+  const startBulkAction = (actionType: typeof bulkActionType, title: string) => {
+    setBulkActionType(actionType);
+    setBulkActionTitle(title);
+    setBulkActionModalVisible(true);
+  };
+
+  const toggleSelection = (id: string, type: 'mentor' | 'application' | 'request') => {
+    if (type === 'mentor') {
+      setSelectedMentorIds(prev =>
+        prev.includes(id) ? prev.filter(i => i !== id) : [...prev, id]
+      );
+    } else if (type === 'application') {
+      setSelectedApplicationIds(prev =>
+        prev.includes(id) ? prev.filter(i => i !== id) : [...prev, id]
+      );
+    } else {
+      setSelectedRequestIds(prev =>
+        prev.includes(id) ? prev.filter(i => i !== id) : [...prev, id]
+      );
+    }
+  };
+
+  const selectAll = (type: 'mentor' | 'application' | 'request') => {
+    if (type === 'mentor') {
+      setSelectedMentorIds(mentors.map(m => m.id));
+    } else if (type === 'application') {
+      setSelectedApplicationIds(applications.map(a => a.id));
+    } else {
+      setSelectedRequestIds(requests.map(r => r.id));
+    }
+  };
+
+  const clearSelection = () => {
+    setSelectedMentorIds([]);
+    setSelectedApplicationIds([]);
+    setSelectedRequestIds([]);
   };
 
   // Update mentor status
@@ -461,23 +572,90 @@ export default function AdminAlumniMentorsScreen() {
             </View>
           )}
         </TouchableOpacity>
+        <TouchableOpacity
+          style={[styles.tab, activeTab === 'analytics' && styles.activeTab]}
+          onPress={() => setActiveTab('analytics')}
+        >
+          <Text style={[styles.tabText, activeTab === 'analytics' && styles.activeTabText]}>
+            Analytics
+          </Text>
+        </TouchableOpacity>
       </View>
+
+      {/* Bulk Actions Bar (shown when selection mode is active) */}
+      {selectionMode && (
+        <View style={styles.bulkActionsBar}>
+          <View style={styles.bulkActionsLeft}>
+            <Text style={styles.bulkActionsCount}>
+              {activeTab === 'mentors' && `${selectedMentorIds.length} selected`}
+              {activeTab === 'applications' && `${selectedApplicationIds.length} selected`}
+              {activeTab === 'requests' && `${selectedRequestIds.length} selected`}
+            </Text>
+            <TouchableOpacity onPress={clearSelection}>
+              <Text style={styles.bulkActionsClear}>Clear</Text>
+            </TouchableOpacity>
+          </View>
+          <View style={styles.bulkActionsButtons}>
+            {activeTab === 'applications' && (
+              <>
+                <TouchableOpacity
+                  style={[styles.bulkActionButton, { backgroundColor: '#10B981' }]}
+                  onPress={() => startBulkAction('approve', 'Bulk Approve Applications')}
+                  disabled={selectedApplicationIds.length === 0}
+                >
+                  <Text style={styles.bulkActionButtonText}>Approve</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[styles.bulkActionButton, { backgroundColor: '#EF4444' }]}
+                  onPress={() => startBulkAction('reject', 'Bulk Reject Applications')}
+                  disabled={selectedApplicationIds.length === 0}
+                >
+                  <Text style={styles.bulkActionButtonText}>Reject</Text>
+                </TouchableOpacity>
+              </>
+            )}
+            {activeTab === 'requests' && (
+              <>
+                <TouchableOpacity
+                  style={[styles.bulkActionButton, { backgroundColor: '#8B5CF6' }]}
+                  onPress={() => startBulkAction('complete', 'Bulk Complete Requests')}
+                  disabled={selectedRequestIds.length === 0}
+                >
+                  <Text style={styles.bulkActionButtonText}>Complete</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[styles.bulkActionButton, { backgroundColor: '#EF4444' }]}
+                  onPress={() => startBulkAction('decline', 'Bulk Decline Requests')}
+                  disabled={selectedRequestIds.length === 0}
+                >
+                  <Text style={styles.bulkActionButtonText}>Decline</Text>
+                </TouchableOpacity>
+              </>
+            )}
+          </View>
+        </View>
+      )}
 
       {/* Content */}
       <ScrollView
         style={styles.content}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
       >
+        {/* ANALYTICS TAB */}
+        {activeTab === 'analytics' && <AnalyticsDashboard />}
+        
         {/* MENTORS TAB */}
         {activeTab === 'mentors' && (
           <View>
-            <TouchableOpacity
-              style={styles.addButton}
-              onPress={() => setShowAddMentorModal(true)}
-            >
-              <Ionicons name="add-circle" size={20} color="#fff" />
-              <Text style={styles.addButtonText}>Add New Mentor</Text>
-            </TouchableOpacity>
+            <View style={styles.tabActions}>
+              <TouchableOpacity
+                style={styles.addButton}
+                onPress={() => setShowAddMentorModal(true)}
+              >
+                <Ionicons name="add-circle" size={20} color="#fff" />
+                <Text style={styles.addButtonText}>Add New Mentor</Text>
+              </TouchableOpacity>
+            </View>
 
             {mentors.map((mentor) => (
               <View key={mentor.id} style={styles.card}>
@@ -967,6 +1145,21 @@ export default function AdminAlumniMentorsScreen() {
           </View>
         </Modal>
       )}
+      
+      {/* Bulk Actions Modal */}
+      <BulkActionsModal
+        visible={bulkActionModalVisible}
+        onClose={() => setBulkActionModalVisible(false)}
+        selectedIds={
+          activeTab === 'mentors' ? selectedMentorIds :
+          activeTab === 'applications' ? selectedApplicationIds :
+          selectedRequestIds
+        }
+        actionType={bulkActionType}
+        onAction={handleBulkAction}
+        title={bulkActionTitle}
+        requireReason={bulkActionType === 'reject' || bulkActionType === 'decline'}
+      />
     </View>
   );
 }
@@ -1112,6 +1305,49 @@ const styles = StyleSheet.create({
   content: {
     flex: 1,
     padding: 16,
+  },
+  tabActions: {
+    marginBottom: 16,
+  },
+  bulkActionsBar: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    backgroundColor: '#EFF6FF',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: '#DBEAFE',
+  },
+  bulkActionsLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  bulkActionsCount: {
+    fontSize: 14,
+    fontFamily: 'Inter-SemiBold',
+    color: '#1E40AF',
+  },
+  bulkActionsClear: {
+    fontSize: 13,
+    fontFamily: 'Inter-SemiBold',
+    color: '#6B7280',
+    textDecorationLine: 'underline',
+  },
+  bulkActionsButtons: {
+    flexDirection: 'row',
+    gap: 8,
+  },
+  bulkActionButton: {
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 8,
+  },
+  bulkActionButtonText: {
+    fontSize: 13,
+    fontFamily: 'Inter-SemiBold',
+    color: '#FFFFFF',
   },
   addButton: {
     flexDirection: 'row',
