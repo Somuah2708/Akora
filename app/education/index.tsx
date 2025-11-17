@@ -6,6 +6,7 @@ import { Search, Filter, ArrowLeft, GraduationCap, MapPin, Globe, ChevronRight, 
 import { useAuth } from '@/hooks/useAuth';
 import { supabase } from '@/lib/supabase';
 import MentorRatingSummary from '@/components/MentorRatingSummary';
+import ExpertiseFilterModal from '@/components/ExpertiseFilterModal';
 
 SplashScreen.preventAutoHideAsync();
 
@@ -33,6 +34,9 @@ export default function EducationScreen() {
   const [searchQuery, setSearchQuery] = useState('');
   const [bookmarkedIds, setBookmarkedIds] = useState<string[]>([]);
   const [favoriteMentorIds, setFavoriteMentorIds] = useState<string[]>([]);
+  const [expertiseFilterVisible, setExpertiseFilterVisible] = useState(false);
+  const [selectedExpertise, setSelectedExpertise] = useState<string[]>([]);
+  const [allExpertiseAreas, setAllExpertiseAreas] = useState<string[]>([]);
   const [isAdmin, setIsAdmin] = useState(false);
   const [checkingAdmin, setCheckingAdmin] = useState(true);
   
@@ -153,6 +157,15 @@ export default function EducationScreen() {
       if (error) throw error;
       console.log('👨‍🎓 Fetched mentors:', data?.length, 'items');
       setMentors(data || []);
+      
+      // Extract all unique expertise areas
+      const expertiseSet = new Set<string>();
+      data?.forEach((mentor: any) => {
+        if (mentor.expertise_areas && Array.isArray(mentor.expertise_areas)) {
+          mentor.expertise_areas.forEach((area: string) => expertiseSet.add(area));
+        }
+      });
+      setAllExpertiseAreas(Array.from(expertiseSet).sort());
     } catch (error) {
       console.error('Error fetching mentors:', error);
       Alert.alert('Error', 'Failed to load mentors.');
@@ -337,16 +350,39 @@ export default function EducationScreen() {
   });
 
   const filteredMentors = mentors.filter(m => {
-    if (!searchQuery) return true;
-    const query = searchQuery.toLowerCase();
-    return (
-      (m.full_name || '').toLowerCase().includes(query) ||
-      (m.current_title || '').toLowerCase().includes(query) ||
-      (m.company || '').toLowerCase().includes(query) ||
-      (m.industry || '').toLowerCase().includes(query) ||
-      (m.expertise_areas || []).some((area: string) => area.toLowerCase().includes(query))
-    );
+    // Apply search query filter
+    if (searchQuery) {
+      const query = searchQuery.toLowerCase();
+      const matchesSearch = (
+        (m.full_name || '').toLowerCase().includes(query) ||
+        (m.current_title || '').toLowerCase().includes(query) ||
+        (m.company || '').toLowerCase().includes(query) ||
+        (m.industry || '').toLowerCase().includes(query) ||
+        (m.expertise_areas || []).some((area: string) => area.toLowerCase().includes(query))
+      );
+      if (!matchesSearch) return false;
+    }
+    
+    // Apply expertise filter
+    if (selectedExpertise.length > 0) {
+      const mentorExpertise = m.expertise_areas || [];
+      const hasMatchingExpertise = selectedExpertise.some(selected =>
+        mentorExpertise.includes(selected)
+      );
+      if (!hasMatchingExpertise) return false;
+    }
+    
+    return true;
   });
+  
+  const handleApplyExpertiseFilter = () => {
+    // Filter is applied reactively through filteredMentors
+    console.log('Applied expertise filter:', selectedExpertise);
+  };
+  
+  const handleResetExpertiseFilter = () => {
+    setSelectedExpertise([]);
+  };
 
   const filteredResources = resources.filter(r => {
     if (!searchQuery) return true;
@@ -775,6 +811,19 @@ export default function EducationScreen() {
                 <Text style={styles.myRequestsButtonText}>My Requests</Text>
               </TouchableOpacity>
               
+              {/* Expertise Filter Button */}
+              <TouchableOpacity 
+                style={styles.filterIconButton}
+                onPress={() => setExpertiseFilterVisible(true)}
+              >
+                <Filter size={16} color={selectedExpertise.length > 0 ? '#10B981' : '#6B7280'} />
+                {selectedExpertise.length > 0 && (
+                  <View style={styles.filterBadge}>
+                    <Text style={styles.filterBadgeText}>{selectedExpertise.length}</Text>
+                  </View>
+                )}
+              </TouchableOpacity>
+              
               {/* Mentor Dashboard Button (only show if user is a mentor) */}
               <TouchableOpacity 
                 style={styles.mentorDashboardButton}
@@ -893,6 +942,17 @@ export default function EducationScreen() {
       )}
 
       {/* Other sections removed to focus on Universities, Scholarships, and Alumni Mentors */}
+      
+      {/* Expertise Filter Modal */}
+      <ExpertiseFilterModal
+        visible={expertiseFilterVisible}
+        allExpertiseAreas={allExpertiseAreas}
+        selectedExpertise={selectedExpertise}
+        onExpertiseChange={setSelectedExpertise}
+        onApplyFilters={handleApplyExpertiseFilter}
+        onResetFilters={handleResetExpertiseFilter}
+        onClose={() => setExpertiseFilterVisible(false)}
+      />
     </ScrollView>
   );
 }
@@ -1447,6 +1507,34 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontFamily: 'Inter-SemiBold',
     color: '#4169E1',
+  },
+  filterIconButton: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#F9FAFB',
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+    position: 'relative',
+  },
+  filterBadge: {
+    position: 'absolute',
+    top: -4,
+    right: -4,
+    backgroundColor: '#10B981',
+    borderRadius: 10,
+    minWidth: 18,
+    height: 18,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 4,
+  },
+  filterBadgeText: {
+    fontSize: 10,
+    fontFamily: 'Inter-SemiBold',
+    color: '#FFFFFF',
   },
   mentorDashboardButton: {
     alignItems: 'center',

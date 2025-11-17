@@ -16,6 +16,7 @@ import { supabase } from '../lib/supabase';
 import { useAuth } from '@/hooks/useAuth';
 import StatCard from '@/components/StatCard';
 import FilterModal from '@/components/FilterModal';
+import MentorStats from '@/components/MentorStats';
 
 interface MentorRequest {
   id: string;
@@ -45,6 +46,7 @@ interface Stats {
   acceptedRequests: number;
   completedRequests: number;
   acceptanceRate: number;
+  avgResponseTimeHours: number;
 }
 
 export default function MentorDashboard() {
@@ -58,6 +60,7 @@ export default function MentorDashboard() {
     acceptedRequests: 0,
     completedRequests: 0,
     acceptanceRate: 0,
+    avgResponseTimeHours: 0,
   });
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -132,12 +135,29 @@ export default function MentorDashboard() {
       const completed = allRequests.filter(r => r.status === 'completed').length;
       const acceptanceRate = total > 0 ? Math.round((accepted + completed) / total * 100) : 0;
 
+      // Fetch performance metrics for avg response time
+      let avgResponseTimeHours = 0;
+      try {
+        const { data: metricsData, error: metricsError } = await supabase
+          .from('mentor_performance_metrics')
+          .select('avg_response_time_hours')
+          .eq('mentor_id', mentorProfile.id)
+          .single();
+        
+        if (!metricsError && metricsData) {
+          avgResponseTimeHours = metricsData.avg_response_time_hours || 0;
+        }
+      } catch (metricsError) {
+        console.log('Could not fetch performance metrics:', metricsError);
+      }
+
       setStats({
         totalRequests: total,
         pendingRequests: pending,
         acceptedRequests: accepted,
         completedRequests: completed,
         acceptanceRate,
+        avgResponseTimeHours,
       });
     } catch (error) {
       console.error('Error fetching requests:', error);
@@ -330,35 +350,13 @@ export default function MentorDashboard() {
       </View>
 
       {/* Stats */}
-      <ScrollView 
-        horizontal 
-        showsHorizontalScrollIndicator={false}
-        style={styles.statsContainer}
-        contentContainerStyle={styles.statsContent}
-      >
-        <View style={[styles.statCard, { borderTopColor: '#4169E1' }]}>
-          <Text style={styles.statValue}>{stats.totalRequests}</Text>
-          <Text style={styles.statLabel}>Total Requests</Text>
-        </View>
-        <View style={[styles.statCard, { borderTopColor: '#F59E0B' }]}>
-          <Text style={styles.statValue}>{stats.pendingRequests}</Text>
-          <Text style={styles.statLabel}>Pending</Text>
-        </View>
-        <View style={[styles.statCard, { borderTopColor: '#10B981' }]}>
-          <Text style={styles.statValue}>{stats.acceptedRequests}</Text>
-          <Text style={styles.statLabel}>Active</Text>
-        </View>
-        <View style={[styles.statCard, { borderTopColor: '#8B5CF6' }]}>
-          <Text style={styles.statValue}>{stats.completedRequests}</Text>
-          <Text style={styles.statLabel}>Completed</Text>
-        </View>
-        <View style={[styles.statCard, { borderTopColor: '#EC4899' }]}>
-          <Text style={styles.statValue}>{stats.acceptanceRate}%</Text>
-          <Text style={styles.statLabel}>Acceptance Rate</Text>
-        </View>
-      </ScrollView>
-
-      {/* Tabs */}
+      <MentorStats
+        totalRequests={stats.totalRequests}
+        acceptedRequests={stats.acceptedRequests}
+        completedRequests={stats.completedRequests}
+        acceptanceRate={stats.acceptanceRate}
+        avgResponseTimeHours={stats.avgResponseTimeHours}
+      />      {/* Tabs */}
       <View style={styles.tabs}>
         <TouchableOpacity
           style={[styles.tab, activeTab === 'pending' && styles.activeTab]}

@@ -34,20 +34,8 @@ CHECK (
   )
 );
 
--- Update status enum to include 'cancelled' if not already present
--- Note: PostgreSQL doesn't allow direct ALTER of enums, so we check first
-DO $$
-BEGIN
-  IF NOT EXISTS (
-    SELECT 1 FROM pg_enum
-    WHERE enumlabel = 'cancelled'
-    AND enumtypid = (SELECT oid FROM pg_type WHERE typname = 'request_status')
-  ) THEN
-    ALTER TYPE request_status ADD VALUE 'cancelled';
-  END IF;
-EXCEPTION
-  WHEN duplicate_object THEN NULL;
-END$$;
+-- Note: The status column is TEXT/VARCHAR, not an enum type
+-- No need to alter enum - the 'cancelled' value can be used directly
 
 -- Function to cancel a request
 CREATE OR REPLACE FUNCTION cancel_mentor_request(

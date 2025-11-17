@@ -17,20 +17,9 @@ ON mentor_requests(mentor_id, status, created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_mentor_requests_created_at 
 ON mentor_requests(created_at DESC);
 
--- Add gin index for full-text search on mentee_name
-CREATE INDEX IF NOT EXISTS idx_mentor_requests_mentee_name_search 
-ON mentor_requests USING gin(to_tsvector('english', mentee_name));
-
--- Add index for alumni_mentors search
-CREATE INDEX IF NOT EXISTS idx_alumni_mentors_search 
-ON alumni_mentors USING gin(
-  to_tsvector('english', 
-    COALESCE(full_name, '') || ' ' || 
-    COALESCE(current_title, '') || ' ' || 
-    COALESCE(company, '') || ' ' ||
-    COALESCE(array_to_string(expertise_areas, ' '), '')
-  )
-);
+-- Note: Full-text search indexes with to_tsvector() require IMMUTABLE functions
+-- For now, we'll use standard ILIKE queries in the search function
+-- which work well for moderate data sizes
 
 -- View for mentor request statistics by date range
 CREATE OR REPLACE VIEW mentor_request_stats AS

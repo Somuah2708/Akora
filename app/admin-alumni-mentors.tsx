@@ -16,6 +16,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/hooks/useAuth';
 import { EXPERTISE_OPTIONS, MEETING_FORMATS, DAYS_OPTIONS, INDUSTRY_OPTIONS } from '@/constants/mentorConstants';
+import { CSVExporter, MentorCSVColumns, MentorRequestCSVColumns, MentorApplicationCSVColumns } from '@/utils/csvExporter';
 
 type TabType = 'mentors' | 'applications' | 'requests';
 
@@ -176,6 +177,40 @@ export default function AdminAlumniMentorsScreen() {
     setRefreshing(true);
     fetchAllData();
   }, [fetchAllData]);
+
+  // Export handlers
+  const handleExportMentors = async () => {
+    try {
+      const csvContent = CSVExporter.toCSV(mentors, MentorCSVColumns);
+      const filename = `mentors_${CSVExporter.formatDate(new Date())}.csv`;
+      await CSVExporter.shareCSV(csvContent, filename);
+    } catch (error) {
+      Alert.alert('Export Error', 'Failed to export mentors data');
+      console.error('Export error:', error);
+    }
+  };
+
+  const handleExportApplications = async () => {
+    try {
+      const csvContent = CSVExporter.toCSV(applications, MentorApplicationCSVColumns);
+      const filename = `applications_${CSVExporter.formatDate(new Date())}.csv`;
+      await CSVExporter.shareCSV(csvContent, filename);
+    } catch (error) {
+      Alert.alert('Export Error', 'Failed to export applications data');
+      console.error('Export error:', error);
+    }
+  };
+
+  const handleExportRequests = async () => {
+    try {
+      const csvContent = CSVExporter.toCSV(requests, MentorRequestCSVColumns);
+      const filename = `requests_${CSVExporter.formatDate(new Date())}.csv`;
+      await CSVExporter.shareCSV(csvContent, filename);
+    } catch (error) {
+      Alert.alert('Export Error', 'Failed to export requests data');
+      console.error('Export error:', error);
+    }
+  };
 
   // Update mentor status
   const updateMentorStatus = async (mentorId: string, newStatus: 'approved' | 'rejected' | 'inactive') => {
@@ -373,6 +408,22 @@ export default function AdminAlumniMentorsScreen() {
           <Text style={styles.statLabel}>Active Mentorships</Text>
         </View>
       </ScrollView>
+
+      {/* Export Buttons */}
+      <View style={styles.exportContainer}>
+        <TouchableOpacity style={styles.exportButton} onPress={handleExportMentors}>
+          <Ionicons name="download-outline" size={16} color="#4169E1" />
+          <Text style={styles.exportButtonText}>Export Mentors</Text>
+        </TouchableOpacity>
+        <TouchableOpacity style={styles.exportButton} onPress={handleExportApplications}>
+          <Ionicons name="download-outline" size={16} color="#10B981" />
+          <Text style={styles.exportButtonText}>Export Applications</Text>
+        </TouchableOpacity>
+        <TouchableOpacity style={styles.exportButton} onPress={handleExportRequests}>
+          <Ionicons name="download-outline" size={16} color="#8B5CF6" />
+          <Text style={styles.exportButtonText}>Export Requests</Text>
+        </TouchableOpacity>
+      </View>
 
       {/* Tabs */}
       <View style={styles.tabs}>
@@ -986,6 +1037,36 @@ const styles = StyleSheet.create({
     color: '#6b7280',
     marginTop: 4,
     textAlign: 'center',
+  },
+  exportContainer: {
+    flexDirection: 'row',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    backgroundColor: '#F9FAFB',
+    gap: 8,
+  },
+  exportButton: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    backgroundColor: '#FFFFFF',
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 2,
+    elevation: 1,
+  },
+  exportButtonText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#374151',
   },
   tabs: {
     flexDirection: 'row',
