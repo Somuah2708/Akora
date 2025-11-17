@@ -123,9 +123,18 @@ export default function MyMentorshipRequests() {
 
               Alert.alert('Success', 'Thank you! Mentorship marked as completed.');
               fetchRequests();
-            } catch (error) {
+            } catch (error: any) {
               console.error('Error updating request:', error);
-              Alert.alert('Error', 'Failed to update status');
+              let errorMessage = 'Failed to mark as completed. Please try again.';
+              if (error.message?.includes('Network')) {
+                errorMessage = 'Network error. Please check your connection and try again.';
+              } else if (error.code === 'PGRST301') {
+                errorMessage = 'Database error. Please contact support if this persists.';
+              }
+              Alert.alert('Error', errorMessage, [
+                { text: 'Cancel', style: 'cancel' },
+                { text: 'Retry', onPress: () => handleMarkCompleted(requestId, mentorUserId, mentorName) },
+              ]);
             }
           },
         },

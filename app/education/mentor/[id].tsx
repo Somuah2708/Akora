@@ -145,7 +145,25 @@ export default function MentorDetailScreen() {
       );
     } catch (error: any) {
       console.error('Error submitting request:', error);
-      Alert.alert('Error', error.message || 'Failed to submit request');
+      
+      let errorMessage = 'Failed to submit request. Please try again.';
+      
+      if (error.message?.includes('Network')) {
+        errorMessage = 'Network error. Please check your connection and try again.';
+      } else if (error.code === 'PGRST301') {
+        errorMessage = 'Database error. Please contact support if this persists.';
+      } else if (error.message) {
+        errorMessage = error.message;
+      }
+      
+      Alert.alert(
+        'Error',
+        errorMessage,
+        [
+          { text: 'Cancel', style: 'cancel' },
+          { text: 'Retry', onPress: () => handleSubmitRequest() },
+        ]
+      );
     } finally {
       setSubmitting(false);
     }

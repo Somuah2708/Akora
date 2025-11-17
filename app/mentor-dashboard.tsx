@@ -192,9 +192,18 @@ export default function MentorDashboard() {
 
       setResponseText('');
       fetchRequests();
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error accepting request:', error);
-      Alert.alert('Error', 'Failed to accept request. Please try again.');
+      let errorMessage = 'Failed to accept request. Please try again.';
+      if (error.message?.includes('Network')) {
+        errorMessage = 'Network error. Please check your connection and try again.';
+      } else if (error.code === 'PGRST301') {
+        errorMessage = 'Database error. Please contact support if this persists.';
+      }
+      Alert.alert('Error', errorMessage, [
+        { text: 'Cancel', style: 'cancel' },
+        { text: 'Retry', onPress: () => handleAccept(requestId, menteeId, menteeName) },
+      ]);
     }
   };
 
@@ -233,9 +242,18 @@ export default function MentorDashboard() {
               setResponseText('');
               setSelectedRequest(null);
               fetchRequests();
-            } catch (error) {
+            } catch (error: any) {
               console.error('Error declining request:', error);
-              Alert.alert('Error', 'Failed to decline request.');
+              let errorMessage = 'Failed to decline request. Please try again.';
+              if (error.message?.includes('Network')) {
+                errorMessage = 'Network error. Please check your connection and try again.';
+              } else if (error.code === 'PGRST301') {
+                errorMessage = 'Database error. Please contact support if this persists.';
+              }
+              Alert.alert('Error', errorMessage, [
+                { text: 'Cancel', style: 'cancel' },
+                { text: 'Retry', onPress: () => handleDecline(requestId, menteeId, menteeName) },
+              ]);
             }
           },
         },

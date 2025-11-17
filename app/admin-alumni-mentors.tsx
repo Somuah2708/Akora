@@ -313,9 +313,18 @@ export default function AdminAlumniMentorsScreen() {
       Alert.alert('Success', 'Application rejected');
       setSelectedApplication(null);
       fetchAllData();
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error rejecting application:', error);
-      Alert.alert('Error', 'Failed to reject application');
+      let errorMessage = 'Failed to reject application. Please try again.';
+      if (error.message?.includes('Network')) {
+        errorMessage = 'Network error. Please check your connection and try again.';
+      } else if (error.code === 'PGRST301') {
+        errorMessage = 'Database error. Please contact support if this persists.';
+      }
+      Alert.alert('Error', errorMessage, [
+        { text: 'Cancel', style: 'cancel' },
+        { text: 'Retry', onPress: () => rejectApplication(applicationId, userId) },
+      ]);
     }
   };
 
