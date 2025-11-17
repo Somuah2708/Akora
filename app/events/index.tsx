@@ -3,7 +3,7 @@ import { View, Text, StyleSheet, TouchableOpacity, TextInput, Alert, Image, Acti
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Video } from 'expo-av';
 import { useRouter } from 'expo-router';
-import { ArrowLeft, Plus, Calendar, MapPin, Upload, CheckCircle2, XCircle, Play } from 'lucide-react-native';
+import { ArrowLeft, Plus, Calendar, MapPin, Upload, CheckCircle2, XCircle, Play, Settings } from 'lucide-react-native';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/hooks/useAuth';
 import { pickDocument, pickMedia, uploadMedia } from '@/lib/media';
@@ -48,6 +48,25 @@ export default function AkoraEventsScreen() {
   const [isAdmin, setIsAdmin] = useState(false);
   const [loading, setLoading] = useState(true);
   const [items, setItems] = useState<AkoraEvent[]>([]);
+  
+  // Package pricing from database
+  const [packagePricing, setPackagePricing] = useState({
+    basic: 0,
+    standard: 50,
+    priority: 150,
+    premium: 300,
+  });
+  
+  // Payment details from database
+  const [paymentDetails, setPaymentDetails] = useState({
+    bankName: 'Access Bank',
+    bankAccountName: 'Akora Events',
+    bankAccountNumber: '1234567890',
+    momoNetwork: 'MTN',
+    momoNumber: '0244 123 456',
+    momoAccountName: 'Akora Events',
+  });
+  
   const [pending, setPending] = useState<AkoraEvent[]>([]);
 
   // Submission form (Akora)
@@ -79,36 +98,124 @@ export default function AkoraEventsScreen() {
   const [searchQuery, setSearchQuery] = useState('');
   const videoRefs = useRef<Map<string, Video | null>>(new Map());
 
-  // Listing packages definition
-  const PACKAGES = useMemo(() => ([
-    { id: 'basic' as const, name: 'Basic', price: 0, perks: ['Listed in feed'], highlight: false },
-    { id: 'standard' as const, name: 'Standard', price: 50, perks: ['Standard placement'], highlight: false },
-    { id: 'priority' as const, name: 'Priority', price: 150, perks: ['Priority placement', 'Priority badge'], highlight: true },
-    { id: 'premium' as const, name: 'Premium', price: 300, perks: ['Top placement', 'Featured badge'], highlight: true },
-  ]), []);
+  // Debug: Log current state values
+  console.log('[AkoraEvents] Current packagePricing state:', packagePricing);
+  console.log('[AkoraEvents] Current paymentDetails state:', paymentDetails);
+
+  // Listing packages definition - now using database values
+  const PACKAGES = useMemo(() => {
+    console.log('[AkoraEvents] PACKAGES recalculating with pricing:', packagePricing);
+    return [
+      { id: 'basic' as const, name: 'Basic', price: packagePricing.basic, perks: ['Listed in feed'], highlight: false },
+      { id: 'standard' as const, name: 'Standard', price: packagePricing.standard, perks: ['Standard placement'], highlight: false },
+      { id: 'priority' as const, name: 'Priority', price: packagePricing.priority, perks: ['Priority placement', 'Priority badge'], highlight: true },
+      { id: 'premium' as const, name: 'Premium', price: packagePricing.premium, perks: ['Top placement', 'Featured badge'], highlight: true },
+    ];
+  }, [packagePricing]);
 
   const getTierFromFee = useCallback((val?: number | null): 'basic'|'standard'|'priority'|'premium' => {
     const n = val ?? 0;
-    if (n >= 300) return 'premium';
-    if (n >= 150) return 'priority';
-    if (n >= 50) return 'standard';
+    if (n >= packagePricing.premium) return 'premium';
+    if (n >= packagePricing.priority) return 'priority';
+    if (n >= packagePricing.standard) return 'standard';
     return 'basic';
+  }, [packagePricing]);
+
+  const loadPackagePricing = useCallback(async () => {
+    try {
+      console.log('[AkoraEvents] Loading package pricing and payment details from database...');
+      const { data, error } = await supabase
+        .from('event_settings')
+        .select('basic_price, standard_price, priority_price, premium_price, bank_name, bank_account_name, bank_account_number, momo_network, momo_number, momo_account_name')
+        .eq('id', '00000000-0000-0000-0000-000000000001')
+        .maybeSingle();
+
+      if (error) {
+        console.error('[AkoraEvents] Error loading settings:', error);
+        return;
+      }
+
+      if (data) {
+        console.log('[AkoraEvents] Loaded settings:', data);
+        
+        // Update pricing
+        setPackagePricing({
+          basic: data.basic_price ?? 0,
+          standard: data.standard_price ?? 50,
+          priority: data.priority_price ?? 150,
+          premium: data.premium_price ?? 300,
+        });
+        
+        // Update payment details
+        setPaymentDetails({
+          bankName: data.bank_name ?? 'Access Bank',
+          bankAccountName: data.bank_account_name ?? 'Akora Events',
+          bankAccountNumber: data.bank_account_number ?? '1234567890',
+          momoNetwork: data.momo_network ?? 'MTN',
+          momoNumber: data.momo_number ?? '0244 123 456',
+          momoAccountName: data.momo_account_name ?? 'Akora Events',
+        });
+        
+        console.log('[AkoraEvents] ✅ Package pricing and payment details updated');
+      } else {
+        console.log('[AkoraEvents] No settings data found, using defaults');
+      }
+    } catch (err) {
+      console.error('[AkoraEvents] Exception loading settings:', err);
+    }
   }, []);
 
   const loadRole = useCallback(async () => {
-    if (!user) return;
-    const { data } = await supabase
-      .from('profiles')
-      .select('is_admin, role')
-      .eq('id', user.id)
-      .single();
-    const admin = data?.is_admin === true || data?.role === 'admin' || data?.role === 'staff';
-    setIsAdmin(!!admin);
+    console.log('[AkoraEvents] loadRole called');
+    console.log('[AkoraEvents] user exists:', !!user);
+    console.log('[AkoraEvents] user.id:', user?.id);
+    
+    if (!user) {
+      console.log('[AkoraEvents] No user, skipping admin check');
+      return;
+    }
+    
+    try {
+      console.log('[AkoraEvents] Fetching profile for user:', user.id);
+      const { data, error } = await supabase
+        .from('profiles')
+        .select('is_admin, role')
+        .eq('id', user.id)
+        .single();
+      
+      if (error) {
+        console.error('[AkoraEvents] Error fetching profile:', error);
+        setIsAdmin(false);
+        return;
+      }
+      
+      console.log('[AkoraEvents] Profile data:', data);
+      console.log('[AkoraEvents] is_admin:', data?.is_admin);
+      console.log('[AkoraEvents] role:', data?.role);
+      
+      const admin = data?.is_admin === true || data?.role === 'admin' || data?.role === 'staff';
+      console.log('[AkoraEvents] Computed admin status:', admin);
+      
+      setIsAdmin(!!admin);
+    } catch (err) {
+      console.error('[AkoraEvents] Exception in loadRole:', err);
+      setIsAdmin(false);
+    }
   }, [user]);
 
   const fetchData = useCallback(async () => {
     try {
       setLoading(true);
+      console.log('Fetching events for tab:', activeTab);
+      
+      // First, try to clean up any invalid UUIDs in the database
+      // This is a workaround for corrupted data
+      try {
+        await supabase.rpc('fix_undefined_uuids_in_events');
+      } catch (cleanupErr) {
+        console.log('Cleanup function not available (this is okay)');
+      }
+      
       // Published list for tab
       const { data: list, error } = await supabase
         .from('akora_events')
@@ -116,7 +223,11 @@ export default function AkoraEventsScreen() {
         .eq('event_type', activeTab)
         .eq('status', 'published')
         .order('start_time', { ascending: true });
-      if (error) throw error;
+      if (error) {
+        console.error('Supabase error fetching events:', error);
+        throw error;
+      }
+      console.log('Events loaded successfully:', list?.length || 0);
       let arr = (list as AkoraEvent[]) || [];
       
       // Apply search filter
@@ -157,14 +268,16 @@ export default function AkoraEventsScreen() {
       } else {
         setPending([]);
       }
-    } catch (err) {
-      console.error('events fetch', err);
-      Alert.alert('Error', 'Failed to load events.');
+    } catch (err: any) {
+      console.error('Error loading events:', err);
+      const errorMsg = err?.message || 'Failed to load events.';
+      Alert.alert('Error loading events', errorMsg);
     } finally {
       setLoading(false);
     }
   }, [activeTab, isAdmin, searchQuery]);
 
+  useEffect(() => { loadPackagePricing(); }, [loadPackagePricing]);
   useEffect(() => { loadRole(); }, [loadRole]);
   useEffect(() => { fetchData(); }, [fetchData]);
 
@@ -239,7 +352,7 @@ export default function AkoraEventsScreen() {
           payment_proof_url: path,
           category: category.trim() || null,
           tags: tags ? tags.split(',').map(t => t.trim()).filter(Boolean) : null,
-          capacity: capacity ? parseInt(capacity, 10) : null,
+          capacity: capacity && parseInt(capacity, 10) > 0 ? parseInt(capacity, 10) : null,
           organizer_name: organizerName.trim() || null,
           organizer_email: organizerEmail.trim() || null,
           organizer_phone: organizerPhone.trim() || null,
@@ -262,8 +375,12 @@ export default function AkoraEventsScreen() {
 
   const approve = async (id: string) => {
     try {
+      if (!user?.id) {
+        Alert.alert('Error', 'User not authenticated');
+        return;
+      }
       const notes = moderationDrafts[id]?.trim() || null;
-      const { error } = await supabase.from('akora_events').update({ status: 'published', moderation_notes: notes, approved_by: user?.id ?? null, approved_at: new Date().toISOString(), published_at: new Date().toISOString() }).eq('id', id);
+      const { error } = await supabase.from('akora_events').update({ status: 'published', moderation_notes: notes, approved_by: user.id, approved_at: new Date().toISOString(), published_at: new Date().toISOString() }).eq('id', id);
       if (error) throw error;
       fetchData();
     } catch (err) { Alert.alert('Error', 'Failed to approve'); }
@@ -332,10 +449,22 @@ export default function AkoraEventsScreen() {
       {/* Header */}
       <View style={styles.header}>
         <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}><ArrowLeft size={22} color="#111" /></TouchableOpacity>
-        <Text style={styles.headerTitle}>Akora Events</Text>
-        <TouchableOpacity onPress={() => router.push('/events/my-akora-events' as any)} style={styles.myEventsBtn}>
-          <Calendar size={20} color="#4169E1" />
-        </TouchableOpacity>
+        <View style={{ flex: 1, alignItems: 'center' }}>
+          <Text style={styles.headerTitle}>Akora Events</Text>
+          {isAdmin && (
+            <Text style={{ fontSize: 10, color: '#10B981', fontWeight: '700' }}>ADMIN MODE</Text>
+          )}
+        </View>
+        <View style={styles.headerRight}>
+          {isAdmin && user && (
+            <TouchableOpacity onPress={() => router.push('/events/admin' as any)} style={styles.adminBtn}>
+              <Settings size={20} color="#4169E1" />
+            </TouchableOpacity>
+          )}
+          <TouchableOpacity onPress={() => router.push('/events/my-akora-events' as any)} style={styles.myEventsBtn}>
+            <Calendar size={20} color="#4169E1" />
+          </TouchableOpacity>
+        </View>
       </View>
 
       {/* Tabs */}
@@ -346,17 +475,6 @@ export default function AkoraEventsScreen() {
         <TouchableOpacity onPress={() => setActiveTab('akora')} style={[styles.tab, activeTab === 'akora' && styles.activeTab]}>
           <Text style={[styles.tabText, activeTab === 'akora' && styles.activeTabText]}>Akora Events</Text>
         </TouchableOpacity>
-      </View>
-
-      {/* Search Bar */}
-      <View style={styles.searchContainer}>
-        <TextInput
-          style={styles.searchInput}
-          placeholder="Search events by title, location, or category..."
-          placeholderTextColor="#9CA3AF"
-          value={searchQuery}
-          onChangeText={setSearchQuery}
-        />
       </View>
 
       {/* Search Bar */}
@@ -414,7 +532,8 @@ export default function AkoraEventsScreen() {
             <Text style={styles.sectionLabel}>Event Details</Text>
             <TextInput value={category} onChangeText={setCategory} placeholder="Category (e.g., Gala, Workshop, Sports)" placeholderTextColor="#9CA3AF" style={styles.input} />
             <TextInput value={tags} onChangeText={setTags} placeholder="Tags (e.g., networking, alumni, fundraiser)" placeholderTextColor="#9CA3AF" style={styles.input} />
-            <TextInput value={capacity} onChangeText={setCapacity} placeholder="Maximum capacity (number of attendees)" placeholderTextColor="#9CA3AF" keyboardType="number-pad" style={styles.input} />
+            <TextInput value={capacity} onChangeText={setCapacity} placeholder="Maximum capacity (leave empty for unlimited)" placeholderTextColor="#9CA3AF" keyboardType="number-pad" style={styles.input} />
+            <Text style={styles.hintText}>Leave capacity empty for unlimited attendees, or enter 0 for no capacity limit</Text>
             <TextInput value={registrationUrl} onChangeText={setRegistrationUrl} placeholder="Registration/Ticket URL (optional)" placeholderTextColor="#9CA3AF" autoCapitalize="none" style={styles.input} />
             
             {/* Event Banner */}
@@ -504,29 +623,85 @@ export default function AkoraEventsScreen() {
               ))}
             </View>
 
-            {/* Visibility/Featured */}
-            <Text style={styles.sectionLabel}>Event Settings</Text>
-            <Text style={styles.hintText}>Control who can see your event and whether it appears at the top of the list.</Text>
-            <View style={{ flexDirection: 'row', gap: 8, flexWrap: 'wrap' }}>
-              <TouchableOpacity onPress={() => setVisibility('public')} style={[styles.tagBtn, visibility==='public' && styles.tagBtnActive]}>
-                <Text style={[styles.tagText, visibility==='public' && styles.tagTextActive]}>Public</Text>
-              </TouchableOpacity>
-              <TouchableOpacity onPress={() => setVisibility('alumni_only')} style={[styles.tagBtn, visibility==='alumni_only' && styles.tagBtnActive]}>
-                <Text style={[styles.tagText, visibility==='alumni_only' && styles.tagTextActive]}>Alumni Only</Text>
-              </TouchableOpacity>
-              <TouchableOpacity onPress={() => setFeatured(f => !f)} style={[styles.tagBtn, featured && styles.tagBtnActive]}>
-                <Text style={[styles.tagText, featured && styles.tagTextActive]}>{featured ? 'Featured ✓' : 'Featured'}</Text>
-              </TouchableOpacity>
-            </View>
-
             {activeTab === 'akora' && (
               <View style={styles.feeBox}>
                 <Text style={styles.feeText}>Listing Fee: GHS {fee}</Text>
                 <Text style={styles.feeSubtext}>Selected: {packageTier.charAt(0).toUpperCase()+packageTier.slice(1)} package</Text>
-                <TouchableOpacity style={styles.proofBtn} onPress={pickProof}>
-                  <Upload size={16} color="#4169E1" />
-                  <Text style={styles.proofText}>{pickedProof ? pickedProof.name : 'Upload payment proof (screenshot or receipt)'}</Text>
-                </TouchableOpacity>
+                
+                {/* Payment Options */}
+                <Text style={styles.paymentTitle}>Payment Options</Text>
+                
+                {/* Bank Transfer */}
+                <View style={styles.paymentOption}>
+                  <Text style={styles.paymentMethod}>1. Bank Transfer</Text>
+                  <View style={styles.paymentDetails}>
+                    <View style={styles.detailRow}>
+                      <Text style={styles.detailLabel}>Bank Name:</Text>
+                      <Text style={styles.detailValue}>{paymentDetails.bankName}</Text>
+                    </View>
+                    <View style={styles.detailRow}>
+                      <Text style={styles.detailLabel}>Account Name:</Text>
+                      <Text style={styles.detailValue}>{paymentDetails.bankAccountName}</Text>
+                    </View>
+                    <View style={styles.detailRow}>
+                      <Text style={styles.detailLabel}>Account Number:</Text>
+                      <Text style={styles.detailValue}>{paymentDetails.bankAccountNumber}</Text>
+                    </View>
+                    <View style={styles.detailRow}>
+                      <Text style={styles.detailLabel}>Reference:</Text>
+                      <Text style={styles.detailValue}>Use your event title</Text>
+                    </View>
+                  </View>
+                </View>
+
+                {/* MoMo Payment */}
+                <View style={styles.paymentOption}>
+                  <Text style={styles.paymentMethod}>2. Mobile Money (MoMo)</Text>
+                  <View style={styles.paymentDetails}>
+                    <View style={styles.detailRow}>
+                      <Text style={styles.detailLabel}>Network:</Text>
+                      <Text style={styles.detailValue}>{paymentDetails.momoNetwork}</Text>
+                    </View>
+                    <View style={styles.detailRow}>
+                      <Text style={styles.detailLabel}>Number:</Text>
+                      <Text style={styles.detailValue}>{paymentDetails.momoNumber}</Text>
+                    </View>
+                    <View style={styles.detailRow}>
+                      <Text style={styles.detailLabel}>Account Name:</Text>
+                      <Text style={styles.detailValue}>{paymentDetails.momoAccountName}</Text>
+                    </View>
+                    <View style={styles.detailRow}>
+                      <Text style={styles.detailLabel}>Reference:</Text>
+                      <Text style={styles.detailValue}>Use your event title</Text>
+                    </View>
+                  </View>
+                </View>
+
+                {/* Upload Payment Proof */}
+                <View style={styles.uploadProofSection}>
+                  <Text style={styles.uploadProofLabel}>Payment Proof</Text>
+                  <TouchableOpacity 
+                    style={[styles.uploadProofBtn, pickedProof && styles.uploadProofBtnActive]} 
+                    onPress={pickProof}
+                  >
+                    <View style={styles.uploadProofIconCircle}>
+                      <Upload size={20} color={pickedProof ? "#10B981" : "#4169E1"} />
+                    </View>
+                    <View style={styles.uploadProofContent}>
+                      <Text style={[styles.uploadProofTitle, pickedProof && styles.uploadProofTitleActive]}>
+                        {pickedProof ? '✓ File Uploaded' : 'Upload Payment Proof'}
+                      </Text>
+                      <Text style={styles.uploadProofSubtitle}>
+                        {pickedProof ? pickedProof.name : 'Screenshot or receipt of payment'}
+                      </Text>
+                    </View>
+                    {!pickedProof && (
+                      <View style={styles.uploadProofArrow}>
+                        <Text style={styles.uploadProofArrowText}>→</Text>
+                      </View>
+                    )}
+                  </TouchableOpacity>
+                </View>
               </View>
             )}
 
@@ -536,10 +711,11 @@ export default function AkoraEventsScreen() {
               onPress={async () => {
               if (activeTab === 'oaa') {
                 if (!isAdmin) { Alert.alert('Admins only'); return; }
+                if (!user?.id) { Alert.alert('Error', 'User not loaded. Please try again.'); return; }
                 // Create published OAA event
                 try {
                   const { error } = await supabase.from('akora_events').insert({
-                    created_by: user?.id,
+                    created_by: user.id,
                     event_type: 'oaa',
                     title: title.trim(),
                     description: description.trim(),
@@ -700,6 +876,64 @@ const styles = StyleSheet.create({
   feeBox: { marginTop: 12, padding: 12, backgroundColor: '#EFF6FF', borderRadius: 8, gap: 6 },
   feeText: { fontSize: 14, fontWeight: '700', color: '#1E40AF' },
   feeSubtext: { fontSize: 11, color: '#3B82F6' },
+  paymentTitle: { fontSize: 13, fontWeight: '700', color: '#1E40AF', marginTop: 12, marginBottom: 8 },
+  paymentOption: { backgroundColor: '#fff', padding: 12, borderRadius: 8, marginBottom: 10, borderWidth: 1, borderColor: '#BFDBFE' },
+  paymentMethod: { fontSize: 13, fontWeight: '700', color: '#1E40AF', marginBottom: 8 },
+  paymentDetails: { gap: 6 },
+  detailRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+  detailLabel: { fontSize: 12, color: '#64748B', fontWeight: '600' },
+  detailValue: { fontSize: 12, color: '#1E293B', fontWeight: '700' },
+  uploadProofSection: { marginTop: 16 },
+  uploadProofLabel: { fontSize: 13, fontWeight: '700', color: '#1E40AF', marginBottom: 8 },
+  uploadProofBtn: { 
+    backgroundColor: '#fff', 
+    borderWidth: 2, 
+    borderColor: '#4169E1', 
+    borderRadius: 12, 
+    padding: 16, 
+    flexDirection: 'row', 
+    alignItems: 'center', 
+    gap: 12,
+    borderStyle: 'dashed',
+  },
+  uploadProofBtnActive: { 
+    backgroundColor: '#ECFDF5', 
+    borderColor: '#10B981',
+    borderStyle: 'solid',
+  },
+  uploadProofIconCircle: { 
+    width: 48, 
+    height: 48, 
+    borderRadius: 24, 
+    backgroundColor: '#EEF2FF', 
+    alignItems: 'center', 
+    justifyContent: 'center',
+  },
+  uploadProofContent: { flex: 1 },
+  uploadProofTitle: { 
+    fontSize: 14, 
+    fontWeight: '700', 
+    color: '#1E293B',
+    marginBottom: 2,
+  },
+  uploadProofTitleActive: { color: '#10B981' },
+  uploadProofSubtitle: { 
+    fontSize: 12, 
+    color: '#64748B',
+  },
+  uploadProofArrow: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: '#EEF2FF',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  uploadProofArrowText: { 
+    fontSize: 18, 
+    color: '#4169E1',
+    fontWeight: '700',
+  },
   proofBtn: { flexDirection: 'row', gap: 6, alignItems: 'center', paddingVertical: 8 },
   proofText: { color: '#4169E1', fontWeight: '600', fontSize: 13 },
   tagBtn: { paddingHorizontal: 12, paddingVertical: 8, borderWidth: 1, borderColor: '#E5E7EB', borderRadius: 20, backgroundColor: '#fff' },
@@ -763,6 +997,8 @@ const styles = StyleSheet.create({
   modalClose: { position: 'absolute', top: 60, right: 20, zIndex: 100, padding: 10, backgroundColor: 'rgba(0,0,0,0.5)', borderRadius: 20 },
   modalMediaContainer: { width: Dimensions.get('window').width, height: Dimensions.get('window').height, justifyContent: 'center', alignItems: 'center' },
   modalMedia: { width: Dimensions.get('window').width, height: Dimensions.get('window').height * 0.8 },
+  headerRight: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  adminBtn: { width: 40, height: 40, justifyContent: 'center', alignItems: 'center' },
   myEventsBtn: { width: 40, height: 40, justifyContent: 'center', alignItems: 'center' },
   searchContainer: { paddingHorizontal: 16, paddingVertical: 12, backgroundColor: '#F9FAFB' },
   searchInput: { backgroundColor: '#FFFFFF', borderWidth: 1, borderColor: '#E5E7EB', borderRadius: 10, paddingHorizontal: 16, paddingVertical: 12, fontSize: 14, color: '#1F2937' },

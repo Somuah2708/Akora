@@ -25,7 +25,9 @@ import {
   Share2,
   Heart,
   Bookmark,
-  ExternalLink 
+  ExternalLink,
+  CheckCircle2,
+  XCircle
 } from 'lucide-react-native';
 import { Video } from 'expo-av';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -724,15 +726,24 @@ export default function EventDetailScreen() {
     try {
       if (!eventId) return;
 
+      // Always count directly from event_rsvps table for real-time accuracy
       const { count, error } = await supabase
         .from('event_rsvps')
         .select('*', { count: 'exact', head: true })
         .eq('event_id', eventId)
         .eq('status', 'attending');
 
-      if (!error) setRsvpCount(count || 0);
+      if (error) {
+        console.error('Error loading RSVP count:', error);
+        // If event_rsvps table doesn't exist, show 0
+        setRsvpCount(0);
+      } else {
+        setRsvpCount(count || 0);
+        console.log(`Loaded RSVP count for event ${eventId}: ${count || 0} attending`);
+      }
     } catch (error) {
       console.error('Error loading RSVP count:', error);
+      setRsvpCount(0);
     }
   };
 
@@ -743,6 +754,8 @@ export default function EventDetailScreen() {
         return;
       }
 
+      console.log(`Updating RSVP for event ${eventId} to status: ${status}`);
+
       if (rsvpId) {
         // Update existing RSVP
         const { error } = await supabase
@@ -752,6 +765,7 @@ export default function EventDetailScreen() {
 
         if (error) throw error;
         setRsvpStatus(status);
+        console.log('RSVP updated successfully');
         Alert.alert('Success', `Your RSVP has been updated to "${status}"`);
       } else {
         // Create new RSVP
@@ -768,11 +782,17 @@ export default function EventDetailScreen() {
         if (error) throw error;
         setRsvpStatus(status);
         setRsvpId(data.id);
+        console.log('RSVP created successfully:', data);
         Alert.alert('Success', `You are now ${status}!`);
       }
       
-      // Reload RSVP count
-      loadRsvpCount();
+      // Reload RSVP count immediately
+      await loadRsvpCount();
+      
+      // Also reload after a short delay to ensure database trigger has fired
+      setTimeout(() => {
+        loadRsvpCount();
+      }, 500);
     } catch (error: any) {
       console.error('Error updating RSVP:', error);
       Alert.alert('Error', error.message || 'Failed to update RSVP');
@@ -901,16 +921,20 @@ export default function EventDetailScreen() {
             ) : null}
             <View style={styles.detailRow}><MapPin size={16} color="#1F2937" /><Text style={styles.detailMeta}>{locationLabel}</Text></View>
             
-            {/* Analytics */}
+            {/* Attendance Count - Prominent Display */}
             <View style={styles.analyticsRow}>
-              <View style={styles.analyticsBadge}>
-                <Users size={14} color="#4169E1" />
-                <Text style={styles.analyticsText}>{rsvpCount} attending</Text>
+              <View style={[styles.analyticsBadge, { backgroundColor: '#D1FAE5', borderColor: '#10B981' }]}>
+                <Users size={16} color="#10B981" />
+                <Text style={[styles.analyticsText, { color: '#047857' }]}>
+                  {rsvpCount} {rsvpCount === 1 ? 'person' : 'people'} attending
+                </Text>
               </View>
               {supaEvent.capacity && (
                 <View style={styles.analyticsBadge}>
-                  <Users size={14} color="#6B7280" />
-                  <Text style={styles.analyticsText}>Capacity: {supaEvent.capacity}</Text>
+                  <Users size={16} color="#6B7280" />
+                  <Text style={[styles.analyticsText, { color: '#6B7280' }]}>
+                    Max: {supaEvent.capacity}
+                  </Text>
                 </View>
               )}
             </View>
@@ -932,38 +956,142 @@ export default function EventDetailScreen() {
 
             {!!desc && <Text style={styles.detailDesc}>{desc}</Text>}
 
-            {/* RSVP Buttons */}
+            {/* RSVP Section - Redesigned */}
             {(() => {
               const warning = getCapacityWarning();
               const canRsvp = !warning || warning.canRsvp;
               return (
-                <View style={styles.rsvpContainer}>
-                  <Text style={styles.rsvpTitle}>Are you attending?</Text>
-                  <View style={styles.rsvpButtons}>
+                <View style={styles.rsvpSection}>
+                  {/* Header with icon */}
+                  <View style={styles.rsvpHeader}>
+                    <Users size={22} color="#111827" />
+                    <Text style={styles.rsvpTitle}>Will you be attending this event?</Text>
+                  </View>
+                  
+                  {/* Description */}
+                  <Text style={styles.rsvpDescription}>
+                    Let the organizer know if you plan to attend
+                  </Text>
+
+                  {/* RSVP Options */}
+                  <View style={styles.rsvpOptions}>
                     <TouchableOpacity
-                      style={[styles.rsvpButton, rsvpStatus === 'attending' && styles.rsvpButtonActive]}
+                      style={[
+                        styles.rsvpOption,
+                        rsvpStatus === 'attending' && styles.rsvpOptionAttending,
+                      ]}
                       onPress={() => handleRsvp('attending')}
                       disabled={!canRsvp}
+                      activeOpacity={0.8}
                     >
-                      <Text style={[styles.rsvpButtonText, rsvpStatus === 'attending' && styles.rsvpButtonTextActive]}>
-                        ✓ Attending
-                      </Text>
+                      <View style={[
+                        styles.rsvpIconCircle,
+                        rsvpStatus === 'attending' && styles.rsvpIconCircleAttending,
+                      ]}>
+                        <CheckCircle2 
+                          size={24} 
+                          color={rsvpStatus === 'attending' ? '#FFFFFF' : '#10B981'} 
+                          fill={rsvpStatus === 'attending' ? '#10B981' : 'transparent'}
+                        />
+                      </View>
+                      <View style={styles.rsvpOptionContent}>
+                        <Text style={[
+                          styles.rsvpOptionTitle,
+                          rsvpStatus === 'attending' && styles.rsvpOptionTitleActive,
+                        ]}>
+                          Yes, I'm Going
+                        </Text>
+                        <Text style={[
+                          styles.rsvpOptionSubtitle,
+                          rsvpStatus === 'attending' && styles.rsvpOptionSubtitleActive,
+                        ]}>
+                          Confirm your attendance
+                        </Text>
+                      </View>
+                      {rsvpStatus === 'attending' && (
+                        <View style={styles.activeBadge}>
+                          <Text style={styles.activeBadgeText}>✓</Text>
+                        </View>
+                      )}
                     </TouchableOpacity>
+
                     <TouchableOpacity
-                      style={[styles.rsvpButton, rsvpStatus === 'maybe' && styles.rsvpButtonActive]}
+                      style={[
+                        styles.rsvpOption,
+                        rsvpStatus === 'maybe' && styles.rsvpOptionMaybe,
+                      ]}
                       onPress={() => handleRsvp('maybe')}
+                      activeOpacity={0.8}
                     >
-                      <Text style={[styles.rsvpButtonText, rsvpStatus === 'maybe' && styles.rsvpButtonTextActive]}>
-                        ? Maybe
-                      </Text>
+                      <View style={[
+                        styles.rsvpIconCircle,
+                        rsvpStatus === 'maybe' && styles.rsvpIconCircleMaybe,
+                      ]}>
+                        <Text style={[
+                          styles.rsvpQuestionIcon,
+                          rsvpStatus === 'maybe' && styles.rsvpQuestionIconActive,
+                        ]}>
+                          ?
+                        </Text>
+                      </View>
+                      <View style={styles.rsvpOptionContent}>
+                        <Text style={[
+                          styles.rsvpOptionTitle,
+                          rsvpStatus === 'maybe' && styles.rsvpOptionTitleActive,
+                        ]}>
+                          Maybe
+                        </Text>
+                        <Text style={[
+                          styles.rsvpOptionSubtitle,
+                          rsvpStatus === 'maybe' && styles.rsvpOptionSubtitleActive,
+                        ]}>
+                          Still deciding
+                        </Text>
+                      </View>
+                      {rsvpStatus === 'maybe' && (
+                        <View style={styles.activeBadge}>
+                          <Text style={styles.activeBadgeText}>✓</Text>
+                        </View>
+                      )}
                     </TouchableOpacity>
+
                     <TouchableOpacity
-                      style={[styles.rsvpButton, rsvpStatus === 'not_attending' && styles.rsvpButtonActive]}
+                      style={[
+                        styles.rsvpOption,
+                        rsvpStatus === 'not_attending' && styles.rsvpOptionNotAttending,
+                      ]}
                       onPress={() => handleRsvp('not_attending')}
+                      activeOpacity={0.8}
                     >
-                      <Text style={[styles.rsvpButtonText, rsvpStatus === 'not_attending' && styles.rsvpButtonTextActive]}>
-                        ✗ Can't Go
-                      </Text>
+                      <View style={[
+                        styles.rsvpIconCircle,
+                        rsvpStatus === 'not_attending' && styles.rsvpIconCircleNotAttending,
+                      ]}>
+                        <XCircle 
+                          size={24} 
+                          color={rsvpStatus === 'not_attending' ? '#FFFFFF' : '#EF4444'} 
+                          fill={rsvpStatus === 'not_attending' ? '#EF4444' : 'transparent'}
+                        />
+                      </View>
+                      <View style={styles.rsvpOptionContent}>
+                        <Text style={[
+                          styles.rsvpOptionTitle,
+                          rsvpStatus === 'not_attending' && styles.rsvpOptionTitleActive,
+                        ]}>
+                          Can't Attend
+                        </Text>
+                        <Text style={[
+                          styles.rsvpOptionSubtitle,
+                          rsvpStatus === 'not_attending' && styles.rsvpOptionSubtitleActive,
+                        ]}>
+                          Won't be able to make it
+                        </Text>
+                      </View>
+                      {rsvpStatus === 'not_attending' && (
+                        <View style={styles.activeBadge}>
+                          <Text style={styles.activeBadgeText}>✓</Text>
+                        </View>
+                      )}
                     </TouchableOpacity>
                   </View>
                 </View>
@@ -1668,21 +1796,24 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     gap: 12,
     marginTop: 12,
-    marginBottom: 8,
+    marginBottom: 12,
+    flexWrap: 'wrap',
   },
   analyticsBadge: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    backgroundColor: '#F3F4F6',
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    backgroundColor: '#EFF6FF',
     borderRadius: 20,
+    borderWidth: 1,
+    borderColor: '#BFDBFE',
   },
   analyticsText: {
-    fontSize: 13,
-    fontWeight: '600',
-    color: '#374151',
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#1E40AF',
   },
   capacityWarning: {
     marginTop: 12,
@@ -1695,44 +1826,158 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     textAlign: 'center',
   },
-  rsvpContainer: {
-    marginTop: 16,
-    marginBottom: 16,
+  // New Professional RSVP Section Styles
+  rsvpSection: {
+    marginTop: 24,
+    marginBottom: 20,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 16,
+    padding: 20,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.08,
+    shadowRadius: 12,
+    elevation: 3,
+    borderWidth: 1,
+    borderColor: '#F3F4F6',
+  },
+  rsvpHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    marginBottom: 8,
+  },
+  rsvpTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: '#111827',
+    flex: 1,
+  },
+  rsvpDescription: {
+    fontSize: 14,
+    color: '#6B7280',
+    marginBottom: 20,
+    lineHeight: 20,
+  },
+  rsvpOptions: {
+    gap: 12,
+  },
+  rsvpOption: {
+    flexDirection: 'row',
+    alignItems: 'center',
     padding: 16,
     backgroundColor: '#F9FAFB',
     borderRadius: 12,
-  },
-  rsvpTitle: {
-    fontSize: 16,
-    fontWeight: '700',
-    color: '#1F2937',
-    marginBottom: 12,
-  },
-  rsvpButtons: {
-    flexDirection: 'row',
-    gap: 8,
-  },
-  rsvpButton: {
-    flex: 1,
-    paddingVertical: 12,
-    paddingHorizontal: 8,
-    backgroundColor: '#FFFFFF',
     borderWidth: 2,
     borderColor: '#E5E7EB',
-    borderRadius: 8,
+    gap: 14,
+  },
+  rsvpOptionAttending: {
+    backgroundColor: '#ECFDF5',
+    borderColor: '#10B981',
+    shadowColor: '#10B981',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 2,
+  },
+  rsvpOptionMaybe: {
+    backgroundColor: '#FEF3C7',
+    borderColor: '#F59E0B',
+    shadowColor: '#F59E0B',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 2,
+  },
+  rsvpOptionNotAttending: {
+    backgroundColor: '#FEE2E2',
+    borderColor: '#EF4444',
+    shadowColor: '#EF4444',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 2,
+  },
+  rsvpIconCircle: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    backgroundColor: '#FFFFFF',
+    justifyContent: 'center',
     alignItems: 'center',
+    borderWidth: 2,
+    borderColor: '#E5E7EB',
   },
-  rsvpButtonActive: {
-    backgroundColor: '#4169E1',
-    borderColor: '#4169E1',
+  rsvpIconCircleAttending: {
+    backgroundColor: '#10B981',
+    borderColor: '#10B981',
   },
-  rsvpButtonText: {
-    fontSize: 13,
-    fontWeight: '700',
-    color: '#6B7280',
+  rsvpIconCircleMaybe: {
+    backgroundColor: '#F59E0B',
+    borderColor: '#F59E0B',
   },
-  rsvpButtonTextActive: {
+  rsvpIconCircleNotAttending: {
+    backgroundColor: '#EF4444',
+    borderColor: '#EF4444',
+  },
+  rsvpQuestionIcon: {
+    fontSize: 24,
+    fontWeight: '800',
+    color: '#F59E0B',
+  },
+  rsvpQuestionIconActive: {
     color: '#FFFFFF',
+  },
+  rsvpOptionContent: {
+    flex: 1,
+  },
+  rsvpOptionTitle: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#111827',
+    marginBottom: 2,
+  },
+  rsvpOptionTitleActive: {
+    color: '#111827',
+  },
+  rsvpOptionSubtitle: {
+    fontSize: 13,
+    color: '#6B7280',
+    lineHeight: 18,
+  },
+  rsvpOptionSubtitleActive: {
+    color: '#374151',
+  },
+  activeBadge: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: '#FFFFFF',
+    justifyContent: 'center',
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.1,
+    shadowRadius: 2,
+    elevation: 2,
+  },
+  activeBadgeText: {
+    fontSize: 16,
+    fontWeight: '800',
+    color: '#10B981',
+  },
+  // Legacy styles (can be removed if not used elsewhere)
+  rsvpButtonContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+  },
+  rsvpButtonIcon: {
+    fontSize: 16,
+    fontWeight: '800',
+    color: '#6B7280',
   },
   shareButton: {
     flexDirection: 'row',

@@ -43,15 +43,24 @@ export default function MyAkoraEventsScreen() {
 
   useEffect(() => {
     loadMyEvents();
-  }, []);
+  }, [user]);
 
   const loadMyEvents = async () => {
     try {
       setLoading(true);
+      
+      // Check if user is loaded
+      if (!user?.id) {
+        console.log('User not loaded yet, skipping events fetch');
+        setEvents([]);
+        setLoading(false);
+        return;
+      }
+
       const { data, error } = await supabase
         .from('akora_events')
         .select('*')
-        .eq('created_by', user?.id)
+        .eq('created_by', user.id)
         .eq('event_type', 'akora')
         .order('created_at', { ascending: false });
 

@@ -69,14 +69,23 @@ export function useAuth() {
 
       if (error) {
         console.error('[useAuth] Error fetching profile:', error);
+        console.error('[useAuth] Error code:', error.code);
+        console.error('[useAuth] Error message:', error.message);
         // Don't throw - user can still be authenticated without profile
         // Profile might not exist yet for new users
       } else {
         console.log('[useAuth] Profile fetched successfully');
+        console.log('[useAuth] Profile data:', {
+          id: data.id,
+          username: data.username,
+          email: data.email,
+          is_admin: data.is_admin,
+          role: data.role,
+        });
         setProfile(data);
       }
     } catch (error) {
-      console.error('[useAuth] Error fetching profile:', error);
+      console.error('[useAuth] Exception in fetchProfile:', error);
     } finally {
       setLoading(false);
       setIsReady(true);

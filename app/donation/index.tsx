@@ -595,24 +595,14 @@ export default function DonationScreen() {
     }
 
     if (paymentMethod === 'mobile-money' && selectedMomoNetwork) {
-      // Show MoMo account details instead of requesting user details
-      const selectedNetworkName = MOBILE_MONEY_NETWORKS.find(n => n.id === selectedMomoNetwork)?.name || 'Mobile Money';
-      
-      Alert.alert(
-        `${selectedNetworkName} Payment Details`,
-        `Please send GH₵${finalAmount.toLocaleString()} to:\n\n📱 Mobile Money Number:\n0244 123 456\n\n👤 Account Name:\nOld Achimotan Association\n\nAfter completing the payment, your donation will be recorded.\n\nThank you for your generosity! 💚`,
-        [
-          {
-            text: 'Cancel',
-            style: 'cancel'
-          },
-          {
-            text: 'I\'ve Sent Payment',
-            onPress: () => processDonation()
-          }
-        ]
-      );
-      return;
+      if (!momoPhone || !momoName) {
+        Alert.alert('Missing Details', 'Please enter your phone number and name for mobile money payment');
+        return;
+      }
+      if (momoPhone.length !== 10) {
+        Alert.alert('Invalid Phone', 'Please enter a valid 10-digit phone number');
+        return;
+      }
     }
 
     if (paymentMethod === 'card' && !selectedCard) {
@@ -1651,62 +1641,33 @@ export default function DonationScreen() {
               </View>
             )}
 
-            {/* Mobile Money Payment Instructions */}
+            {/* Mobile Money Payment Details */}
             {paymentMethod === 'mobile-money' && selectedMomoNetwork && (
-              <View style={styles.paymentInstructionsSection}>
-                <View style={styles.instructionsCard}>
-                  <View style={styles.instructionsHeader}>
-                    <DollarSign size={24} color="#10B981" />
-                    <Text style={styles.instructionsTitle}>Payment Instructions</Text>
-                  </View>
-                  
-                  <Text style={styles.instructionsText}>
-                    To complete your donation of <Text style={styles.instructionsAmount}>GH₵{(donationAmount || parseFloat(customAmount) || 0).toLocaleString()}</Text>:
-                  </Text>
-                  
-                  <View style={styles.instructionsSteps}>
-                    <View style={styles.instructionsStep}>
-                      <View style={styles.stepNumber}>
-                        <Text style={styles.stepNumberText}>1</Text>
-                      </View>
-                      <Text style={styles.stepText}>
-                        Open your {MOBILE_MONEY_NETWORKS.find(n => n.id === selectedMomoNetwork)?.name || 'Mobile Money'} app
-                      </Text>
-                    </View>
-                    
-                    <View style={styles.instructionsStep}>
-                      <View style={styles.stepNumber}>
-                        <Text style={styles.stepNumberText}>2</Text>
-                      </View>
-                      <Text style={styles.stepText}>
-                        Send money to: <Text style={styles.highlightText}>0244 123 456</Text>
-                      </Text>
-                    </View>
-                    
-                    <View style={styles.instructionsStep}>
-                      <View style={styles.stepNumber}>
-                        <Text style={styles.stepNumberText}>3</Text>
-                      </View>
-                      <Text style={styles.stepText}>
-                        Account Name: <Text style={styles.highlightText}>Old Achimotan Association</Text>
-                      </Text>
-                    </View>
-                    
-                    <View style={styles.instructionsStep}>
-                      <View style={styles.stepNumber}>
-                        <Text style={styles.stepNumberText}>4</Text>
-                      </View>
-                      <Text style={styles.stepText}>
-                        Click "I've Sent Payment" below after completing the transfer
-                      </Text>
-                    </View>
-                  </View>
-                  
-                  <View style={styles.instructionsNote}>
-                    <Text style={styles.instructionsNoteText}>
-                      💡 Your donation will be recorded once you confirm the payment.
-                    </Text>
-                  </View>
+              <View style={styles.paymentDetailsSection}>
+                <Text style={styles.donateLabel}>Enter Payment Details</Text>
+                
+                <View style={styles.inputGroup}>
+                  <Text style={styles.inputLabel}>Phone Number *</Text>
+                  <TextInput
+                    style={styles.paymentInput}
+                    placeholder="0XX XXX XXXX"
+                    placeholderTextColor="#999"
+                    keyboardType="phone-pad"
+                    maxLength={10}
+                    value={momoPhone}
+                    onChangeText={setMomoPhone}
+                  />
+                </View>
+
+                <View style={styles.inputGroup}>
+                  <Text style={styles.inputLabel}>Account Name *</Text>
+                  <TextInput
+                    style={styles.paymentInput}
+                    placeholder="Enter your name as registered"
+                    placeholderTextColor="#999"
+                    value={momoName}
+                    onChangeText={setMomoName}
+                  />
                 </View>
               </View>
             )}
@@ -1825,12 +1786,9 @@ export default function DonationScreen() {
                 <>
                   <Heart size={20} color="#FFFFFF" />
                   <Text style={styles.confirmDonateButtonText}>
-                    {paymentMethod === 'mobile-money' && selectedMomoNetwork
-                      ? `Proceed to Payment - GH₵${(donationAmount || parseFloat(customAmount) || 0).toLocaleString()}`
-                      : `Donate ${(donationAmount || parseFloat(customAmount) || 0) > 0 
-                          ? `GH₵${(donationAmount || parseFloat(customAmount)).toLocaleString()}` 
-                          : 'Now'}`
-                    }
+                    Donate {(donationAmount || parseFloat(customAmount) || 0) > 0 
+                      ? `GH₵${(donationAmount || parseFloat(customAmount)).toLocaleString()}` 
+                      : 'Now'}
                   </Text>
                 </>
               )}
@@ -3268,83 +3226,5 @@ const styles = StyleSheet.create({
     fontFamily: 'Inter-Regular',
     color: '#666666',
     lineHeight: 20,
-  },
-  // Mobile Money Instructions Styles
-  paymentInstructionsSection: {
-    marginTop: 16,
-  },
-  instructionsCard: {
-    backgroundColor: '#F0F9FF',
-    borderRadius: 16,
-    padding: 20,
-    borderWidth: 2,
-    borderColor: '#10B981',
-  },
-  instructionsHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-    marginBottom: 16,
-  },
-  instructionsTitle: {
-    fontSize: 18,
-    fontFamily: 'Inter-SemiBold',
-    color: '#000000',
-  },
-  instructionsText: {
-    fontSize: 15,
-    fontFamily: 'Inter-Regular',
-    color: '#333333',
-    marginBottom: 16,
-    lineHeight: 22,
-  },
-  instructionsAmount: {
-    fontFamily: 'Inter-SemiBold',
-    color: '#10B981',
-  },
-  instructionsSteps: {
-    gap: 16,
-    marginBottom: 16,
-  },
-  instructionsStep: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    gap: 12,
-  },
-  stepNumber: {
-    width: 28,
-    height: 28,
-    borderRadius: 14,
-    backgroundColor: '#10B981',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  stepNumberText: {
-    fontSize: 14,
-    fontFamily: 'Inter-SemiBold',
-    color: '#FFFFFF',
-  },
-  stepText: {
-    flex: 1,
-    fontSize: 14,
-    fontFamily: 'Inter-Regular',
-    color: '#333333',
-    lineHeight: 20,
-    paddingTop: 4,
-  },
-  highlightText: {
-    fontFamily: 'Inter-SemiBold',
-    color: '#10B981',
-  },
-  instructionsNote: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 12,
-    padding: 12,
-  },
-  instructionsNoteText: {
-    fontSize: 13,
-    fontFamily: 'Inter-Regular',
-    color: '#666666',
-    textAlign: 'center',
   },
 });

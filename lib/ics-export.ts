@@ -3,7 +3,7 @@
  * Generates .ics files for events compatible with Apple Calendar, Google Calendar, Outlook
  */
 
-import * as FileSystem from 'expo-file-system';
+import * as FileSystem from 'expo-file-system/legacy';
 import * as Sharing from 'expo-sharing';
 
 export interface EventData {
@@ -96,31 +96,47 @@ export const generateICSContent = (event: EventData): string => {
  */
 export const exportEventToCalendar = async (event: EventData): Promise<void> => {
   try {
+    console.log('Starting calendar export for event:', event.id);
+    
     // Generate ICS content
     const icsContent = generateICSContent(event);
+    console.log('Generated ICS content, length:', icsContent.length);
     
     // Create safe filename
     const safeTitle = event.title.replace(/[^a-z0-9]/gi, '_').substring(0, 50);
     const fileName = `${safeTitle}_${event.id.substring(0, 8)}.ics`;
     const fileUri = `${FileSystem.documentDirectory}${fileName}`;
+    console.log('File URI:', fileUri);
 
-    // Write ICS file
-    await FileSystem.writeAsStringAsync(fileUri, icsContent, {
-      encoding: FileSystem.EncodingType.UTF8,
-    });
+    // Write ICS file - use simple string writing
+    try {
+      await FileSystem.writeAsStringAsync(fileUri, icsContent);
+      console.log('File written successfully');
+    } catch (writeError) {
+      console.error('File write error:', writeError);
+      throw new Error('Failed to create calendar file');
+    }
 
     // Check if sharing is available
     const isSharingAvailable = await Sharing.isAvailableAsync();
+    console.log('Sharing available:', isSharingAvailable);
+    
     if (!isSharingAvailable) {
       throw new Error('Sharing is not available on this device');
     }
 
     // Share the file (user can choose Calendar app)
-    await Sharing.shareAsync(fileUri, {
-      mimeType: 'text/calendar',
-      dialogTitle: 'Add to Calendar',
-      UTI: 'public.calendar-event',
-    });
+    try {
+      await Sharing.shareAsync(fileUri, {
+        mimeType: 'text/calendar',
+        dialogTitle: 'Add to Calendar',
+        UTI: 'public.calendar-event',
+      });
+      console.log('File shared successfully');
+    } catch (shareError) {
+      console.error('Share error:', shareError);
+      throw new Error('Failed to share calendar file');
+    }
 
     // Clean up file after sharing
     // Note: File cleanup happens automatically on iOS after sharing
@@ -215,9 +231,7 @@ export const exportMultipleEventsToCalendar = async (events: EventData[]): Promi
     const fileName = `akora_events_${Date.now()}.ics`;
     const fileUri = `${FileSystem.documentDirectory}${fileName}`;
 
-    await FileSystem.writeAsStringAsync(fileUri, icsContent, {
-      encoding: FileSystem.EncodingType.UTF8,
-    });
+    await FileSystem.writeAsStringAsync(fileUri, icsContent);
 
     const isSharingAvailable = await Sharing.isAvailableAsync();
     if (!isSharingAvailable) {

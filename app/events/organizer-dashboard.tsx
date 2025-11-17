@@ -55,7 +55,24 @@ export default function OrganizerDashboardScreen() {
         .limit(5);
 
       if (error) throw error;
-      setRecentEvents(data || []);
+
+      // Load RSVP counts for each event
+      const eventsWithRsvps = await Promise.all(
+        (data || []).map(async (event) => {
+          const { count } = await supabase
+            .from('event_rsvps')
+            .select('*', { count: 'exact', head: true })
+            .eq('event_id', event.id)
+            .eq('status', 'attending');
+
+          return {
+            ...event,
+            rsvp_count: count || 0,
+          };
+        })
+      );
+
+      setRecentEvents(eventsWithRsvps);
     } catch (error) {
       console.error('Error fetching events:', error);
     }
