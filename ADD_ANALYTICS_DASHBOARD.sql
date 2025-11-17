@@ -89,29 +89,20 @@ GROUP BY expertise
 ORDER BY request_count DESC;
 
 -- View: Response time analytics
+-- Note: Uses mentor_response field presence as proxy for response time since responded_at column doesn't exist
 CREATE OR REPLACE VIEW analytics_response_times AS
 SELECT 
   DATE(mr.created_at) as date,
-  COUNT(*) FILTER (WHERE mr.responded_at IS NOT NULL) as responded_requests,
-  ROUND(AVG(
-    EXTRACT(EPOCH FROM (mr.responded_at - mr.created_at)) / 3600
-  )::NUMERIC, 2) as avg_response_hours,
-  ROUND(MIN(
-    EXTRACT(EPOCH FROM (mr.responded_at - mr.created_at)) / 3600
-  )::NUMERIC, 2) as min_response_hours,
-  ROUND(MAX(
-    EXTRACT(EPOCH FROM (mr.responded_at - mr.created_at)) / 3600
-  )::NUMERIC, 2) as max_response_hours,
-  COUNT(*) FILTER (
-    WHERE mr.responded_at IS NOT NULL 
-    AND mr.responded_at <= mr.created_at + INTERVAL '24 hours'
-  ) as responses_within_24h,
-  COUNT(*) FILTER (
-    WHERE mr.responded_at IS NOT NULL 
-    AND mr.responded_at <= mr.created_at + INTERVAL '48 hours'
-  ) as responses_within_48h
+  COUNT(*) FILTER (WHERE mr.mentor_response IS NOT NULL AND mr.mentor_response != '') as responded_requests,
+  COUNT(*) FILTER (WHERE mr.status = 'accepted') as accepted_requests,
+  COUNT(*) FILTER (WHERE mr.status = 'declined') as declined_requests,
+  COUNT(*) FILTER (WHERE mr.status = 'pending') as pending_requests,
+  ROUND(
+    COUNT(*) FILTER (WHERE mr.mentor_response IS NOT NULL AND mr.mentor_response != '')::NUMERIC /
+    NULLIF(COUNT(*)::NUMERIC, 0) * 100,
+    2
+  ) as response_rate
 FROM mentor_requests mr
-WHERE mr.responded_at IS NOT NULL
 GROUP BY DATE(mr.created_at)
 ORDER BY date DESC;
 
@@ -167,7 +158,7 @@ RETURNS TABLE (
   new_requests BIGINT,
   accepted_requests BIGINT,
   completed_requests BIGINT,
-  avg_response_hours NUMERIC
+  declined_requests BIGINT
 ) AS $$
 BEGIN
   RETURN QUERY
@@ -176,9 +167,7 @@ BEGIN
     COALESCE(COUNT(mr.id) FILTER (WHERE DATE(mr.created_at) = d.date), 0) as new_requests,
     COALESCE(COUNT(mr.id) FILTER (WHERE DATE(mr.created_at) = d.date AND mr.status = 'accepted'), 0) as accepted_requests,
     COALESCE(COUNT(mr.id) FILTER (WHERE DATE(mr.created_at) = d.date AND mr.status = 'completed'), 0) as completed_requests,
-    COALESCE(ROUND(AVG(
-      EXTRACT(EPOCH FROM (mr.responded_at - mr.created_at)) / 3600
-    ) FILTER (WHERE DATE(mr.created_at) = d.date AND mr.responded_at IS NOT NULL)::NUMERIC, 2), 0) as avg_response_hours
+    COALESCE(COUNT(mr.id) FILTER (WHERE DATE(mr.created_at) = d.date AND mr.status = 'declined'), 0) as declined_requests
   FROM generate_series(start_date, end_date, '1 day'::interval) d(date)
   LEFT JOIN mentor_requests mr ON DATE(mr.created_at) = d.date::DATE
   GROUP BY d.date
@@ -206,7 +195,7 @@ COMMENT ON VIEW analytics_daily_activity IS 'Daily breakdown of mentorship reque
 COMMENT ON VIEW analytics_monthly_trends IS 'Monthly trends showing acceptance and completion rates';
 COMMENT ON VIEW analytics_mentor_engagement IS 'Individual mentor performance and engagement metrics';
 COMMENT ON VIEW analytics_expertise_popularity IS 'Most requested expertise areas and their success rates';
-COMMENT ON VIEW analytics_response_times IS 'Response time analytics by date';
+COMMENT ON VIEW analytics_response_times IS 'Response rate analytics by date (based on mentor_response field)';
 COMMENT ON VIEW analytics_program_overview IS 'Overall mentorship program statistics';
 COMMENT ON VIEW analytics_top_mentors IS 'Top 10 performing mentors in the last 30 days';
 COMMENT ON FUNCTION get_analytics_date_range IS 'Get analytics data for a specific date range';

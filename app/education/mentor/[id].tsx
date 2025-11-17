@@ -1,9 +1,10 @@
 import { View, Text, StyleSheet, ScrollView, Image, TouchableOpacity, TextInput, Alert, Linking } from 'react-native';
 import { useState, useEffect } from 'react';
 import { useRouter, useLocalSearchParams } from 'expo-router';
-import { ArrowLeft, Building2, GraduationCap, Clock, MapPin, Linkedin, Globe, Send } from 'lucide-react-native';
+import { ArrowLeft, Building2, GraduationCap, Clock, MapPin, Linkedin, Globe, Send, FileText } from 'lucide-react-native';
 import { useAuth } from '@/hooks/useAuth';
 import { supabase } from '@/lib/supabase';
+import RequestTemplatesModal, { RequestTemplate } from '@/components/RequestTemplatesModal';
 
 export default function MentorDetailScreen() {
   const router = useRouter();
@@ -13,6 +14,7 @@ export default function MentorDetailScreen() {
   const [mentor, setMentor] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [showRequestForm, setShowRequestForm] = useState(false);
+  const [templatesModalVisible, setTemplatesModalVisible] = useState(false);
   
   // Request form fields
   const [menteeName, setMenteeName] = useState(profile?.full_name || '');
@@ -54,6 +56,12 @@ export default function MentorDetailScreen() {
     } else {
       setSelectedAreas([...selectedAreas, area]);
     }
+  };
+  
+  const handleSelectTemplate = (template: RequestTemplate) => {
+    setMessage(template.message);
+    setSelectedAreas(template.suggestedAreas);
+    // Keep the form open so user can customize the message
   };
 
   const handleSubmitRequest = async () => {
@@ -408,6 +416,15 @@ export default function MentorDetailScreen() {
             </View>
 
             <Text style={styles.formLabel}>Your Message *</Text>
+            <View style={styles.messageHeader}>
+              <TouchableOpacity 
+                style={styles.templateButton}
+                onPress={() => setTemplatesModalVisible(true)}
+              >
+                <FileText size={16} color="#4169E1" />
+                <Text style={styles.templateButtonText}>Use Template</Text>
+              </TouchableOpacity>
+            </View>
             <TextInput
               style={[styles.formInput, styles.textArea]}
               value={message}
@@ -441,6 +458,13 @@ export default function MentorDetailScreen() {
 
         <View style={{ height: 40 }} />
       </ScrollView>
+      
+      {/* Request Templates Modal */}
+      <RequestTemplatesModal
+        visible={templatesModalVisible}
+        onClose={() => setTemplatesModalVisible(false)}
+        onSelectTemplate={handleSelectTemplate}
+      />
     </View>
   );
 }
@@ -709,6 +733,27 @@ const styles = StyleSheet.create({
   },
   selectableChipTextSelected: {
     color: '#FFFFFF',
+  },
+  messageHeader: {
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+    marginBottom: 8,
+  },
+  templateButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    backgroundColor: '#EFF6FF',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#DBEAFE',
+  },
+  templateButtonText: {
+    fontSize: 13,
+    fontFamily: 'Inter-SemiBold',
+    color: '#4169E1',
   },
   formActions: {
     flexDirection: 'row',

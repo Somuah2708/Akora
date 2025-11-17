@@ -7,6 +7,7 @@ import { useAuth } from '@/hooks/useAuth';
 import { supabase } from '@/lib/supabase';
 import MentorRatingSummary from '@/components/MentorRatingSummary';
 import ExpertiseFilterModal from '@/components/ExpertiseFilterModal';
+import AdvancedFilterModal, { FilterCriteria } from '@/components/AdvancedFilterModal';
 
 SplashScreen.preventAutoHideAsync();
 
@@ -37,6 +38,8 @@ export default function EducationScreen() {
   const [expertiseFilterVisible, setExpertiseFilterVisible] = useState(false);
   const [selectedExpertise, setSelectedExpertise] = useState<string[]>([]);
   const [allExpertiseAreas, setAllExpertiseAreas] = useState<string[]>([]);
+  const [advancedFilterVisible, setAdvancedFilterVisible] = useState(false);
+  const [advancedFilters, setAdvancedFilters] = useState<FilterCriteria | null>(null);
   const [isAdmin, setIsAdmin] = useState(false);
   const [checkingAdmin, setCheckingAdmin] = useState(true);
   
@@ -372,6 +375,44 @@ export default function EducationScreen() {
       if (!hasMatchingExpertise) return false;
     }
     
+    // Apply advanced filters
+    if (advancedFilters) {
+      // Company filter
+      if (advancedFilters.companies.length > 0) {
+        const mentorCompany = (m.company || '').toLowerCase();
+        const matchesCompany = advancedFilters.companies.some(c => 
+          mentorCompany.includes(c.toLowerCase())
+        );
+        if (!matchesCompany) return false;
+      }
+      
+      // Industry filter
+      if (advancedFilters.industries.length > 0) {
+        const mentorIndustry = m.industry || '';
+        if (!advancedFilters.industries.includes(mentorIndustry)) return false;
+      }
+      
+      // Experience filter
+      const experience = m.years_of_experience || 0;
+      if (advancedFilters.minExperience !== null && experience < advancedFilters.minExperience) {
+        return false;
+      }
+      if (advancedFilters.maxExperience !== null && experience > advancedFilters.maxExperience) {
+        return false;
+      }
+      
+      // Rating filter
+      if (advancedFilters.minRating !== null) {
+        const rating = m.average_rating || 0;
+        if (rating < advancedFilters.minRating) return false;
+      }
+      
+      // Availability filter (if you have this data)
+      // if (advancedFilters.availability !== 'any') {
+      //   // Add availability logic based on your data model
+      // }
+    }
+    
     return true;
   });
   
@@ -382,6 +423,15 @@ export default function EducationScreen() {
   
   const handleResetExpertiseFilter = () => {
     setSelectedExpertise([]);
+  };
+  
+  const handleApplyAdvancedFilters = (filters: FilterCriteria) => {
+    setAdvancedFilters(filters);
+    console.log('Applied advanced filters:', filters);
+  };
+  
+  const handleResetAdvancedFilters = () => {
+    setAdvancedFilters(null);
   };
 
   const filteredResources = resources.filter(r => {
@@ -824,6 +874,19 @@ export default function EducationScreen() {
                 )}
               </TouchableOpacity>
               
+              {/* Advanced Filter Button */}
+              <TouchableOpacity 
+                style={styles.filterIconButton}
+                onPress={() => setAdvancedFilterVisible(true)}
+              >
+                <Filter size={16} color={advancedFilters ? '#3B82F6' : '#6B7280'} />
+                {advancedFilters && (
+                  <View style={[styles.filterBadge, {backgroundColor: '#3B82F6'}]}>
+                    <Text style={styles.filterBadgeText}>A</Text>
+                  </View>
+                )}
+              </TouchableOpacity>
+              
               {/* Mentor Dashboard Button (only show if user is a mentor) */}
               <TouchableOpacity 
                 style={styles.mentorDashboardButton}
@@ -952,6 +1015,14 @@ export default function EducationScreen() {
         onApplyFilters={handleApplyExpertiseFilter}
         onResetFilters={handleResetExpertiseFilter}
         onClose={() => setExpertiseFilterVisible(false)}
+      />
+      
+      {/* Advanced Filter Modal */}
+      <AdvancedFilterModal
+        visible={advancedFilterVisible}
+        onClose={() => setAdvancedFilterVisible(false)}
+        onApplyFilters={handleApplyAdvancedFilters}
+        onResetFilters={handleResetAdvancedFilters}
       />
     </ScrollView>
   );
