@@ -14,9 +14,11 @@ import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '@/hooks/useAuth';
+import StatCard from '@/components/StatCard';
 
 interface MentorRequest {
   id: string;
+  mentee_id: string;
   mentee_name: string;
   mentee_email: string;
   mentee_phone: string | null;
@@ -36,11 +38,26 @@ interface MentorProfile {
   company: string;
 }
 
+interface Stats {
+  totalRequests: number;
+  pendingRequests: number;
+  acceptedRequests: number;
+  completedRequests: number;
+  acceptanceRate: number;
+}
+
 export default function MentorDashboard() {
   const router = useRouter();
   const { user, profile } = useAuth();
   const [mentorProfile, setMentorProfile] = useState<MentorProfile | null>(null);
   const [requests, setRequests] = useState<MentorRequest[]>([]);
+  const [stats, setStats] = useState<Stats>({
+    totalRequests: 0,
+    pendingRequests: 0,
+    acceptedRequests: 0,
+    completedRequests: 0,
+    acceptanceRate: 0,
+  });
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [selectedRequest, setSelectedRequest] = useState<string | null>(null);
@@ -101,6 +118,22 @@ export default function MentorDashboard() {
 
       console.log(`📥 Fetched ${data?.length || 0} ${activeTab} requests`);
       setRequests(data || []);
+
+      // Calculate stats
+      const allRequests = data || [];
+      const total = allRequests.length;
+      const pending = allRequests.filter(r => r.status === 'pending').length;
+      const accepted = allRequests.filter(r => r.status === 'accepted').length;
+      const completed = allRequests.filter(r => r.status === 'completed').length;
+      const acceptanceRate = total > 0 ? Math.round((accepted + completed) / total * 100) : 0;
+
+      setStats({
+        totalRequests: total,
+        pendingRequests: pending,
+        acceptedRequests: accepted,
+        completedRequests: completed,
+        acceptanceRate,
+      });
     } catch (error) {
       console.error('Error fetching requests:', error);
       Alert.alert('Error', 'Failed to load mentorship requests.');
@@ -132,7 +165,7 @@ export default function MentorDashboard() {
   }, [fetchRequests]);
 
   // Accept request
-  const handleAccept = async (requestId: string) => {
+  const handleAccept = async (requestId: string, menteeId: string, menteeName: string) => {
     try {
       const { error } = await supabase
         .from('mentor_requests')
@@ -143,6 +176,13 @@ export default function MentorDashboard() {
         .eq('id', requestId);
 
       if (error) throw error;
+
+      // Send notification to mentee
+      await supabase.from('app_notifications').insert({
+        user_id: menteeId,
+        title: '✅ Mentorship Request Accepted!',
+        body: `${mentorProfile?.full_name} has accepted your mentorship request. You can now contact them directly.`,
+      });
 
       Alert.alert(
         'Request Accepted! ✅',
@@ -159,7 +199,7 @@ export default function MentorDashboard() {
   };
 
   // Decline request
-  const handleDecline = async (requestId: string) => {
+  const handleDecline = async (requestId: string, menteeId: string, menteeName: string) => {
     Alert.alert(
       'Decline Request',
       'Are you sure you want to decline this mentorship request? You can optionally provide a reason.',
@@ -170,15 +210,24 @@ export default function MentorDashboard() {
           style: 'destructive',
           onPress: async () => {
             try {
+              const response = responseText || 'Unfortunately, I am unable to take on new mentees at this time.';
+              
               const { error } = await supabase
                 .from('mentor_requests')
                 .update({
                   status: 'declined',
-                  mentor_response: responseText || 'Unfortunately, I am unable to take on new mentees at this time.',
+                  mentor_response: response,
                 })
                 .eq('id', requestId);
 
               if (error) throw error;
+
+              // Send notification to mentee
+              await supabase.from('app_notifications').insert({
+                user_id: menteeId,
+                title: '❌ Mentorship Request Declined',
+                body: `${mentorProfile?.full_name} has declined your request. ${response}`,
+              });
 
               Alert.alert('Request Declined', 'The request has been declined.');
               setResponseText('');
@@ -257,6 +306,35 @@ export default function MentorDashboard() {
         </View>
       </View>
 
+      {/* Stats */}
+      <ScrollView 
+        horizontal 
+        showsHorizontalScrollIndicator={false}
+        style={styles.statsContainer}
+        contentContainerStyle={styles.statsContent}
+      >
+        <View style={[styles.statCard, { borderTopColor: '#4169E1' }]}>
+          <Text style={styles.statValue}>{stats.totalRequests}</Text>
+          <Text style={styles.statLabel}>Total Requests</Text>
+        </View>
+        <View style={[styles.statCard, { borderTopColor: '#F59E0B' }]}>
+          <Text style={styles.statValue}>{stats.pendingRequests}</Text>
+          <Text style={styles.statLabel}>Pending</Text>
+        </View>
+        <View style={[styles.statCard, { borderTopColor: '#10B981' }]}>
+          <Text style={styles.statValue}>{stats.acceptedRequests}</Text>
+          <Text style={styles.statLabel}>Active</Text>
+        </View>
+        <View style={[styles.statCard, { borderTopColor: '#8B5CF6' }]}>
+          <Text style={styles.statValue}>{stats.completedRequests}</Text>
+          <Text style={styles.statLabel}>Completed</Text>
+        </View>
+        <View style={[styles.statCard, { borderTopColor: '#EC4899' }]}>
+          <Text style={styles.statValue}>{stats.acceptanceRate}%</Text>
+          <Text style={styles.statLabel}>Acceptance Rate</Text>
+        </View>
+      </ScrollView>
+
       {/* Tabs */}
       <View style={styles.tabs}>
         <TouchableOpacity
@@ -266,9 +344,9 @@ export default function MentorDashboard() {
           <Text style={[styles.tabText, activeTab === 'pending' && styles.activeTabText]}>
             Pending
           </Text>
-          {requests.length > 0 && activeTab === 'pending' && (
+          {stats.pendingRequests > 0 && activeTab === 'pending' && (
             <View style={styles.badge}>
-              <Text style={styles.badgeText}>{requests.length}</Text>
+              <Text style={styles.badgeText}>{stats.pendingRequests}</Text>
             </View>
           )}
         </TouchableOpacity>
@@ -407,13 +485,13 @@ export default function MentorDashboard() {
                         </TouchableOpacity>
                         <TouchableOpacity
                           style={styles.declineButton}
-                          onPress={() => handleDecline(request.id)}
+                          onPress={() => handleDecline(request.id, request.mentee_id, request.mentee_name)}
                         >
                           <Text style={styles.declineButtonText}>Decline</Text>
                         </TouchableOpacity>
                         <TouchableOpacity
                           style={styles.acceptButton}
-                          onPress={() => handleAccept(request.id)}
+                          onPress={() => handleAccept(request.id, request.mentee_id, request.mentee_name)}
                         >
                           <Text style={styles.acceptButtonText}>✓ Accept</Text>
                         </TouchableOpacity>
@@ -771,5 +849,40 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontWeight: '600',
     fontSize: 14,
+  },
+  statsContainer: {
+    backgroundColor: '#fff',
+    borderBottomWidth: 1,
+    borderBottomColor: '#e5e7eb',
+    paddingVertical: 12,
+  },
+  statsContent: {
+    paddingHorizontal: 16,
+    gap: 12,
+  },
+  statCard: {
+    backgroundColor: '#fff',
+    borderRadius: 12,
+    padding: 16,
+    borderTopWidth: 3,
+    minWidth: 110,
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  statValue: {
+    fontSize: 28,
+    fontWeight: '700',
+    color: '#111827',
+    marginBottom: 4,
+  },
+  statLabel: {
+    fontSize: 12,
+    color: '#6b7280',
+    fontWeight: '500',
+    textAlign: 'center',
   },
 });

@@ -35,6 +35,7 @@ interface Mentor {
 
 interface Application {
   id: string;
+  user_id: string | null;
   full_name: string;
   email: string;
   current_title: string;
@@ -227,19 +228,31 @@ export default function AdminAlumniMentorsScreen() {
   // Approve application
   const approveApplication = async (application: Application) => {
     try {
-      // Create mentor entry
+      // Create mentor entry with user_id from application
       const { error: mentorError } = await supabase
         .from('alumni_mentors')
         .insert({
+          user_id: application.user_id,
           full_name: application.full_name,
           email: application.email,
+          phone: application.phone,
           current_title: application.current_title,
           company: application.company,
+          industry: application.industry,
+          years_of_experience: application.years_of_experience,
+          graduation_year: application.graduation_year,
+          degree: application.degree,
           expertise_areas: application.expertise_areas,
+          available_hours: application.available_hours,
+          meeting_formats: application.meeting_formats,
+          preferred_days: application.preferred_days,
+          linkedin_url: application.linkedin_url,
           short_bio: application.why_mentor,
           detailed_bio: application.what_offer,
           status: 'approved',
           application_type: 'self_applied',
+          approved_by: user?.id,
+          approved_at: new Date().toISOString(),
         });
 
       if (mentorError) throw mentorError;
@@ -247,10 +260,23 @@ export default function AdminAlumniMentorsScreen() {
       // Update application status
       const { error: appError } = await supabase
         .from('mentor_applications')
-        .update({ status: 'approved' })
+        .update({ 
+          status: 'approved',
+          reviewed_by: profile?.id,
+          reviewed_at: new Date().toISOString(),
+        })
         .eq('id', application.id);
 
       if (appError) throw appError;
+
+      // Send notification to applicant
+      if (application.user_id) {
+        await supabase.from('app_notifications').insert({
+          user_id: application.user_id,
+          title: '🎉 Mentor Application Approved!',
+          body: `Congratulations! Your application to become a mentor has been approved. You can now start accepting mentorship requests.`,
+        });
+      }
 
       Alert.alert('Success', `${application.full_name} is now an approved mentor!`);
       setSelectedApplication(null);
@@ -262,14 +288,27 @@ export default function AdminAlumniMentorsScreen() {
   };
 
   // Reject application
-  const rejectApplication = async (applicationId: string) => {
+  const rejectApplication = async (applicationId: string, userId: string | null) => {
     try {
       const { error } = await supabase
         .from('mentor_applications')
-        .update({ status: 'rejected' })
+        .update({ 
+          status: 'rejected',
+          reviewed_by: profile?.id,
+          reviewed_at: new Date().toISOString(),
+        })
         .eq('id', applicationId);
 
       if (error) throw error;
+
+      // Send notification to applicant
+      if (userId) {
+        await supabase.from('app_notifications').insert({
+          user_id: userId,
+          title: 'Mentor Application Update',
+          body: 'Thank you for your interest in becoming a mentor. Unfortunately, we are unable to approve your application at this time.',
+        });
+      }
 
       Alert.alert('Success', 'Application rejected');
       setSelectedApplication(null);
@@ -431,6 +470,13 @@ export default function AdminAlumniMentorsScreen() {
                 )}
 
                 <View style={styles.cardActions}>
+                  <TouchableOpacity
+                    style={[styles.actionButton, styles.editButton]}
+                    onPress={() => setEditingMentor(mentor)}
+                  >
+                    <Ionicons name="pencil-outline" size={16} color="#fff" />
+                    <Text style={styles.actionButtonText}>Edit</Text>
+                  </TouchableOpacity>
                   {mentor.status === 'pending' && (
                     <>
                       <TouchableOpacity
@@ -540,7 +586,7 @@ export default function AdminAlumniMentorsScreen() {
                     </TouchableOpacity>
                     <TouchableOpacity
                       style={[styles.actionButton, styles.rejectButton]}
-                      onPress={() => rejectApplication(app.id)}
+                      onPress={() => rejectApplication(app.id, app.user_id)}
                     >
                       <Text style={styles.actionButtonText}>Reject</Text>
                     </TouchableOpacity>
@@ -674,12 +720,188 @@ export default function AdminAlumniMentorsScreen() {
                     </TouchableOpacity>
                     <TouchableOpacity
                       style={[styles.modalButton, styles.rejectButton]}
-                      onPress={() => rejectApplication(selectedApplication.id)}
+                      onPress={() => rejectApplication(selectedApplication.id, selectedApplication.user_id)}
                     >
                       <Text style={styles.modalButtonText}>Reject Application</Text>
                     </TouchableOpacity>
                   </View>
                 )}
+              </ScrollView>
+            </View>
+          </View>
+        </Modal>
+      )}
+
+      {/* Add Mentor Modal */}
+      {showAddMentorModal && (
+        <Modal visible={true} animationType="slide" transparent={true}>
+          <View style={styles.modalOverlay}>
+            <View style={styles.modalContent}>
+              <View style={styles.modalHeader}>
+                <Text style={styles.modalTitle}>Add New Mentor</Text>
+                <TouchableOpacity onPress={() => setShowAddMentorModal(false)}>
+                  <Ionicons name="close" size={28} color="#000" />
+                </TouchableOpacity>
+              </View>
+
+              <ScrollView style={styles.modalBody}>
+                <Text style={styles.formLabel}>Full Name *</Text>
+                <TextInput
+                  style={styles.formInput}
+                  placeholder="Enter full name"
+                  placeholderTextColor="#999"
+                />
+
+                <Text style={styles.formLabel}>Email *</Text>
+                <TextInput
+                  style={styles.formInput}
+                  placeholder="email@example.com"
+                  keyboardType="email-address"
+                  autoCapitalize="none"
+                  placeholderTextColor="#999"
+                />
+
+                <Text style={styles.formLabel}>Phone</Text>
+                <TextInput
+                  style={styles.formInput}
+                  placeholder="+233 XX XXX XXXX"
+                  keyboardType="phone-pad"
+                  placeholderTextColor="#999"
+                />
+
+                <Text style={styles.formLabel}>Current Title *</Text>
+                <TextInput
+                  style={styles.formInput}
+                  placeholder="e.g., Senior Software Engineer"
+                  placeholderTextColor="#999"
+                />
+
+                <Text style={styles.formLabel}>Company</Text>
+                <TextInput
+                  style={styles.formInput}
+                  placeholder="Company name"
+                  placeholderTextColor="#999"
+                />
+
+                <View style={styles.modalActions}>
+                  <TouchableOpacity
+                    style={[styles.modalButton, styles.cancelButton]}
+                    onPress={() => setShowAddMentorModal(false)}
+                  >
+                    <Text style={[styles.modalButtonText, { color: '#666' }]}>Cancel</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={[styles.modalButton, styles.saveButton]}
+                    onPress={() => {
+                      Alert.alert('Info', 'This feature is coming soon!');
+                      setShowAddMentorModal(false);
+                    }}
+                  >
+                    <Text style={styles.modalButtonText}>Add Mentor</Text>
+                  </TouchableOpacity>
+                </View>
+              </ScrollView>
+            </View>
+          </View>
+        </Modal>
+      )}
+
+      {/* Edit Mentor Modal */}
+      {editingMentor && (
+        <Modal visible={true} animationType="slide" transparent={true}>
+          <View style={styles.modalOverlay}>
+            <View style={styles.modalContent}>
+              <View style={styles.modalHeader}>
+                <Text style={styles.modalTitle}>Edit Mentor</Text>
+                <TouchableOpacity onPress={() => setEditingMentor(null)}>
+                  <Ionicons name="close" size={28} color="#000" />
+                </TouchableOpacity>
+              </View>
+
+              <ScrollView style={styles.modalBody}>
+                <Text style={styles.modalName}>{editingMentor.full_name}</Text>
+                <Text style={styles.modalTitle2}>{editingMentor.current_title}</Text>
+                {editingMentor.company && (
+                  <Text style={styles.modalCompany}>{editingMentor.company}</Text>
+                )}
+
+                <View style={styles.modalSection}>
+                  <Text style={styles.modalSectionLabel}>Contact:</Text>
+                  <Text style={styles.modalText}>📧 {editingMentor.email}</Text>
+                  {editingMentor.phone && (
+                    <Text style={styles.modalText}>📞 {editingMentor.phone}</Text>
+                  )}
+                </View>
+
+                {editingMentor.expertise_areas && editingMentor.expertise_areas.length > 0 && (
+                  <View style={styles.modalSection}>
+                    <Text style={styles.modalSectionLabel}>Expertise Areas:</Text>
+                    <View style={styles.expertiseContainer}>
+                      {editingMentor.expertise_areas.map((area, idx) => (
+                        <View key={idx} style={styles.expertiseChip}>
+                          <Text style={styles.expertiseText}>{area}</Text>
+                        </View>
+                      ))}
+                    </View>
+                  </View>
+                )}
+
+                {editingMentor.short_bio && (
+                  <View style={styles.modalSection}>
+                    <Text style={styles.modalSectionLabel}>Bio:</Text>
+                    <Text style={styles.modalText}>{editingMentor.short_bio}</Text>
+                  </View>
+                )}
+
+                <View style={styles.modalSection}>
+                  <Text style={styles.modalSectionLabel}>Status:</Text>
+                  <View style={styles.statusOptions}>
+                    {['approved', 'inactive', 'rejected'].map((status) => (
+                      <TouchableOpacity
+                        key={status}
+                        style={[
+                          styles.statusOption,
+                          editingMentor.status === status && styles.statusOptionSelected,
+                        ]}
+                        onPress={() => {
+                          updateMentorStatus(editingMentor.id, status as any);
+                          setEditingMentor({ ...editingMentor, status: status as any });
+                        }}
+                      >
+                        <Text
+                          style={[
+                            styles.statusOptionText,
+                            editingMentor.status === status && styles.statusOptionTextSelected,
+                          ]}
+                        >
+                          {status.charAt(0).toUpperCase() + status.slice(1)}
+                        </Text>
+                      </TouchableOpacity>
+                    ))}
+                  </View>
+                </View>
+
+                <View style={styles.modalActions}>
+                  <TouchableOpacity
+                    style={[styles.modalButton, { backgroundColor: '#e5e7eb' }]}
+                    onPress={() => setEditingMentor(null)}
+                  >
+                    <Text style={[styles.modalButtonText, { color: '#666' }]}>Close</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={[styles.modalButton, styles.deleteButton]}
+                    onPress={() => {
+                      setEditingMentor(null);
+                      deleteMentor(editingMentor.id);
+                    }}
+                  >
+                    <Text style={styles.modalButtonText}>Delete Mentor</Text>
+                  </TouchableOpacity>
+                </View>
+
+                <Text style={styles.modalNote}>
+                  💡 To edit detailed information, use the full form (coming soon)
+                </Text>
               </ScrollView>
             </View>
           </View>
@@ -1086,5 +1308,63 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontSize: 16,
     fontWeight: '600',
+  },
+  formLabel: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#374151',
+    marginBottom: 8,
+    marginTop: 16,
+  },
+  formInput: {
+    backgroundColor: '#f9fafb',
+    borderWidth: 1,
+    borderColor: '#d1d5db',
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    fontSize: 15,
+    color: '#111827',
+  },
+  cancelButton: {
+    backgroundColor: '#e5e7eb',
+  },
+  saveButton: {
+    backgroundColor: '#16a34a',
+  },
+  editButton: {
+    backgroundColor: '#3b82f6',
+  },
+  statusOptions: {
+    flexDirection: 'row',
+    gap: 8,
+    flexWrap: 'wrap',
+  },
+  statusOption: {
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderRadius: 8,
+    borderWidth: 2,
+    borderColor: '#e5e7eb',
+    backgroundColor: '#f9fafb',
+  },
+  statusOptionSelected: {
+    borderColor: '#16a34a',
+    backgroundColor: '#d1fae5',
+  },
+  statusOptionText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#6b7280',
+  },
+  statusOptionTextSelected: {
+    color: '#16a34a',
+  },
+  modalNote: {
+    fontSize: 13,
+    color: '#6b7280',
+    fontStyle: 'italic',
+    marginTop: 20,
+    textAlign: 'center',
   },
 });

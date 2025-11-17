@@ -75,6 +75,29 @@ export default function MentorDetailScreen() {
     try {
       setSubmitting(true);
 
+      // Check for existing pending request
+      const { data: existingRequests, error: checkError } = await supabase
+        .from('mentor_requests')
+        .select('id, status, created_at')
+        .eq('mentor_id', mentor.id)
+        .eq('mentee_id', user.id)
+        .eq('status', 'pending')
+        .maybeSingle();
+
+      if (checkError && checkError.code !== 'PGRST116') {
+        throw checkError;
+      }
+
+      if (existingRequests) {
+        Alert.alert(
+          'Request Already Sent',
+          `You already have a pending request to ${mentor.full_name} from ${new Date(existingRequests.created_at).toLocaleDateString()}. Please wait for their response.`,
+          [{ text: 'OK' }]
+        );
+        setSubmitting(false);
+        return;
+      }
+
       const request = {
         mentor_id: mentor.id,
         mentee_id: user.id,
@@ -87,11 +110,22 @@ export default function MentorDetailScreen() {
         status: 'pending',
       };
 
-      const { error } = await supabase
+      const { data: insertedRequest, error } = await supabase
         .from('mentor_requests')
-        .insert([request]);
+        .insert([request])
+        .select()
+        .single();
 
       if (error) throw error;
+
+      // Send notification to mentor
+      if (mentor.user_id) {
+        await supabase.from('app_notifications').insert({
+          user_id: mentor.user_id,
+          title: '🎓 New Mentorship Request',
+          body: `${menteeName} has requested mentorship in ${selectedAreas.slice(0, 2).join(', ')}${selectedAreas.length > 2 ? '...' : ''}`,
+        });
+      }
 
       Alert.alert(
         'Request Sent! 🎉',

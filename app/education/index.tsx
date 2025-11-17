@@ -320,9 +320,11 @@ export default function EducationScreen() {
     if (!searchQuery) return true;
     const query = searchQuery.toLowerCase();
     return (
-      (m.title || '').toLowerCase().includes(query) ||
-      (m.description || '').toLowerCase().includes(query) ||
-      (m.location || '').toLowerCase().includes(query)
+      (m.full_name || '').toLowerCase().includes(query) ||
+      (m.current_title || '').toLowerCase().includes(query) ||
+      (m.company || '').toLowerCase().includes(query) ||
+      (m.industry || '').toLowerCase().includes(query) ||
+      (m.expertise_areas || []).some((area: string) => area.toLowerCase().includes(query))
     );
   });
 

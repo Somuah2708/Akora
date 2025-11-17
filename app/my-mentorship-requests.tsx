@@ -31,6 +31,7 @@ interface MentorshipRequest {
     current_title: string;
     company: string;
     profile_photo_url: string | null;
+    user_id: string | null;
   };
 }
 
@@ -56,7 +57,8 @@ export default function MyMentorshipRequests() {
             phone,
             current_title,
             company,
-            profile_photo_url
+            profile_photo_url,
+            user_id
           )
         `)
         .eq('mentee_id', user.id)
@@ -91,6 +93,44 @@ export default function MyMentorshipRequests() {
   const handlePhone = (phone: string) => {
     const cleanedPhone = phone.replace(/[^0-9+]/g, '');
     Linking.openURL(`tel:${cleanedPhone}`);
+  };
+
+  const handleMarkCompleted = async (requestId: string, mentorUserId: string | null, mentorName: string) => {
+    Alert.alert(
+      'Mark as Completed',
+      'Have you completed this mentorship?',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Yes, Complete',
+          onPress: async () => {
+            try {
+              const { error } = await supabase
+                .from('mentor_requests')
+                .update({ status: 'completed' })
+                .eq('id', requestId);
+
+              if (error) throw error;
+
+              // Send notification to mentor
+              if (mentorUserId) {
+                await supabase.from('app_notifications').insert({
+                  user_id: mentorUserId,
+                  title: '🎓 Mentorship Completed',
+                  body: `Your mentee has marked the mentorship as completed. Great work!`,
+                });
+              }
+
+              Alert.alert('Success', 'Thank you! Mentorship marked as completed.');
+              fetchRequests();
+            } catch (error) {
+              console.error('Error updating request:', error);
+              Alert.alert('Error', 'Failed to update status');
+            }
+          },
+        },
+      ]
+    );
   };
 
   if (loading) {
@@ -213,6 +253,14 @@ export default function MyMentorshipRequests() {
                         <Text style={styles.contactButtonText}>{request.mentor.phone}</Text>
                       </TouchableOpacity>
                     )}
+                    
+                    <TouchableOpacity 
+                      style={styles.completeButton}
+                      onPress={() => handleMarkCompleted(request.id, request.mentor.user_id, request.mentor.full_name)}
+                    >
+                      <Ionicons name="checkmark-circle" size={20} color="#fff" />
+                      <Text style={styles.completeButtonText}>Mark as Completed</Text>
+                    </TouchableOpacity>
                   </View>
                 </>
               )}
@@ -468,6 +516,21 @@ const styles = StyleSheet.create({
     color: '#166534',
     marginLeft: 10,
     fontWeight: '500',
+  },
+  completeButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#8b5cf6',
+    padding: 14,
+    borderRadius: 8,
+    marginTop: 16,
+  },
+  completeButtonText: {
+    fontSize: 15,
+    color: '#fff',
+    marginLeft: 8,
+    fontWeight: '600',
   },
   declinedNotice: {
     flexDirection: 'row',
