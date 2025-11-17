@@ -5,6 +5,7 @@ import { SplashScreen, useRouter, Link } from 'expo-router';
 import { Search, Filter, ArrowLeft, GraduationCap, MapPin, Globe, ChevronRight, Clock, Award, Wallet, BookOpen, Building2, Users, Plus, FileText, Bookmark } from 'lucide-react-native';
 import { useAuth } from '@/hooks/useAuth';
 import { supabase } from '@/lib/supabase';
+import MentorRatingSummary from '@/components/MentorRatingSummary';
 
 SplashScreen.preventAutoHideAsync();
 
@@ -144,7 +145,7 @@ export default function EducationScreen() {
       setLoading(true);
       const { data, error } = await supabase
         .from('alumni_mentors')
-        .select('*')
+        .select('*, average_rating, total_ratings')
         .eq('status', 'approved')
         .order('created_at', { ascending: false });
 
@@ -764,6 +765,14 @@ export default function EducationScreen() {
                       <Text style={styles.mentorCompany}>{mentor.company}</Text>
                     </View>
                   )}
+                  {/* Rating Display */}
+                  <View style={{ marginTop: 8 }}>
+                    <MentorRatingSummary
+                      averageRating={mentor.average_rating || 0}
+                      totalRatings={mentor.total_ratings || 0}
+                      size="small"
+                    />
+                  </View>
                   {mentor.expertise_areas && mentor.expertise_areas.length > 0 && (
                     <View style={{flexDirection:'row', flexWrap:'wrap', gap:6, marginTop:6}}>
                       {mentor.expertise_areas.slice(0, 3).map((area:string, idx: number) => (

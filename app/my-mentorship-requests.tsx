@@ -14,9 +14,11 @@ import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '@/hooks/useAuth';
+import RatingModal from '@/components/RatingModal';
 
 interface MentorshipRequest {
   id: string;
+  mentor_id: string;
   mentee_name: string;
   current_status: string | null;
   areas_of_interest: string[];
@@ -24,6 +26,7 @@ interface MentorshipRequest {
   status: 'pending' | 'accepted' | 'declined' | 'completed';
   mentor_response: string | null;
   created_at: string;
+  has_rating: boolean;
   mentor: {
     full_name: string;
     email: string;
@@ -41,6 +44,8 @@ export default function MyMentorshipRequests() {
   const [requests, setRequests] = useState<MentorshipRequest[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [ratingModalVisible, setRatingModalVisible] = useState(false);
+  const [selectedRequest, setSelectedRequest] = useState<MentorshipRequest | null>(null);
 
   // Fetch user's mentorship requests
   const fetchRequests = useCallback(async () => {
@@ -59,15 +64,28 @@ export default function MyMentorshipRequests() {
             company,
             profile_photo_url,
             user_id
-          )
+          ),
+          ratings:mentor_ratings(id)
         `)
         .eq('mentee_id', user.id)
         .order('created_at', { ascending: false });
 
       if (error) throw error;
 
-      console.log(`📥 Fetched ${data?.length || 0} mentorship requests`);
-      setRequests(data || []);
+      // Transform data to include has_rating flag
+      const requestsWithRatings = data?.map(req => ({
+        ...req,
+        has_rating: req.ratings && req.ratings.length > 0
+      })) || [];
+
+      // Transform data to include has_rating flag
+      const requestsWithRatings = data?.map(req => ({
+        ...req,
+        has_rating: req.ratings && req.ratings.length > 0
+      })) || [];
+
+      console.log(`📥 Fetched ${requestsWithRatings.length} mentorship requests`);
+      setRequests(requestsWithRatings);
     } catch (error) {
       console.error('Error fetching requests:', error);
       Alert.alert('Error', 'Failed to load your mentorship requests.');
@@ -287,9 +305,31 @@ export default function MyMentorshipRequests() {
               )}
 
               {request.status === 'completed' && (
-                <View style={styles.completedNotice}>
-                  <Ionicons name="checkmark-circle" size={20} color="#8b5cf6" />
-                  <Text style={styles.completedText}>Mentorship completed</Text>
+                <View style={styles.completedSection}>
+                  <View style={styles.completedNotice}>
+                    <Ionicons name="checkmark-circle" size={20} color="#8b5cf6" />
+                    <Text style={styles.completedText}>Mentorship completed</Text>
+                  </View>
+                  
+                  {!request.has_rating && (
+                    <TouchableOpacity
+                      style={styles.rateButton}
+                      onPress={() => {
+                        setSelectedRequest(request);
+                        setRatingModalVisible(true);
+                      }}
+                    >
+                      <Ionicons name="star" size={20} color="#F59E0B" />
+                      <Text style={styles.rateButtonText}>Rate Your Experience</Text>
+                    </TouchableOpacity>
+                  )}
+                  
+                  {request.has_rating && (
+                    <View style={styles.ratedNotice}>
+                      <Ionicons name="checkmark-circle" size={16} color="#10B981" />
+                      <Text style={styles.ratedText}>Thank you for rating!</Text>
+                    </View>
+                  )}
                 </View>
               )}
 
@@ -305,6 +345,23 @@ export default function MyMentorshipRequests() {
           ))
         )}
       </ScrollView>
+
+      {/* Rating Modal */}
+      {selectedRequest && (
+        <RatingModal
+          visible={ratingModalVisible}
+          onClose={() => {
+            setRatingModalVisible(false);
+            setSelectedRequest(null);
+          }}
+          requestId={selectedRequest.id}
+          mentorId={selectedRequest.mentor_id}
+          mentorName={selectedRequest.mentor.full_name}
+          onRatingSubmitted={() => {
+            fetchRequests();
+          }}
+        />
+      )}
     </View>
   );
 }
@@ -570,12 +627,46 @@ const styles = StyleSheet.create({
     backgroundColor: '#f5f3ff',
     padding: 12,
     borderRadius: 8,
-    marginTop: 8,
+  },
+  completedSection: {
+    marginTop: 16,
   },
   completedText: {
     fontSize: 14,
     color: '#8b5cf6',
     marginLeft: 8,
+    fontWeight: '500',
+  },
+  rateButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#FFFBEB',
+    borderWidth: 1,
+    borderColor: '#F59E0B',
+    padding: 12,
+    borderRadius: 8,
+    marginTop: 12,
+    gap: 8,
+  },
+  rateButtonText: {
+    fontSize: 15,
+    color: '#F59E0B',
+    fontWeight: '600',
+  },
+  ratedNotice: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#D1FAE5',
+    padding: 12,
+    borderRadius: 8,
+    marginTop: 12,
+    gap: 6,
+  },
+  ratedText: {
+    fontSize: 14,
+    color: '#10B981',
     fontWeight: '500',
   },
   dateText: {
