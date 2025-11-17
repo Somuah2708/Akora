@@ -2,12 +2,17 @@
 -- PROFILE PHOTO STORAGE SETUP
 -- =============================================
 -- This migration sets up Supabase Storage for profile photos
--- Creates storage bucket and RLS policies for secure file uploads
+-- RLS policies for secure file uploads
 
--- Create storage bucket for mentor profile photos
-INSERT INTO storage.buckets (id, name, public)
-VALUES ('mentor-profiles', 'mentor-profiles', true)
-ON CONFLICT (id) DO NOTHING;
+-- ⚠️ MANUAL STEP REQUIRED FIRST:
+-- Before running this SQL, create the storage bucket via Supabase Dashboard:
+-- 1. Go to Storage in Supabase Dashboard
+-- 2. Click "New bucket"
+-- 3. Name: mentor-profiles
+-- 4. Public bucket: YES (checked)
+-- 5. Click "Create bucket"
+
+-- After creating the bucket manually, run this SQL to add RLS policies:
 
 -- RLS Policies for storage bucket
 
@@ -100,5 +105,4 @@ FOR EACH ROW
 WHEN (OLD.profile_photo_url IS DISTINCT FROM NEW.profile_photo_url)
 EXECUTE FUNCTION delete_old_profile_photo();
 
-COMMENT ON TABLE storage.buckets IS 'Storage buckets for file uploads';
 COMMENT ON FUNCTION get_profile_photo_url IS 'Generates full URL for profile photo';

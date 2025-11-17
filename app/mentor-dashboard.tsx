@@ -15,6 +15,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '@/hooks/useAuth';
 import StatCard from '@/components/StatCard';
+import FilterModal from '@/components/FilterModal';
 
 interface MentorRequest {
   id: string;
@@ -63,6 +64,10 @@ export default function MentorDashboard() {
   const [selectedRequest, setSelectedRequest] = useState<string | null>(null);
   const [responseText, setResponseText] = useState('');
   const [activeTab, setActiveTab] = useState<'pending' | 'accepted' | 'all'>('pending');
+  const [filterModalVisible, setFilterModalVisible] = useState(false);
+  const [selectedStatus, setSelectedStatus] = useState('pending');
+  const [selectedSort, setSelectedSort] = useState('created_at_desc');
+  const [filteredRequests, setFilteredRequests] = useState<MentorRequest[]>([]);
 
   // Check if user is a mentor
   const checkMentorStatus = useCallback(async () => {

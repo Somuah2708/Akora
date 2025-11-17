@@ -15,6 +15,8 @@ import { Ionicons } from '@expo/vector-icons';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '@/hooks/useAuth';
 import RatingModal from '@/components/RatingModal';
+import FilterModal from '@/components/FilterModal';
+import CancelRequestModal from '@/components/CancelRequestModal';
 
 interface MentorshipRequest {
   id: string;
@@ -46,6 +48,12 @@ export default function MyMentorshipRequests() {
   const [refreshing, setRefreshing] = useState(false);
   const [ratingModalVisible, setRatingModalVisible] = useState(false);
   const [selectedRequest, setSelectedRequest] = useState<MentorshipRequest | null>(null);
+  const [filterModalVisible, setFilterModalVisible] = useState(false);
+  const [cancelModalVisible, setCancelModalVisible] = useState(false);
+  const [requestToCancel, setRequestToCancel] = useState<MentorshipRequest | null>(null);
+  const [selectedStatus, setSelectedStatus] = useState('all');
+  const [selectedSort, setSelectedSort] = useState('created_at_desc');
+  const [filteredRequests, setFilteredRequests] = useState<MentorshipRequest[]>([]);
 
   // Fetch user's mentorship requests
   const fetchRequests = useCallback(async () => {
@@ -86,6 +94,7 @@ export default function MyMentorshipRequests() {
 
       console.log(`📥 Fetched ${requestsWithRatings.length} mentorship requests`);
       setRequests(requestsWithRatings);
+      applyFiltersAndSort(requestsWithRatings);
     } catch (error) {
       console.error('Error fetching requests:', error);
       Alert.alert('Error', 'Failed to load your mentorship requests.');
@@ -98,6 +107,62 @@ export default function MyMentorshipRequests() {
   useEffect(() => {
     fetchRequests();
   }, [fetchRequests]);
+
+  const onRefresh = useCallback(async () => {
+    setRefreshing(true);
+    await fetchRequests();
+  }, [fetchRequests]);
+
+  // Filter and sort logic
+  const applyFiltersAndSort = useCallback((requestsList: MentorshipRequest[]) => {
+    let filtered = [...requestsList];
+
+    // Apply status filter
+    if (selectedStatus !== 'all') {
+      filtered = filtered.filter(req => req.status === selectedStatus);
+    }
+
+    // Apply sorting
+    const [sortField, sortOrder] = selectedSort.split('_');
+    filtered.sort((a, b) => {
+      let comparison = 0;
+      
+      if (sortField === 'created') {
+        comparison = new Date(a.created_at).getTime() - new Date(b.created_at).getTime();
+      } else if (sortField === 'mentee') {
+        comparison = a.mentee_name.localeCompare(b.mentee_name);
+      } else if (sortField === 'status') {
+        comparison = a.status.localeCompare(b.status);
+      }
+
+      return sortOrder === 'desc' ? -comparison : comparison;
+    });
+
+    setFilteredRequests(filtered);
+  }, [selectedStatus, selectedSort]);
+
+  // Re-apply filters when filter/sort changes
+  useEffect(() => {
+    applyFiltersAndSort(requests);
+  }, [requests, selectedStatus, selectedSort, applyFiltersAndSort]);
+
+  const handleApplyFilters = () => {
+    applyFiltersAndSort(requests);
+  };
+
+  const handleResetFilters = () => {
+    setSelectedStatus('all');
+    setSelectedSort('created_at_desc');
+  };
+
+  const handleCancelRequest = (request: MentorshipRequest) => {
+    setRequestToCancel(request);
+    setCancelModalVisible(true);
+  };
+
+  const handleRequestCancelled = () => {
+    fetchRequests();
+  };
 
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
@@ -177,6 +242,15 @@ export default function MyMentorshipRequests() {
           <Ionicons name="arrow-back" size={24} color="#000" />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>My Mentorship Requests</Text>
+        <TouchableOpacity 
+          onPress={() => setFilterModalVisible(true)} 
+          style={styles.filterButton}
+        >
+          <Ionicons name="filter" size={24} color="#000" />
+          {(selectedStatus !== 'all' || selectedSort !== 'created_at_desc') && (
+            <View style={styles.filterBadge} />
+          )}
+        </TouchableOpacity>
       </View>
 
       {/* Requests List */}
@@ -184,7 +258,33 @@ export default function MyMentorshipRequests() {
         style={styles.scrollView}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
       >
-        {requests.length === 0 ? (
+        {/* Filter Summary */}
+        {(selectedStatus !== 'all' || selectedSort !== 'created_at_desc') && (
+          <View style={styles.filterSummary}>
+            <Text style={styles.filterSummaryText}>
+              Showing {filteredRequests.length} of {requests.length} requests
+            </Text>
+            <TouchableOpacity onPress={handleResetFilters}>
+              <Text style={styles.clearFiltersText}>Clear filters</Text>
+            </TouchableOpacity>
+          </View>
+        )}
+
+        {filteredRequests.length === 0 && requests.length > 0 ? (
+          <View style={styles.emptyState}>
+            <Ionicons name="search-outline" size={80} color="#d1d5db" />
+            <Text style={styles.emptyText}>No matching requests</Text>
+            <Text style={styles.emptySubtext}>
+              Try adjusting your filters
+            </Text>
+            <TouchableOpacity
+              style={styles.browseButton}
+              onPress={handleResetFilters}
+            >
+              <Text style={styles.browseButtonText}>Clear Filters</Text>
+            </TouchableOpacity>
+          </View>
+        ) : requests.length === 0 ? (
           <View style={styles.emptyState}>
             <Ionicons name="paper-plane-outline" size={80} color="#d1d5db" />
             <Text style={styles.emptyText}>No mentorship requests</Text>
@@ -199,7 +299,7 @@ export default function MyMentorshipRequests() {
             </TouchableOpacity>
           </View>
         ) : (
-          requests.map((request) => (
+          filteredRequests.map((request) => (
             <View key={request.id} style={styles.requestCard}>
               {/* Mentor Info */}
               <View style={styles.mentorHeader}>
@@ -242,10 +342,18 @@ export default function MyMentorshipRequests() {
               {/* Status-specific content */}
               {request.status === 'pending' && (
                 <View style={styles.pendingNotice}>
-                  <Ionicons name="time-outline" size={20} color="#f59e0b" />
-                  <Text style={styles.pendingText}>
-                    Waiting for mentor response...
-                  </Text>
+                  <View style={styles.pendingRow}>
+                    <Ionicons name="time-outline" size={20} color="#f59e0b" />
+                    <Text style={styles.pendingText}>
+                      Waiting for mentor response...
+                    </Text>
+                  </View>
+                  <TouchableOpacity
+                    style={styles.cancelLinkButton}
+                    onPress={() => handleCancelRequest(request)}
+                  >
+                    <Text style={styles.cancelLinkText}>Cancel Request</Text>
+                  </TouchableOpacity>
                 </View>
               )}
 
@@ -287,6 +395,13 @@ export default function MyMentorshipRequests() {
                     >
                       <Ionicons name="checkmark-circle" size={20} color="#fff" />
                       <Text style={styles.completeButtonText}>Mark as Completed</Text>
+                    </TouchableOpacity>
+
+                    <TouchableOpacity
+                      style={styles.cancelAcceptedButton}
+                      onPress={() => handleCancelRequest(request)}
+                    >
+                      <Text style={styles.cancelAcceptedButtonText}>Cancel Request</Text>
                     </TouchableOpacity>
                   </View>
                 </>
@@ -362,6 +477,32 @@ export default function MyMentorshipRequests() {
           }}
         />
       )}
+
+      {/* Filter Modal */}
+      <FilterModal
+        visible={filterModalVisible}
+        onClose={() => setFilterModalVisible(false)}
+        selectedStatus={selectedStatus}
+        onStatusChange={setSelectedStatus}
+        selectedSort={selectedSort}
+        onSortChange={setSelectedSort}
+        onApplyFilters={handleApplyFilters}
+        onResetFilters={handleResetFilters}
+      />
+
+      {/* Cancel Request Modal */}
+      {requestToCancel && (
+        <CancelRequestModal
+          visible={cancelModalVisible}
+          onClose={() => {
+            setCancelModalVisible(false);
+            setRequestToCancel(null);
+          }}
+          requestId={requestToCancel.id}
+          mentorName={requestToCancel.mentor.full_name}
+          onCancelled={handleRequestCancelled}
+        />
+      )}
     </View>
   );
 }
@@ -396,12 +537,47 @@ const styles = StyleSheet.create({
     marginRight: 15,
   },
   headerTitle: {
+    flex: 1,
     fontSize: 24,
     fontWeight: '700',
     color: '#111827',
   },
+  filterButton: {
+    position: 'relative',
+    padding: 8,
+  },
+  filterBadge: {
+    position: 'absolute',
+    top: 6,
+    right: 6,
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: '#10B981',
+  },
   scrollView: {
     flex: 1,
+  },
+  filterSummary: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: 20,
+    paddingVertical: 12,
+    backgroundColor: '#F3F4F6',
+    marginTop: 16,
+    marginHorizontal: 16,
+    borderRadius: 8,
+  },
+  filterSummaryText: {
+    fontSize: 14,
+    color: '#374151',
+    fontWeight: '500',
+  },
+  clearFiltersText: {
+    fontSize: 14,
+    color: '#10B981',
+    fontWeight: '600',
   },
   emptyState: {
     alignItems: 'center',
@@ -491,6 +667,9 @@ const styles = StyleSheet.create({
   status_completed: {
     backgroundColor: '#e0e7ff',
   },
+  status_cancelled: {
+    backgroundColor: '#f3f4f6',
+  },
   statusText: {
     fontSize: 12,
     fontWeight: '600',
@@ -529,18 +708,31 @@ const styles = StyleSheet.create({
     color: '#374151',
   },
   pendingNotice: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: 'column',
     backgroundColor: '#fffbeb',
     padding: 12,
     borderRadius: 8,
     marginTop: 8,
+  },
+  pendingRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
   },
   pendingText: {
     fontSize: 14,
     color: '#f59e0b',
     marginLeft: 8,
     fontWeight: '500',
+  },
+  cancelLinkButton: {
+    marginTop: 8,
+    alignSelf: 'flex-start',
+  },
+  cancelLinkText: {
+    fontSize: 13,
+    color: '#EF4444',
+    fontWeight: '600',
+    textDecorationLine: 'underline',
   },
   responseContainer: {
     backgroundColor: '#f0fdf4',
@@ -596,6 +788,21 @@ const styles = StyleSheet.create({
     fontSize: 15,
     color: '#fff',
     marginLeft: 8,
+    fontWeight: '600',
+  },
+  cancelAcceptedButton: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#fff',
+    padding: 12,
+    borderRadius: 8,
+    marginTop: 12,
+    borderWidth: 1,
+    borderColor: '#EF4444',
+  },
+  cancelAcceptedButtonText: {
+    fontSize: 14,
+    color: '#EF4444',
     fontWeight: '600',
   },
   declinedNotice: {
