@@ -1,4 +1,5 @@
-import { View, Text, StyleSheet, TextInput, TouchableOpacity, ScrollView, ActivityIndicator, Image } from 'react-native';
+import { View, Text, StyleSheet, TextInput, TouchableOpacity, ScrollView, ActivityIndicator } from 'react-native';
+import { Image } from 'expo-image';
 import * as ImagePicker from 'expo-image-picker';
 import { useFonts, Inter_400Regular, Inter_600SemiBold } from '@expo-google-fonts/inter';
 import { useEffect, useState } from 'react';
@@ -134,7 +135,9 @@ export default function EditJobListingScreen() {
     });
 
     if (!result.canceled && result.assets[0]) {
-      setUploadedImage(result.assets[0].uri);
+      const imageUri = result.assets[0].uri;
+      console.log('Image picked:', imageUri);
+      setUploadedImage(imageUri);
       setImageUrl('');
     }
   };
@@ -181,7 +184,7 @@ export default function EditJobListingScreen() {
         .update({
           title: title.trim(),
           description: fullDescription,
-          price: salary.trim() ? Number(salary) : null,
+          price: salary.trim() ? Number(salary) : 0,
           image_url: finalImageUrl,
           category_name: category,
         })
@@ -408,7 +411,7 @@ export default function EditJobListingScreen() {
             <TouchableOpacity style={styles.uploadButton} onPress={pickImage}>
               <Upload size={24} color="#4169E1" />
               <Text style={styles.uploadButtonText}>
-                {uploadedImage ? 'Change Image' : 'Upload from Gallery'}
+                {uploadedImage ? 'Upload Photo (1)' : 'Upload Photo'}
               </Text>
             </TouchableOpacity>
           ) : (
@@ -424,14 +427,25 @@ export default function EditJobListingScreen() {
             </View>
           )}
 
-          {(uploadedImage || imageUrl.trim() !== '') && (
+          {/* Image Preview - Always show if image exists */}
+          {(uploadedImage || (imageUrl && imageUrl.trim() !== '')) && (
             <View style={styles.imagePreviewContainer}>
-              <Text style={styles.imagePreviewLabel}>Preview:</Text>
+              <Text style={styles.imagePreviewLabel}>Image Preview:</Text>
               <Image 
                 source={{ uri: uploadedImage || imageUrl }} 
                 style={styles.imagePreview}
-                onError={() => alert('Invalid Image URL')}
+                contentFit="cover"
+                transition={200}
               />
+              <TouchableOpacity 
+                style={styles.removeImageButton}
+                onPress={() => {
+                  setUploadedImage(null);
+                  setImageUrl('');
+                }}
+              >
+                <Text style={styles.removeImageText}>✕ Remove Image</Text>
+              </TouchableOpacity>
             </View>
           )}
         </View>
@@ -698,18 +712,38 @@ const styles = StyleSheet.create({
   },
   imagePreviewContainer: {
     marginTop: 12,
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+    borderRadius: 12,
+    padding: 12,
+    backgroundColor: '#FFFFFF',
   },
   imagePreviewLabel: {
     fontSize: 14,
-    fontFamily: 'Inter-Regular',
-    color: '#666666',
+    fontFamily: 'Inter-SemiBold',
+    color: '#374151',
     marginBottom: 8,
   },
   imagePreview: {
     width: '100%',
     height: 200,
     borderRadius: 12,
-    backgroundColor: '#F8F9FA',
+    backgroundColor: '#F3F4F6',
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+  },
+  removeImageButton: {
+    marginTop: 8,
+    alignSelf: 'center',
+    paddingVertical: 8,
+    paddingHorizontal: 16,
+    backgroundColor: '#FEE2E2',
+    borderRadius: 8,
+  },
+  removeImageText: {
+    fontSize: 14,
+    fontFamily: 'Inter-SemiBold',
+    color: '#EF4444',
   },
   infoContainer: {
     flexDirection: 'row',

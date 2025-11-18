@@ -86,12 +86,6 @@ export default function MyMentorshipRequests() {
         has_rating: req.ratings && req.ratings.length > 0
       })) || [];
 
-      // Transform data to include has_rating flag
-      const requestsWithRatings = data?.map(req => ({
-        ...req,
-        has_rating: req.ratings && req.ratings.length > 0
-      })) || [];
-
       console.log(`📥 Fetched ${requestsWithRatings.length} mentorship requests`);
       setRequests(requestsWithRatings);
       applyFiltersAndSort(requestsWithRatings);
@@ -163,11 +157,6 @@ export default function MyMentorshipRequests() {
   const handleRequestCancelled = () => {
     fetchRequests();
   };
-
-  const onRefresh = useCallback(async () => {
-    setRefreshing(true);
-    await fetchRequests();
-  }, [fetchRequests]);
 
   const handleEmail = (email: string) => {
     Linking.openURL(`mailto:${email}`);

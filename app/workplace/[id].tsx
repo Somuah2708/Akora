@@ -409,10 +409,30 @@ export default function JobDetailsScreen() {
           applicationLink = descParts[3].replace('Application Link:', '').trim();
         }
 
-        // Generate sample images for the job
-        const images = Array.from({ length: 20 }, (_, i) => 
-          `https://images.unsplash.com/photo-${1486406146926 + i * 1000}?w=800&auto=format&fit=crop&q=60`
-        );
+        // Parse images from image_url (which is stored as JSON array)
+        let images: string[] = [];
+        if (data.image_url) {
+          try {
+            if (data.image_url.startsWith('[')) {
+              // It's a JSON array
+              const parsed = JSON.parse(data.image_url);
+              images = Array.isArray(parsed) ? parsed : [data.image_url];
+            } else {
+              // It's a single URL
+              images = [data.image_url];
+            }
+          } catch (e) {
+            console.log('Failed to parse image_url, using as single URL');
+            images = [data.image_url];
+          }
+        }
+        
+        // If no images, use placeholder
+        if (images.length === 0) {
+          images = Array.from({ length: 20 }, (_, i) => 
+            `https://images.unsplash.com/photo-${1486406146926 + i * 1000}?w=800&auto=format&fit=crop&q=60`
+          );
+        }
 
         setJob({
           id: data.id,
@@ -423,7 +443,7 @@ export default function JobDetailsScreen() {
           description,
           applicationLink,
           type: data.category_name || 'Full Time Jobs',
-          imageUrl: data.image_url,
+          imageUrl: images[0], // First image as main image
           postedDate: new Date(data.created_at).toLocaleDateString(),
           images,
         });

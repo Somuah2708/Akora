@@ -16,6 +16,13 @@
 
 -- RLS Policies for storage bucket
 
+-- Drop existing policies if they exist (to allow re-running)
+DROP POLICY IF EXISTS "Public profile photos are viewable by everyone" ON storage.objects;
+DROP POLICY IF EXISTS "Users can upload their own profile photos" ON storage.objects;
+DROP POLICY IF EXISTS "Users can update their own profile photos" ON storage.objects;
+DROP POLICY IF EXISTS "Users can delete their own profile photos" ON storage.objects;
+DROP POLICY IF EXISTS "Admins can manage all profile photos" ON storage.objects;
+
 -- Policy: Anyone can view profile photos (public bucket)
 CREATE POLICY "Public profile photos are viewable by everyone"
 ON storage.objects FOR SELECT

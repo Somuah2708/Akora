@@ -5,6 +5,9 @@ import { ArrowLeft, Building2, GraduationCap, Clock, MapPin, Linkedin, Globe, Se
 import { useAuth } from '@/hooks/useAuth';
 import { supabase } from '@/lib/supabase';
 import RequestTemplatesModal, { RequestTemplate } from '@/components/RequestTemplatesModal';
+import MentorBadges from '@/components/MentorBadges';
+import MentorTestimonials from '@/components/MentorTestimonials';
+import RichTextEditor from '@/components/RichTextEditor';
 
 export default function MentorDetailScreen() {
   const router = useRouter();
@@ -12,9 +15,12 @@ export default function MentorDetailScreen() {
   const { user, profile } = useAuth();
   
   const [mentor, setMentor] = useState<any>(null);
+  const [badges, setBadges] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [showRequestForm, setShowRequestForm] = useState(false);
   const [templatesModalVisible, setTemplatesModalVisible] = useState(false);
+  const [canAddTestimonial, setCanAddTestimonial] = useState(false);
+  const [completedRequestId, setCompletedRequestId] = useState<string | null>(null);
   
   // Request form fields
   const [menteeName, setMenteeName] = useState(profile?.full_name || '');
@@ -41,6 +47,31 @@ export default function MentorDetailScreen() {
 
       if (error) throw error;
       setMentor(data);
+      
+      // Fetch badges
+      const { data: badgesData } = await supabase
+        .from('mentor_badges')
+        .select('*')
+        .eq('mentor_id', id)
+        .order('earned_at', { ascending: false });
+      
+      setBadges(badgesData || []);
+      
+      // Check if user can add testimonial (has completed session)
+      if (user) {
+        const { data: completedRequest } = await supabase
+          .from('mentor_requests')
+          .select('id')
+          .eq('mentor_id', id)
+          .eq('mentee_id', user.id)
+          .eq('status', 'completed')
+          .maybeSingle();
+        
+        if (completedRequest) {
+          setCanAddTestimonial(true);
+          setCompletedRequestId(completedRequest.id);
+        }
+      }
     } catch (error: any) {
       console.error('Error fetching mentor:', error);
       Alert.alert('Error', 'Failed to load mentor details');
@@ -226,6 +257,13 @@ export default function MentorDetailScreen() {
                 <Text style={styles.alumniText}>Class of {mentor.graduation_year} • {mentor.degree}</Text>
               </View>
             )}
+            
+            {/* Badges */}
+            {badges.length > 0 && (
+              <View style={styles.badgesContainer}>
+                <MentorBadges badges={badges} size="medium" maxDisplay={4} />
+              </View>
+            )}
           </View>
         </View>
 
@@ -338,6 +376,13 @@ export default function MentorDetailScreen() {
           </View>
         </View>
 
+        {/* Testimonials */}
+        <MentorTestimonials 
+          mentorId={id as string}
+          canAddTestimonial={canAddTestimonial}
+          requestId={completedRequestId || undefined}
+        />
+
         {/* Request Mentorship Section */}
         {!showRequestForm ? (
           <View style={styles.section}>
@@ -425,15 +470,15 @@ export default function MentorDetailScreen() {
                 <Text style={styles.templateButtonText}>Use Template</Text>
               </TouchableOpacity>
             </View>
-            <TextInput
-              style={[styles.formInput, styles.textArea]}
+            <Text style={styles.helpText}>
+              Use formatting: **bold**, _italic_, [links](url) for better presentation
+            </Text>
+            <RichTextEditor
               value={message}
               onChangeText={setMessage}
               placeholder="Tell the mentor about yourself, your goals, and why you'd like their guidance..."
-              multiline
-              numberOfLines={6}
-              textAlignVertical="top"
-              placeholderTextColor="#999999"
+              maxLength={1500}
+              minHeight={150}
             />
 
             <View style={styles.formActions}>
@@ -701,6 +746,12 @@ const styles = StyleSheet.create({
     marginBottom: 8,
     marginTop: 12,
   },
+  helpText: {
+    fontSize: 12,
+    color: '#6B7280',
+    marginBottom: 8,
+    fontStyle: 'italic',
+  },
   formInput: {
     backgroundColor: '#F9FAFB',
     borderWidth: 1,
@@ -786,5 +837,8 @@ const styles = StyleSheet.create({
     fontSize: 15,
     fontWeight: '600',
     color: '#FFFFFF',
+  },
+  badgesContainer: {
+    marginTop: 12,
   },
 });

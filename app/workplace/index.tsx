@@ -110,7 +110,7 @@ export default function WorkplaceScreen() {
         .from('products_services')
         .select('*')
         .in('category_name', ['Full Time Jobs', 'Internships', 'National Service', 'Part Time', 'Remote Work', 'Volunteering'])
-        .eq('is_approved', true)
+        .or('is_approved.eq.true,approval_status.eq.approved')
         .order('created_at', { ascending: false });
       
       if (error) {
@@ -446,14 +446,21 @@ export default function WorkplaceScreen() {
             >
               {filteredJobs.slice(0, 5).map((job) => {
                 // Parse image_url if it's a JSON string
-                let imageUri = job.image_url;
-                if (imageUri && imageUri.startsWith('[')) {
-                  try {
-                    const parsed = JSON.parse(imageUri);
-                    imageUri = Array.isArray(parsed) && parsed.length > 0 ? parsed[0] : imageUri;
-                  } catch (e) {
-                    console.log('Failed to parse image_url');
+                let images = [];
+                if (job.image_url) {
+                  if (job.image_url.startsWith('[')) {
+                    try {
+                      const parsed = JSON.parse(job.image_url);
+                      images = Array.isArray(parsed) ? parsed : [job.image_url];
+                    } catch (e) {
+                      images = [job.image_url];
+                    }
+                  } else {
+                    images = [job.image_url];
                   }
+                }
+                if (images.length === 0) {
+                  images = ['https://images.unsplash.com/photo-1486406146926-c627a92ad1ab?w=800'];
                 }
                 
                 return (
@@ -462,10 +469,15 @@ export default function WorkplaceScreen() {
                     style={styles.featuredCard}
                     onPress={() => handleJobPress(job.id)}
                   >
-                    <Image 
-                      source={{ uri: imageUri || 'https://images.unsplash.com/photo-1486406146926-c627a92ad1ab?w=800' }} 
-                      style={styles.featuredImage} 
-                    />
+                    <ScrollView horizontal showsHorizontalScrollIndicator={false} pagingEnabled>
+                      {images.map((uri, idx) => (
+                        <Image 
+                          key={uri + idx}
+                          source={{ uri }} 
+                          style={styles.featuredImage} 
+                        />
+                      ))}
+                    </ScrollView>
                     <View style={styles.featuredInfo}>
                       <View style={styles.jobTypeTag}>
                         <Clock size={14} color="#4169E1" />
@@ -521,13 +533,22 @@ export default function WorkplaceScreen() {
               const company = parts[0]?.trim() || 'Company';
               const location = parts[1]?.trim() || 'Location';
               
-              // Parse image
-              let imageUri = job.image_url;
-              if (imageUri && imageUri.startsWith('[')) {
-                try {
-                  const parsed = JSON.parse(imageUri);
-                  imageUri = Array.isArray(parsed) && parsed.length > 0 ? parsed[0] : imageUri;
-                } catch (e) {}
+              // Parse images
+              let images = [];
+              if (job.image_url) {
+                if (job.image_url.startsWith('[')) {
+                  try {
+                    const parsed = JSON.parse(job.image_url);
+                    images = Array.isArray(parsed) ? parsed : [job.image_url];
+                  } catch (e) {
+                    images = [job.image_url];
+                  }
+                } else {
+                  images = [job.image_url];
+                }
+              }
+              if (images.length === 0) {
+                images = ['https://images.unsplash.com/photo-1486406146926-c627a92ad1ab?w=800'];
               }
               
               // Calculate days since posted
@@ -548,10 +569,15 @@ export default function WorkplaceScreen() {
                   style={styles.opportunityCard}
                   onPress={() => handleJobPress(job.id)}
                 >
-                  <Image 
-                    source={{ uri: imageUri || 'https://images.unsplash.com/photo-1486406146926-c627a92ad1ab?w=800' }} 
-                    style={styles.opportunityImage} 
-                  />
+                  <ScrollView horizontal showsHorizontalScrollIndicator={false} pagingEnabled>
+                    {images.map((uri, idx) => (
+                      <Image 
+                        key={uri + idx}
+                        source={{ uri }} 
+                        style={styles.opportunityImage} 
+                      />
+                    ))}
+                  </ScrollView>
                   <View style={styles.opportunityInfo}>
                     <Text style={styles.opportunityTitle}>{job.title}</Text>
                     <Text style={styles.organizationName}>{company}</Text>

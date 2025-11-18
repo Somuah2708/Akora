@@ -82,10 +82,19 @@ export default function MentorDashboard() {
         .select('id, full_name, email, current_title, company')
         .eq('email', profile.email)
         .eq('status', 'approved')
-        .single();
+        .maybeSingle();
 
       if (error) {
         console.error('Error checking mentor status:', error);
+        Alert.alert(
+          'Not a Mentor',
+          'You are not registered as a mentor. Please contact admin to become a mentor.',
+          [{ text: 'Go Back', onPress: () => router.back() }]
+        );
+        return;
+      }
+
+      if (!data) {
         Alert.alert(
           'Not a Mentor',
           'You are not registered as a mentor. Please contact admin to become a mentor.',
@@ -889,7 +898,7 @@ const styles = StyleSheet.create({
     minWidth: 110,
     alignItems: 'center',
     shadowColor: '#000',
-    shadowOffset: { width: 0, height 2 },
+    shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.1,
     shadowRadius: 4,
     elevation: 3,

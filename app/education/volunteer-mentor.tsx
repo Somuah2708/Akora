@@ -5,6 +5,8 @@ import { ArrowLeft, User, Briefcase, GraduationCap, Heart, Calendar } from 'luci
 import { useAuth } from '@/hooks/useAuth';
 import { supabase } from '@/lib/supabase';
 import { EXPERTISE_OPTIONS, MEETING_FORMATS, DAYS_OPTIONS, INDUSTRY_OPTIONS } from '@/constants/mentorConstants';
+import ProfilePhotoUpload from '@/components/ProfilePhotoUpload';
+import RichTextEditor from '@/components/RichTextEditor';
 
 export default function VolunteerMentorScreen() {
   const router = useRouter();
@@ -25,6 +27,7 @@ export default function VolunteerMentorScreen() {
   const [availableHours, setAvailableHours] = useState('');
   const [whyMentor, setWhyMentor] = useState('');
   const [whatOffer, setWhatOffer] = useState('');
+  const [profilePhotoUrl, setProfilePhotoUrl] = useState('');
 
   // Multi-select fields
   const [selectedExpertise, setSelectedExpertise] = useState<string[]>([]);
@@ -82,6 +85,7 @@ export default function VolunteerMentorScreen() {
         linkedin_url: linkedinUrl.trim() || null,
         why_mentor: whyMentor.trim(),
         what_offer: whatOffer.trim(),
+        profile_photo_url: profilePhotoUrl || null,
         status: 'pending',
       };
 
@@ -136,6 +140,18 @@ export default function VolunteerMentorScreen() {
           <View style={styles.sectionHeader}>
             <User size={18} color="#4169E1" />
             <Text style={styles.sectionTitle}>Personal Information</Text>
+          </View>
+
+          {/* Profile Photo Upload */}
+          <View style={styles.photoUploadContainer}>
+            <Text style={styles.label}>Profile Photo</Text>
+            <Text style={styles.helpText}>Upload a professional photo (optional but recommended)</Text>
+            <ProfilePhotoUpload
+              currentPhotoUrl={profilePhotoUrl}
+              onPhotoUploaded={setProfilePhotoUrl}
+              bucket="mentor-profiles"
+              size={100}
+            />
           </View>
 
           <Text style={styles.label}>Full Name *</Text>
@@ -340,27 +356,27 @@ export default function VolunteerMentorScreen() {
         {/* Motivation Section */}
         <View style={styles.section}>
           <Text style={styles.label}>Why do you want to be a mentor? *</Text>
-          <TextInput
-            style={[styles.input, styles.textArea]}
+          <Text style={styles.helpText}>
+            Share your motivation (use **bold**, _italic_, or [links](url) for formatting)
+          </Text>
+          <RichTextEditor
             value={whyMentor}
             onChangeText={setWhyMentor}
             placeholder="Share your motivation for volunteering as a mentor..."
-            multiline
-            numberOfLines={4}
-            textAlignVertical="top"
-            placeholderTextColor="#999999"
+            maxLength={1000}
+            minHeight={120}
           />
 
           <Text style={styles.label}>What can you offer to mentees? *</Text>
-          <TextInput
-            style={[styles.input, styles.textArea]}
+          <Text style={styles.helpText}>
+            Describe the value you provide (guidance, connections, skills, etc.)
+          </Text>
+          <RichTextEditor
             value={whatOffer}
             onChangeText={setWhatOffer}
-            placeholder="Describe the value you can provide (guidance, connections, skills, etc.)..."
-            multiline
-            numberOfLines={4}
-            textAlignVertical="top"
-            placeholderTextColor="#999999"
+            placeholder="Describe what you can offer (expertise, industry insights, career advice, etc.)..."
+            maxLength={1000}
+            minHeight={120}
           />
         </View>
 
@@ -453,6 +469,14 @@ const styles = StyleSheet.create({
     color: '#374151',
     marginBottom: 8,
     marginTop: 12,
+  },
+  helpText: {
+    fontSize: 12,
+    color: '#6B7280',
+    marginBottom: 12,
+  },
+  photoUploadContainer: {
+    marginBottom: 16,
   },
   input: {
     backgroundColor: '#F9FAFB',

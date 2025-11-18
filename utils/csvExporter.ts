@@ -111,16 +111,14 @@ export class CSVExporter {
    */
   static async shareCSV(csvContent: string, filename: string): Promise<void> {
     try {
-      const { default: * as FileSystem } = await import('expo-file-system');
-      const { default: * as Sharing } = await import('expo-sharing');
+      const { Paths, File } = await import('expo-file-system');
+      const { isAvailableAsync, shareAsync } = await import('expo-sharing');
 
-      const fileUri = `${FileSystem.documentDirectory}${filename}`;
-      await FileSystem.writeAsStringAsync(fileUri, csvContent, {
-        encoding: FileSystem.EncodingType.UTF8,
-      });
+      const file = new File(Paths.document, filename);
+      await file.write(csvContent);
 
-      if (await Sharing.isAvailableAsync()) {
-        await Sharing.shareAsync(fileUri);
+      if (await isAvailableAsync()) {
+        await shareAsync(file.uri);
       } else {
         throw new Error('Sharing is not available on this device');
       }

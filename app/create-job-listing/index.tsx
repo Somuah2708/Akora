@@ -1,4 +1,5 @@
-import { View, Text, StyleSheet, TextInput, TouchableOpacity, ScrollView, Alert, ActivityIndicator, Image } from 'react-native';
+import { View, Text, StyleSheet, TextInput, TouchableOpacity, ScrollView, Alert, ActivityIndicator } from 'react-native';
+import { Image } from 'expo-image';
 import * as ImagePicker from 'expo-image-picker';
 import { useFonts, Inter_400Regular, Inter_600SemiBold } from '@expo-google-fonts/inter';
 import { useEffect, useState } from 'react';
@@ -135,18 +136,21 @@ export default function CreateJobListingScreen() {
       }
       
       // Insert the job listing
+      // TODO: Set is_approved: false and approval_status: 'pending' when approval system is ready
       const { data: newListing, error: listingError } = await supabase
         .from('products_services')
         .insert({
           user_id: user?.id,
           title: title.trim(),
           description: fullDescription,
-          price: salary.trim() ? Number(salary) : null,
+          price: salary.trim() ? Number(salary) : 0,
           image_url: finalImageUrls.length > 0 ? JSON.stringify(finalImageUrls) : null,
           category_name: category,
           is_featured: false,
           is_premium_listing: false,
-          is_approved: true,
+          is_approved: true, // Auto-approve for now (change to false when approval system is enabled)
+          approval_status: 'approved', // Auto-approve for now (change to 'pending' when approval system is enabled)
+          creator_email: email.trim() || null,
         })
         .select()
         .single();
@@ -345,7 +349,7 @@ export default function CreateJobListingScreen() {
             <TouchableOpacity style={styles.uploadButton} onPress={pickImage}>
               <Upload size={24} color="#4169E1" />
               <Text style={styles.uploadButtonText}>
-                {uploadedImages.length > 0 ? `Change Images (${uploadedImages.length}/20)` : 'Upload from Gallery'}
+                {uploadedImages.length > 0 ? `Upload Photos (${uploadedImages.length})` : 'Upload Photos'}
               </Text>
             </TouchableOpacity>
           ) : (
@@ -362,24 +366,35 @@ export default function CreateJobListingScreen() {
           )}
 
           {/* Image Preview */}
-          {(uploadedImages.length > 0 || imageUrl.trim() !== '') && (
+          {(uploadedImages.length > 0 || (imageUrl && imageUrl.trim() !== '')) && (
             <View style={styles.imagePreviewContainer}>
-              <Text style={styles.imagePreviewLabel}>Preview:</Text>
+              <Text style={styles.imagePreviewLabel}>Image Preview:</Text>
               <ScrollView horizontal showsHorizontalScrollIndicator={false}>
                 {uploadedImages.map((uri, idx) => (
-                  <Image 
-                    key={uri + idx}
-                    source={{ uri }} 
-                    style={styles.imagePreview}
-                    onError={() => alert('Invalid Image URL')}
-                  />
+                  <View key={uri + idx} style={styles.imagePreviewWrapper}>
+                    <Image 
+                      source={{ uri }} 
+                      style={styles.imagePreview}
+                      contentFit="cover"
+                      transition={200}
+                    />
+                    <TouchableOpacity
+                      style={styles.removePreviewButton}
+                      onPress={() => {
+                        setUploadedImages(prev => prev.filter((_, i) => i !== idx));
+                      }}
+                    >
+                      <Text style={styles.removePreviewText}>✕</Text>
+                    </TouchableOpacity>
+                  </View>
                 ))}
                 {imageUrl.trim() !== '' && imageUrl.split(',').slice(0, 20).map((url, idx) => (
                   <Image 
                     key={url.trim() + idx}
                     source={{ uri: url.trim() }} 
                     style={styles.imagePreview}
-                    onError={() => alert('Invalid Image URL')}
+                    contentFit="cover"
+                    transition={200}
                   />
                 ))}
               </ScrollView>
@@ -568,10 +583,33 @@ const styles = StyleSheet.create({
     marginBottom: 8,
   },
   imagePreview: {
-    width: '100%',
+    width: 250,
     height: 200,
     borderRadius: 12,
-    backgroundColor: '#F8F9FA',
+    backgroundColor: '#F3F4F6',
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+  },
+  imagePreviewWrapper: {
+    position: 'relative',
+    marginRight: 12,
+    width: 250,
+  },
+  removePreviewButton: {
+    position: 'absolute',
+    top: 8,
+    right: 8,
+    backgroundColor: '#EF4444',
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  removePreviewText: {
+    color: '#FFFFFF',
+    fontSize: 16,
+    fontFamily: 'Inter-SemiBold',
   },
   infoContainer: {
     flexDirection: 'row',

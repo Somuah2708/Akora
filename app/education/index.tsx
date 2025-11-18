@@ -6,8 +6,7 @@ import { Search, Filter, ArrowLeft, GraduationCap, MapPin, Globe, ChevronRight, 
 import { useAuth } from '@/hooks/useAuth';
 import { supabase } from '@/lib/supabase';
 import MentorRatingSummary from '@/components/MentorRatingSummary';
-import ExpertiseFilterModal from '@/components/ExpertiseFilterModal';
-import AdvancedFilterModal, { FilterCriteria } from '@/components/AdvancedFilterModal';
+import UnifiedMentorFilterModal, { FilterCriteria } from '@/components/UnifiedMentorFilterModal';
 
 SplashScreen.preventAutoHideAsync();
 
@@ -35,10 +34,9 @@ export default function EducationScreen() {
   const [searchQuery, setSearchQuery] = useState('');
   const [bookmarkedIds, setBookmarkedIds] = useState<string[]>([]);
   const [favoriteMentorIds, setFavoriteMentorIds] = useState<string[]>([]);
-  const [expertiseFilterVisible, setExpertiseFilterVisible] = useState(false);
+  const [filterModalVisible, setFilterModalVisible] = useState(false);
   const [selectedExpertise, setSelectedExpertise] = useState<string[]>([]);
   const [allExpertiseAreas, setAllExpertiseAreas] = useState<string[]>([]);
-  const [advancedFilterVisible, setAdvancedFilterVisible] = useState(false);
   const [advancedFilters, setAdvancedFilters] = useState<FilterCriteria | null>(null);
   const [isAdmin, setIsAdmin] = useState(false);
   const [checkingAdmin, setCheckingAdmin] = useState(true);
@@ -416,21 +414,14 @@ export default function EducationScreen() {
     return true;
   });
   
-  const handleApplyExpertiseFilter = () => {
-    // Filter is applied reactively through filteredMentors
-    console.log('Applied expertise filter:', selectedExpertise);
+  const handleApplyUnifiedFilters = (expertise: string[], advancedCriteria: FilterCriteria | null) => {
+    setSelectedExpertise(expertise);
+    setAdvancedFilters(advancedCriteria);
+    console.log('Applied unified filters - Expertise:', expertise, 'Advanced:', advancedCriteria);
   };
   
-  const handleResetExpertiseFilter = () => {
+  const handleResetUnifiedFilters = () => {
     setSelectedExpertise([]);
-  };
-  
-  const handleApplyAdvancedFilters = (filters: FilterCriteria) => {
-    setAdvancedFilters(filters);
-    console.log('Applied advanced filters:', filters);
-  };
-  
-  const handleResetAdvancedFilters = () => {
     setAdvancedFilters(null);
   };
 
@@ -568,179 +559,194 @@ export default function EducationScreen() {
 
   return (
     <ScrollView style={styles.container} showsVerticalScrollIndicator={false}>
-      <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
-          <ArrowLeft size={24} color="#000000" />
-        </TouchableOpacity>
-        <View style={{ flex: 1, alignItems: 'center' }}>
-          <Text style={styles.title}>Universities, Scholarships & Alumni Mentors</Text>
-          <Text style={styles.subtitle}>Discover schools, secure funding, and get guidance from alumni mentors</Text>
+      {/* Hero Header */}
+      <View style={styles.heroHeader}>
+        <View style={styles.heroTopRow}>
+          <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
+            <ArrowLeft size={22} color="#0F172A" />
+          </TouchableOpacity>
+          {(profile?.is_admin || profile?.role === 'admin') ? (
+            <TouchableOpacity 
+              style={styles.heroManageButton}
+              onPress={handleAddOpportunity}
+              accessibilityLabel="Manage Schools and Scholarships"
+            >
+              <Plus size={18} color="#4169E1" />
+              <Text style={styles.heroManageText}>Manage</Text>
+            </TouchableOpacity>
+          ) : (
+            <View style={{ width: 74 }} />
+          )}
         </View>
-        {(profile?.is_admin || profile?.role === 'admin') ? (
-          <TouchableOpacity 
-            style={styles.addButton}
-            onPress={handleAddOpportunity}
-            accessibilityLabel="Manage Schools and Scholarships"
+        <Text style={styles.heroTitle}>Universities, Scholarships & Alumni Mentors</Text>
+        <Text style={styles.heroSubtitle}>Discover schools, secure funding, and get guidance from alumni mentors</Text>
+
+        {/* Search */}
+        <View style={styles.searchContainer}>
+          <View style={styles.searchInputContainer}>
+            <Search size={20} color="#64748B" />
+            <TextInput
+              style={styles.searchInput}
+              placeholder="Search universities, scholarships, mentors..."
+              placeholderTextColor="#64748B"
+              value={searchQuery}
+              onChangeText={setSearchQuery}
+            />
+          </View>
+        </View>
+
+        {/* Quick Actions */}
+        <View style={styles.quickActions}>
+          <Link href="/education/my-applications" asChild>
+            <TouchableOpacity style={styles.quickActionButton}>
+              <Text style={styles.quickActionText}>Applications</Text>
+            </TouchableOpacity>
+          </Link>
+          <Link href="/education/saved-opportunities" asChild>
+            <TouchableOpacity style={styles.quickActionButton}>
+              <Text style={styles.quickActionText}>Saved</Text>
+            </TouchableOpacity>
+          </Link>
+          <Link href="/education/saved-mentors" asChild>
+            <TouchableOpacity style={styles.quickActionButton}>
+              <Text style={styles.quickActionText}>Mentors</Text>
+            </TouchableOpacity>
+          </Link>
+        </View>
+
+        {/* Segmented Tabs */}
+        <View style={styles.segmentedTabs}>
+          <TouchableOpacity
+            style={[styles.segmentedTab, activeTab === 'universities' && styles.segmentedTabActive]}
+            onPress={() => {
+              setActiveTab('universities');
+              setSearchQuery('');
+            }}
           >
-            <Plus size={24} color="#4169E1" />
+            <Text style={[styles.segmentedTabText, activeTab === 'universities' && styles.segmentedTabTextActive]}>Universities ({universities.length})</Text>
           </TouchableOpacity>
-        ) : (
-          // preserve layout spacing when button hidden
-          <View style={{ width: 40 }} />
-        )}
-      </View>
-
-      <View style={styles.searchContainer}>
-        <View style={styles.searchInputContainer}>
-          <Search size={20} color="#666666" />
-          <TextInput
-            style={styles.searchInput}
-            placeholder="Search universities, scholarships, mentors..."
-            placeholderTextColor="#666666"
-            value={searchQuery}
-            onChangeText={setSearchQuery}
-          />
+          <TouchableOpacity
+            style={[styles.segmentedTab, activeTab === 'scholarships' && styles.segmentedTabActive]}
+            onPress={() => {
+              setActiveTab('scholarships');
+              setSearchQuery('');
+            }}
+          >
+            <Text style={[styles.segmentedTabText, activeTab === 'scholarships' && styles.segmentedTabTextActive]}>Scholarships ({scholarships.length})</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.segmentedTab, activeTab === 'mentors' && styles.segmentedTabActive]}
+            onPress={() => {
+              setActiveTab('mentors');
+              setSearchQuery('');
+            }}
+          >
+            <Text style={[styles.segmentedTabText, activeTab === 'mentors' && styles.segmentedTabTextActive]}>Alumni Mentors ({mentors.length})</Text>
+          </TouchableOpacity>
         </View>
       </View>
-      {/* Quick Actions */}
-      <View style={styles.quickActions}>
-        <Link href="/education/my-applications" asChild>
-          <TouchableOpacity style={styles.quickActionButton}>
-            <FileText size={18} color="#4169E1" />
-            <Text style={styles.quickActionText}>My Applications</Text>
-          </TouchableOpacity>
-        </Link>
-        <Link href="/education/saved-opportunities" asChild>
-          <TouchableOpacity style={styles.quickActionButton}>
-            <Bookmark size={18} color="#4169E1" />
-            <Text style={styles.quickActionText}>Saved</Text>
-          </TouchableOpacity>
-        </Link>
-      </View>
-
-      {/* Tabs */}
-      <ScrollView 
-        horizontal 
-        showsHorizontalScrollIndicator={false}
-        style={styles.tabScrollContainer}
-        contentContainerStyle={styles.tabContainer}
-      >
-        <TouchableOpacity
-          style={[styles.tabButton, activeTab === 'universities' && styles.activeTabButton]}
-          onPress={() => {
-            setActiveTab('universities');
-            setSearchQuery('');
-          }}
-        >
-          <Building2 size={20} color={activeTab === 'universities' ? '#FFFFFF' : '#666666'} />
-          <Text style={[styles.tabText, activeTab === 'universities' && styles.activeTabText]}>
-            Universities ({universities.length})
-          </Text>
-        </TouchableOpacity>
-        
-        <TouchableOpacity
-          style={[styles.tabButton, activeTab === 'scholarships' && styles.activeTabButton]}
-          onPress={() => {
-            setActiveTab('scholarships');
-            setSearchQuery('');
-          }}
-        >
-          <Award size={20} color={activeTab === 'scholarships' ? '#FFFFFF' : '#666666'} />
-          <Text style={[styles.tabText, activeTab === 'scholarships' && styles.activeTabText]}>
-            Scholarships ({scholarships.length})
-          </Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity
-          style={[styles.tabButton, activeTab === 'mentors' && styles.activeTabButton]}
-          onPress={() => {
-            setActiveTab('mentors');
-            setSearchQuery('');
-          }}
-        >
-          <Users size={20} color={activeTab === 'mentors' ? '#FFFFFF' : '#666666'} />
-          <Text style={[styles.tabText, activeTab === 'mentors' && styles.activeTabText]}>
-            Alumni Mentors ({mentors.length})
-          </Text>
-        </TouchableOpacity>
-
-        {false && (
-          <View />
-        )}
-      </ScrollView>
 
       {/* Universities Tab Content */}
       {activeTab === 'universities' && (
         <View style={styles.section}>
-          <View style={styles.sectionHeader}>
-            <Text style={styles.sectionTitle}>🇬🇭 Ghanaian Universities</Text>
-            <Text style={styles.sectionCount}>{filteredUniversities.length} universities</Text>
+          {/* Section Header with Stats */}
+          <View style={styles.modernSectionHeader}>
+            <View style={styles.headerLeft}>
+              <View style={styles.headerIconBox}>
+                <Building2 size={24} color="#4169E1" />
+              </View>
+              <View>
+                <Text style={styles.modernSectionTitle}>Ghanaian Universities</Text>
+                <Text style={styles.modernSectionSubtitle}>Discover top institutions in Ghana</Text>
+              </View>
+            </View>
+            <View style={styles.countBadge}>
+              <Text style={styles.countBadgeText}>{filteredUniversities.length}</Text>
+            </View>
           </View>
 
           {loading ? (
-            <Text style={styles.loadingText}>Loading universities...</Text>
+            <View style={styles.loadingContainer}>
+              <ActivityIndicator size="large" color="#4169E1" />
+              <Text style={styles.loadingText}>Loading universities...</Text>
+            </View>
           ) : filteredUniversities.length > 0 ? (
-            filteredUniversities.map((university) => {
-              // Parse image_url if it's a JSON array
-              let imageUri = university.image_url || 'https://images.unsplash.com/photo-1541339907198-e08756dedf3f?w=800';
-              if (imageUri && imageUri.startsWith('[')) {
-                try {
-                  const parsed = JSON.parse(imageUri);
-                  imageUri = Array.isArray(parsed) && parsed.length > 0 ? parsed[0] : imageUri;
-                } catch (e) {
-                  // Keep original if parsing fails
+            <View style={styles.cardsGrid}>
+              {filteredUniversities.map((university) => {
+                // Parse image_url if it's a JSON array
+                let imageUri = university.image_url || 'https://images.unsplash.com/photo-1541339907198-e08756dedf3f?w=800';
+                if (imageUri && imageUri.startsWith('[')) {
+                  try {
+                    const parsed = JSON.parse(imageUri);
+                    imageUri = Array.isArray(parsed) && parsed.length > 0 ? parsed[0] : imageUri;
+                  } catch (e) {
+                    // Keep original if parsing fails
+                  }
                 }
-              }
-              
-              return (
-                <TouchableOpacity 
-                  key={university.id} 
-                  style={styles.universityCard}
-                  onPress={() => router.push(`/education/detail/${university.id}` as any)}
-                >
-                  <Image 
-                    source={{ uri: imageUri }} 
-                    style={styles.cardImage} 
-                  />
+                
+                return (
                   <TouchableOpacity 
-                    style={styles.bookmarkIcon}
-                    onPress={(e) => {
-                      e?.preventDefault?.();
-                      e?.stopPropagation?.();
-                      toggleBookmark(university.id, e);
-                    }}
-                    activeOpacity={0.7}
-                    hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                    key={university.id} 
+                    style={styles.modernUniversityCard}
+                    onPress={() => router.push(`/education/detail/${university.id}` as any)}
+                    activeOpacity={0.95}
                   >
-                    <Bookmark 
-                      size={20} 
-                      color={bookmarkedIds.includes(university.id) ? "#4169E1" : "#666666"} 
-                      fill={bookmarkedIds.includes(university.id) ? "#4169E1" : "none"}
-                    />
-                  </TouchableOpacity>
-                  <View style={styles.cardInfo}>
-                    <Text style={styles.cardTitle}>{university.title}</Text>
-                    <View style={styles.locationRow}>
-                      <MapPin size={14} color="#666666" />
-                      <Text style={styles.locationText}>{university.location || 'Ghana'}</Text>
+                    <View style={styles.modernCardImageContainer}>
+                      <Image 
+                        source={{ uri: imageUri }} 
+                        style={styles.modernCardImage} 
+                        resizeMode="cover"
+                      />
+                      <View style={styles.imageGradient} />
+                      <TouchableOpacity 
+                        style={styles.modernBookmarkButton}
+                        onPress={(e) => {
+                          e?.preventDefault?.();
+                          e?.stopPropagation?.();
+                          toggleBookmark(university.id, e);
+                        }}
+                        activeOpacity={0.7}
+                        hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                      >
+                        <Bookmark 
+                          size={20} 
+                          color={bookmarkedIds.includes(university.id) ? "#FFD700" : "#FFFFFF"} 
+                          fill={bookmarkedIds.includes(university.id) ? "#FFD700" : "none"}
+                          strokeWidth={2}
+                        />
+                      </TouchableOpacity>
                     </View>
-                    <Text style={styles.cardDescription} numberOfLines={3}>
-                      {university.description}
-                    </Text>
-                    {university.application_url && (
-                      <View style={styles.linkRow}>
-                        <Globe size={14} color="#4169E1" />
-                        <Text style={styles.linkText}>Application Available</Text>
+                    <View style={styles.modernCardContent}>
+                      <Text style={styles.modernCardTitle} numberOfLines={2}>{university.title}</Text>
+                      <View style={styles.modernLocationRow}>
+                        <MapPin size={16} color="#4169E1" />
+                        <Text style={styles.modernLocationText}>{university.location || 'Ghana'}</Text>
                       </View>
-                    )}
-                  </View>
-                </TouchableOpacity>
-              );
-            })
+                      <Text style={styles.modernCardDescription} numberOfLines={3}>
+                        {university.description}
+                      </Text>
+                      {university.application_url && (
+                        <View style={styles.modernApplicationBadge}>
+                          <Globe size={14} color="#10B981" />
+                          <Text style={styles.modernApplicationText}>Applications Open</Text>
+                        </View>
+                      )}
+                      <TouchableOpacity style={styles.modernViewButton}>
+                        <Text style={styles.modernViewButtonText}>View Details</Text>
+                        <ChevronRight size={16} color="#4169E1" />
+                      </TouchableOpacity>
+                    </View>
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
           ) : (
-            <View style={styles.emptyContainer}>
-              <Building2 size={64} color="#CCCCCC" />
-              <Text style={styles.emptyText}>No universities found</Text>
+            <View style={styles.modernEmptyState}>
+              <View style={styles.emptyIconContainer}>
+                <Building2 size={64} color="#D1D5DB" />
+              </View>
+              <Text style={styles.modernEmptyTitle}>No Universities Found</Text>
+              <Text style={styles.modernEmptySubtitle}>Try adjusting your search criteria</Text>
             </View>
           )}
         </View>
@@ -749,94 +755,141 @@ export default function EducationScreen() {
       {/* Scholarships Tab Content */}
       {activeTab === 'scholarships' && (
         <View style={styles.section}>
-          <View style={styles.sectionHeader}>
-            <Text style={styles.sectionTitle}>💰 Available Scholarships</Text>
-            <Text style={styles.sectionCount}>{filteredScholarships.length} scholarships</Text>
+          {/* Section Header with Stats */}
+          <View style={styles.modernSectionHeader}>
+            <View style={styles.headerLeft}>
+              <View style={[styles.headerIconBox, {backgroundColor: '#FFF9E6'}]}>
+                <Award size={24} color="#F59E0B" />
+              </View>
+              <View>
+                <Text style={styles.modernSectionTitle}>Scholarships & Funding</Text>
+                <Text style={styles.modernSectionSubtitle}>Find financial support for your education</Text>
+              </View>
+            </View>
+            <View style={[styles.countBadge, {backgroundColor: '#FFF9E6', borderColor: '#F59E0B'}]}>
+              <Text style={[styles.countBadgeText, {color: '#F59E0B'}]}>{filteredScholarships.length}</Text>
+            </View>
           </View>
 
           {loading ? (
-            <Text style={styles.loadingText}>Loading scholarships...</Text>
+            <View style={styles.loadingContainer}>
+              <ActivityIndicator size="large" color="#F59E0B" />
+              <Text style={styles.loadingText}>Loading scholarships...</Text>
+            </View>
           ) : filteredScholarships.length > 0 ? (
-            filteredScholarships.map((scholarship) => {
-              // Parse image_url if it's a JSON array
-              let imageUri = scholarship.image_url || 'https://images.unsplash.com/photo-1523050854058-8df90110c9f1?w=800';
-              if (imageUri && typeof imageUri === 'string' && imageUri.startsWith('[')) {
-                try {
-                  const parsed = JSON.parse(imageUri);
-                  imageUri = Array.isArray(parsed) && parsed.length > 0 ? parsed[0] : imageUri;
-                } catch (e) {
-                  // Keep original if parsing fails
+            <View style={styles.cardsGrid}>
+              {filteredScholarships.map((scholarship) => {
+                // Parse image_url if it's a JSON array
+                let imageUri = scholarship.image_url || 'https://images.unsplash.com/photo-1523050854058-8df90110c9f1?w=800';
+                if (imageUri && typeof imageUri === 'string' && imageUri.startsWith('[')) {
+                  try {
+                    const parsed = JSON.parse(imageUri);
+                    imageUri = Array.isArray(parsed) && parsed.length > 0 ? parsed[0] : imageUri;
+                  } catch (e) {
+                    // Keep original if parsing fails
+                  }
                 }
-              }
-              const currencySymbol = scholarship.funding_currency === 'GHS' ? '₵' : '$';
-              return (
-              <TouchableOpacity 
-                key={scholarship.id} 
-                style={styles.scholarshipCard}
-                onPress={() => router.push(`/education/detail/${scholarship.id}` as any)}
-              >
-                <View style={styles.scholarshipImageContainer}>
-                  <Image 
-                    source={{ uri: imageUri }} 
-                    style={styles.scholarshipImage}
-                    resizeMode="cover"
-                  />
-                </View>
-                <TouchableOpacity 
-                  style={styles.bookmarkIconSmall}
-                  onPress={(e) => {
-                    e?.preventDefault?.();
-                    e?.stopPropagation?.();
-                    toggleBookmark(scholarship.id, e);
-                  }}
-                  activeOpacity={0.7}
-                  hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-                >
-                  <Bookmark 
-                    size={18} 
-                    color={bookmarkedIds.includes(scholarship.id) ? "#4169E1" : "#666666"} 
-                    fill={bookmarkedIds.includes(scholarship.id) ? "#4169E1" : "none"}
-                  />
-                </TouchableOpacity>
-                <View style={styles.scholarshipInfo}>
-                  <View style={styles.scholarshipTypeTag}>
-                    <GraduationCap size={14} color="#4169E1" />
-                    <Text style={styles.scholarshipTypeText}>Scholarship</Text>
-                  </View>
-                  <Text style={styles.scholarshipTitle}>{scholarship.title}</Text>
-                  <Text style={styles.cardDescription} numberOfLines={2}>
-                    {scholarship.description}
-                  </Text>
-                  <View style={styles.scholarshipDetails}>
-                    {scholarship.funding_amount && (
-                      <View style={styles.detailItem}>
-                        <Wallet size={14} color="#4CAF50" />
-                        <Text style={styles.detailText}>{currencySymbol}{scholarship.funding_amount}</Text>
+                const currencySymbol = scholarship.funding_currency === 'GHS' ? '₵' : '$';
+                
+                // Calculate days remaining
+                let daysRemaining = null;
+                let deadlineStatus = '';
+                if (scholarship.deadline_date) {
+                  const deadline = new Date(scholarship.deadline_date);
+                  const now = new Date();
+                  daysRemaining = Math.ceil((deadline.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
+                  if (daysRemaining > 0) {
+                    deadlineStatus = `${daysRemaining} days left`;
+                  } else {
+                    deadlineStatus = 'Expired';
+                  }
+                }
+                
+                return (
+                  <TouchableOpacity 
+                    key={scholarship.id} 
+                    style={styles.modernScholarshipCard}
+                    onPress={() => router.push(`/education/detail/${scholarship.id}` as any)}
+                    activeOpacity={0.95}
+                  >
+                    <View style={styles.modernCardImageContainer}>
+                      <Image 
+                        source={{ uri: imageUri }} 
+                        style={styles.modernCardImage}
+                        resizeMode="cover"
+                      />
+                      <View style={styles.imageGradient} />
+                      
+                      {/* Funding Amount Badge */}
+                      {scholarship.funding_amount && (
+                        <View style={styles.fundingAmountBadge}>
+                          <Wallet size={16} color="#FFFFFF" />
+                          <Text style={styles.fundingAmountText}>
+                            {currencySymbol}{scholarship.funding_amount}
+                          </Text>
+                        </View>
+                      )}
+                      
+                      <TouchableOpacity 
+                        style={styles.modernBookmarkButton}
+                        onPress={(e) => {
+                          e?.preventDefault?.();
+                          e?.stopPropagation?.();
+                          toggleBookmark(scholarship.id, e);
+                        }}
+                        activeOpacity={0.7}
+                        hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                      >
+                        <Bookmark 
+                          size={20} 
+                          color={bookmarkedIds.includes(scholarship.id) ? "#FFD700" : "#FFFFFF"} 
+                          fill={bookmarkedIds.includes(scholarship.id) ? "#FFD700" : "none"}
+                          strokeWidth={2}
+                        />
+                      </TouchableOpacity>
+                    </View>
+                    
+                    <View style={styles.modernCardContent}>
+                      <View style={styles.scholarshipTypeBadge}>
+                        <GraduationCap size={14} color="#F59E0B" />
+                        <Text style={styles.scholarshipTypeBadgeText}>Scholarship</Text>
                       </View>
-                    )}
-                    {scholarship.deadline_date ? (
-                      <View style={styles.detailItem}>
-                        <Clock size={14} color="#FF6B6B" />
-                        <Text style={styles.deadlineText}>
-                          {new Date(scholarship.deadline_date) > new Date()
-                            ? `${Math.ceil((new Date(scholarship.deadline_date).getTime() - new Date().getTime()) / (1000 * 60 * 60 * 24))} days left`
-                            : 'Expired'}
-                        </Text>
-                      </View>
-                    ) : scholarship.deadline_text ? (
-                      <View style={styles.detailItem}>
-                        <Clock size={14} color="#FF6B6B" />
-                        <Text style={styles.deadlineText}>{scholarship.deadline_text}</Text>
-                      </View>
-                    ) : null}
-                  </View>
-                </View>
-              </TouchableOpacity>
-            )})
+                      
+                      <Text style={styles.modernCardTitle} numberOfLines={2}>{scholarship.title}</Text>
+                      
+                      <Text style={styles.modernCardDescription} numberOfLines={3}>
+                        {scholarship.description}
+                      </Text>
+                      
+                      {/* Deadline Info */}
+                      {(deadlineStatus || scholarship.deadline_text) && (
+                        <View style={styles.deadlineContainer}>
+                          <Clock size={14} color={daysRemaining !== null && daysRemaining > 0 && daysRemaining <= 7 ? '#EF4444' : '#6B7280'} />
+                          <Text style={[
+                            styles.deadlineInfoText,
+                            daysRemaining !== null && daysRemaining > 0 && daysRemaining <= 7 && styles.urgentDeadline
+                          ]}>
+                            {deadlineStatus || scholarship.deadline_text}
+                          </Text>
+                        </View>
+                      )}
+                      
+                      <TouchableOpacity style={[styles.modernViewButton, {backgroundColor: '#FFF9E6'}]}>
+                        <Text style={[styles.modernViewButtonText, {color: '#F59E0B'}]}>Apply Now</Text>
+                        <ChevronRight size={16} color="#F59E0B" />
+                      </TouchableOpacity>
+                    </View>
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
           ) : (
-            <View style={styles.emptyContainer}>
-              <Award size={64} color="#CCCCCC" />
-              <Text style={styles.emptyText}>No scholarships found</Text>
+            <View style={styles.modernEmptyState}>
+              <View style={styles.emptyIconContainer}>
+                <Award size={64} color="#D1D5DB" />
+              </View>
+              <Text style={styles.modernEmptyTitle}>No Scholarships Found</Text>
+              <Text style={styles.modernEmptySubtitle}>Check back soon for new opportunities</Text>
             </View>
           )}
         </View>
@@ -861,28 +914,17 @@ export default function EducationScreen() {
                 <Text style={styles.myRequestsButtonText}>My Requests</Text>
               </TouchableOpacity>
               
-              {/* Expertise Filter Button */}
+              {/* Unified Filter Button */}
               <TouchableOpacity 
                 style={styles.filterIconButton}
-                onPress={() => setExpertiseFilterVisible(true)}
+                onPress={() => setFilterModalVisible(true)}
               >
-                <Filter size={16} color={selectedExpertise.length > 0 ? '#10B981' : '#6B7280'} />
-                {selectedExpertise.length > 0 && (
+                <Filter size={16} color={(selectedExpertise.length > 0 || advancedFilters) ? '#4169E1' : '#6B7280'} />
+                {(selectedExpertise.length > 0 || advancedFilters) && (
                   <View style={styles.filterBadge}>
-                    <Text style={styles.filterBadgeText}>{selectedExpertise.length}</Text>
-                  </View>
-                )}
-              </TouchableOpacity>
-              
-              {/* Advanced Filter Button */}
-              <TouchableOpacity 
-                style={styles.filterIconButton}
-                onPress={() => setAdvancedFilterVisible(true)}
-              >
-                <Filter size={16} color={advancedFilters ? '#3B82F6' : '#6B7280'} />
-                {advancedFilters && (
-                  <View style={[styles.filterBadge, {backgroundColor: '#3B82F6'}]}>
-                    <Text style={styles.filterBadgeText}>A</Text>
+                    <Text style={styles.filterBadgeText}>
+                      {selectedExpertise.length + (advancedFilters ? 1 : 0)}
+                    </Text>
                   </View>
                 )}
               </TouchableOpacity>
@@ -919,8 +961,9 @@ export default function EducationScreen() {
             filteredMentors.map((mentor) => (
               <TouchableOpacity 
                 key={mentor.id} 
-                style={styles.mentorCard}
+                style={styles.modernMentorCard}
                 onPress={() => router.push(`/education/mentor/${mentor.id}` as any)}
+                activeOpacity={0.95}
               >
                 <Image 
                   source={{ uri: mentor.profile_photo_url || 'https://images.unsplash.com/photo-1568602471122-7832951cc4c5?w=800' }} 
@@ -941,12 +984,11 @@ export default function EducationScreen() {
                   <Text style={styles.mentorRole} numberOfLines={1}>{mentor.current_title}</Text>
                   {mentor.company && (
                     <View style={styles.companyRow}>
-                      <Building2 size={12} color="#666666" />
                       <Text style={styles.mentorCompany}>{mentor.company}</Text>
                     </View>
                   )}
                   {/* Rating Display */}
-                  <View style={{ marginTop: 8 }}>
+                  <View style={{ marginTop: 6 }}>
                     <MentorRatingSummary
                       averageRating={mentor.average_rating || 0}
                       totalRatings={mentor.total_ratings || 0}
@@ -954,35 +996,34 @@ export default function EducationScreen() {
                     />
                   </View>
                   {mentor.expertise_areas && mentor.expertise_areas.length > 0 && (
-                    <View style={{flexDirection:'row', flexWrap:'wrap', gap:6, marginTop:6}}>
+                    <View style={styles.mentorFormatsRow}>
                       {mentor.expertise_areas.slice(0, 3).map((area:string, idx: number) => (
-                        <View key={idx} style={{backgroundColor:'#EAF2FF', paddingHorizontal:8, paddingVertical:4, borderRadius:8, borderWidth:1, borderColor:'#D6E1FF'}}>
-                          <Text style={{fontSize:11, color:'#4169E1', fontFamily:'Inter-SemiBold'}}>{area}</Text>
+                        <View key={idx} style={styles.mentorChip}>
+                          <Text style={styles.mentorChipText}>{area}</Text>
                         </View>
                       ))}
                       {mentor.expertise_areas.length > 3 && (
-                        <View style={{backgroundColor:'#F3F4F6', paddingHorizontal:8, paddingVertical:4, borderRadius:8}}>
-                          <Text style={{fontSize:11, color:'#666666', fontFamily:'Inter-SemiBold'}}>+{mentor.expertise_areas.length - 3}</Text>
+                        <View style={[styles.mentorChip, { backgroundColor: '#F3F4F6', borderColor: '#E5E7EB' }]}>
+                          <Text style={[styles.mentorChipText, { color: '#6B7280' }]}>+{mentor.expertise_areas.length - 3}</Text>
                         </View>
                       )}
                     </View>
                   )}
                   {mentor.meeting_formats && mentor.meeting_formats.length > 0 && (
-                    <View style={{flexDirection:'row', flexWrap:'wrap', gap:4, marginTop:6}}>
+                    <View style={styles.mentorFormatsRow}>
                       {mentor.meeting_formats.map((format:string, idx: number) => (
-                        <Text key={idx} style={{fontSize:11, color:'#666666'}}>
-                          {format === 'Video Call' ? '📹' : format === 'In-Person' ? '🤝' : format === 'Phone' ? '📞' : '📧'} {format}
-                        </Text>
+                        <View key={idx} style={[styles.mentorChip, { backgroundColor: '#F1F5F9', borderColor: '#E2E8F0' }]}>
+                          <Text style={[styles.mentorChipText, { color: '#334155' }]}>{format}</Text>
+                        </View>
                       ))}
                     </View>
                   )}
                   <View style={styles.mentorFooter}>
                     <View style={styles.availabilityBadge}>
-                      <Clock size={12} color="#10B981" />
-                      <Text style={styles.availabilityText}>{mentor.available_hours || 'Flexible'}</Text>
+                      <Text style={styles.availabilityText} numberOfLines={1} ellipsizeMode="tail">{mentor.available_hours || 'Flexible'}</Text>
                     </View>
-                    <TouchableOpacity style={styles.connectButton}>
-                      <Text style={styles.connectButtonText}>Request Mentorship</Text>
+                    <TouchableOpacity style={styles.mentorCTAButton}>
+                      <Text style={styles.mentorCTAButtonText}>Request Mentorship</Text>
                     </TouchableOpacity>
                   </View>
                 </View>
@@ -1006,23 +1047,15 @@ export default function EducationScreen() {
 
       {/* Other sections removed to focus on Universities, Scholarships, and Alumni Mentors */}
       
-      {/* Expertise Filter Modal */}
-      <ExpertiseFilterModal
-        visible={expertiseFilterVisible}
+      {/* Unified Mentor Filter Modal */}
+      <UnifiedMentorFilterModal
+        visible={filterModalVisible}
+        onClose={() => setFilterModalVisible(false)}
         allExpertiseAreas={allExpertiseAreas}
         selectedExpertise={selectedExpertise}
         onExpertiseChange={setSelectedExpertise}
-        onApplyFilters={handleApplyExpertiseFilter}
-        onResetFilters={handleResetExpertiseFilter}
-        onClose={() => setExpertiseFilterVisible(false)}
-      />
-      
-      {/* Advanced Filter Modal */}
-      <AdvancedFilterModal
-        visible={advancedFilterVisible}
-        onClose={() => setAdvancedFilterVisible(false)}
-        onApplyFilters={handleApplyAdvancedFilters}
-        onResetFilters={handleResetAdvancedFilters}
+        onApplyFilters={handleApplyUnifiedFilters}
+        onResetFilters={handleResetUnifiedFilters}
       />
     </ScrollView>
   );
@@ -1044,6 +1077,55 @@ const styles = StyleSheet.create({
   },
   backButton: {
     padding: 8,
+  },
+  heroHeader: {
+    backgroundColor: '#F8FAFF',
+    paddingTop: 56,
+    paddingBottom: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: '#E5EAF2',
+  },
+  heroTopRow: {
+    paddingHorizontal: 16,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  heroTitle: {
+    paddingHorizontal: 16,
+    fontSize: 22,
+    fontFamily: 'Inter-SemiBold',
+    color: '#0F172A',
+    letterSpacing: -0.3,
+  },
+  heroSubtitle: {
+    paddingHorizontal: 16,
+    fontSize: 13,
+    fontFamily: 'Inter-Regular',
+    color: '#475569',
+    marginTop: 4,
+  },
+  heroManageButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    backgroundColor: '#FFFFFF',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: '#D6E1FF',
+    shadowColor: '#4169E1',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 2,
+  },
+  heroManageText: {
+    fontSize: 12,
+    fontFamily: 'Inter-SemiBold',
+    color: '#4169E1',
   },
   title: {
     fontSize: 24,
@@ -1286,31 +1368,31 @@ const styles = StyleSheet.create({
   quickActions: {
     flexDirection: 'row',
     paddingHorizontal: 16,
-    gap: 12,
+    gap: 8,
     marginBottom: 20,
   },
   quickActionButton: {
     flex: 1,
-    flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: '#EEF2FF',
-    paddingVertical: 14,
-    borderRadius: 16,
-    gap: 10,
-    borderWidth: 2,
+    paddingVertical: 10,
+    paddingHorizontal: 6,
+    borderRadius: 10,
+    borderWidth: 1.5,
     borderColor: '#D6E1FF',
     shadowColor: '#4169E1',
-    shadowOffset: { width: 0, height: 3 },
-    shadowOpacity: 0.15,
-    shadowRadius: 6,
-    elevation: 4,
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.08,
+    shadowRadius: 3,
+    elevation: 2,
   },
   quickActionText: {
-    fontSize: 14,
+    fontSize: 11,
     fontFamily: 'Inter-SemiBold',
     color: '#4169E1',
-    letterSpacing: 0.3,
+    letterSpacing: 0.1,
+    textAlign: 'center',
   },
   loadingText: {
     textAlign: 'center',
@@ -1466,8 +1548,43 @@ const styles = StyleSheet.create({
     elevation: 3,
     zIndex: 10,
   },
-  tabScrollContainer: {
-    marginBottom: 20,
+  segmentedTabs: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    paddingHorizontal: 16,
+    paddingTop: 12,
+    paddingBottom: 8,
+  },
+  segmentedTab: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 12,
+    paddingHorizontal: 10,
+    borderRadius: 12,
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1.5,
+    borderColor: '#E5EAF2',
+    gap: 8,
+  },
+  segmentedTabActive: {
+    backgroundColor: '#4169E1',
+    borderColor: '#4169E1',
+    shadowColor: '#4169E1',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.25,
+    shadowRadius: 8,
+    elevation: 4,
+  },
+  segmentedTabText: {
+    fontSize: 13,
+    fontFamily: 'Inter-SemiBold',
+    color: '#1F2937',
+  },
+  segmentedTabTextActive: {
+    color: '#FFFFFF',
   },
   emptySubtext: {
     fontSize: 14,
@@ -1513,6 +1630,23 @@ const styles = StyleSheet.create({
     borderRadius: 35,
     borderWidth: 3,
     borderColor: '#4169E1',
+  },
+  modernMentorCard: {
+    position: 'relative',
+    flexDirection: 'row',
+    backgroundColor: '#FFFFFF',
+    borderRadius: 16,
+    marginHorizontal: 16,
+    marginBottom: 14,
+    padding: 16,
+    shadowColor: '#000000',
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.08,
+    shadowRadius: 10,
+    elevation: 4,
+    gap: 14,
+    borderWidth: 1,
+    borderColor: '#EEF2FF',
   },
   mentorInfo: {
     flex: 1,
@@ -1666,35 +1800,64 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
+    flexWrap: 'wrap',
     marginTop: 12,
     paddingTop: 12,
     borderTopWidth: 1,
     borderTopColor: '#F3F4F6',
   },
+  mentorFormatsRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 6,
+    marginTop: 6,
+  },
+  mentorChip: {
+    backgroundColor: '#EAF2FF',
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: '#D6E1FF',
+  },
+  mentorChipText: {
+    fontSize: 11,
+    fontFamily: 'Inter-SemiBold',
+    color: '#4169E1',
+  },
   availabilityBadge: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 4,
-    backgroundColor: '#D1FAE5',
-    paddingHorizontal: 10,
+    backgroundColor: '#F1F5F9',
+    paddingHorizontal: 12,
     paddingVertical: 6,
     borderRadius: 8,
+    flexShrink: 1,
+    minWidth: 0,
+    maxWidth: '70%',
   },
   availabilityText: {
-    fontSize: 11,
-    fontFamily: 'Inter-SemiBold',
-    color: '#10B981',
-  },
-  connectButton: {
-    backgroundColor: '#4169E1',
-    paddingVertical: 8,
-    paddingHorizontal: 14,
-    borderRadius: 10,
-  },
-  connectButtonText: {
     fontSize: 12,
     fontFamily: 'Inter-SemiBold',
+    color: '#334155',
+  },
+  mentorCTAButton: {
+    backgroundColor: '#4169E1',
+    paddingVertical: 10,
+    paddingHorizontal: 14,
+    borderRadius: 10,
+    shadowColor: '#4169E1',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.2,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  mentorCTAButtonText: {
+    fontSize: 13,
+    fontFamily: 'Inter-SemiBold',
     color: '#FFFFFF',
+    letterSpacing: 0.3,
   },
   emptyButton: {
     backgroundColor: '#4169E1',
@@ -1965,5 +2128,281 @@ const styles = StyleSheet.create({
     fontFamily: 'Inter-SemiBold',
     color: '#FF5722',
     marginTop: 4,
+  },
+  // Modern redesigned styles
+  modernSectionHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: 20,
+    paddingVertical: 16,
+    marginBottom: 8,
+    backgroundColor: '#FFFFFF',
+  },
+  headerLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 14,
+    flex: 1,
+  },
+  headerIconBox: {
+    width: 48,
+    height: 48,
+    borderRadius: 14,
+    backgroundColor: '#EEF2FF',
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: '#4169E1',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 6,
+    elevation: 3,
+  },
+  modernSectionTitle: {
+    fontSize: 20,
+    fontFamily: 'Inter-SemiBold',
+    color: '#1F2937',
+    letterSpacing: -0.3,
+  },
+  modernSectionSubtitle: {
+    fontSize: 13,
+    fontFamily: 'Inter-Regular',
+    color: '#6B7280',
+    marginTop: 2,
+  },
+  countBadge: {
+    minWidth: 44,
+    height: 44,
+    borderRadius: 12,
+    backgroundColor: '#EEF2FF',
+    borderWidth: 2,
+    borderColor: '#4169E1',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 12,
+  },
+  countBadgeText: {
+    fontSize: 16,
+    fontFamily: 'Inter-SemiBold',
+    color: '#4169E1',
+  },
+  loadingContainer: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 60,
+    gap: 12,
+  },
+  cardsGrid: {
+    paddingHorizontal: 16,
+    gap: 16,
+    paddingBottom: 20,
+  },
+  modernUniversityCard: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 20,
+    overflow: 'hidden',
+    shadowColor: '#000000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.08,
+    shadowRadius: 12,
+    elevation: 5,
+    borderWidth: 1,
+    borderColor: '#F3F4F6',
+  },
+  modernScholarshipCard: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 20,
+    overflow: 'hidden',
+    shadowColor: '#F59E0B',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.12,
+    shadowRadius: 12,
+    elevation: 5,
+    borderWidth: 1,
+    borderColor: '#FEF3C7',
+  },
+  modernCardImageContainer: {
+    width: '100%',
+    height: 200,
+    position: 'relative',
+    backgroundColor: '#F3F4F6',
+  },
+  modernCardImage: {
+    width: '100%',
+    height: '100%',
+  },
+  imageGradient: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    height: 80,
+    backgroundColor: 'transparent',
+  },
+  modernBookmarkButton: {
+    position: 'absolute',
+    top: 12,
+    right: 12,
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: 'rgba(0, 0, 0, 0.35)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: '#000000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.25,
+    shadowRadius: 4,
+    elevation: 4,
+  },
+  fundingAmountBadge: {
+    position: 'absolute',
+    top: 12,
+    left: 12,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    backgroundColor: 'rgba(16, 185, 129, 0.95)',
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 12,
+    shadowColor: '#10B981',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.3,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  fundingAmountText: {
+    fontSize: 14,
+    fontFamily: 'Inter-SemiBold',
+    color: '#FFFFFF',
+    letterSpacing: 0.3,
+  },
+  modernCardContent: {
+    padding: 18,
+    gap: 12,
+  },
+  modernCardTitle: {
+    fontSize: 18,
+    fontFamily: 'Inter-SemiBold',
+    color: '#111827',
+    lineHeight: 24,
+    letterSpacing: -0.2,
+  },
+  modernLocationRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  modernLocationText: {
+    fontSize: 14,
+    fontFamily: 'Inter-Regular',
+    color: '#4169E1',
+  },
+  modernCardDescription: {
+    fontSize: 14,
+    fontFamily: 'Inter-Regular',
+    color: '#6B7280',
+    lineHeight: 20,
+  },
+  modernApplicationBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    alignSelf: 'flex-start',
+    backgroundColor: '#D1FAE5',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#10B981',
+  },
+  modernApplicationText: {
+    fontSize: 12,
+    fontFamily: 'Inter-SemiBold',
+    color: '#10B981',
+  },
+  scholarshipTypeBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    alignSelf: 'flex-start',
+    backgroundColor: '#FEF3C7',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#F59E0B',
+  },
+  scholarshipTypeBadgeText: {
+    fontSize: 12,
+    fontFamily: 'Inter-SemiBold',
+    color: '#F59E0B',
+    letterSpacing: 0.3,
+  },
+  deadlineContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    backgroundColor: '#F3F4F6',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 8,
+    alignSelf: 'flex-start',
+  },
+  deadlineInfoText: {
+    fontSize: 13,
+    fontFamily: 'Inter-SemiBold',
+    color: '#6B7280',
+  },
+  urgentDeadline: {
+    color: '#EF4444',
+  },
+  modernViewButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#EEF2FF',
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    borderRadius: 12,
+    gap: 8,
+    marginTop: 4,
+    borderWidth: 1.5,
+    borderColor: '#4169E1',
+  },
+  modernViewButtonText: {
+    fontSize: 14,
+    fontFamily: 'Inter-SemiBold',
+    color: '#4169E1',
+    letterSpacing: 0.3,
+  },
+  modernEmptyState: {
+    alignItems: 'center',
+    paddingVertical: 80,
+    paddingHorizontal: 32,
+    gap: 16,
+  },
+  emptyIconContainer: {
+    width: 120,
+    height: 120,
+    borderRadius: 60,
+    backgroundColor: '#F9FAFB',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 8,
+  },
+  modernEmptyTitle: {
+    fontSize: 20,
+    fontFamily: 'Inter-SemiBold',
+    color: '#374151',
+    textAlign: 'center',
+  },
+  modernEmptySubtitle: {
+    fontSize: 14,
+    fontFamily: 'Inter-Regular',
+    color: '#9CA3AF',
+    textAlign: 'center',
+    lineHeight: 20,
   },
 });
