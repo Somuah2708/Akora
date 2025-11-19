@@ -13,7 +13,6 @@ import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '@/hooks/useAuth';
-import MentorRatingSummary from '@/components/MentorRatingSummary';
 
 interface FavoriteMentor {
   id: string;
@@ -28,8 +27,6 @@ interface FavoriteMentor {
     company: string;
     expertise_areas: string[];
     profile_photo_url: string | null;
-    average_rating: number;
-    total_ratings: number;
   };
 }
 
@@ -58,9 +55,7 @@ export default function FavoriteMentors() {
             current_title,
             company,
             expertise_areas,
-            profile_photo_url,
-            average_rating,
-            total_ratings
+            profile_photo_url
           )
         `)
         .eq('user_id', user.id)
@@ -69,7 +64,7 @@ export default function FavoriteMentors() {
       if (error) throw error;
 
       console.log(`📚 Fetched ${data?.length || 0} favorite mentors`);
-      setFavorites(data || []);
+      setFavorites(data as any || []);
     } catch (error) {
       console.error('Error fetching favorites:', error);
       Alert.alert('Error', 'Failed to load your favorite mentors.');
@@ -194,17 +189,6 @@ export default function FavoriteMentors() {
                   <Ionicons name="heart" size={24} color="#EF4444" />
                 </TouchableOpacity>
               </View>
-
-              {/* Rating */}
-              {favorite.mentor.total_ratings > 0 && (
-                <View style={styles.ratingRow}>
-                  <MentorRatingSummary
-                    averageRating={favorite.mentor.average_rating || 0}
-                    totalRatings={favorite.mentor.total_ratings || 0}
-                    size="small"
-                  />
-                </View>
-              )}
 
               {/* Expertise Areas */}
               {favorite.mentor.expertise_areas && favorite.mentor.expertise_areas.length > 0 && (

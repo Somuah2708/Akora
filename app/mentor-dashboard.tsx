@@ -77,10 +77,11 @@ export default function MentorDashboard() {
     if (!user || !profile) return;
 
     try {
+      // Use ilike for case-insensitive email matching
       const { data, error } = await supabase
         .from('alumni_mentors')
         .select('id, full_name, email, current_title, company')
-        .eq('email', profile.email)
+        .ilike('email', profile.email)
         .eq('status', 'approved')
         .maybeSingle();
 

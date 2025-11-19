@@ -1,12 +1,12 @@
-import { View, Text, StyleSheet, ScrollView, TextInput, TouchableOpacity, Alert } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TextInput, TouchableOpacity, Alert, ActivityIndicator } from 'react-native';
 import { useState } from 'react';
 import { useRouter } from 'expo-router';
-import { ArrowLeft, User, Briefcase, GraduationCap, Heart, Calendar } from 'lucide-react-native';
+import { ArrowLeft, User, Briefcase, GraduationCap, Heart, Calendar, FileText, Upload, CheckCircle } from 'lucide-react-native';
 import { useAuth } from '@/hooks/useAuth';
 import { supabase } from '@/lib/supabase';
 import { EXPERTISE_OPTIONS, MEETING_FORMATS, DAYS_OPTIONS, INDUSTRY_OPTIONS } from '@/constants/mentorConstants';
 import ProfilePhotoUpload from '@/components/ProfilePhotoUpload';
-import RichTextEditor from '@/components/RichTextEditor';
+import * as DocumentPicker from 'expo-document-picker';
 
 export default function VolunteerMentorScreen() {
   const router = useRouter();
@@ -24,10 +24,13 @@ export default function VolunteerMentorScreen() {
   const [graduationYear, setGraduationYear] = useState('');
   const [degree, setDegree] = useState('');
   const [linkedinUrl, setLinkedinUrl] = useState('');
+  const [whatsappNumber, setWhatsappNumber] = useState('');
   const [availableHours, setAvailableHours] = useState('');
   const [whyMentor, setWhyMentor] = useState('');
   const [whatOffer, setWhatOffer] = useState('');
   const [profilePhotoUrl, setProfilePhotoUrl] = useState('');
+  const [verificationDocuments, setVerificationDocuments] = useState<string[]>([]);
+  const [uploadingDoc, setUploadingDoc] = useState(false);
 
   // Multi-select fields
   const [selectedExpertise, setSelectedExpertise] = useState<string[]>([]);
@@ -40,6 +43,89 @@ export default function VolunteerMentorScreen() {
     } else {
       setList([...list, item]);
     }
+  };
+
+  const pickDocument = async () => {
+    try {
+      const result = await DocumentPicker.getDocumentAsync({
+        type: ['application/pdf', 'image/*', 'application/msword', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'],
+        copyToCacheDirectory: true,
+      });
+
+      if (result.canceled) return;
+
+      const file = result.assets[0];
+      
+      // Check file size (max 5MB)
+      if (file.size && file.size > 5 * 1024 * 1024) {
+        Alert.alert('File Too Large', 'Please select a file smaller than 5MB');
+        return;
+      }
+
+      await uploadDocument(file.uri, file.name);
+    } catch (error) {
+      console.error('Error picking document:', error);
+      Alert.alert('Error', 'Failed to pick document');
+    }
+  };
+
+  const uploadDocument = async (uri: string, fileName: string) => {
+    if (!user) {
+      Alert.alert('Error', 'You must be logged in to upload documents');
+      return;
+    }
+
+    try {
+      setUploadingDoc(true);
+
+      const fileExt = fileName.split('.').pop()?.toLowerCase() || 'pdf';
+      const filePath = `${user.id}/verification/${Date.now()}.${fileExt}`;
+
+      // Create FormData for file upload
+      const formData = new FormData();
+      formData.append('file', {
+        uri: uri,
+        type: `application/${fileExt}`,
+        name: fileName,
+      } as any);
+
+      // Upload to Supabase Storage
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) throw new Error('No active session');
+
+      const uploadResponse = await fetch(
+        `${process.env.EXPO_PUBLIC_SUPABASE_URL}/storage/v1/object/mentor-verification/${filePath}`,
+        {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${session.access_token}`,
+          },
+          body: formData,
+        }
+      );
+
+      if (!uploadResponse.ok) {
+        const errorData = await uploadResponse.json();
+        throw new Error(errorData.message || 'Upload failed');
+      }
+
+      // Get public URL
+      const { data: { publicUrl } } = supabase.storage
+        .from('mentor-verification')
+        .getPublicUrl(filePath);
+
+      setVerificationDocuments([...verificationDocuments, publicUrl]);
+      Alert.alert('Success', 'Document uploaded successfully!');
+    } catch (error: any) {
+      console.error('Error uploading document:', error);
+      Alert.alert('Upload Failed', error.message || 'Failed to upload document');
+    } finally {
+      setUploadingDoc(false);
+    }
+  };
+
+  const removeDocument = (url: string) => {
+    setVerificationDocuments(verificationDocuments.filter(doc => doc !== url));
   };
 
   const handleSubmit = async () => {
@@ -64,6 +150,20 @@ export default function VolunteerMentorScreen() {
       return;
     }
 
+    // Verification documents are required
+    if (verificationDocuments.length === 0) {
+      Alert.alert(
+        'Verification Required',
+        'Please upload at least one verification document (e.g., diploma, professional certificate, employee ID, LinkedIn profile screenshot) to verify your credentials.',
+        [{ text: 'OK' }]
+      );
+      return;
+    }
+
+    await submitApplication();
+  };
+
+  const submitApplication = async () => {
     try {
       setLoading(true);
 
@@ -83,9 +183,11 @@ export default function VolunteerMentorScreen() {
         meeting_formats: selectedFormats.length > 0 ? selectedFormats : ['Video Call'],
         preferred_days: selectedDays.length > 0 ? selectedDays : ['Flexible'],
         linkedin_url: linkedinUrl.trim() || null,
+        whatsapp_number: whatsappNumber.trim() || null,
+        profile_photo_url: profilePhotoUrl || null,
         why_mentor: whyMentor.trim(),
         what_offer: whatOffer.trim(),
-        profile_photo_url: profilePhotoUrl || null,
+        verification_documents: verificationDocuments,
         status: 'pending',
       };
 
@@ -238,6 +340,16 @@ export default function VolunteerMentorScreen() {
             autoCapitalize="none"
             placeholderTextColor="#999999"
           />
+
+          <Text style={styles.label}>WhatsApp Number (Optional)</Text>
+          <TextInput
+            style={styles.input}
+            value={whatsappNumber}
+            onChangeText={setWhatsappNumber}
+            placeholder="+233 XX XXX XXXX"
+            keyboardType="phone-pad"
+            placeholderTextColor="#999999"
+          />
         </View>
 
         {/* Education Section */}
@@ -353,31 +465,95 @@ export default function VolunteerMentorScreen() {
           </View>
         </View>
 
+        {/* Verification Documents Section */}
+        <View style={styles.section}>
+          <View style={styles.sectionHeader}>
+            <FileText size={18} color="#4169E1" />
+            <Text style={styles.sectionTitle}>Verification Documents *</Text>
+          </View>
+
+          <View style={styles.verificationInfo}>
+            <Text style={styles.verificationInfoText}>
+              📄 To ensure the safety and quality of our mentorship program, please upload at least one document to verify your credentials:
+            </Text>
+            <Text style={styles.verificationBullet}>• Diploma or degree certificate</Text>
+            <Text style={styles.verificationBullet}>• Professional certification</Text>
+            <Text style={styles.verificationBullet}>• Employee ID or business card</Text>
+            <Text style={styles.verificationBullet}>• LinkedIn profile screenshot</Text>
+            <Text style={styles.verificationBullet}>• Letter of recommendation</Text>
+          </View>
+
+          <TouchableOpacity
+            style={styles.uploadButton}
+            onPress={pickDocument}
+            disabled={uploadingDoc}
+          >
+            {uploadingDoc ? (
+              <ActivityIndicator size="small" color="#4169E1" />
+            ) : (
+              <>
+                <Upload size={20} color="#4169E1" />
+                <Text style={styles.uploadButtonText}>Upload Document</Text>
+              </>
+            )}
+          </TouchableOpacity>
+
+          {verificationDocuments.length > 0 && (
+            <View style={styles.documentsContainer}>
+              {verificationDocuments.map((doc, index) => (
+                <View key={index} style={styles.documentItem}>
+                  <CheckCircle size={16} color="#10B981" />
+                  <Text style={styles.documentName} numberOfLines={1}>
+                    Document {index + 1}
+                  </Text>
+                  <TouchableOpacity onPress={() => removeDocument(doc)}>
+                    <Text style={styles.removeDocText}>Remove</Text>
+                  </TouchableOpacity>
+                </View>
+              ))}
+            </View>
+          )}
+
+          <Text style={styles.helpText}>
+            Accepted formats: PDF, DOC, DOCX, JPG, PNG (Max 5MB per file)
+          </Text>
+        </View>
+
         {/* Motivation Section */}
         <View style={styles.section}>
           <Text style={styles.label}>Why do you want to be a mentor? *</Text>
           <Text style={styles.helpText}>
-            Share your motivation (use **bold**, _italic_, or [links](url) for formatting)
+            Share your motivation for volunteering as a mentor
           </Text>
-          <RichTextEditor
+          <TextInput
+            style={styles.textArea}
             value={whyMentor}
             onChangeText={setWhyMentor}
             placeholder="Share your motivation for volunteering as a mentor..."
+            placeholderTextColor="#999999"
+            multiline
+            numberOfLines={6}
+            textAlignVertical="top"
             maxLength={1000}
-            minHeight={120}
           />
+          <Text style={styles.characterCount}>{whyMentor.length}/1000</Text>
 
           <Text style={styles.label}>What can you offer to mentees? *</Text>
           <Text style={styles.helpText}>
             Describe the value you provide (guidance, connections, skills, etc.)
           </Text>
-          <RichTextEditor
+          <TextInput
+            style={styles.textArea}
             value={whatOffer}
             onChangeText={setWhatOffer}
             placeholder="Describe what you can offer (expertise, industry insights, career advice, etc.)..."
+            placeholderTextColor="#999999"
+            multiline
+            numberOfLines={6}
+            textAlignVertical="top"
             maxLength={1000}
-            minHeight={120}
           />
+          <Text style={styles.characterCount}>{whatOffer.length}/1000</Text>
         </View>
 
         {/* Submit Button */}
@@ -488,7 +664,84 @@ const styles = StyleSheet.create({
     color: '#000000',
   },
   textArea: {
-    minHeight: 100,
+    backgroundColor: '#F9FAFB',
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+    borderRadius: 12,
+    padding: 14,
+    fontSize: 15,
+    color: '#000000',
+    minHeight: 140,
+    fontFamily: 'System',
+    lineHeight: 22,
+  },
+  characterCount: {
+    fontSize: 12,
+    color: '#9CA3AF',
+    textAlign: 'right',
+    marginTop: 4,
+  },
+  verificationInfo: {
+    backgroundColor: '#EFF6FF',
+    borderRadius: 12,
+    padding: 16,
+    marginBottom: 16,
+    borderWidth: 1,
+    borderColor: '#BFDBFE',
+  },
+  verificationInfoText: {
+    fontSize: 13,
+    color: '#1E40AF',
+    marginBottom: 12,
+    lineHeight: 20,
+  },
+  verificationBullet: {
+    fontSize: 13,
+    color: '#1E40AF',
+    marginLeft: 8,
+    marginBottom: 4,
+  },
+  uploadButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#FFFFFF',
+    borderWidth: 2,
+    borderColor: '#4169E1',
+    borderRadius: 12,
+    paddingVertical: 14,
+    gap: 8,
+    marginBottom: 16,
+  },
+  uploadButtonText: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: '#4169E1',
+  },
+  documentsContainer: {
+    gap: 8,
+    marginBottom: 12,
+  },
+  documentItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#F0FDF4',
+    borderWidth: 1,
+    borderColor: '#86EFAC',
+    borderRadius: 8,
+    padding: 12,
+    gap: 10,
+  },
+  documentName: {
+    flex: 1,
+    fontSize: 14,
+    color: '#166534',
+    fontWeight: '500',
+  },
+  removeDocText: {
+    fontSize: 13,
+    color: '#EF4444',
+    fontWeight: '500',
   },
   chipContainer: {
     flexDirection: 'row',

@@ -5,7 +5,6 @@ import { SplashScreen, useRouter, Link } from 'expo-router';
 import { Search, Filter, ArrowLeft, GraduationCap, MapPin, Globe, ChevronRight, Clock, Award, Wallet, BookOpen, Building2, Users, Plus, FileText, Bookmark } from 'lucide-react-native';
 import { useAuth } from '@/hooks/useAuth';
 import { supabase } from '@/lib/supabase';
-import MentorRatingSummary from '@/components/MentorRatingSummary';
 import UnifiedMentorFilterModal, { FilterCriteria } from '@/components/UnifiedMentorFilterModal';
 
 SplashScreen.preventAutoHideAsync();
@@ -151,7 +150,7 @@ export default function EducationScreen() {
       setLoading(true);
       const { data, error } = await supabase
         .from('alumni_mentors')
-        .select('*, average_rating, total_ratings')
+        .select('*')
         .eq('status', 'approved')
         .order('created_at', { ascending: false });
 
@@ -987,14 +986,6 @@ export default function EducationScreen() {
                       <Text style={styles.mentorCompany}>{mentor.company}</Text>
                     </View>
                   )}
-                  {/* Rating Display */}
-                  <View style={{ marginTop: 6 }}>
-                    <MentorRatingSummary
-                      averageRating={mentor.average_rating || 0}
-                      totalRatings={mentor.total_ratings || 0}
-                      size="small"
-                    />
-                  </View>
                   {mentor.expertise_areas && mentor.expertise_areas.length > 0 && (
                     <View style={styles.mentorFormatsRow}>
                       {mentor.expertise_areas.slice(0, 3).map((area:string, idx: number) => (
@@ -1022,7 +1013,10 @@ export default function EducationScreen() {
                     <View style={styles.availabilityBadge}>
                       <Text style={styles.availabilityText} numberOfLines={1} ellipsizeMode="tail">{mentor.available_hours || 'Flexible'}</Text>
                     </View>
-                    <TouchableOpacity style={styles.mentorCTAButton}>
+                    <TouchableOpacity 
+                      style={styles.mentorCTAButton}
+                      onPress={() => router.push(`/education/mentor/${mentor.id}` as any)}
+                    >
                       <Text style={styles.mentorCTAButtonText}>Request Mentorship</Text>
                     </TouchableOpacity>
                   </View>

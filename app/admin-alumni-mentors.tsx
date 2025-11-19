@@ -10,30 +10,47 @@ import {
   RefreshControl,
   ActivityIndicator,
   Modal,
+  Image,
+  Linking,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/hooks/useAuth';
-import { EXPERTISE_OPTIONS, MEETING_FORMATS, DAYS_OPTIONS, INDUSTRY_OPTIONS } from '@/constants/mentorConstants';
-import { CSVExporter, MentorCSVColumns, MentorRequestCSVColumns, MentorApplicationCSVColumns } from '@/utils/csvExporter';
-import BulkActionsModal from '@/components/BulkActionsModal';
-import AnalyticsDashboard from '@/components/AnalyticsDashboard';
+import { EXPERTISE_OPTIONS, MEETING_FORMATS, DAYS_OPTIONS } from '@/constants/mentorConstants';
 
-type TabType = 'mentors' | 'applications' | 'requests' | 'analytics';
+type TabType = 'mentors' | 'applications' | 'requests';
 
 interface Mentor {
   id: string;
+  user_id: string | null;
   full_name: string;
   email: string;
   phone: string | null;
+  profile_photo_url: string | null;
   current_title: string;
   company: string | null;
   industry: string | null;
+  years_of_experience: number | null;
+  graduation_year: number | null;
+  degree: string | null;
   expertise_areas: string[];
+  available_hours: string | null;
+  meeting_formats: string[];
+  preferred_days: string[];
+  linkedin_url: string | null;
+  whatsapp_number: string | null;
+  short_bio: string | null;
+  detailed_bio: string | null;
+  mentorship_philosophy: string | null;
   status: 'pending' | 'approved' | 'rejected' | 'inactive';
   application_type: 'admin_added' | 'self_applied';
+  admin_notes: string | null;
+  approved_by: string | null;
+  approved_at: string | null;
+  created_by: string | null;
   created_at: string;
+  updated_at: string;
 }
 
 interface Application {
@@ -41,24 +58,45 @@ interface Application {
   user_id: string | null;
   full_name: string;
   email: string;
+  phone: string | null;
+  profile_photo_url: string | null;
   current_title: string;
   company: string | null;
+  industry: string | null;
+  years_of_experience: number | null;
+  graduation_year: number | null;
+  degree: string | null;
   expertise_areas: string[];
+  available_hours: string | null;
+  meeting_formats: string[];
+  preferred_days: string[];
+  linkedin_url: string | null;
+  whatsapp_number: string | null;
   why_mentor: string;
   what_offer: string;
+  verification_documents: string[] | null;
   status: 'pending' | 'approved' | 'rejected';
+  admin_notes: string | null;
+  reviewed_by: string | null;
+  reviewed_at: string | null;
   created_at: string;
+  updated_at: string;
 }
 
 interface Request {
   id: string;
+  mentor_id: string;
+  mentee_id: string | null;
   mentee_name: string;
   mentee_email: string;
+  mentee_phone: string | null;
   current_status: string | null;
   areas_of_interest: string[];
   message: string;
   status: 'pending' | 'accepted' | 'declined' | 'completed';
+  mentor_response: string | null;
   created_at: string;
+  updated_at: string;
   mentor: {
     full_name: string;
     email: string;
@@ -78,42 +116,19 @@ export default function AdminAlumniMentorsScreen() {
   const [requests, setRequests] = useState<Request[]>([]);
 
   // Modal states
-  const [showAddMentorModal, setShowAddMentorModal] = useState(false);
   const [editingMentor, setEditingMentor] = useState<Mentor | null>(null);
   const [selectedApplication, setSelectedApplication] = useState<Application | null>(null);
-  
-  // Bulk actions states
-  const [selectedMentorIds, setSelectedMentorIds] = useState<string[]>([]);
-  const [selectedApplicationIds, setSelectedApplicationIds] = useState<string[]>([]);
-  const [selectedRequestIds, setSelectedRequestIds] = useState<string[]>([]);
-  const [bulkActionModalVisible, setBulkActionModalVisible] = useState(false);
-  const [bulkActionType, setBulkActionType] = useState<'approve' | 'reject' | 'decline' | 'complete' | 'delete'>('approve');
-  const [bulkActionTitle, setBulkActionTitle] = useState('');
-  const [selectionMode, setSelectionMode] = useState(false);
-
-  // Statistics
-  const [stats, setStats] = useState({
-    totalMentors: 0,
-    activeMentors: 0,
-    pendingApplications: 0,
-    pendingRequests: 0,
-    acceptedRequests: 0,
-  });
+  const [selectedRequest, setSelectedRequest] = useState<Request | null>(null);
 
   // Check admin access
   useEffect(() => {
-    // Wait for profile to load before checking
     if (profile === null) {
-      console.log('[AdminAlumniMentors] Waiting for profile to load...');
       return;
     }
     
     if (!profile?.is_admin) {
-      console.log('[AdminAlumniMentors] Access denied - not an admin');
       Alert.alert('Access Denied', 'You do not have permission to access this page.');
       router.back();
-    } else {
-      console.log('[AdminAlumniMentors] Access granted - user is admin');
     }
   }, [profile, router]);
 
@@ -140,7 +155,7 @@ export default function AdminAlumniMentorsScreen() {
       if (appsError) throw appsError;
       setApplications(appsData || []);
 
-      // Fetch requests
+      // Fetch requests with mentor info
       const { data: requestsData, error: requestsError } = await supabase
         .from('mentor_requests')
         .select(`
@@ -155,22 +170,7 @@ export default function AdminAlumniMentorsScreen() {
       if (requestsError) throw requestsError;
       setRequests(requestsData || []);
 
-      // Calculate stats
-      const totalMentors = mentorsData?.length || 0;
-      const activeMentors = mentorsData?.filter(m => m.status === 'approved').length || 0;
-      const pendingApps = appsData?.filter(a => a.status === 'pending').length || 0;
-      const pendingReqs = requestsData?.filter(r => r.status === 'pending').length || 0;
-      const acceptedReqs = requestsData?.filter(r => r.status === 'accepted').length || 0;
-
-      setStats({
-        totalMentors,
-        activeMentors,
-        pendingApplications: pendingApps,
-        pendingRequests: pendingReqs,
-        acceptedRequests: acceptedReqs,
-      });
-
-      console.log('📊 Admin Stats:', { totalMentors, activeMentors, pendingApps, pendingReqs });
+      console.log('📊 Loaded:', mentorsData?.length, 'mentors,', appsData?.length, 'applications,', requestsData?.length, 'requests');
     } catch (error) {
       console.error('Error fetching data:', error);
       Alert.alert('Error', 'Failed to load data');
@@ -188,140 +188,6 @@ export default function AdminAlumniMentorsScreen() {
     setRefreshing(true);
     fetchAllData();
   }, [fetchAllData]);
-
-  // Export handlers
-  const handleExportMentors = async () => {
-    try {
-      const csvContent = CSVExporter.toCSV(mentors, MentorCSVColumns);
-      const filename = `mentors_${CSVExporter.formatDate(new Date())}.csv`;
-      await CSVExporter.shareCSV(csvContent, filename);
-    } catch (error) {
-      Alert.alert('Export Error', 'Failed to export mentors data');
-      console.error('Export error:', error);
-    }
-  };
-
-  const handleExportApplications = async () => {
-    try {
-      const csvContent = CSVExporter.toCSV(applications, MentorApplicationCSVColumns);
-      const filename = `applications_${CSVExporter.formatDate(new Date())}.csv`;
-      await CSVExporter.shareCSV(csvContent, filename);
-    } catch (error) {
-      Alert.alert('Export Error', 'Failed to export applications data');
-      console.error('Export error:', error);
-    }
-  };
-
-  const handleExportRequests = async () => {
-    try {
-      const csvContent = CSVExporter.toCSV(requests, MentorRequestCSVColumns);
-      const filename = `requests_${CSVExporter.formatDate(new Date())}.csv`;
-      await CSVExporter.shareCSV(csvContent, filename);
-    } catch (error) {
-      Alert.alert('Export Error', 'Failed to export requests data');
-      console.error('Export error:', error);
-    }
-  };
-
-  // Bulk action handlers
-  const handleBulkAction = async (ids: string[], reason?: string) => {
-    try {
-      let result;
-      
-      switch (bulkActionType) {
-        case 'approve':
-          result = await supabase.rpc('bulk_approve_applications', {
-            application_ids: ids,
-          });
-          break;
-          
-        case 'reject':
-          result = await supabase.rpc('bulk_reject_applications', {
-            application_ids: ids,
-            rejection_reason: reason || 'Application did not meet requirements',
-          });
-          break;
-          
-        case 'decline':
-          result = await supabase.rpc('bulk_decline_requests', {
-            request_ids: ids,
-            decline_reason: reason || 'Unable to accept at this time',
-          });
-          break;
-          
-        case 'complete':
-          result = await supabase.rpc('bulk_complete_requests', {
-            request_ids: ids,
-          });
-          break;
-          
-        case 'delete':
-          result = await supabase.rpc('bulk_delete_applications', {
-            application_ids: ids,
-          });
-          break;
-      }
-
-      if (result?.error) throw result.error;
-
-      const data = result?.data?.[0];
-      const successCount = data?.approved_count || data?.rejected_count || data?.declined_count || data?.completed_count || data?.deleted_count || 0;
-      const failedCount = data?.failed_count || 0;
-
-      Alert.alert(
-        'Bulk Action Complete',
-        `Successfully processed ${successCount} item(s). ${failedCount > 0 ? `${failedCount} failed.` : ''}`,
-        [{ text: 'OK', onPress: () => {
-          setSelectionMode(false);
-          setSelectedMentorIds([]);
-          setSelectedApplicationIds([]);
-          setSelectedRequestIds([]);
-          fetchAllData();
-        }}]
-      );
-    } catch (error) {
-      console.error('Bulk action error:', error);
-      Alert.alert('Error', 'Failed to complete bulk action');
-    }
-  };
-
-  const startBulkAction = (actionType: typeof bulkActionType, title: string) => {
-    setBulkActionType(actionType);
-    setBulkActionTitle(title);
-    setBulkActionModalVisible(true);
-  };
-
-  const toggleSelection = (id: string, type: 'mentor' | 'application' | 'request') => {
-    if (type === 'mentor') {
-      setSelectedMentorIds(prev =>
-        prev.includes(id) ? prev.filter(i => i !== id) : [...prev, id]
-      );
-    } else if (type === 'application') {
-      setSelectedApplicationIds(prev =>
-        prev.includes(id) ? prev.filter(i => i !== id) : [...prev, id]
-      );
-    } else {
-      setSelectedRequestIds(prev =>
-        prev.includes(id) ? prev.filter(i => i !== id) : [...prev, id]
-      );
-    }
-  };
-
-  const selectAll = (type: 'mentor' | 'application' | 'request') => {
-    if (type === 'mentor') {
-      setSelectedMentorIds(mentors.map(m => m.id));
-    } else if (type === 'application') {
-      setSelectedApplicationIds(applications.map(a => a.id));
-    } else {
-      setSelectedRequestIds(requests.map(r => r.id));
-    }
-  };
-
-  const clearSelection = () => {
-    setSelectedMentorIds([]);
-    setSelectedApplicationIds([]);
-    setSelectedRequestIds([]);
-  };
 
   // Update mentor status
   const updateMentorStatus = async (mentorId: string, newStatus: 'approved' | 'rejected' | 'inactive') => {
@@ -374,7 +240,7 @@ export default function AdminAlumniMentorsScreen() {
   // Approve application
   const approveApplication = async (application: Application) => {
     try {
-      // Create mentor entry with user_id from application
+      // Create mentor entry from application
       const { error: mentorError } = await supabase
         .from('alumni_mentors')
         .insert({
@@ -393,11 +259,14 @@ export default function AdminAlumniMentorsScreen() {
           meeting_formats: application.meeting_formats,
           preferred_days: application.preferred_days,
           linkedin_url: application.linkedin_url,
-          short_bio: application.why_mentor,
+          whatsapp_number: application.whatsapp_number,
+          profile_photo_url: application.profile_photo_url,
+          short_bio: application.what_offer?.substring(0, 200) || null, // First 200 chars as short bio
           detailed_bio: application.what_offer,
+          mentorship_philosophy: application.why_mentor,
           status: 'approved',
           application_type: 'self_applied',
-          approved_by: user?.id,
+          approved_by: profile?.id,
           approved_at: new Date().toISOString(),
         });
 
@@ -420,7 +289,7 @@ export default function AdminAlumniMentorsScreen() {
         await supabase.from('app_notifications').insert({
           user_id: application.user_id,
           title: '🎉 Mentor Application Approved!',
-          body: `Congratulations! Your application to become a mentor has been approved. You can now start accepting mentorship requests.`,
+          body: `Congratulations! Your application to become a mentor has been approved.`,
         });
       }
 
@@ -447,31 +316,31 @@ export default function AdminAlumniMentorsScreen() {
 
       if (error) throw error;
 
-      // Send notification to applicant
+      // Send notification
       if (userId) {
         await supabase.from('app_notifications').insert({
           user_id: userId,
           title: 'Mentor Application Update',
-          body: 'Thank you for your interest in becoming a mentor. Unfortunately, we are unable to approve your application at this time.',
+          body: 'Thank you for your interest. We are unable to approve your application at this time.',
         });
       }
 
       Alert.alert('Success', 'Application rejected');
       setSelectedApplication(null);
       fetchAllData();
-    } catch (error: any) {
+    } catch (error) {
       console.error('Error rejecting application:', error);
-      let errorMessage = 'Failed to reject application. Please try again.';
-      if (error.message?.includes('Network')) {
-        errorMessage = 'Network error. Please check your connection and try again.';
-      } else if (error.code === 'PGRST301') {
-        errorMessage = 'Database error. Please contact support if this persists.';
-      }
-      Alert.alert('Error', errorMessage, [
-        { text: 'Cancel', style: 'cancel' },
-        { text: 'Retry', onPress: () => rejectApplication(applicationId, userId) },
-      ]);
+      Alert.alert('Error', 'Failed to reject application');
     }
+  };
+
+  // Handle mentee email redirect
+  const contactMentee = (email: string) => {
+    const subject = 'Re: Mentorship Request';
+    const mailtoUrl = `mailto:${email}?subject=${encodeURIComponent(subject)}`;
+    Linking.openURL(mailtoUrl).catch(() => {
+      Alert.alert('Error', 'Unable to open email client');
+    });
   };
 
   if (loading) {
@@ -499,42 +368,22 @@ export default function AdminAlumniMentorsScreen() {
       {/* Stats Cards */}
       <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.statsContainer}>
         <View style={[styles.statCard, { backgroundColor: '#dbeafe' }]}>
-          <Text style={styles.statNumber}>{stats.totalMentors}</Text>
+          <Text style={styles.statNumber}>{mentors.length}</Text>
           <Text style={styles.statLabel}>Total Mentors</Text>
         </View>
         <View style={[styles.statCard, { backgroundColor: '#d1fae5' }]}>
-          <Text style={styles.statNumber}>{stats.activeMentors}</Text>
+          <Text style={styles.statNumber}>{mentors.filter(m => m.status === 'approved').length}</Text>
           <Text style={styles.statLabel}>Active</Text>
         </View>
         <View style={[styles.statCard, { backgroundColor: '#fef3c7' }]}>
-          <Text style={styles.statNumber}>{stats.pendingApplications}</Text>
+          <Text style={styles.statNumber}>{applications.filter(a => a.status === 'pending').length}</Text>
           <Text style={styles.statLabel}>Pending Apps</Text>
         </View>
         <View style={[styles.statCard, { backgroundColor: '#fce7f3' }]}>
-          <Text style={styles.statNumber}>{stats.pendingRequests}</Text>
+          <Text style={styles.statNumber}>{requests.filter(r => r.status === 'pending').length}</Text>
           <Text style={styles.statLabel}>Pending Requests</Text>
         </View>
-        <View style={[styles.statCard, { backgroundColor: '#e0e7ff' }]}>
-          <Text style={styles.statNumber}>{stats.acceptedRequests}</Text>
-          <Text style={styles.statLabel}>Active Mentorships</Text>
-        </View>
       </ScrollView>
-
-      {/* Export Buttons */}
-      <View style={styles.exportContainer}>
-        <TouchableOpacity style={styles.exportButton} onPress={handleExportMentors}>
-          <Ionicons name="download-outline" size={16} color="#4169E1" />
-          <Text style={styles.exportButtonText}>Export Mentors</Text>
-        </TouchableOpacity>
-        <TouchableOpacity style={styles.exportButton} onPress={handleExportApplications}>
-          <Ionicons name="download-outline" size={16} color="#10B981" />
-          <Text style={styles.exportButtonText}>Export Applications</Text>
-        </TouchableOpacity>
-        <TouchableOpacity style={styles.exportButton} onPress={handleExportRequests}>
-          <Ionicons name="download-outline" size={16} color="#8B5CF6" />
-          <Text style={styles.exportButtonText}>Export Requests</Text>
-        </TouchableOpacity>
-      </View>
 
       {/* Tabs */}
       <View style={styles.tabs}>
@@ -553,9 +402,9 @@ export default function AdminAlumniMentorsScreen() {
           <Text style={[styles.tabText, activeTab === 'applications' && styles.activeTabText]}>
             Applications ({applications.length})
           </Text>
-          {stats.pendingApplications > 0 && (
+          {applications.filter(a => a.status === 'pending').length > 0 && (
             <View style={styles.badge}>
-              <Text style={styles.badgeText}>{stats.pendingApplications}</Text>
+              <Text style={styles.badgeText}>{applications.filter(a => a.status === 'pending').length}</Text>
             </View>
           )}
         </TouchableOpacity>
@@ -566,103 +415,32 @@ export default function AdminAlumniMentorsScreen() {
           <Text style={[styles.tabText, activeTab === 'requests' && styles.activeTabText]}>
             Requests ({requests.length})
           </Text>
-          {stats.pendingRequests > 0 && (
+          {requests.filter(r => r.status === 'pending').length > 0 && (
             <View style={styles.badge}>
-              <Text style={styles.badgeText}>{stats.pendingRequests}</Text>
+              <Text style={styles.badgeText}>{requests.filter(r => r.status === 'pending').length}</Text>
             </View>
           )}
         </TouchableOpacity>
-        <TouchableOpacity
-          style={[styles.tab, activeTab === 'analytics' && styles.activeTab]}
-          onPress={() => setActiveTab('analytics')}
-        >
-          <Text style={[styles.tabText, activeTab === 'analytics' && styles.activeTabText]}>
-            Analytics
-          </Text>
-        </TouchableOpacity>
       </View>
-
-      {/* Bulk Actions Bar (shown when selection mode is active) */}
-      {selectionMode && (
-        <View style={styles.bulkActionsBar}>
-          <View style={styles.bulkActionsLeft}>
-            <Text style={styles.bulkActionsCount}>
-              {activeTab === 'mentors' && `${selectedMentorIds.length} selected`}
-              {activeTab === 'applications' && `${selectedApplicationIds.length} selected`}
-              {activeTab === 'requests' && `${selectedRequestIds.length} selected`}
-            </Text>
-            <TouchableOpacity onPress={clearSelection}>
-              <Text style={styles.bulkActionsClear}>Clear</Text>
-            </TouchableOpacity>
-          </View>
-          <View style={styles.bulkActionsButtons}>
-            {activeTab === 'applications' && (
-              <>
-                <TouchableOpacity
-                  style={[styles.bulkActionButton, { backgroundColor: '#10B981' }]}
-                  onPress={() => startBulkAction('approve', 'Bulk Approve Applications')}
-                  disabled={selectedApplicationIds.length === 0}
-                >
-                  <Text style={styles.bulkActionButtonText}>Approve</Text>
-                </TouchableOpacity>
-                <TouchableOpacity
-                  style={[styles.bulkActionButton, { backgroundColor: '#EF4444' }]}
-                  onPress={() => startBulkAction('reject', 'Bulk Reject Applications')}
-                  disabled={selectedApplicationIds.length === 0}
-                >
-                  <Text style={styles.bulkActionButtonText}>Reject</Text>
-                </TouchableOpacity>
-              </>
-            )}
-            {activeTab === 'requests' && (
-              <>
-                <TouchableOpacity
-                  style={[styles.bulkActionButton, { backgroundColor: '#8B5CF6' }]}
-                  onPress={() => startBulkAction('complete', 'Bulk Complete Requests')}
-                  disabled={selectedRequestIds.length === 0}
-                >
-                  <Text style={styles.bulkActionButtonText}>Complete</Text>
-                </TouchableOpacity>
-                <TouchableOpacity
-                  style={[styles.bulkActionButton, { backgroundColor: '#EF4444' }]}
-                  onPress={() => startBulkAction('decline', 'Bulk Decline Requests')}
-                  disabled={selectedRequestIds.length === 0}
-                >
-                  <Text style={styles.bulkActionButtonText}>Decline</Text>
-                </TouchableOpacity>
-              </>
-            )}
-          </View>
-        </View>
-      )}
 
       {/* Content */}
       <ScrollView
         style={styles.content}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
       >
-        {/* ANALYTICS TAB */}
-        {activeTab === 'analytics' && <AnalyticsDashboard />}
-        
         {/* MENTORS TAB */}
         {activeTab === 'mentors' && (
           <View>
-            <View style={styles.tabActions}>
-              <TouchableOpacity
-                style={styles.addButton}
-                onPress={() => setShowAddMentorModal(true)}
-              >
-                <Ionicons name="add-circle" size={20} color="#fff" />
-                <Text style={styles.addButtonText}>Add New Mentor</Text>
-              </TouchableOpacity>
-            </View>
-
             {mentors.map((mentor) => (
               <View key={mentor.id} style={styles.card}>
                 <View style={styles.cardHeader}>
-                  <View style={styles.avatarPlaceholder}>
-                    <Text style={styles.avatarText}>{mentor.full_name.charAt(0)}</Text>
-                  </View>
+                  {mentor.profile_photo_url ? (
+                    <Image source={{ uri: mentor.profile_photo_url }} style={styles.mentorPhoto} />
+                  ) : (
+                    <View style={styles.avatarPlaceholder}>
+                      <Text style={styles.avatarText}>{mentor.full_name.charAt(0)}</Text>
+                    </View>
+                  )}
                   <View style={styles.cardInfo}>
                     <Text style={styles.cardTitle}>{mentor.full_name}</Text>
                     <Text style={styles.cardSubtitle}>{mentor.current_title}</Text>
@@ -690,6 +468,12 @@ export default function AdminAlumniMentorsScreen() {
                     <View style={styles.detailRow}>
                       <Ionicons name="briefcase-outline" size={14} color="#6b7280" />
                       <Text style={styles.detailText}>{mentor.industry}</Text>
+                    </View>
+                  )}
+                  {mentor.years_of_experience && (
+                    <View style={styles.detailRow}>
+                      <Ionicons name="calendar-outline" size={14} color="#6b7280" />
+                      <Text style={styles.detailText}>{mentor.years_of_experience} years experience</Text>
                     </View>
                   )}
                 </View>
@@ -765,7 +549,6 @@ export default function AdminAlumniMentorsScreen() {
               <View style={styles.emptyState}>
                 <Ionicons name="people-outline" size={60} color="#d1d5db" />
                 <Text style={styles.emptyText}>No mentors yet</Text>
-                <Text style={styles.emptySubtext}>Add your first mentor to get started</Text>
               </View>
             )}
           </View>
@@ -799,6 +582,12 @@ export default function AdminAlumniMentorsScreen() {
                     <Ionicons name="mail-outline" size={14} color="#6b7280" />
                     <Text style={styles.detailText}>{app.email}</Text>
                   </View>
+                  {app.years_of_experience && (
+                    <View style={styles.detailRow}>
+                      <Ionicons name="calendar-outline" size={14} color="#6b7280" />
+                      <Text style={styles.detailText}>{app.years_of_experience} years experience</Text>
+                    </View>
+                  )}
                 </View>
 
                 {app.expertise_areas && app.expertise_areas.length > 0 && (
@@ -841,7 +630,6 @@ export default function AdminAlumniMentorsScreen() {
               <View style={styles.emptyState}>
                 <Ionicons name="document-text-outline" size={60} color="#d1d5db" />
                 <Text style={styles.emptyText}>No applications</Text>
-                <Text style={styles.emptySubtext}>Volunteer applications will appear here</Text>
               </View>
             )}
           </View>
@@ -851,7 +639,11 @@ export default function AdminAlumniMentorsScreen() {
         {activeTab === 'requests' && (
           <View>
             {requests.map((request) => (
-              <View key={request.id} style={styles.card}>
+              <TouchableOpacity
+                key={request.id}
+                style={styles.card}
+                onPress={() => setSelectedRequest(request)}
+              >
                 <View style={styles.requestHeader}>
                   <View>
                     <Text style={styles.cardTitle}>{request.mentee_name}</Text>
@@ -891,17 +683,26 @@ export default function AdminAlumniMentorsScreen() {
                   </Text>
                 </View>
 
+                {request.status === 'pending' && (
+                  <TouchableOpacity
+                    style={styles.emailButton}
+                    onPress={() => contactMentee(request.mentee_email)}
+                  >
+                    <Ionicons name="mail" size={16} color="#fff" />
+                    <Text style={styles.emailButtonText}>Contact via Email</Text>
+                  </TouchableOpacity>
+                )}
+
                 <Text style={styles.cardDate}>
                   Requested {new Date(request.created_at).toLocaleDateString()}
                 </Text>
-              </View>
+              </TouchableOpacity>
             ))}
 
             {requests.length === 0 && (
               <View style={styles.emptyState}>
                 <Ionicons name="chatbubbles-outline" size={60} color="#d1d5db" />
                 <Text style={styles.emptyText}>No requests</Text>
-                <Text style={styles.emptySubtext}>Mentorship requests will appear here</Text>
               </View>
             )}
           </View>
@@ -926,6 +727,27 @@ export default function AdminAlumniMentorsScreen() {
                 {selectedApplication.company && (
                   <Text style={styles.modalCompany}>{selectedApplication.company}</Text>
                 )}
+
+                <View style={styles.modalSection}>
+                  <Text style={styles.modalSectionLabel}>Contact:</Text>
+                  <Text style={styles.modalText}>{selectedApplication.email}</Text>
+                  {selectedApplication.phone && (
+                    <Text style={styles.modalText}>{selectedApplication.phone}</Text>
+                  )}
+                </View>
+
+                <View style={styles.modalSection}>
+                  <Text style={styles.modalSectionLabel}>Experience:</Text>
+                  <Text style={styles.modalText}>
+                    {selectedApplication.years_of_experience || 'Not specified'} years
+                  </Text>
+                  {selectedApplication.degree && (
+                    <Text style={styles.modalText}>Degree: {selectedApplication.degree}</Text>
+                  )}
+                  {selectedApplication.graduation_year && (
+                    <Text style={styles.modalText}>Graduated: {selectedApplication.graduation_year}</Text>
+                  )}
+                </View>
 
                 <View style={styles.modalSection}>
                   <Text style={styles.modalSectionLabel}>Expertise Areas:</Text>
@@ -970,74 +792,67 @@ export default function AdminAlumniMentorsScreen() {
         </Modal>
       )}
 
-      {/* Add Mentor Modal */}
-      {showAddMentorModal && (
+      {/* Request Detail Modal */}
+      {selectedRequest && (
         <Modal visible={true} animationType="slide" transparent={true}>
           <View style={styles.modalOverlay}>
             <View style={styles.modalContent}>
               <View style={styles.modalHeader}>
-                <Text style={styles.modalTitle}>Add New Mentor</Text>
-                <TouchableOpacity onPress={() => setShowAddMentorModal(false)}>
+                <Text style={styles.modalTitle}>Mentorship Request</Text>
+                <TouchableOpacity onPress={() => setSelectedRequest(null)}>
                   <Ionicons name="close" size={28} color="#000" />
                 </TouchableOpacity>
               </View>
 
               <ScrollView style={styles.modalBody}>
-                <Text style={styles.formLabel}>Full Name *</Text>
-                <TextInput
-                  style={styles.formInput}
-                  placeholder="Enter full name"
-                  placeholderTextColor="#999"
-                />
+                <Text style={styles.modalName}>{selectedRequest.mentee_name}</Text>
+                <Text style={styles.modalTitle2}>{selectedRequest.current_status || 'Student/Professional'}</Text>
 
-                <Text style={styles.formLabel}>Email *</Text>
-                <TextInput
-                  style={styles.formInput}
-                  placeholder="email@example.com"
-                  keyboardType="email-address"
-                  autoCapitalize="none"
-                  placeholderTextColor="#999"
-                />
-
-                <Text style={styles.formLabel}>Phone</Text>
-                <TextInput
-                  style={styles.formInput}
-                  placeholder="+233 XX XXX XXXX"
-                  keyboardType="phone-pad"
-                  placeholderTextColor="#999"
-                />
-
-                <Text style={styles.formLabel}>Current Title *</Text>
-                <TextInput
-                  style={styles.formInput}
-                  placeholder="e.g., Senior Software Engineer"
-                  placeholderTextColor="#999"
-                />
-
-                <Text style={styles.formLabel}>Company</Text>
-                <TextInput
-                  style={styles.formInput}
-                  placeholder="Company name"
-                  placeholderTextColor="#999"
-                />
-
-                <View style={styles.modalActions}>
-                  <TouchableOpacity
-                    style={[styles.modalButton, styles.cancelButton]}
-                    onPress={() => setShowAddMentorModal(false)}
-                  >
-                    <Text style={[styles.modalButtonText, { color: '#666' }]}>Cancel</Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity
-                    style={[styles.modalButton, styles.saveButton]}
-                    onPress={() => {
-                      Alert.alert('Info', 'This feature is coming soon!');
-                      setShowAddMentorModal(false);
-                    }}
-                  >
-                    <Text style={styles.modalButtonText}>Add Mentor</Text>
-                  </TouchableOpacity>
+                <View style={styles.modalSection}>
+                  <Text style={styles.modalSectionLabel}>Contact:</Text>
+                  <Text style={styles.modalText}>{selectedRequest.mentee_email}</Text>
+                  {selectedRequest.mentee_phone && (
+                    <Text style={styles.modalText}>{selectedRequest.mentee_phone}</Text>
+                  )}
                 </View>
+
+                <View style={styles.modalSection}>
+                  <Text style={styles.modalSectionLabel}>Mentor Requested:</Text>
+                  <Text style={styles.modalText}>{selectedRequest.mentor.full_name}</Text>
+                  <Text style={styles.modalText}>{selectedRequest.mentor.email}</Text>
+                </View>
+
+                <View style={styles.modalSection}>
+                  <Text style={styles.modalSectionLabel}>Areas of Interest:</Text>
+                  <View style={styles.expertiseContainer}>
+                    {selectedRequest.areas_of_interest.map((area, idx) => (
+                      <View key={idx} style={styles.expertiseChip}>
+                        <Text style={styles.expertiseText}>{area}</Text>
+                      </View>
+                    ))}
+                  </View>
+                </View>
+
+                <View style={styles.modalSection}>
+                  <Text style={styles.modalSectionLabel}>Message:</Text>
+                  <Text style={styles.modalText}>{selectedRequest.message}</Text>
+                </View>
+
+                {selectedRequest.status === 'pending' && (
+                  <View style={styles.modalActions}>
+                    <TouchableOpacity
+                      style={[styles.modalButton, styles.approveButton]}
+                      onPress={() => contactMentee(selectedRequest.mentee_email)}
+                    >
+                      <Ionicons name="mail" size={20} color="#fff" style={{ marginRight: 8 }} />
+                      <Text style={styles.modalButtonText}>Contact Mentee via Email</Text>
+                    </TouchableOpacity>
+                  </View>
+                )}
+
+                <Text style={styles.modalNote}>
+                  ℹ️ Admin can facilitate connection. Mentor will receive notification.
+                </Text>
               </ScrollView>
             </View>
           </View>
@@ -1057,66 +872,151 @@ export default function AdminAlumniMentorsScreen() {
               </View>
 
               <ScrollView style={styles.modalBody}>
-                <Text style={styles.modalName}>{editingMentor.full_name}</Text>
-                <Text style={styles.modalTitle2}>{editingMentor.current_title}</Text>
-                {editingMentor.company && (
-                  <Text style={styles.modalCompany}>{editingMentor.company}</Text>
-                )}
-
                 <View style={styles.modalSection}>
-                  <Text style={styles.modalSectionLabel}>Contact:</Text>
-                  <Text style={styles.modalText}>📧 {editingMentor.email}</Text>
-                  {editingMentor.phone && (
-                    <Text style={styles.modalText}>📞 {editingMentor.phone}</Text>
-                  )}
-                </View>
+                  <Text style={styles.modalSectionLabel}>Basic Information</Text>
+                  
+                  <Text style={styles.formLabel}>Full Name</Text>
+                  <TextInput
+                    style={styles.formInput}
+                    value={editingMentor.full_name}
+                    onChangeText={(text) => setEditingMentor({ ...editingMentor, full_name: text })}
+                    placeholder="Full Name"
+                  />
 
-                {editingMentor.expertise_areas && editingMentor.expertise_areas.length > 0 && (
-                  <View style={styles.modalSection}>
-                    <Text style={styles.modalSectionLabel}>Expertise Areas:</Text>
-                    <View style={styles.expertiseContainer}>
-                      {editingMentor.expertise_areas.map((area, idx) => (
-                        <View key={idx} style={styles.expertiseChip}>
-                          <Text style={styles.expertiseText}>{area}</Text>
-                        </View>
-                      ))}
-                    </View>
-                  </View>
-                )}
+                  <Text style={styles.formLabel}>Email</Text>
+                  <TextInput
+                    style={styles.formInput}
+                    value={editingMentor.email}
+                    onChangeText={(text) => setEditingMentor({ ...editingMentor, email: text })}
+                    placeholder="Email"
+                    keyboardType="email-address"
+                    autoCapitalize="none"
+                  />
 
-                {editingMentor.short_bio && (
-                  <View style={styles.modalSection}>
-                    <Text style={styles.modalSectionLabel}>Bio:</Text>
-                    <Text style={styles.modalText}>{editingMentor.short_bio}</Text>
-                  </View>
-                )}
+                  <Text style={styles.formLabel}>Phone</Text>
+                  <TextInput
+                    style={styles.formInput}
+                    value={editingMentor.phone || ''}
+                    onChangeText={(text) => setEditingMentor({ ...editingMentor, phone: text })}
+                    placeholder="Phone"
+                    keyboardType="phone-pad"
+                  />
 
-                <View style={styles.modalSection}>
-                  <Text style={styles.modalSectionLabel}>Status:</Text>
-                  <View style={styles.statusOptions}>
-                    {['approved', 'inactive', 'rejected'].map((status) => (
-                      <TouchableOpacity
-                        key={status}
-                        style={[
-                          styles.statusOption,
-                          editingMentor.status === status && styles.statusOptionSelected,
-                        ]}
-                        onPress={() => {
-                          updateMentorStatus(editingMentor.id, status as any);
-                          setEditingMentor({ ...editingMentor, status: status as any });
-                        }}
-                      >
-                        <Text
-                          style={[
-                            styles.statusOptionText,
-                            editingMentor.status === status && styles.statusOptionTextSelected,
-                          ]}
-                        >
-                          {status.charAt(0).toUpperCase() + status.slice(1)}
-                        </Text>
-                      </TouchableOpacity>
-                    ))}
-                  </View>
+                  <Text style={styles.formLabel}>Current Title</Text>
+                  <TextInput
+                    style={styles.formInput}
+                    value={editingMentor.current_title}
+                    onChangeText={(text) => setEditingMentor({ ...editingMentor, current_title: text })}
+                    placeholder="Current Title"
+                  />
+
+                  <Text style={styles.formLabel}>Company</Text>
+                  <TextInput
+                    style={styles.formInput}
+                    value={editingMentor.company || ''}
+                    onChangeText={(text) => setEditingMentor({ ...editingMentor, company: text })}
+                    placeholder="Company"
+                  />
+
+                  <Text style={styles.formLabel}>Industry</Text>
+                  <TextInput
+                    style={styles.formInput}
+                    value={editingMentor.industry || ''}
+                    onChangeText={(text) => setEditingMentor({ ...editingMentor, industry: text })}
+                    placeholder="Industry"
+                  />
+
+                  <Text style={styles.formLabel}>Years of Experience</Text>
+                  <TextInput
+                    style={styles.formInput}
+                    value={editingMentor.years_of_experience?.toString() || ''}
+                    onChangeText={(text) => setEditingMentor({ ...editingMentor, years_of_experience: parseInt(text) || null })}
+                    placeholder="Years of Experience"
+                    keyboardType="numeric"
+                  />
+
+                  <Text style={styles.formLabel}>Graduation Year</Text>
+                  <TextInput
+                    style={styles.formInput}
+                    value={editingMentor.graduation_year?.toString() || ''}
+                    onChangeText={(text) => setEditingMentor({ ...editingMentor, graduation_year: parseInt(text) || null })}
+                    placeholder="Graduation Year"
+                    keyboardType="numeric"
+                  />
+
+                  <Text style={styles.formLabel}>Degree</Text>
+                  <TextInput
+                    style={styles.formInput}
+                    value={editingMentor.degree || ''}
+                    onChangeText={(text) => setEditingMentor({ ...editingMentor, degree: text })}
+                    placeholder="Degree"
+                  />
+
+                  <Text style={styles.formLabel}>Available Hours</Text>
+                  <TextInput
+                    style={styles.formInput}
+                    value={editingMentor.available_hours || ''}
+                    onChangeText={(text) => setEditingMentor({ ...editingMentor, available_hours: text })}
+                    placeholder="e.g. 2-3 hours per week"
+                  />
+
+                  <Text style={styles.formLabel}>LinkedIn URL</Text>
+                  <TextInput
+                    style={styles.formInput}
+                    value={editingMentor.linkedin_url || ''}
+                    onChangeText={(text) => setEditingMentor({ ...editingMentor, linkedin_url: text })}
+                    placeholder="LinkedIn URL"
+                    autoCapitalize="none"
+                  />
+
+                  <Text style={styles.formLabel}>WhatsApp Number</Text>
+                  <TextInput
+                    style={styles.formInput}
+                    value={editingMentor.whatsapp_number || ''}
+                    onChangeText={(text) => setEditingMentor({ ...editingMentor, whatsapp_number: text })}
+                    placeholder="WhatsApp Number (e.g., +233XXXXXXXXX)"
+                    keyboardType="phone-pad"
+                  />
+
+                  <Text style={styles.formLabel}>Short Bio</Text>
+                  <TextInput
+                    style={[styles.formInput, styles.textArea]}
+                    value={editingMentor.short_bio || ''}
+                    onChangeText={(text) => setEditingMentor({ ...editingMentor, short_bio: text })}
+                    placeholder="Short Bio"
+                    multiline
+                    numberOfLines={3}
+                  />
+
+                  <Text style={styles.formLabel}>Detailed Bio</Text>
+                  <TextInput
+                    style={[styles.formInput, styles.textArea]}
+                    value={editingMentor.detailed_bio || ''}
+                    onChangeText={(text) => setEditingMentor({ ...editingMentor, detailed_bio: text })}
+                    placeholder="Detailed Bio"
+                    multiline
+                    numberOfLines={4}
+                  />
+
+                  <Text style={styles.formLabel}>Mentorship Philosophy</Text>
+                  <TextInput
+                    style={[styles.formInput, styles.textArea]}
+                    value={editingMentor.mentorship_philosophy || ''}
+                    onChangeText={(text) => setEditingMentor({ ...editingMentor, mentorship_philosophy: text })}
+                    placeholder="Mentorship Philosophy"
+                    multiline
+                    numberOfLines={3}
+                  />
+
+                  <Text style={styles.formLabel}>Admin Notes</Text>
+                  <TextInput
+                    style={[styles.formInput, styles.textArea]}
+                    value={editingMentor.admin_notes || ''}
+                    onChangeText={(text) => setEditingMentor({ ...editingMentor, admin_notes: text })}
+                    placeholder="Internal admin notes"
+                    multiline
+                    numberOfLines={2}
+                  />
                 </View>
 
                 <View style={styles.modalActions}>
@@ -1124,42 +1024,53 @@ export default function AdminAlumniMentorsScreen() {
                     style={[styles.modalButton, { backgroundColor: '#e5e7eb' }]}
                     onPress={() => setEditingMentor(null)}
                   >
-                    <Text style={[styles.modalButtonText, { color: '#666' }]}>Close</Text>
+                    <Text style={[styles.modalButtonText, { color: '#374151' }]}>Cancel</Text>
                   </TouchableOpacity>
                   <TouchableOpacity
-                    style={[styles.modalButton, styles.deleteButton]}
-                    onPress={() => {
-                      setEditingMentor(null);
-                      deleteMentor(editingMentor.id);
+                    style={[styles.modalButton, { backgroundColor: '#16a34a' }]}
+                    onPress={async () => {
+                      try {
+                        const { error } = await supabase
+                          .from('alumni_mentors')
+                          .update({
+                            full_name: editingMentor.full_name,
+                            email: editingMentor.email,
+                            phone: editingMentor.phone,
+                            current_title: editingMentor.current_title,
+                            company: editingMentor.company,
+                            industry: editingMentor.industry,
+                            years_of_experience: editingMentor.years_of_experience,
+                            graduation_year: editingMentor.graduation_year,
+                            degree: editingMentor.degree,
+                            available_hours: editingMentor.available_hours,
+                            linkedin_url: editingMentor.linkedin_url,
+                            whatsapp_number: editingMentor.whatsapp_number,
+                            short_bio: editingMentor.short_bio,
+                            detailed_bio: editingMentor.detailed_bio,
+                            mentorship_philosophy: editingMentor.mentorship_philosophy,
+                            admin_notes: editingMentor.admin_notes,
+                          })
+                          .eq('id', editingMentor.id);
+
+                        if (error) throw error;
+
+                        Alert.alert('Success', 'Mentor updated successfully');
+                        setEditingMentor(null);
+                        fetchAllData();
+                      } catch (error) {
+                        console.error('Error updating mentor:', error);
+                        Alert.alert('Error', 'Failed to update mentor');
+                      }
                     }}
                   >
-                    <Text style={styles.modalButtonText}>Delete Mentor</Text>
+                    <Text style={styles.modalButtonText}>Save Changes</Text>
                   </TouchableOpacity>
                 </View>
-
-                <Text style={styles.modalNote}>
-                  💡 To edit detailed information, use the full form (coming soon)
-                </Text>
               </ScrollView>
             </View>
           </View>
         </Modal>
       )}
-      
-      {/* Bulk Actions Modal */}
-      <BulkActionsModal
-        visible={bulkActionModalVisible}
-        onClose={() => setBulkActionModalVisible(false)}
-        selectedIds={
-          activeTab === 'mentors' ? selectedMentorIds :
-          activeTab === 'applications' ? selectedApplicationIds :
-          selectedRequestIds
-        }
-        actionType={bulkActionType}
-        onAction={handleBulkAction}
-        title={bulkActionTitle}
-        requireReason={bulkActionType === 'reject' || bulkActionType === 'decline'}
-      />
     </View>
   );
 }
@@ -1214,52 +1125,22 @@ const styles = StyleSheet.create({
     borderBottomColor: '#e5e7eb',
   },
   statCard: {
-    width: 120,
-    padding: 16,
-    borderRadius: 12,
+    width: 90,
+    padding: 12,
+    borderRadius: 10,
     marginHorizontal: 4,
     alignItems: 'center',
   },
   statNumber: {
-    fontSize: 28,
+    fontSize: 24,
     fontWeight: '700',
     color: '#111827',
   },
   statLabel: {
-    fontSize: 12,
+    fontSize: 11,
     color: '#6b7280',
-    marginTop: 4,
+    marginTop: 2,
     textAlign: 'center',
-  },
-  exportContainer: {
-    flexDirection: 'row',
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    backgroundColor: '#F9FAFB',
-    gap: 8,
-  },
-  exportButton: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 6,
-    backgroundColor: '#FFFFFF',
-    paddingVertical: 10,
-    paddingHorizontal: 12,
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: '#E5E7EB',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.05,
-    shadowRadius: 2,
-    elevation: 1,
-  },
-  exportButtonText: {
-    fontSize: 12,
-    fontWeight: '600',
-    color: '#374151',
   },
   tabs: {
     flexDirection: 'row',
@@ -1306,64 +1187,6 @@ const styles = StyleSheet.create({
     flex: 1,
     padding: 16,
   },
-  tabActions: {
-    marginBottom: 16,
-  },
-  bulkActionsBar: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    backgroundColor: '#EFF6FF',
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: '#DBEAFE',
-  },
-  bulkActionsLeft: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-  },
-  bulkActionsCount: {
-    fontSize: 14,
-    fontFamily: 'Inter-SemiBold',
-    color: '#1E40AF',
-  },
-  bulkActionsClear: {
-    fontSize: 13,
-    fontFamily: 'Inter-SemiBold',
-    color: '#6B7280',
-    textDecorationLine: 'underline',
-  },
-  bulkActionsButtons: {
-    flexDirection: 'row',
-    gap: 8,
-  },
-  bulkActionButton: {
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    borderRadius: 8,
-  },
-  bulkActionButtonText: {
-    fontSize: 13,
-    fontFamily: 'Inter-SemiBold',
-    color: '#FFFFFF',
-  },
-  addButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: '#16a34a',
-    padding: 14,
-    borderRadius: 12,
-    marginBottom: 16,
-    gap: 8,
-  },
-  addButtonText: {
-    color: '#fff',
-    fontSize: 16,
-    fontWeight: '600',
-  },
   card: {
     backgroundColor: '#fff',
     borderRadius: 12,
@@ -1376,6 +1199,12 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'flex-start',
     marginBottom: 12,
+  },
+  mentorPhoto: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    marginRight: 12,
   },
   avatarPlaceholder: {
     width: 48,
@@ -1490,6 +1319,8 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     alignItems: 'center',
     justifyContent: 'center',
+    flexDirection: 'row',
+    gap: 4,
   },
   approveButton: {
     backgroundColor: '#16a34a',
@@ -1501,6 +1332,9 @@ const styles = StyleSheet.create({
     backgroundColor: '#f59e0b',
   },
   activateButton: {
+    backgroundColor: '#3b82f6',
+  },
+  editButton: {
     backgroundColor: '#3b82f6',
   },
   deleteButton: {
@@ -1547,6 +1381,21 @@ const styles = StyleSheet.create({
     color: '#374151',
     lineHeight: 18,
   },
+  emailButton: {
+    backgroundColor: '#3b82f6',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 12,
+    borderRadius: 8,
+    marginTop: 12,
+    gap: 8,
+  },
+  emailButtonText: {
+    color: '#fff',
+    fontSize: 14,
+    fontWeight: '600',
+  },
   emptyState: {
     alignItems: 'center',
     justifyContent: 'center',
@@ -1558,11 +1407,6 @@ const styles = StyleSheet.create({
     color: '#9ca3af',
     marginTop: 12,
   },
-  emptySubtext: {
-    fontSize: 14,
-    color: '#d1d5db',
-    marginTop: 4,
-  },
   modalOverlay: {
     flex: 1,
     backgroundColor: 'rgba(0,0,0,0.5)',
@@ -1572,7 +1416,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#fff',
     borderTopLeftRadius: 24,
     borderTopRightRadius: 24,
-    maxHeight: '80%',
+    maxHeight: '85%',
   },
   modalHeader: {
     flexDirection: 'row',
@@ -1620,6 +1464,7 @@ const styles = StyleSheet.create({
     fontSize: 15,
     color: '#374151',
     lineHeight: 22,
+    marginBottom: 4,
   },
   modalActions: {
     marginTop: 24,
@@ -1629,11 +1474,21 @@ const styles = StyleSheet.create({
     paddingVertical: 14,
     borderRadius: 12,
     alignItems: 'center',
+    flexDirection: 'row',
+    justifyContent: 'center',
   },
   modalButtonText: {
     color: '#fff',
     fontSize: 16,
     fontWeight: '600',
+  },
+  modalNote: {
+    fontSize: 13,
+    color: '#6b7280',
+    fontStyle: 'italic',
+    marginTop: 20,
+    textAlign: 'center',
+    paddingBottom: 20,
   },
   formLabel: {
     fontSize: 14,
@@ -1652,45 +1507,8 @@ const styles = StyleSheet.create({
     fontSize: 15,
     color: '#111827',
   },
-  cancelButton: {
-    backgroundColor: '#e5e7eb',
-  },
-  saveButton: {
-    backgroundColor: '#16a34a',
-  },
-  editButton: {
-    backgroundColor: '#3b82f6',
-  },
-  statusOptions: {
-    flexDirection: 'row',
-    gap: 8,
-    flexWrap: 'wrap',
-  },
-  statusOption: {
-    paddingHorizontal: 16,
-    paddingVertical: 10,
-    borderRadius: 8,
-    borderWidth: 2,
-    borderColor: '#e5e7eb',
-    backgroundColor: '#f9fafb',
-  },
-  statusOptionSelected: {
-    borderColor: '#16a34a',
-    backgroundColor: '#d1fae5',
-  },
-  statusOptionText: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#6b7280',
-  },
-  statusOptionTextSelected: {
-    color: '#16a34a',
-  },
-  modalNote: {
-    fontSize: 13,
-    color: '#6b7280',
-    fontStyle: 'italic',
-    marginTop: 20,
-    textAlign: 'center',
+  textArea: {
+    minHeight: 80,
+    textAlignVertical: 'top',
   },
 });

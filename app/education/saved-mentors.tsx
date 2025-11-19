@@ -13,7 +13,6 @@ import { router } from 'expo-router';
 import { ArrowLeft, Bookmark, Heart, Star, Trash2 } from 'lucide-react-native';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/hooks/useAuth';
-import MentorRatingSummary from '@/components/MentorRatingSummary';
 
 interface FavoriteMentor {
   mentor_id: string;
@@ -23,8 +22,6 @@ interface FavoriteMentor {
   expertise_areas: string[];
   bio: string;
   profile_photo_url: string;
-  average_rating: number;
-  total_ratings: number;
   years_of_experience: number;
   favorited_at: string;
 }
@@ -166,15 +163,6 @@ export default function SavedMentorsScreen() {
                       {mentor.company}
                     </Text>
                   )}
-
-                  {/* Rating */}
-                  <View style={{ marginTop: 6 }}>
-                    <MentorRatingSummary
-                      averageRating={mentor.average_rating || 0}
-                      totalRatings={mentor.total_ratings || 0}
-                      size="small"
-                    />
-                  </View>
 
                   {/* Expertise */}
                   {mentor.expertise_areas && mentor.expertise_areas.length > 0 && (

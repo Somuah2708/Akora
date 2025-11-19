@@ -1,13 +1,11 @@
 import { View, Text, StyleSheet, ScrollView, Image, TouchableOpacity, TextInput, Alert, Linking } from 'react-native';
 import { useState, useEffect } from 'react';
 import { useRouter, useLocalSearchParams } from 'expo-router';
-import { ArrowLeft, Building2, GraduationCap, Clock, MapPin, Linkedin, Globe, Send, FileText } from 'lucide-react-native';
+import { ArrowLeft, Building2, GraduationCap, Clock, MapPin, Linkedin, Mail, MessageCircle, Phone, Send, FileText } from 'lucide-react-native';
 import { useAuth } from '@/hooks/useAuth';
 import { supabase } from '@/lib/supabase';
 import RequestTemplatesModal, { RequestTemplate } from '@/components/RequestTemplatesModal';
 import MentorBadges from '@/components/MentorBadges';
-import MentorTestimonials from '@/components/MentorTestimonials';
-import RichTextEditor from '@/components/RichTextEditor';
 
 export default function MentorDetailScreen() {
   const router = useRouter();
@@ -19,8 +17,7 @@ export default function MentorDetailScreen() {
   const [loading, setLoading] = useState(true);
   const [showRequestForm, setShowRequestForm] = useState(false);
   const [templatesModalVisible, setTemplatesModalVisible] = useState(false);
-  const [canAddTestimonial, setCanAddTestimonial] = useState(false);
-  const [completedRequestId, setCompletedRequestId] = useState<string | null>(null);
+  const [hasAcceptedRequest, setHasAcceptedRequest] = useState(false);
   
   // Request form fields
   const [menteeName, setMenteeName] = useState(profile?.full_name || '');
@@ -57,20 +54,17 @@ export default function MentorDetailScreen() {
       
       setBadges(badgesData || []);
       
-      // Check if user can add testimonial (has completed session)
+      // Check if user has an accepted request from this mentor
       if (user) {
-        const { data: completedRequest } = await supabase
+        const { data: requestData } = await supabase
           .from('mentor_requests')
-          .select('id')
+          .select('status')
           .eq('mentor_id', id)
           .eq('mentee_id', user.id)
-          .eq('status', 'completed')
+          .eq('status', 'accepted')
           .maybeSingle();
         
-        if (completedRequest) {
-          setCanAddTestimonial(true);
-          setCompletedRequestId(completedRequest.id);
-        }
+        setHasAcceptedRequest(!!requestData);
       }
     } catch (error: any) {
       console.error('Error fetching mentor:', error);
@@ -93,6 +87,24 @@ export default function MentorDetailScreen() {
     setMessage(template.message);
     setSelectedAreas(template.suggestedAreas);
     // Keep the form open so user can customize the message
+  };
+
+  const handleContactClick = (url: string, platform: string) => {
+    if (!user) {
+      Alert.alert('Login Required', 'Please login to contact the mentor');
+      return;
+    }
+    
+    if (!hasAcceptedRequest) {
+      Alert.alert(
+        'Request Not Accepted',
+        `The mentor hasn't accepted your request yet. Once they accept, you'll be able to contact them via ${platform}.`,
+        [{ text: 'OK' }]
+      );
+      return;
+    }
+    
+    Linking.openURL(url);
   };
 
   const handleSubmitRequest = async () => {
@@ -168,7 +180,7 @@ export default function MentorDetailScreen() {
 
       Alert.alert(
         'Request Sent! 🎉',
-        `Your mentorship request has been sent to ${mentor.full_name}. They will review it and get back to you soon.`,
+        `Your mentorship request has been sent to ${mentor.full_name}. They will be notified and can review it in their mentor dashboard.`,
         [
           {
             text: 'OK',
@@ -178,6 +190,8 @@ export default function MentorDetailScreen() {
               setCurrentStatus('');
               setSelectedAreas([]);
               setMessage('');
+              // Navigate back to mentors list
+              router.back();
             },
           },
         ]
@@ -354,34 +368,52 @@ export default function MentorDetailScreen() {
         {/* Social Links */}
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Connect</Text>
+          {!hasAcceptedRequest && (
+            <View style={styles.contactNotice}>
+              <Text style={styles.contactNoticeText}>
+                🔒 Contact information will be revealed once the mentor accepts your request
+              </Text>
+            </View>
+          )}
           <View style={styles.socialContainer}>
             {mentor.linkedin_url && (
               <TouchableOpacity 
-                style={styles.socialButton}
-                onPress={() => Linking.openURL(mentor.linkedin_url)}
+                style={[styles.socialButton, !hasAcceptedRequest && styles.socialButtonLocked]}
+                onPress={() => handleContactClick(mentor.linkedin_url, 'LinkedIn')}
               >
-                <Linkedin size={20} color="#0A66C2" />
-                <Text style={styles.socialButtonText}>LinkedIn</Text>
+                <Linkedin size={20} color={hasAcceptedRequest ? "#0A66C2" : "#9CA3AF"} />
+                <Text style={[styles.socialButtonText, !hasAcceptedRequest && styles.socialButtonTextLocked]}>LinkedIn</Text>
               </TouchableOpacity>
             )}
-            {mentor.website_url && (
+            {mentor.email && (
               <TouchableOpacity 
-                style={styles.socialButton}
-                onPress={() => Linking.openURL(mentor.website_url)}
+                style={[styles.socialButton, !hasAcceptedRequest && styles.socialButtonLocked]}
+                onPress={() => handleContactClick(`mailto:${mentor.email}`, 'Email')}
               >
-                <Globe size={20} color="#4169E1" />
-                <Text style={styles.socialButtonText}>Website</Text>
+                <Mail size={20} color={hasAcceptedRequest ? "#EF4444" : "#9CA3AF"} />
+                <Text style={[styles.socialButtonText, !hasAcceptedRequest && styles.socialButtonTextLocked]}>Email</Text>
+              </TouchableOpacity>
+            )}
+            {mentor.whatsapp_number && (
+              <TouchableOpacity 
+                style={[styles.socialButton, !hasAcceptedRequest && styles.socialButtonLocked]}
+                onPress={() => handleContactClick(`https://wa.me/${mentor.whatsapp_number.replace(/[^0-9]/g, '')}`, 'WhatsApp')}
+              >
+                <MessageCircle size={20} color={hasAcceptedRequest ? "#25D366" : "#9CA3AF"} />
+                <Text style={[styles.socialButtonText, !hasAcceptedRequest && styles.socialButtonTextLocked]}>WhatsApp</Text>
+              </TouchableOpacity>
+            )}
+            {mentor.phone && (
+              <TouchableOpacity 
+                style={[styles.socialButton, !hasAcceptedRequest && styles.socialButtonLocked]}
+                onPress={() => handleContactClick(`tel:${mentor.phone}`, 'Phone')}
+              >
+                <Phone size={20} color={hasAcceptedRequest ? "#8B5CF6" : "#9CA3AF"} />
+                <Text style={[styles.socialButtonText, !hasAcceptedRequest && styles.socialButtonTextLocked]}>Phone</Text>
               </TouchableOpacity>
             )}
           </View>
         </View>
-
-        {/* Testimonials */}
-        <MentorTestimonials 
-          mentorId={id as string}
-          canAddTestimonial={canAddTestimonial}
-          requestId={completedRequestId || undefined}
-        />
 
         {/* Request Mentorship Section */}
         {!showRequestForm ? (
@@ -460,7 +492,6 @@ export default function MentorDetailScreen() {
               ))}
             </View>
 
-            <Text style={styles.formLabel}>Your Message *</Text>
             <View style={styles.messageHeader}>
               <TouchableOpacity 
                 style={styles.templateButton}
@@ -470,16 +501,22 @@ export default function MentorDetailScreen() {
                 <Text style={styles.templateButtonText}>Use Template</Text>
               </TouchableOpacity>
             </View>
+            <Text style={styles.formLabel}>Your Message *</Text>
             <Text style={styles.helpText}>
-              Use formatting: **bold**, _italic_, [links](url) for better presentation
+              Tell the mentor about yourself, your goals, and why you'd like their guidance
             </Text>
-            <RichTextEditor
+            <TextInput
+              style={styles.textArea}
               value={message}
               onChangeText={setMessage}
-              placeholder="Tell the mentor about yourself, your goals, and why you'd like their guidance..."
+              placeholder="Share your background, goals, and what you hope to gain from this mentorship..."
+              placeholderTextColor="#999999"
               maxLength={1500}
-              minHeight={150}
+              multiline
+              numberOfLines={6}
+              textAlignVertical="top"
             />
+            <Text style={styles.characterCount}>{message.length}/1500</Text>
 
             <View style={styles.formActions}>
               <TouchableOpacity 
@@ -703,6 +740,20 @@ const styles = StyleSheet.create({
   socialContainer: {
     flexDirection: 'row',
     gap: 12,
+    flexWrap: 'wrap',
+  },
+  contactNotice: {
+    backgroundColor: '#FEF3C7',
+    padding: 12,
+    borderRadius: 8,
+    marginBottom: 12,
+    borderLeftWidth: 3,
+    borderLeftColor: '#F59E0B',
+  },
+  contactNoticeText: {
+    fontSize: 13,
+    color: '#92400E',
+    lineHeight: 18,
   },
   socialButton: {
     flexDirection: 'row',
@@ -715,10 +766,17 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: '#E5E7EB',
   },
+  socialButtonLocked: {
+    backgroundColor: '#F3F4F6',
+    opacity: 0.6,
+  },
   socialButtonText: {
     fontSize: 14,
     fontWeight: '500',
     color: '#374151',
+  },
+  socialButtonTextLocked: {
+    color: '#9CA3AF',
   },
   requestButton: {
     flexDirection: 'row',
@@ -762,8 +820,29 @@ const styles = StyleSheet.create({
     color: '#000000',
   },
   textArea: {
-    minHeight: 120,
+    backgroundColor: '#F9FAFB',
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+    borderRadius: 12,
+    padding: 14,
+    fontSize: 15,
+    color: '#000000',
+    minHeight: 140,
+    fontFamily: 'System',
+    lineHeight: 22,
     textAlignVertical: 'top',
+  },
+  characterCount: {
+    fontSize: 12,
+    color: '#9CA3AF',
+    textAlign: 'right',
+    marginTop: 4,
+  },
+  characterCount: {
+    fontSize: 12,
+    color: '#9CA3AF',
+    textAlign: 'right',
+    marginTop: 4,
   },
   selectableChip: {
     backgroundColor: '#F3F4F6',

@@ -92,23 +92,37 @@ export default function ProfilePhotoUpload({
     try {
       setUploading(true);
 
-      // Convert image to blob
-      const response = await fetch(uri);
-      const blob = await response.blob();
-      
-      // Create file extension
+      // For React Native, we need to create a file object from the URI
       const fileExt = uri.split('.').pop()?.toLowerCase() || 'jpg';
       const fileName = `${user.id}/${Date.now()}.${fileExt}`;
 
-      // Upload to Supabase Storage
-      const { data, error } = await supabase.storage
-        .from(bucket)
-        .upload(fileName, blob, {
-          contentType: `image/${fileExt}`,
-          upsert: true,
-        });
+      // Create FormData for file upload
+      const formData = new FormData();
+      formData.append('file', {
+        uri: uri,
+        type: `image/${fileExt}`,
+        name: fileName,
+      } as any);
 
-      if (error) throw error;
+      // Upload using fetch with FormData
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) throw new Error('No active session');
+
+      const uploadResponse = await fetch(
+        `${process.env.EXPO_PUBLIC_SUPABASE_URL}/storage/v1/object/${bucket}/${fileName}`,
+        {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${session.access_token}`,
+          },
+          body: formData,
+        }
+      );
+
+      if (!uploadResponse.ok) {
+        const errorData = await uploadResponse.json();
+        throw new Error(errorData.message || 'Upload failed');
+      }
 
       // Get public URL
       const { data: { publicUrl } } = supabase.storage
