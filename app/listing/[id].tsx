@@ -2,7 +2,7 @@ import { View, Text, StyleSheet, ScrollView, Image, TouchableOpacity, Alert, Act
 import { useFonts, Inter_400Regular, Inter_600SemiBold } from '@expo-google-fonts/inter';
 import { useEffect, useState } from 'react';
 import { SplashScreen, useRouter, useLocalSearchParams } from 'expo-router';
-import { ArrowLeft, Star, MessageCircle, Share2, Edit, Trash2, Save, X } from 'lucide-react-native';
+import { ArrowLeft, Star, MessageCircle, Share2, Edit, Trash2, Save, X, MapPin, Mail, Phone } from 'lucide-react-native';
 import { supabase, type ProductService, type Profile } from '@/lib/supabase';
 import { useAuth } from '@/hooks/useAuth';
 
@@ -23,6 +23,7 @@ export default function ListingDetailScreen() {
   const [editedDescription, setEditedDescription] = useState('');
   const [editedPrice, setEditedPrice] = useState('');
   const [isSaving, setIsSaving] = useState(false);
+  const [selectedImageIndex, setSelectedImageIndex] = useState(0);
 
   const [fontsLoaded] = useFonts({
     'Inter-Regular': Inter_400Regular,
@@ -63,7 +64,8 @@ export default function ListingDetailScreen() {
         setListing({ ...listingData, user: userData });
         setEditedTitle(listingData.title);
         setEditedDescription(listingData.description);
-        setEditedPrice(listingData.price.toString());
+        setEditedPrice(listingData.price?.toString() || '0');
+        setSelectedImageIndex(0); // Reset to first image when listing loads
       }
     } catch (error) {
       console.error('Error fetching listing:', error);
@@ -210,10 +212,76 @@ export default function ListingDetailScreen() {
       </View>
 
       <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
-        <Image
-          source={{ uri: listing.image_url || 'https://images.unsplash.com/photo-1460925895917-afdab827c52f?w=800&auto=format&fit=crop&q=60' }}
-          style={styles.mainImage}
-        />
+        {(() => {
+          // Parse image_url - it could be a single URL or JSON array
+          let images: string[] = [];
+          if (listing.image_url) {
+            if (listing.image_url.startsWith('[')) {
+              try {
+                images = JSON.parse(listing.image_url);
+              } catch (e) {
+                images = [listing.image_url];
+              }
+            } else {
+              images = [listing.image_url];
+            }
+          }
+          
+          // Fallback image if none provided
+          if (images.length === 0) {
+            images = ['https://images.unsplash.com/photo-1460925895917-afdab827c52f?w=800&auto=format&fit=crop&q=60'];
+          }
+
+          return (
+            <>
+              {/* Main Image Display */}
+              <View style={styles.mainImageContainer}>
+                <Image
+                  source={{ uri: images[selectedImageIndex] }}
+                  style={styles.mainImage}
+                  resizeMode="cover"
+                />
+                {images.length > 1 && (
+                  <View style={styles.imageCounter}>
+                    <Text style={styles.imageCounterText}>
+                      {selectedImageIndex + 1} / {images.length}
+                    </Text>
+                  </View>
+                )}
+              </View>
+              
+              {/* Image Gallery Thumbnails */}
+              {images.length > 1 && (
+                <View style={styles.imageGalleryContainer}>
+                  <Text style={styles.galleryTitle}>All Images ({images.length})</Text>
+                  <ScrollView 
+                    horizontal 
+                    showsHorizontalScrollIndicator={false}
+                    style={styles.imageGallery}
+                    contentContainerStyle={styles.imageGalleryContent}
+                  >
+                    {images.map((imageUri, index) => (
+                      <TouchableOpacity
+                        key={index}
+                        onPress={() => setSelectedImageIndex(index)}
+                        style={[
+                          styles.galleryImageContainer,
+                          selectedImageIndex === index && styles.selectedGalleryImage
+                        ]}
+                      >
+                        <Image
+                          source={{ uri: imageUri }}
+                          style={styles.galleryImage}
+                          resizeMode="cover"
+                        />
+                      </TouchableOpacity>
+                    ))}
+                  </ScrollView>
+                </View>
+              )}
+            </>
+          );
+        })()}
 
         <View style={styles.detailsContainer}>
           {isEditing ? (
@@ -286,6 +354,34 @@ export default function ListingDetailScreen() {
                 <Text style={styles.description}>{listing.description}</Text>
               </View>
 
+              {listing.location && (
+                <View style={styles.section}>
+                  <Text style={styles.sectionTitle}>Location</Text>
+                  <View style={styles.locationContainer}>
+                    <MapPin size={16} color="#4169E1" />
+                    <Text style={styles.locationText}>{listing.location}</Text>
+                  </View>
+                </View>
+              )}
+
+              {(listing.contact_email || listing.contact_phone) && (
+                <View style={styles.section}>
+                  <Text style={styles.sectionTitle}>Contact Information</Text>
+                  {listing.contact_email && (
+                    <TouchableOpacity style={styles.contactInfoItem}>
+                      <Mail size={16} color="#4169E1" />
+                      <Text style={styles.contactInfoText}>{listing.contact_email}</Text>
+                    </TouchableOpacity>
+                  )}
+                  {listing.contact_phone && (
+                    <TouchableOpacity style={[styles.contactInfoItem, listing.contact_email && { marginTop: 8 }]}>
+                      <Phone size={16} color="#4169E1" />
+                      <Text style={styles.contactInfoText}>{listing.contact_phone}</Text>
+                    </TouchableOpacity>
+                  )}
+                </View>
+              )}
+
               <View style={styles.section}>
                 <Text style={styles.sectionTitle}>Category</Text>
                 <View style={styles.categoryBadge}>
@@ -351,10 +447,67 @@ const styles = StyleSheet.create({
   content: {
     flex: 1,
   },
+  mainImageContainer: {
+    width: '100%',
+    height: 350,
+    backgroundColor: '#F8F9FA',
+    position: 'relative',
+  },
   mainImage: {
     width: '100%',
-    height: 300,
-    backgroundColor: '#F8F9FA',
+    height: '100%',
+  },
+  imageCounter: {
+    position: 'absolute',
+    bottom: 12,
+    right: 12,
+    backgroundColor: 'rgba(0, 0, 0, 0.7)',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 16,
+  },
+  imageCounterText: {
+    color: '#FFFFFF',
+    fontSize: 12,
+    fontFamily: 'Inter-SemiBold',
+  },
+  imageGalleryContainer: {
+    paddingVertical: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: '#F0F0F0',
+  },
+  galleryTitle: {
+    fontSize: 14,
+    fontFamily: 'Inter-SemiBold',
+    color: '#000000',
+    paddingHorizontal: 16,
+    marginBottom: 12,
+  },
+  imageGallery: {
+    marginVertical: 0,
+  },
+  imageGalleryContent: {
+    paddingHorizontal: 16,
+    gap: 8,
+  },
+  galleryImageContainer: {
+    borderRadius: 8,
+    borderWidth: 2,
+    borderColor: 'transparent',
+    overflow: 'hidden',
+    marginRight: 8,
+  },
+  selectedGalleryImage: {
+    borderColor: '#4169E1',
+    shadowColor: '#4169E1',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.3,
+    shadowRadius: 4,
+    elevation: 4,
+  },
+  galleryImage: {
+    width: 80,
+    height: 80,
   },
   detailsContainer: {
     padding: 16,
@@ -440,6 +593,34 @@ const styles = StyleSheet.create({
     fontFamily: 'Inter-Regular',
     color: '#333333',
     lineHeight: 22,
+  },
+  locationContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    backgroundColor: '#F8F9FA',
+    padding: 12,
+    borderRadius: 8,
+  },
+  locationText: {
+    fontSize: 14,
+    fontFamily: 'Inter-Regular',
+    color: '#333333',
+    flex: 1,
+  },
+  contactInfoItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    backgroundColor: '#F8F9FA',
+    padding: 12,
+    borderRadius: 8,
+  },
+  contactInfoText: {
+    fontSize: 14,
+    fontFamily: 'Inter-Regular',
+    color: '#4169E1',
+    flex: 1,
   },
   categoryBadge: {
     alignSelf: 'flex-start',

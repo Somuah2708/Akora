@@ -48,6 +48,7 @@ export default function CreateListingScreen() {
   const [imageUrl, setImageUrl] = useState('');
   const [category, setCategory] = useState('');
   const [email, setEmail] = useState('');
+  const [phone, setPhone] = useState('');
   const [location, setLocation] = useState('');
   const [localImages, setLocalImages] = useState<string[]>([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -91,69 +92,85 @@ export default function CreateListingScreen() {
     }
   }, [user, loading, router]);
 
+  /**
+   * Handles the submission of a new marketplace listing
+   * 
+   * Workflow:
+   * 1. Validates all required fields (title, description, price, category)
+   * 2. Prepares image URLs (from local picker or URL input)
+   * 3. Inserts listing into products_services table with user_id
+   * 4. Listing is auto-approved (is_approved: true) for immediate visibility
+   * 5. Clears form on success and shows confirmation dialog
+   * 6. Navigates back to marketplace
+   * 
+   * Error handling: Shows user-friendly alerts for validation and database errors
+   */
   const handleSubmit = async () => {
-    console.log('🔵 === BUTTON CLICKED === 🔵');
-    console.log('Title:', title);
-    console.log('Description:', description);
-    console.log('Price:', price);
-    console.log('Category:', category);
-    console.log('Email:', email);
-    console.log('Location:', location);
-    console.log('User ID:', user?.id);
-    
-    // Validate inputs
-    console.log('⚡ Starting validation...');
-    if (!title.trim()) {
-      console.log('❌ Validation failed: No title');
-      Alert.alert('Error', 'Please enter a title for your listing');
+    // Prevent double submission
+    if (isSubmitting) {
+      console.log('⚠️ Already submitting, ignoring click');
       return;
     }
-    console.log('✅ Title valid');
+
+    console.log('🔵 === PUBLISH BUTTON CLICKED === 🔵');
+    
+    // Validate inputs before attempting to submit
+    if (!title.trim()) {
+      Alert.alert('Missing Title', 'Please enter a title for your listing');
+      return;
+    }
     
     if (!description.trim()) {
-      console.log('❌ Validation failed: No description');
-      Alert.alert('Error', 'Please enter a description for your listing');
+      Alert.alert('Missing Description', 'Please enter a description for your listing');
       return;
     }
-    console.log('✅ Description valid');
     
     if (!price.trim() || isNaN(Number(price)) || Number(price) <= 0) {
-      console.log('❌ Validation failed: Invalid price');
-      Alert.alert('Error', 'Please enter a valid price greater than 0');
+      Alert.alert('Invalid Price', 'Please enter a valid price greater than 0');
       return;
     }
-    console.log('✅ Price valid');
     
     if (!category) {
-      console.log('❌ Validation failed: No category');
-      Alert.alert('Error', 'Please select a category');
+      Alert.alert('Missing Category', 'Please select a category for your listing');
       return;
     }
-    console.log('✅ Category valid');
     
-    // Email and location are optional since they're not stored in database
-    if (email.trim() && !email.includes('@')) {
-      console.log('❌ Validation failed: Invalid email format -', email);
-      Alert.alert('Error', 'Please enter a valid email with @ symbol, or leave it blank');
+    // Email validation (required field)
+    if (!email.trim()) {
+      Alert.alert('Missing Contact Email', 'Please provide a contact email for customers to reach you');
       return;
     }
-    console.log('✅ Email valid (or empty)');
-    console.log('✅ Location:', location.trim() || '(not provided)');
-    console.log('✅ All validations passed!');
+    
+    if (!email.includes('@') || !email.includes('.')) {
+      Alert.alert('Invalid Email', 'Please enter a valid email address');
+      return;
+    }
+    
+    // Phone validation (required field)
+    if (!phone.trim()) {
+      Alert.alert('Missing Phone Number', 'Please provide a phone number for customers to reach you');
+      return;
+    }
+    
+    // Location validation (required field)
+    if (!location.trim()) {
+      Alert.alert('Missing Location', 'Please provide a location where your product/service is available');
+      return;
+    }
 
+    // Prepare image URLs
     let finalImageUrls: string[] = [];
     if (localImages.length > 0) {
       finalImageUrls = localImages;
     } else if (imageUrl.trim()) {
-      finalImageUrls = imageUrl.split(',').map(url => url.trim()).slice(0, 20);
+      finalImageUrls = imageUrl.split(',').map(url => url.trim()).filter(url => url).slice(0, 20);
     }
 
-    console.log('All validations passed, submitting to database...');
+    console.log('✅ All validations passed, submitting to database...');
     
     try {
       setIsSubmitting(true);
       
-      // Store price as numeric value only (currency not stored in DB yet)
       const priceValue = Number(price.trim());
       
       const listingData = {
@@ -163,44 +180,102 @@ export default function CreateListingScreen() {
         price: priceValue,
         image_url: finalImageUrls.length > 0 ? JSON.stringify(finalImageUrls) : null,
         category_name: category,
+        contact_email: email.trim(),
+        contact_phone: phone.trim(),
+        location: location.trim(),
         is_featured: false,
         is_premium_listing: false,
-        is_approved: true,
+        is_approved: true, // Auto-approve for immediate visibility
       };
       
-      console.log('📝 Listing data prepared:', listingData);
+      console.log('📝 Inserting listing:', listingData);
       
-      console.log('Inserting listing data:', listingData);
-      
-      const { data: newListing, error: listingError} = await supabase
+      const { data: newListing, error: listingError } = await supabase
         .from('products_services')
         .insert(listingData)
         .select()
         .single();
 
       if (listingError) {
-        console.error('Database error:', listingError);
-        throw listingError;
+        console.error('❌ Database error:', listingError);
+        
+        // Provide helpful error messages
+        let errorMessage = 'Failed to create listing. Please try again.';
+        
+        if (listingError.message.includes('foreign key')) {
+          errorMessage = 'Authentication error. Please sign out and sign in again.';
+        } else if (listingError.message.includes('permission')) {
+          errorMessage = 'You do not have permission to create listings. Please contact support.';
+        } else if (listingError.message) {
+          errorMessage = listingError.message;
+        }
+        
+        throw new Error(errorMessage);
+      }
+      
+      if (!newListing) {
+        throw new Error('Listing was created but no data was returned. Please refresh the page.');
       }
       
       console.log('✅ Listing created successfully!', newListing);
-      console.log('Navigating back...');
 
-      // Navigate back
-      router.back();
-      
-      // Show success message after navigation starts
-      setTimeout(() => {
-        Alert.alert('✅ Success!', 'Your listing has been created successfully!');
-      }, 500);
+      // Clear form
+      setTitle('');
+      setDescription('');
+      setPrice('');
+      setCategory('');
+      setEmail('');
+      setLocation('');
+      setImageUrl('');
+      setLocalImages([]);
+
+      // Show success and navigate
+      Alert.alert(
+        '🎉 Published Successfully!', 
+        'Your listing is now live and visible to all users in the Akora Marketplace!',
+        [
+          {
+            text: 'View Marketplace',
+            onPress: () => {
+              router.push('/services');
+            }
+          },
+          {
+            text: 'Create Another',
+            style: 'cancel'
+          }
+        ]
+      );
       
     } catch (error: any) {
       console.error('❌ Error creating listing:', error);
-      Alert.alert('Error', error.message || 'Failed to create listing');
+      Alert.alert(
+        'Error', 
+        error.message || 'Failed to create listing. Please try again.',
+        [{ text: 'OK' }]
+      );
     } finally {
       setIsSubmitting(false);
     }
   };
+
+  // Debug: Check button state (all fields required)
+  const isButtonDisabled = !title.trim() || !description.trim() || !price.trim() || !category || !email.trim() || !phone.trim() || !location.trim() || isSubmitting;
+  
+  // Log form state for debugging - MUST be before any returns
+  useEffect(() => {
+    console.log('🔍 Form State Changed:', {
+      buttonDisabled: isButtonDisabled,
+      hasTitle: !!title.trim(),
+      hasDescription: !!description.trim(),
+      hasPrice: !!price.trim(),
+      hasCategory: !!category,
+      hasEmail: !!email.trim(),
+      hasPhone: !!phone.trim(),
+      hasLocation: !!location.trim(),
+      isSubmitting
+    });
+  }, [title, description, price, category, email, phone, location, isSubmitting, isButtonDisabled]);
 
   if (!fontsLoaded || loading) {
     return null;
@@ -209,21 +284,6 @@ export default function CreateListingScreen() {
     // Optionally show a loading or sign-in prompt
     return null;
   }
-
-  // Debug: Check button state (email and location are optional)
-  const isButtonDisabled = !title.trim() || !description.trim() || !price.trim() || !category || isSubmitting;
-  
-  // Log form state for debugging
-  useEffect(() => {
-    console.log('🔍 Form State Changed:', {
-      buttonDisabled: isButtonDisabled,
-      hasTitle: !!title.trim(),
-      hasDescription: !!description.trim(),
-      hasPrice: !!price.trim(),
-      hasCategory: !!category,
-      isSubmitting
-    });
-  }, [title, description, price, category, isSubmitting, isButtonDisabled]);
 
   return (
     <View style={styles.container}>
@@ -283,6 +343,20 @@ export default function CreateListingScreen() {
         </View>
         
         <View style={styles.formGroup}>
+          <Text style={styles.label}>Description *</Text>
+          <TextInput
+            style={[styles.input, styles.textArea]}
+            placeholder="Describe your product or service in detail..."
+            placeholderTextColor="#999999"
+            value={description}
+            onChangeText={setDescription}
+            multiline
+            maxLength={500}
+          />
+          <Text style={styles.charCount}>{description.length}/500</Text>
+        </View>
+        
+        <View style={styles.formGroup}>
           <View style={{backgroundColor:'#F8F9FA',borderRadius:16,padding:18,marginBottom:18,shadowColor:'#4169E1',shadowOffset:{width:0,height:2},shadowOpacity:0.08,shadowRadius:8,elevation:2,borderWidth:1,borderColor:'#E2E8F0'}}>
             <Text style={{fontSize:16,fontFamily:'Inter-SemiBold',color:'#4169E1',marginBottom:10}}>Price *</Text>
             <View style={{flexDirection:'row',gap:12,marginBottom:8,marginTop:4}}>
@@ -335,29 +409,42 @@ export default function CreateListingScreen() {
         </View>
         
         <View style={styles.formGroup}>
-          <Text style={styles.label}>Contact Email (Optional)</Text>
+          <Text style={styles.label}>Contact Email *</Text>
           <TextInput
             style={styles.input}
-            placeholder="your@email.com (optional)"
+            placeholder="your@email.com"
             placeholderTextColor="#999999"
             value={email}
             onChangeText={setEmail}
             autoCapitalize="none"
             keyboardType="email-address"
           />
-          <Text style={styles.helperText}>This field is optional and not stored</Text>
+          <Text style={styles.helperText}>Customers will use this to contact you</Text>
         </View>
 
         <View style={styles.formGroup}>
-          <Text style={styles.label}>Location (Optional)</Text>
+          <Text style={styles.label}>Phone Number *</Text>
           <TextInput
             style={styles.input}
-            placeholder="e.g., Accra, Ghana (optional)"
+            placeholder="+233 XX XXX XXXX"
+            placeholderTextColor="#999999"
+            value={phone}
+            onChangeText={setPhone}
+            keyboardType="phone-pad"
+          />
+          <Text style={styles.helperText}>Customers can call or WhatsApp you</Text>
+        </View>
+
+        <View style={styles.formGroup}>
+          <Text style={styles.label}>Location *</Text>
+          <TextInput
+            style={styles.input}
+            placeholder="e.g., Accra, Ghana"
             placeholderTextColor="#999999"
             value={location}
             onChangeText={setLocation}
           />
-          <Text style={styles.helperText}>This field is optional and not stored</Text>
+          <Text style={styles.helperText}>Where is your product/service available?</Text>
         </View>
 
         <View style={styles.formGroup}>
@@ -423,12 +510,9 @@ export default function CreateListingScreen() {
             styles.submitButtonLarge,
             isButtonDisabled && styles.submitButtonLargeDisabled
           ]}
-          onPress={() => {
-            console.log('👆 TouchableOpacity onPress triggered');
-            handleSubmit();
-          }}
+          onPress={handleSubmit}
           disabled={isButtonDisabled}
-          activeOpacity={0.9}
+          activeOpacity={0.7}
         >
           <LinearGradient
             colors={isButtonDisabled 
@@ -441,16 +525,25 @@ export default function CreateListingScreen() {
             {isSubmitting ? (
               <>
                 <ActivityIndicator color="#FFFFFF" size="small" />
-                <Text style={styles.submitButtonLargeText}>Creating Listing...</Text>
+                <Text style={styles.submitButtonLargeText}>Publishing Listing...</Text>
               </>
             ) : (
               <>
                 <Send size={20} color="#FFFFFF" />
-                <Text style={styles.submitButtonLargeText}>Publish Listing</Text>
+                <Text style={styles.submitButtonLargeText}>
+                  {isButtonDisabled ? 'Fill Required Fields' : 'Publish Listing Now'}
+                </Text>
               </>
             )}
           </LinearGradient>
         </TouchableOpacity>
+
+        {/* Helper text below button */}
+        {isButtonDisabled && !isSubmitting && (
+          <Text style={styles.buttonHelperText}>
+            Please fill in all required fields (*) to publish your listing
+          </Text>
+        )}
 
         <View style={styles.bottomPadding} />
       </ScrollView>
@@ -721,5 +814,13 @@ const styles = StyleSheet.create({
     borderColor: '#E8E8E8',
     backgroundColor: '#FFFFFF',
     gap: 6,
+  },
+  buttonHelperText: {
+    fontSize: 13,
+    fontFamily: 'Inter-Regular',
+    color: '#EF4444',
+    textAlign: 'center',
+    marginTop: 12,
+    paddingHorizontal: 20,
   },
 });

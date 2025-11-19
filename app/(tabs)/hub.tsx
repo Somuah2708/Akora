@@ -48,7 +48,7 @@ const HERITAGE_ITEMS = [
   },
   {
     id: '5',
-    title: 'O.A.A Secretariat',
+    title: 'OAA Secretariat',
     description: 'Official communications and updates',
     icon: Building2,
     image: 'https://images.unsplash.com/photo-1497366216548-37526070297c?w=800&auto=format&fit=crop&q=60',

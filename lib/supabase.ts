@@ -243,6 +243,9 @@ export type ProductService = {
   price: number | null;
   image_url?: string;
   category_name: string;
+  contact_email?: string;
+  contact_phone?: string;
+  location?: string;
   is_featured: boolean;
   is_premium_listing: boolean;
   is_approved?: boolean;

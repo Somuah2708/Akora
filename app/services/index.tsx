@@ -107,13 +107,27 @@ export default function ServicesScreen() {
         profilesMap.set(profile.id, profile);
       });
       
-      // Step 4: Combine products with their user profiles
-      const formattedProducts = productsData.map(item => ({
-        ...item,
-        user: profilesMap.get(item.user_id) as Profile,
-        rating: (Math.random() * (5 - 4) + 4).toFixed(1), // Random rating between 4.0 and 5.0
-        reviews: Math.floor(Math.random() * 150) + 10, // Random number of reviews
-      })).filter(item => item.user); // Filter out items without valid user data
+      // Step 4: Combine products with their user profiles and parse image URLs
+      const formattedProducts = productsData.map(item => {
+        // Parse image_url if it's a JSON array, otherwise use as-is
+        let imageUrl = item.image_url;
+        if (imageUrl && imageUrl.startsWith('[')) {
+          try {
+            const imageArray = JSON.parse(imageUrl);
+            imageUrl = Array.isArray(imageArray) && imageArray.length > 0 ? imageArray[0] : imageUrl;
+          } catch (e) {
+            console.log('Failed to parse image_url as JSON, using as-is');
+          }
+        }
+        
+        return {
+          ...item,
+          image_url: imageUrl,
+          user: profilesMap.get(item.user_id) as Profile,
+          rating: (Math.random() * (5 - 4) + 4).toFixed(1), // Random rating between 4.0 and 5.0
+          reviews: Math.floor(Math.random() * 150) + 10, // Random number of reviews
+        };
+      }).filter(item => item.user); // Filter out items without valid user data
       
       // Filter featured businesses (unique user_ids with featured listings)
       const featuredUserIds = new Set();
