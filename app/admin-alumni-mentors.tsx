@@ -19,6 +19,7 @@ import * as DocumentPicker from 'expo-document-picker';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/hooks/useAuth';
 import { EXPERTISE_OPTIONS, MEETING_FORMATS, DAYS_OPTIONS } from '@/constants/mentorConstants';
+import ProfilePhotoUpload from '@/components/ProfilePhotoUpload';
 
 type TabType = 'mentors' | 'applications';
 
@@ -570,41 +571,44 @@ export default function AdminAlumniMentorsScreen() {
         </View>
 
         {/* Stats Cards */}
-        <View style={styles.statsContainer}>
-        <View style={styles.statsGrid}>
+        <ScrollView 
+          horizontal 
+          showsHorizontalScrollIndicator={false}
+          style={styles.statsScrollView}
+          contentContainerStyle={styles.statsContainer}
+        >
           <View style={[styles.statCard, styles.statCardBlue]}>
-            <View style={styles.statIconContainer}>
-              <Ionicons name="people" size={24} color="#3b82f6" />
+            <Ionicons name="people" size={20} color="#3b82f6" />
+            <View style={styles.statContent}>
+              <Text style={styles.statNumber}>{mentors.length}</Text>
+              <Text style={styles.statLabel}>Total Mentors</Text>
             </View>
-            <Text style={styles.statNumber}>{mentors.length}</Text>
-            <Text style={styles.statLabel}>Total Mentors</Text>
           </View>
           
           <View style={[styles.statCard, styles.statCardGreen]}>
-            <View style={styles.statIconContainer}>
-              <Ionicons name="checkmark-circle" size={24} color="#10b981" />
+            <Ionicons name="checkmark-circle" size={20} color="#10b981" />
+            <View style={styles.statContent}>
+              <Text style={styles.statNumber}>{mentors.filter(m => m.status === 'approved').length}</Text>
+              <Text style={styles.statLabel}>Active</Text>
             </View>
-            <Text style={styles.statNumber}>{mentors.filter(m => m.status === 'approved').length}</Text>
-            <Text style={styles.statLabel}>Active</Text>
           </View>
           
           <View style={[styles.statCard, styles.statCardYellow]}>
-            <View style={styles.statIconContainer}>
-              <Ionicons name="document-text" size={24} color="#f59e0b" />
+            <Ionicons name="document-text" size={20} color="#f59e0b" />
+            <View style={styles.statContent}>
+              <Text style={styles.statNumber}>{applications.filter(a => a.status === 'pending').length}</Text>
+              <Text style={styles.statLabel}>Pending</Text>
             </View>
-            <Text style={styles.statNumber}>{applications.filter(a => a.status === 'pending').length}</Text>
-            <Text style={styles.statLabel}>Pending Apps</Text>
           </View>
           
           <View style={[styles.statCard, styles.statCardPurple]}>
-            <View style={styles.statIconContainer}>
-              <Ionicons name="time" size={24} color="#8b5cf6" />
+            <Ionicons name="time" size={20} color="#8b5cf6" />
+            <View style={styles.statContent}>
+              <Text style={styles.statNumber}>{applications.length}</Text>
+              <Text style={styles.statLabel}>All Apps</Text>
             </View>
-            <Text style={styles.statNumber}>{applications.length}</Text>
-            <Text style={styles.statLabel}>Total Apps</Text>
           </View>
-        </View>
-      </View>
+        </ScrollView>
 
       {/* Tabs */}
       <View style={styles.tabs}>
@@ -1027,6 +1031,15 @@ export default function AdminAlumniMentorsScreen() {
                     value={linkedinUrl}
                     onChangeText={setLinkedinUrl}
                     autoCapitalize="none"
+                  />
+
+                  <Text style={styles.formLabel}>Profile Photo</Text>
+                  <Text style={styles.formHelpText}>Upload a professional photo for the mentor (optional but recommended)</Text>
+                  <ProfilePhotoUpload
+                    currentPhotoUrl={profilePhotoUrl}
+                    onPhotoUploaded={setProfilePhotoUrl}
+                    bucket="mentor-profiles"
+                    size={100}
                   />
                 </View>
 
@@ -1583,74 +1596,65 @@ const styles = StyleSheet.create({
     color: '#6b7280',
     marginTop: 2,
   },
-  statsContainer: {
-    backgroundColor: '#f9fafb',
-    paddingTop: 8,
-    paddingBottom: 8,
-    paddingHorizontal: 16,
+  statsScrollView: {
+    backgroundColor: '#ffffff',
+    borderBottomWidth: 1,
+    borderBottomColor: '#e5e7eb',
   },
-  statsGrid: {
+  statsContainer: {
     flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 8,
+    paddingVertical: 16,
+    paddingHorizontal: 16,
+    gap: 10,
   },
   statCard: {
-    flex: 1,
-    minWidth: '48%',
-    maxWidth: '48.5%',
-    backgroundColor: '#fff',
-    borderRadius: 10,
-    padding: 10,
+    flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
+    backgroundColor: '#fff',
+    borderRadius: 12,
+    paddingVertical: 12,
+    paddingHorizontal: 14,
+    gap: 12,
+    borderWidth: 1,
+    borderColor: '#e5e7eb',
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.06,
-    shadowRadius: 4,
+    shadowOpacity: 0.05,
+    shadowRadius: 3,
     elevation: 2,
-    borderLeftWidth: 3,
+    minWidth: 110,
+  },
+  statContent: {
+    flexShrink: 0,
   },
   statCardBlue: {
-    borderLeftColor: '#3b82f6',
+    borderColor: '#3b82f6',
     backgroundColor: '#eff6ff',
   },
   statCardGreen: {
-    borderLeftColor: '#10b981',
+    borderColor: '#10b981',
     backgroundColor: '#f0fdf4',
   },
   statCardYellow: {
-    borderLeftColor: '#f59e0b',
+    borderColor: '#f59e0b',
     backgroundColor: '#fffbeb',
   },
   statCardPurple: {
-    borderLeftColor: '#8b5cf6',
+    borderColor: '#8b5cf6',
     backgroundColor: '#f5f3ff',
   },
-  statIconContainer: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    backgroundColor: '#fff',
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: 6,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.08,
-    shadowRadius: 2,
-    elevation: 1,
-  },
   statNumber: {
-    fontSize: 20,
+    fontSize: 18,
     fontWeight: '700',
     color: '#111827',
-    marginBottom: 2,
+    lineHeight: 22,
   },
   statLabel: {
-    fontSize: 10,
+    fontSize: 11,
     color: '#6b7280',
     fontWeight: '500',
-    textAlign: 'center',
+    marginTop: 2,
+    whiteSpace: 'nowrap',
   },
   tabs: {
     flexDirection: 'row',
@@ -2016,6 +2020,12 @@ const styles = StyleSheet.create({
     color: '#374151',
     marginBottom: 8,
     marginTop: 16,
+  },
+  formHelpText: {
+    fontSize: 12,
+    color: '#6b7280',
+    marginBottom: 12,
+    fontStyle: 'italic',
   },
   formInput: {
     backgroundColor: '#f9fafb',

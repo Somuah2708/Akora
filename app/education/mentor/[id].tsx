@@ -451,6 +451,15 @@ export default function MentorDetailScreen() {
               </Text>
             </View>
           )}
+          {hasAcceptedRequest && mentor.phone && (
+            <View style={styles.phoneNumberDisplay}>
+              <Phone size={18} color="#4169E1" />
+              <View style={styles.phoneNumberContent}>
+                <Text style={styles.phoneNumberLabel}>Phone Number</Text>
+                <Text style={styles.phoneNumberText}>{mentor.phone}</Text>
+              </View>
+            </View>
+          )}
           <View style={styles.socialContainer}>
             {mentor.linkedin_url && (
               <TouchableOpacity 
@@ -851,6 +860,32 @@ const styles = StyleSheet.create({
     fontSize: 13,
     color: '#92400E',
     lineHeight: 18,
+  },
+  phoneNumberDisplay: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    backgroundColor: '#EEF2FF',
+    padding: 16,
+    borderRadius: 12,
+    marginBottom: 16,
+    borderWidth: 1,
+    borderColor: '#C7D2FE',
+  },
+  phoneNumberContent: {
+    flex: 1,
+  },
+  phoneNumberLabel: {
+    fontSize: 12,
+    color: '#6366F1',
+    fontWeight: '600',
+    marginBottom: 4,
+  },
+  phoneNumberText: {
+    fontSize: 16,
+    color: '#1E1B4B',
+    fontWeight: '600',
+    letterSpacing: 0.5,
   },
   socialButton: {
     flexDirection: 'row',

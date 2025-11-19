@@ -1,8 +1,8 @@
-import { View, Text, StyleSheet, ScrollView, Image, TouchableOpacity, TextInput, Dimensions, Alert, ActivityIndicator } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, Image, TouchableOpacity, TextInput, Dimensions, Alert, ActivityIndicator, Modal } from 'react-native';
 import { useFonts, Inter_400Regular, Inter_600SemiBold } from '@expo-google-fonts/inter';
 import { useEffect, useState, useCallback } from 'react';
 import { SplashScreen, useRouter, Link, useLocalSearchParams } from 'expo-router';
-import { Search, Filter, ArrowLeft, GraduationCap, MapPin, Globe, ChevronRight, Clock, Award, Wallet, BookOpen, Building2, Users, Plus, FileText, Bookmark } from 'lucide-react-native';
+import { Search, Filter, ArrowLeft, GraduationCap, MapPin, Globe, ChevronRight, Clock, Award, Wallet, BookOpen, Building2, Users, Plus, FileText, Bookmark, Settings } from 'lucide-react-native';
 import { useAuth } from '@/hooks/useAuth';
 import { supabase } from '@/lib/supabase';
 import UnifiedMentorFilterModal, { FilterCriteria } from '@/components/UnifiedMentorFilterModal';
@@ -41,6 +41,7 @@ export default function EducationScreen() {
   const [advancedFilters, setAdvancedFilters] = useState<FilterCriteria | null>(null);
   const [isAdmin, setIsAdmin] = useState(false);
   const [checkingAdmin, setCheckingAdmin] = useState(true);
+  const [adminMenuVisible, setAdminMenuVisible] = useState(false);
   
   const [fontsLoaded] = useFonts({
     'Inter-Regular': Inter_400Regular,
@@ -129,15 +130,38 @@ export default function EducationScreen() {
   const fetchScholarships = useCallback(async () => {
     try {
       setLoading(true);
-      const { data, error } = await supabase
+      
+      // Fetch legacy scholarships from products_services
+      const { data: legacyData, error: legacyError } = await supabase
         .from('products_services')
         .select('*')
         .eq('is_approved', true)
         .eq('category_name', 'Scholarships')
         .order('created_at', { ascending: false });
 
-      if (error) throw error;
-      setScholarships(data || []);
+      if (legacyError) throw legacyError;
+
+      // Fetch approved user-submitted scholarships
+      const { data: submittedData, error: submittedError } = await supabase
+        .from('approved_scholarships')
+        .select('*');
+
+      if (submittedError) {
+        console.warn('Error fetching user-submitted scholarships:', submittedError);
+      }
+
+      // Combine both sources
+      const combined = [
+        ...(legacyData || []),
+        ...(submittedData || []).map((s: any) => ({
+          ...s,
+          category_name: 'Scholarships',
+          is_user_submitted: true,
+        })),
+      ];
+
+      console.log('📚 Fetched scholarships:', legacyData?.length, 'legacy +', submittedData?.length, 'user-submitted');
+      setScholarships(combined);
     } catch (error) {
       console.error('Error fetching scholarships:', error);
       Alert.alert('Error', 'Failed to load scholarships.');
@@ -476,9 +500,9 @@ export default function EducationScreen() {
       Alert.alert('Admins only', 'You need admin access to manage Schools & Scholarships.');
       return;
     }
-    // Redirect to admin panel
-    console.log('[Education] Admin verified, redirecting to admin panel');
-    router.replace('/education/admin');
+    // Show admin menu modal
+    console.log('[Education] Admin verified, showing admin menu');
+    setAdminMenuVisible(true);
   };
 
   // Toggle favorite mentor
@@ -792,7 +816,7 @@ export default function EducationScreen() {
               <View style={[styles.headerIconBox, {backgroundColor: '#FFF9E6'}]}>
                 <Award size={24} color="#F59E0B" />
               </View>
-              <View>
+              <View style={{flex: 1}}>
                 <Text style={styles.modernSectionTitle}>Scholarships & Funding</Text>
                 <Text style={styles.modernSectionSubtitle}>Find financial support for your education</Text>
               </View>
@@ -801,6 +825,18 @@ export default function EducationScreen() {
               <Text style={[styles.countBadgeText, {color: '#F59E0B'}]}>{filteredScholarships.length}</Text>
             </View>
           </View>
+
+          {/* Submit Scholarship Button */}
+          {user && (
+            <TouchableOpacity
+              style={styles.submitScholarshipButton}
+              onPress={() => router.push('/education/submit-scholarship' as any)}
+              activeOpacity={0.7}
+            >
+              <Plus size={18} color="#FFFFFF" />
+              <Text style={styles.submitScholarshipButtonText}>Submit a Scholarship</Text>
+            </TouchableOpacity>
+          )}
 
           {loading ? (
             <View style={styles.loadingContainer}>
@@ -1083,6 +1119,70 @@ export default function EducationScreen() {
         onApplyFilters={handleApplyUnifiedFilters}
         onResetFilters={handleResetUnifiedFilters}
       />
+
+      {/* Admin Menu Modal */}
+      <Modal
+        visible={adminMenuVisible}
+        animationType="fade"
+        transparent={true}
+        onRequestClose={() => setAdminMenuVisible(false)}
+      >
+        <TouchableOpacity 
+          style={styles.adminModalOverlay}
+          activeOpacity={1}
+          onPress={() => setAdminMenuVisible(false)}
+        >
+          <View style={styles.adminModalContent} onStartShouldSetResponder={() => true}>
+            <View style={styles.adminModalHeader}>
+              <Settings size={24} color="#4169E1" />
+              <Text style={styles.adminModalTitle}>Manage Education</Text>
+            </View>
+            
+            <TouchableOpacity
+              style={styles.adminMenuItem}
+              onPress={() => {
+                setAdminMenuVisible(false);
+                router.push('/admin-alumni-mentors' as any);
+              }}
+            >
+              <Users size={20} color="#4169E1" />
+              <Text style={styles.adminMenuItemText}>Alumni Mentors</Text>
+              <ChevronRight size={20} color="#94A3B8" />
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={styles.adminMenuItem}
+              onPress={() => {
+                setAdminMenuVisible(false);
+                router.push('/admin-education-scholarships' as any);
+              }}
+            >
+              <Award size={20} color="#4169E1" />
+              <Text style={styles.adminMenuItemText}>Scholarships</Text>
+              <ChevronRight size={20} color="#94A3B8" />
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={styles.adminMenuItem}
+              onPress={() => {
+                setAdminMenuVisible(false);
+                router.push('/admin-education-universities' as any);
+              }}
+            >
+              <GraduationCap size={20} color="#4169E1" />
+              <Text style={styles.adminMenuItemText}>Universities</Text>
+              <ChevronRight size={20} color="#94A3B8" />
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={styles.adminModalCancelButton}
+              onPress={() => setAdminMenuVisible(false)}
+            >
+              <Text style={styles.adminModalCancelText}>Cancel</Text>
+            </TouchableOpacity>
+          </View>
+        </TouchableOpacity>
+      </Modal>
     </ScrollView>
   );
 }
@@ -2430,5 +2530,91 @@ const styles = StyleSheet.create({
     color: '#9CA3AF',
     textAlign: 'center',
     lineHeight: 20,
+  },
+  submitScholarshipButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    backgroundColor: '#10B981',
+    paddingVertical: 14,
+    paddingHorizontal: 20,
+    borderRadius: 12,
+    marginHorizontal: 16,
+    marginBottom: 20,
+    shadowColor: '#10B981',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.2,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  submitScholarshipButtonText: {
+    fontSize: 15,
+    fontFamily: 'Inter-SemiBold',
+    color: '#FFFFFF',
+  },
+  adminModalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 20,
+  },
+  adminModalContent: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 16,
+    padding: 20,
+    width: '100%',
+    maxWidth: 400,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.2,
+    shadowRadius: 8,
+    elevation: 5,
+  },
+  adminModalHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    marginBottom: 20,
+    paddingBottom: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: '#E5E7EB',
+  },
+  adminModalTitle: {
+    fontSize: 20,
+    fontFamily: 'Inter-SemiBold',
+    color: '#0F172A',
+    flex: 1,
+  },
+  adminMenuItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    paddingVertical: 16,
+    paddingHorizontal: 12,
+    backgroundColor: '#F8FAFF',
+    borderRadius: 12,
+    marginBottom: 12,
+    borderWidth: 1,
+    borderColor: '#E5EAF2',
+  },
+  adminMenuItemText: {
+    fontSize: 16,
+    fontFamily: 'Inter-SemiBold',
+    color: '#1E293B',
+    flex: 1,
+  },
+  adminModalCancelButton: {
+    marginTop: 8,
+    paddingVertical: 14,
+    alignItems: 'center',
+    borderRadius: 12,
+    backgroundColor: '#F3F4F6',
+  },
+  adminModalCancelText: {
+    fontSize: 16,
+    fontFamily: 'Inter-SemiBold',
+    color: '#6B7280',
   },
 });

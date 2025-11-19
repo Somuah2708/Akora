@@ -2,7 +2,7 @@ import { View, Text, StyleSheet, ScrollView, Image, TouchableOpacity, ActivityIn
 import { useFonts, Inter_400Regular, Inter_600SemiBold } from '@expo-google-fonts/inter';
 import { useEffect, useState } from 'react';
 import { SplashScreen, useRouter, useLocalSearchParams } from 'expo-router';
-import { ArrowLeft, MapPin, Globe, Mail, Award, Calendar, Wallet, BookOpen, Share2, Bookmark, ExternalLink } from 'lucide-react-native';
+import { ArrowLeft, MapPin, Globe, Mail, Award, Calendar, Wallet, BookOpen, Share2, Bookmark, ExternalLink, Users, Briefcase, GraduationCap } from 'lucide-react-native';
 import { supabase } from '../../../lib/supabase';
 import { useAuth } from '../../../hooks/useAuth';
 
@@ -15,6 +15,8 @@ export default function EducationDetailScreen() {
   const [opportunity, setOpportunity] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [isBookmarked, setIsBookmarked] = useState(false);
+  const [alumniMentors, setAlumniMentors] = useState<any[]>([]);
+  const [loadingMentors, setLoadingMentors] = useState(false);
 
   const [fontsLoaded] = useFonts({
     'Inter-Regular': Inter_400Regular,
@@ -45,11 +47,43 @@ export default function EducationDetailScreen() {
 
       if (error) throw error;
       setOpportunity(data);
+      
+      // If it's a university, fetch alumni mentors
+      if (data?.category_name === 'Universities') {
+        fetchAlumniMentors(data.title);
+      }
     } catch (error) {
       console.error('Error fetching opportunity details:', error);
       Alert.alert('Error', 'Failed to load details.');
     } finally {
       setLoading(false);
+    }
+  };
+
+  const fetchAlumniMentors = async (universityName: string) => {
+    try {
+      setLoadingMentors(true);
+      
+      // Fetch mentors who currently work at this university (staff/faculty)
+      const { data, error } = await supabase
+        .from('alumni_mentors')
+        .select('*')
+        .eq('status', 'approved')
+        .or(`university.eq.${universityName},university_id.eq.${id}`)
+        .order('created_at', { ascending: false })
+        .limit(10);
+
+      if (error) {
+        console.error('Error fetching university staff mentors:', error);
+        return;
+      }
+
+      console.log('🏫 Fetched staff mentors at university:', universityName, '→', data?.length, 'mentors');
+      setAlumniMentors(data || []);
+    } catch (error) {
+      console.error('Error fetching university staff mentors:', error);
+    } finally {
+      setLoadingMentors(false);
     }
   };
 
@@ -322,6 +356,95 @@ export default function EducationDetailScreen() {
             )}
           </View>
 
+          {/* Alumni Mentors Section (for Universities) */}
+          {!isMentor && !isScholarship && (
+            <View style={styles.section}>
+              <View style={styles.alumniHeader}>
+                <View style={styles.alumniHeaderLeft}>
+                  <Users size={22} color="#4169E1" />
+                  <View>
+                    <Text style={styles.sectionTitle}>Staff & Faculty Mentors</Text>
+                    <Text style={styles.alumniSubtitle}>Connect with current staff and faculty at this university</Text>
+                  </View>
+                </View>
+                {alumniMentors.length > 0 && (
+                  <View style={styles.mentorCountBadge}>
+                    <Text style={styles.mentorCountText}>{alumniMentors.length}</Text>
+                  </View>
+                )}
+              </View>
+
+              {loadingMentors ? (
+                <View style={styles.mentorsLoadingContainer}>
+                  <ActivityIndicator size="small" color="#4169E1" />
+                  <Text style={styles.mentorsLoadingText}>Loading mentors...</Text>
+                </View>
+              ) : alumniMentors.length > 0 ? (
+                <View style={styles.mentorsContainer}>
+                  {alumniMentors.map((mentor) => (
+                    <TouchableOpacity
+                      key={mentor.id}
+                      style={styles.mentorCard}
+                      onPress={() => router.push(`/education/mentor/${mentor.id}` as any)}
+                      activeOpacity={0.7}
+                    >
+                      <Image
+                        source={{ 
+                          uri: mentor.profile_photo_url || 'https://ui-avatars.com/api/?name=' + encodeURIComponent(mentor.full_name || 'User') + '&background=4169E1&color=fff&size=200'
+                        }}
+                        style={styles.mentorAvatar}
+                      />
+                      <View style={styles.mentorInfo}>
+                        <Text style={styles.mentorName} numberOfLines={1}>{mentor.full_name}</Text>
+                        <View style={styles.mentorTitleRow}>
+                          <Briefcase size={14} color="#666666" />
+                          <Text style={styles.mentorTitle} numberOfLines={1}>
+                            {mentor.current_title || 'Mentor'}
+                          </Text>
+                        </View>
+                        {mentor.company && (
+                          <Text style={styles.mentorCompany} numberOfLines={1}>
+                            {mentor.company}
+                          </Text>
+                        )}
+                        {mentor.expertise_areas && mentor.expertise_areas.length > 0 && (
+                          <View style={styles.expertisePreview}>
+                            <Text style={styles.expertiseTag} numberOfLines={1}>
+                              {mentor.expertise_areas.slice(0, 2).join(' • ')}
+                            </Text>
+                          </View>
+                        )}
+                      </View>
+                      <ExternalLink size={18} color="#4169E1" />
+                    </TouchableOpacity>
+                  ))}
+                  
+                  {alumniMentors.length >= 10 && (
+                    <TouchableOpacity 
+                      style={styles.viewAllMentorsButton}
+                      onPress={() => router.push('/education?tab=mentors' as any)}
+                    >
+                      <Text style={styles.viewAllMentorsText}>View All Mentors</Text>
+                      <ExternalLink size={16} color="#4169E1" />
+                    </TouchableOpacity>
+                  )}
+                </View>
+              ) : (
+                <View style={styles.noMentorsContainer}>
+                  <GraduationCap size={40} color="#D1D5DB" />
+                  <Text style={styles.noMentorsText}>No staff mentors at this university yet</Text>
+                  <Text style={styles.noMentorsSubtext}>Check back soon or explore other mentors</Text>
+                  <TouchableOpacity 
+                    style={styles.browseMentorsButton}
+                    onPress={() => router.push('/education?tab=mentors' as any)}
+                  >
+                    <Text style={styles.browseMentorsText}>Browse All Mentors</Text>
+                  </TouchableOpacity>
+                </View>
+              )}
+            </View>
+          )}
+
           {/* Apply Now Button */}
           {opportunity.application_url && (
             <TouchableOpacity style={styles.applyButton} onPress={handleApplyNow}>
@@ -533,6 +656,150 @@ const styles = StyleSheet.create({
   },
   backButtonText: {
     fontSize: 14,
+    fontFamily: 'Inter-SemiBold',
+    color: '#FFFFFF',
+  },
+  alumniHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+    marginBottom: 16,
+  },
+  alumniHeaderLeft: {
+    flexDirection: 'row',
+    gap: 12,
+    flex: 1,
+  },
+  alumniSubtitle: {
+    fontSize: 13,
+    fontFamily: 'Inter-Regular',
+    color: '#666666',
+    marginTop: 2,
+  },
+  mentorCountBadge: {
+    backgroundColor: '#4169E1',
+    borderRadius: 12,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    minWidth: 28,
+    alignItems: 'center',
+  },
+  mentorCountText: {
+    fontSize: 12,
+    fontFamily: 'Inter-SemiBold',
+    color: '#FFFFFF',
+  },
+  mentorsLoadingContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 12,
+    paddingVertical: 24,
+  },
+  mentorsLoadingText: {
+    fontSize: 14,
+    fontFamily: 'Inter-Regular',
+    color: '#666666',
+  },
+  mentorsContainer: {
+    gap: 12,
+  },
+  mentorCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    backgroundColor: '#F9FAFB',
+    padding: 12,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+  },
+  mentorAvatar: {
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    backgroundColor: '#E5E7EB',
+  },
+  mentorInfo: {
+    flex: 1,
+    gap: 4,
+  },
+  mentorName: {
+    fontSize: 15,
+    fontFamily: 'Inter-SemiBold',
+    color: '#000000',
+  },
+  mentorTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  mentorTitle: {
+    fontSize: 13,
+    fontFamily: 'Inter-Regular',
+    color: '#666666',
+    flex: 1,
+  },
+  mentorCompany: {
+    fontSize: 12,
+    fontFamily: 'Inter-Regular',
+    color: '#4169E1',
+  },
+  expertisePreview: {
+    marginTop: 4,
+  },
+  expertiseTag: {
+    fontSize: 11,
+    fontFamily: 'Inter-Regular',
+    color: '#9CA3AF',
+  },
+  viewAllMentorsButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    backgroundColor: '#F9FAFB',
+    paddingVertical: 12,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#4169E1',
+    marginTop: 8,
+  },
+  viewAllMentorsText: {
+    fontSize: 14,
+    fontFamily: 'Inter-SemiBold',
+    color: '#4169E1',
+  },
+  noMentorsContainer: {
+    alignItems: 'center',
+    paddingVertical: 32,
+    paddingHorizontal: 20,
+    backgroundColor: '#F9FAFB',
+    borderRadius: 12,
+    gap: 8,
+  },
+  noMentorsText: {
+    fontSize: 15,
+    fontFamily: 'Inter-SemiBold',
+    color: '#6B7280',
+    textAlign: 'center',
+    marginTop: 8,
+  },
+  noMentorsSubtext: {
+    fontSize: 13,
+    fontFamily: 'Inter-Regular',
+    color: '#9CA3AF',
+    textAlign: 'center',
+  },
+  browseMentorsButton: {
+    backgroundColor: '#4169E1',
+    paddingHorizontal: 20,
+    paddingVertical: 10,
+    borderRadius: 8,
+    marginTop: 12,
+  },
+  browseMentorsText: {
+    fontSize: 13,
     fontFamily: 'Inter-SemiBold',
     color: '#FFFFFF',
   },

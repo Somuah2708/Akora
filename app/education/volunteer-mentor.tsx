@@ -21,6 +21,7 @@ export default function VolunteerMentorScreen() {
   const [company, setCompany] = useState('');
   const [industry, setIndustry] = useState('');
   const [yearsExperience, setYearsExperience] = useState('');
+  const [university, setUniversity] = useState('');
   const [graduationYear, setGraduationYear] = useState('');
   const [degree, setDegree] = useState('');
   const [linkedinUrl, setLinkedinUrl] = useState('');
@@ -183,6 +184,7 @@ export default function VolunteerMentorScreen() {
         company: company.trim() || null,
         industry: industry.trim() || null,
         years_of_experience: yearsExperience ? parseInt(yearsExperience) : null,
+        university: university.trim() || null,
         graduation_year: parseInt(graduationYear),
         degree: degree.trim(),
         expertise_areas: selectedExpertise,
@@ -361,12 +363,22 @@ export default function VolunteerMentorScreen() {
           />
         </View>
 
-        {/* Education Section */}
+        {/* Current Institution Section */}
         <View style={styles.section}>
           <View style={styles.sectionHeader}>
             <GraduationCap size={18} color="#4169E1" />
-            <Text style={styles.sectionTitle}>Education (Alumni Info)</Text>
+            <Text style={styles.sectionTitle}>Current Institution</Text>
           </View>
+
+          <Text style={styles.label}>University / Institution Where You Work (Optional)</Text>
+          <Text style={styles.helpText}>Only fill if you're currently a staff member or faculty at a university</Text>
+          <TextInput
+            style={styles.input}
+            value={university}
+            onChangeText={setUniversity}
+            placeholder="e.g., University of Ghana, KNUST, Ashesi University, etc."
+            placeholderTextColor="#999999"
+          />
 
           <Text style={styles.label}>Graduation Year *</Text>
           <TextInput
