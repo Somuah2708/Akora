@@ -26,6 +26,8 @@ export default function VolunteerMentorScreen() {
   const [linkedinUrl, setLinkedinUrl] = useState('');
   const [whatsappNumber, setWhatsappNumber] = useState('');
   const [availableHours, setAvailableHours] = useState('');
+  const [aboutMe, setAboutMe] = useState('');
+  const [background, setBackground] = useState('');
   const [whyMentor, setWhyMentor] = useState('');
   const [whatOffer, setWhatOffer] = useState('');
   const [profilePhotoUrl, setProfilePhotoUrl] = useState('');
@@ -145,6 +147,11 @@ export default function VolunteerMentorScreen() {
       return;
     }
 
+    if (!aboutMe.trim() || !background.trim()) {
+      Alert.alert('Missing Info', 'Please provide your About and Background information');
+      return;
+    }
+
     if (!whyMentor.trim() || !whatOffer.trim()) {
       Alert.alert('Missing Info', 'Please tell us why you want to mentor and what you can offer');
       return;
@@ -185,6 +192,8 @@ export default function VolunteerMentorScreen() {
         linkedin_url: linkedinUrl.trim() || null,
         whatsapp_number: whatsappNumber.trim() || null,
         profile_photo_url: profilePhotoUrl || null,
+        short_bio: aboutMe.trim(),
+        detailed_bio: background.trim(),
         why_mentor: whyMentor.trim(),
         what_offer: whatOffer.trim(),
         verification_documents: verificationDocuments,
@@ -519,8 +528,55 @@ export default function VolunteerMentorScreen() {
           </Text>
         </View>
 
+        {/* About & Background Section */}
+        <View style={styles.section}>
+          <View style={styles.sectionHeader}>
+            <User size={18} color="#4169E1" />
+            <Text style={styles.sectionTitle}>About You</Text>
+          </View>
+
+          <Text style={styles.label}>About *</Text>
+          <Text style={styles.helpText}>
+            Write a brief introduction about yourself (will be shown on your profile)
+          </Text>
+          <TextInput
+            style={styles.textArea}
+            value={aboutMe}
+            onChangeText={setAboutMe}
+            placeholder="Brief introduction about yourself, your passions, and interests..."
+            placeholderTextColor="#999999"
+            multiline
+            numberOfLines={4}
+            textAlignVertical="top"
+            maxLength={500}
+          />
+          <Text style={styles.characterCount}>{aboutMe.length}/500</Text>
+
+          <Text style={styles.label}>Background *</Text>
+          <Text style={styles.helpText}>
+            Share your professional journey, achievements, and experience
+          </Text>
+          <TextInput
+            style={styles.textArea}
+            value={background}
+            onChangeText={setBackground}
+            placeholder="Your professional journey, key achievements, career path, and relevant experience..."
+            placeholderTextColor="#999999"
+            multiline
+            numberOfLines={6}
+            textAlignVertical="top"
+            maxLength={1000}
+          />
+          <Text style={styles.characterCount}>{background.length}/1000</Text>
+        </View>
+
         {/* Motivation Section */}
         <View style={styles.section}>
+          <View style={styles.sectionHeader}>
+            <Heart size={18} color="#4169E1" />
+            <Text style={styles.sectionTitle}>Mentorship Motivation</Text>
+          </View>
+
           <Text style={styles.label}>Why do you want to be a mentor? *</Text>
           <Text style={styles.helpText}>
             Share your motivation for volunteering as a mentor

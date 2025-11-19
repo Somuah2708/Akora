@@ -230,7 +230,14 @@ export default function MyMentorshipRequests() {
         <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
           <Ionicons name="arrow-back" size={24} color="#000" />
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>My Mentorship Requests</Text>
+        <View style={styles.headerTitleContainer}>
+          <Text style={styles.headerTitle}>My Mentorship Requests</Text>
+          {requests.length > 0 && (
+            <View style={styles.countBadge}>
+              <Text style={styles.countBadgeText}>{requests.length}</Text>
+            </View>
+          )}
+        </View>
         <TouchableOpacity 
           onPress={() => setFilterModalVisible(true)} 
           style={styles.filterButton}
@@ -289,7 +296,12 @@ export default function MyMentorshipRequests() {
           </View>
         ) : (
           filteredRequests.map((request) => (
-            <View key={request.id} style={styles.requestCard}>
+            <TouchableOpacity 
+              key={request.id} 
+              style={styles.requestCard}
+              onPress={() => router.push(`/education/mentor/${request.mentor_id}`)}
+              activeOpacity={0.7}
+            >
               {/* Mentor Info */}
               <View style={styles.mentorHeader}>
                 <View style={styles.avatarPlaceholder}>
@@ -338,10 +350,11 @@ export default function MyMentorshipRequests() {
                     </Text>
                   </View>
                   <TouchableOpacity
-                    style={styles.cancelLinkButton}
+                    style={styles.cancelButton}
                     onPress={() => handleCancelRequest(request)}
                   >
-                    <Text style={styles.cancelLinkText}>Cancel Request</Text>
+                    <Ionicons name="close-circle-outline" size={18} color="#EF4444" />
+                    <Text style={styles.cancelButtonText}>Cancel Request</Text>
                   </TouchableOpacity>
                 </View>
               )}
@@ -438,14 +451,17 @@ export default function MyMentorshipRequests() {
               )}
 
               {/* Date */}
-              <Text style={styles.dateText}>
-                Requested on {new Date(request.created_at).toLocaleDateString('en-US', {
-                  month: 'long',
-                  day: 'numeric',
-                  year: 'numeric',
-                })}
-              </Text>
-            </View>
+              <View style={styles.cardFooter}>
+                <Ionicons name="calendar-outline" size={14} color="#9ca3af" />
+                <Text style={styles.dateText}>
+                  Requested {new Date(request.created_at).toLocaleDateString('en-US', {
+                    month: 'short',
+                    day: 'numeric',
+                    year: 'numeric',
+                  })}
+                </Text>
+              </View>
+            </TouchableOpacity>
           ))
         )}
       </ScrollView>
@@ -521,19 +537,43 @@ const styles = StyleSheet.create({
     borderBottomColor: '#e5e7eb',
     flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'space-between',
   },
   backButton: {
     marginRight: 15,
   },
-  headerTitle: {
+  headerTitleContainer: {
     flex: 1,
-    fontSize: 24,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    flexWrap: 'nowrap',
+  },
+  headerTitle: {
+    fontSize: 20,
     fontWeight: '700',
     color: '#111827',
+    flexShrink: 1,
+  },
+  countBadge: {
+    backgroundColor: '#16a34a',
+    minWidth: 24,
+    height: 24,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 8,
+    flexShrink: 0,
+  },
+  countBadgeText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#fff',
   },
   filterButton: {
-    position: 'relative',
     padding: 8,
+    marginLeft: 8,
+    flexShrink: 0,
   },
   filterBadge: {
     position: 'absolute',
@@ -712,16 +752,25 @@ const styles = StyleSheet.create({
     color: '#f59e0b',
     marginLeft: 8,
     fontWeight: '500',
+    flex: 1,
   },
-  cancelLinkButton: {
-    marginTop: 8,
-    alignSelf: 'flex-start',
+  cancelButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#FEE2E2',
+    paddingVertical: 10,
+    paddingHorizontal: 16,
+    borderRadius: 8,
+    marginTop: 12,
+    borderWidth: 1,
+    borderColor: '#FCA5A5',
+    gap: 6,
   },
-  cancelLinkText: {
-    fontSize: 13,
+  cancelButtonText: {
+    fontSize: 14,
     color: '#EF4444',
     fontWeight: '600',
-    textDecorationLine: 'underline',
   },
   responseContainer: {
     backgroundColor: '#f0fdf4',
@@ -865,12 +914,18 @@ const styles = StyleSheet.create({
     color: '#10B981',
     fontWeight: '500',
   },
-  dateText: {
-    fontSize: 12,
-    color: '#9ca3af',
+  cardFooter: {
+    flexDirection: 'row',
+    alignItems: 'center',
     marginTop: 16,
     paddingTop: 16,
     borderTopWidth: 1,
-    borderTopColor: '#e5e7eb',
+    borderTopColor: '#f3f4f6',
+    gap: 6,
+  },
+  dateText: {
+    fontSize: 13,
+    color: '#9ca3af',
+    fontWeight: '500',
   },
 });

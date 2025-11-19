@@ -74,9 +74,17 @@ export default function MentorDashboard() {
 
   // Check if user is a mentor
   const checkMentorStatus = useCallback(async () => {
-    if (!user || !profile) return;
+    if (!user || !profile) {
+      console.log('⚠️ [MentorDashboard] No user or profile yet');
+      return;
+    }
 
     try {
+      console.log(`🔍 [MentorDashboard] Checking mentor status for:`, {
+        userId: user.id,
+        profileEmail: profile.email
+      });
+
       // Use ilike for case-insensitive email matching
       const { data, error } = await supabase
         .from('alumni_mentors')
@@ -86,7 +94,7 @@ export default function MentorDashboard() {
         .maybeSingle();
 
       if (error) {
-        console.error('Error checking mentor status:', error);
+        console.error('❌ [MentorDashboard] Error checking mentor status:', error);
         Alert.alert(
           'Not a Mentor',
           'You are not registered as a mentor. Please contact admin to become a mentor.',
@@ -96,6 +104,7 @@ export default function MentorDashboard() {
       }
 
       if (!data) {
+        console.log('❌ [MentorDashboard] No mentor found for email:', profile.email);
         Alert.alert(
           'Not a Mentor',
           'You are not registered as a mentor. Please contact admin to become a mentor.',
@@ -104,6 +113,7 @@ export default function MentorDashboard() {
         return;
       }
 
+      console.log('✅ [MentorDashboard] Mentor profile found:', data);
       setMentorProfile(data);
     } catch (error) {
       console.error('Error:', error);
@@ -114,9 +124,19 @@ export default function MentorDashboard() {
 
   // Fetch mentorship requests
   const fetchRequests = useCallback(async () => {
-    if (!mentorProfile) return;
+    if (!mentorProfile) {
+      console.log('⚠️ [MentorDashboard] No mentor profile yet, skipping fetch');
+      return;
+    }
 
     try {
+      console.log(`🔍 [MentorDashboard] Fetching requests for mentor:`, {
+        mentorId: mentorProfile.id,
+        mentorEmail: mentorProfile.email,
+        mentorName: mentorProfile.full_name,
+        activeTab
+      });
+
       let query = supabase
         .from('mentor_requests')
         .select('*')
@@ -132,9 +152,16 @@ export default function MentorDashboard() {
 
       const { data, error } = await query;
 
-      if (error) throw error;
+      if (error) {
+        console.error('❌ [MentorDashboard] Error fetching requests:', error);
+        throw error;
+      }
 
-      console.log(`📥 Fetched ${data?.length || 0} ${activeTab} requests`);
+      console.log(`📥 [MentorDashboard] Fetched ${data?.length || 0} ${activeTab} requests`);
+      
+      if (data && data.length > 0) {
+        console.log('📋 [MentorDashboard] Sample request:', data[0]);
+      }
       setRequests(data || []);
 
       // Calculate stats
@@ -346,64 +373,67 @@ export default function MentorDashboard() {
 
   return (
     <View style={styles.container}>
-      {/* Header */}
-      <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
-          <Ionicons name="arrow-back" size={24} color="#000" />
-        </TouchableOpacity>
-        <View style={styles.headerContent}>
-          <Text style={styles.headerTitle}>Mentor Dashboard</Text>
-          <Text style={styles.headerSubtitle}>
-            {mentorProfile.full_name} • {mentorProfile.current_title}
-          </Text>
-        </View>
-      </View>
-
-      {/* Stats */}
-      <MentorStats
-        totalRequests={stats.totalRequests}
-        acceptedRequests={stats.acceptedRequests}
-        completedRequests={stats.completedRequests}
-        acceptanceRate={stats.acceptanceRate}
-        avgResponseTimeHours={stats.avgResponseTimeHours}
-      />      {/* Tabs */}
-      <View style={styles.tabs}>
-        <TouchableOpacity
-          style={[styles.tab, activeTab === 'pending' && styles.activeTab]}
-          onPress={() => setActiveTab('pending')}
-        >
-          <Text style={[styles.tabText, activeTab === 'pending' && styles.activeTabText]}>
-            Pending
-          </Text>
-          {stats.pendingRequests > 0 && activeTab === 'pending' && (
-            <View style={styles.badge}>
-              <Text style={styles.badgeText}>{stats.pendingRequests}</Text>
-            </View>
-          )}
-        </TouchableOpacity>
-        <TouchableOpacity
-          style={[styles.tab, activeTab === 'accepted' && styles.activeTab]}
-          onPress={() => setActiveTab('accepted')}
-        >
-          <Text style={[styles.tabText, activeTab === 'accepted' && styles.activeTabText]}>
-            Accepted
-          </Text>
-        </TouchableOpacity>
-        <TouchableOpacity
-          style={[styles.tab, activeTab === 'all' && styles.activeTab]}
-          onPress={() => setActiveTab('all')}
-        >
-          <Text style={[styles.tabText, activeTab === 'all' && styles.activeTabText]}>
-            All
-          </Text>
-        </TouchableOpacity>
-      </View>
-
-      {/* Requests List */}
       <ScrollView
         style={styles.scrollView}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
+        showsVerticalScrollIndicator={false}
       >
+        {/* Header */}
+        <View style={styles.header}>
+          <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
+            <Ionicons name="arrow-back" size={24} color="#000" />
+          </TouchableOpacity>
+          <View style={styles.headerContent}>
+            <Text style={styles.headerTitle}>Mentor Dashboard</Text>
+            <Text style={styles.headerSubtitle}>
+              {mentorProfile.full_name} • {mentorProfile.current_title}
+            </Text>
+          </View>
+        </View>
+
+        {/* Stats */}
+        <MentorStats
+          totalRequests={stats.totalRequests}
+          acceptedRequests={stats.acceptedRequests}
+          completedRequests={stats.completedRequests}
+          acceptanceRate={stats.acceptanceRate}
+          avgResponseTimeHours={stats.avgResponseTimeHours}
+        />
+
+        {/* Tabs */}
+        <View style={styles.tabs}>
+          <TouchableOpacity
+            style={[styles.tab, activeTab === 'pending' && styles.activeTab]}
+            onPress={() => setActiveTab('pending')}
+          >
+            <Text style={[styles.tabText, activeTab === 'pending' && styles.activeTabText]}>
+              Pending
+            </Text>
+            {stats.pendingRequests > 0 && activeTab === 'pending' && (
+              <View style={styles.badge}>
+                <Text style={styles.badgeText}>{stats.pendingRequests}</Text>
+              </View>
+            )}
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.tab, activeTab === 'accepted' && styles.activeTab]}
+            onPress={() => setActiveTab('accepted')}
+          >
+            <Text style={[styles.tabText, activeTab === 'accepted' && styles.activeTabText]}>
+              Accepted
+            </Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.tab, activeTab === 'all' && styles.activeTab]}
+            onPress={() => setActiveTab('all')}
+          >
+            <Text style={[styles.tabText, activeTab === 'all' && styles.activeTabText]}>
+              All
+            </Text>
+          </TouchableOpacity>
+        </View>
+
+        {/* Requests List */}
         {requests.length === 0 ? (
           <View style={styles.emptyState}>
             <Ionicons name="mail-open-outline" size={80} color="#d1d5db" />
@@ -645,6 +675,7 @@ const styles = StyleSheet.create({
   },
   scrollView: {
     flex: 1,
+    backgroundColor: '#f9fafb',
   },
   emptyState: {
     alignItems: 'center',

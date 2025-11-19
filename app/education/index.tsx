@@ -1,11 +1,12 @@
 import { View, Text, StyleSheet, ScrollView, Image, TouchableOpacity, TextInput, Dimensions, Alert, ActivityIndicator } from 'react-native';
 import { useFonts, Inter_400Regular, Inter_600SemiBold } from '@expo-google-fonts/inter';
 import { useEffect, useState, useCallback } from 'react';
-import { SplashScreen, useRouter, Link } from 'expo-router';
+import { SplashScreen, useRouter, Link, useLocalSearchParams } from 'expo-router';
 import { Search, Filter, ArrowLeft, GraduationCap, MapPin, Globe, ChevronRight, Clock, Award, Wallet, BookOpen, Building2, Users, Plus, FileText, Bookmark } from 'lucide-react-native';
 import { useAuth } from '@/hooks/useAuth';
 import { supabase } from '@/lib/supabase';
 import UnifiedMentorFilterModal, { FilterCriteria } from '@/components/UnifiedMentorFilterModal';
+import { EXPERTISE_OPTIONS } from '@/constants/mentorConstants';
 
 SplashScreen.preventAutoHideAsync();
 
@@ -17,11 +18,13 @@ type TabType = 'universities' | 'scholarships' | 'mentors';
 export default function EducationScreen() {
   const router = useRouter();
   const { user, profile } = useAuth();
+  const params = useLocalSearchParams();
   
   console.log('[Education] Component mounted/rendered');
   console.log('[Education] Initial user:', !!user, 'profile:', !!profile);
+  console.log('[Education] URL params:', params);
   
-  const [activeTab, setActiveTab] = useState<TabType>('universities');
+  const [activeTab, setActiveTab] = useState<TabType>((params.tab as TabType) || 'universities');
   const [universities, setUniversities] = useState<any[]>([]);
   const [scholarships, setScholarships] = useState<any[]>([]);
   const [mentors, setMentors] = useState<any[]>([]);
@@ -35,7 +38,6 @@ export default function EducationScreen() {
   const [favoriteMentorIds, setFavoriteMentorIds] = useState<string[]>([]);
   const [filterModalVisible, setFilterModalVisible] = useState(false);
   const [selectedExpertise, setSelectedExpertise] = useState<string[]>([]);
-  const [allExpertiseAreas, setAllExpertiseAreas] = useState<string[]>([]);
   const [advancedFilters, setAdvancedFilters] = useState<FilterCriteria | null>(null);
   const [isAdmin, setIsAdmin] = useState(false);
   const [checkingAdmin, setCheckingAdmin] = useState(true);
@@ -157,15 +159,6 @@ export default function EducationScreen() {
       if (error) throw error;
       console.log('👨‍🎓 Fetched mentors:', data?.length, 'items');
       setMentors(data || []);
-      
-      // Extract all unique expertise areas
-      const expertiseSet = new Set<string>();
-      data?.forEach((mentor: any) => {
-        if (mentor.expertise_areas && Array.isArray(mentor.expertise_areas)) {
-          mentor.expertise_areas.forEach((area: string) => expertiseSet.add(area));
-        }
-      });
-      setAllExpertiseAreas(Array.from(expertiseSet).sort());
     } catch (error) {
       console.error('Error fetching mentors:', error);
       Alert.alert('Error', 'Failed to load mentors.');
@@ -276,18 +269,31 @@ export default function EducationScreen() {
 
   // Fetch favorite mentors
   const fetchFavoriteMentors = useCallback(async () => {
-    if (!user) return;
+    if (!user) {
+      console.log('⚠️ [Education] fetchFavoriteMentors: No user');
+      return;
+    }
+    
+    console.log('📚 [Education] Fetching favorite mentors for user:', user.id);
+    
     try {
       const { data, error } = await supabase
-        .from('mentor_favorites')
+        .from('education_bookmarks')
         .select('mentor_id')
-        .eq('user_id', user.id);
+        .eq('user_id', user.id)
+        .not('mentor_id', 'is', null);
 
-      if (error) throw error;
-      setFavoriteMentorIds(data?.map(f => f.mentor_id) || []);
-      console.log('📚 Loaded favorite mentors:', data?.length || 0);
+      if (error) {
+        console.error('❌ [Education] Error fetching favorite mentors:', error);
+        throw error;
+      }
+      
+      const mentorIds = data?.map(f => f.mentor_id!) || [];
+      setFavoriteMentorIds(mentorIds);
+      console.log('✅ [Education] Loaded favorite mentors:', mentorIds.length, 'mentors');
+      console.log('✅ [Education] Mentor IDs:', mentorIds);
     } catch (error) {
-      console.error('Error fetching favorite mentors:', error);
+      console.error('❌ [Education] Error fetching favorite mentors:', error);
     }
   }, [user]);
 
@@ -479,37 +485,63 @@ export default function EducationScreen() {
   const toggleFavoriteMentor = async (mentorId: string, event: any) => {
     event.stopPropagation(); // Prevent card click
     
+    console.log('🔖 [Education] toggleFavoriteMentor called', { mentorId, userId: user?.id });
+    
     if (!user) {
       Alert.alert('Login Required', 'Please sign in to favorite mentors.');
       return;
     }
 
     const isFavorited = favoriteMentorIds.includes(mentorId);
+    console.log('🔖 [Education] Current favorite status:', { isFavorited, mentorId });
     
     try {
       if (isFavorited) {
+        console.log('🔖 [Education] Removing mentor from favorites...');
         const { error } = await supabase
-          .from('mentor_favorites')
+          .from('education_bookmarks')
           .delete()
           .eq('user_id', user.id)
           .eq('mentor_id', mentorId);
 
-        if (error) throw error;
+        if (error) {
+          console.error('❌ [Education] Delete error:', error);
+          throw error;
+        }
         
         setFavoriteMentorIds(prev => prev.filter(id => id !== mentorId));
-        console.log('❤️ Removed mentor from favorites');
+        console.log('✅ [Education] Removed mentor from favorites');
       } else {
-        const { error } = await supabase
-          .from('mentor_favorites')
-          .insert({ user_id: user.id, mentor_id: mentorId });
-
-        if (error) throw error;
+        console.log('🔖 [Education] Adding mentor to favorites...');
+        const insertData = { 
+          user_id: user.id, 
+          mentor_id: mentorId,
+          opportunity_id: null
+        };
+        console.log('🔖 [Education] Insert data:', insertData);
         
+        const { data, error } = await supabase
+          .from('education_bookmarks')
+          .insert(insertData)
+          .select();
+
+        if (error) {
+          console.error('❌ [Education] Insert error:', error);
+          console.error('❌ [Education] Error details:', {
+            message: error.message,
+            code: error.code,
+            details: error.details,
+            hint: error.hint
+          });
+          throw error;
+        }
+        
+        console.log('✅ [Education] Insert successful, returned data:', data);
         setFavoriteMentorIds(prev => [...prev, mentorId]);
-        console.log('❤️ Added mentor to favorites');
+        console.log('✅ [Education] Added mentor to favorites, new list:', [...favoriteMentorIds, mentorId]);
       }
     } catch (error: any) {
-      console.error('Error toggling favorite:', error);
+      console.error('❌ [Education] Error toggling favorite:', error);
       Alert.alert('Error', error.message || 'Failed to update favorites');
     }
   };
@@ -598,17 +630,17 @@ export default function EducationScreen() {
         <View style={styles.quickActions}>
           <Link href="/education/my-applications" asChild>
             <TouchableOpacity style={styles.quickActionButton}>
-              <Text style={styles.quickActionText}>Applications</Text>
+              <Text style={styles.quickActionText}>My Applications</Text>
             </TouchableOpacity>
           </Link>
           <Link href="/education/saved-opportunities" asChild>
             <TouchableOpacity style={styles.quickActionButton}>
-              <Text style={styles.quickActionText}>Saved</Text>
+              <Text style={styles.quickActionText}>Saved ↓</Text>
             </TouchableOpacity>
           </Link>
           <Link href="/education/saved-mentors" asChild>
             <TouchableOpacity style={styles.quickActionButton}>
-              <Text style={styles.quickActionText}>Mentors</Text>
+              <Text style={styles.quickActionText}>Saved ↓</Text>
             </TouchableOpacity>
           </Link>
         </View>
@@ -1045,7 +1077,7 @@ export default function EducationScreen() {
       <UnifiedMentorFilterModal
         visible={filterModalVisible}
         onClose={() => setFilterModalVisible(false)}
-        allExpertiseAreas={allExpertiseAreas}
+        allExpertiseAreas={EXPERTISE_OPTIONS}
         selectedExpertise={selectedExpertise}
         onExpertiseChange={setSelectedExpertise}
         onApplyFilters={handleApplyUnifiedFilters}

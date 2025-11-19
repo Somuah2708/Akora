@@ -1,7 +1,7 @@
 import { View, Text, StyleSheet, ScrollView, Image, TouchableOpacity, TextInput, Alert, Linking } from 'react-native';
-import { useState, useEffect } from 'react';
-import { useRouter, useLocalSearchParams } from 'expo-router';
-import { ArrowLeft, Building2, GraduationCap, Clock, MapPin, Linkedin, Mail, MessageCircle, Phone, Send, FileText } from 'lucide-react-native';
+import React, { useState, useEffect } from 'react';
+import { useRouter, useLocalSearchParams, useFocusEffect } from 'expo-router';
+import { ArrowLeft, Building2, GraduationCap, Clock, MapPin, Linkedin, Mail, MessageCircle, Phone, Send, FileText, UserCircle2 } from 'lucide-react-native';
 import { useAuth } from '@/hooks/useAuth';
 import { supabase } from '@/lib/supabase';
 import RequestTemplatesModal, { RequestTemplate } from '@/components/RequestTemplatesModal';
@@ -31,6 +31,15 @@ export default function MentorDetailScreen() {
   useEffect(() => {
     fetchMentorDetails();
   }, [id]);
+
+  // Refresh accepted request status when screen gains focus
+  useFocusEffect(
+    React.useCallback(() => {
+      if (user && id) {
+        checkAcceptedRequestStatus();
+      }
+    }, [user, id])
+  );
 
   const fetchMentorDetails = async () => {
     try {
@@ -75,6 +84,37 @@ export default function MentorDetailScreen() {
     }
   };
 
+  const checkAcceptedRequestStatus = async () => {
+    if (!user || !id) return;
+    
+    try {
+      const { data: requestData, error } = await supabase
+        .from('mentor_requests')
+        .select('id, status, created_at')
+        .eq('mentor_id', id)
+        .eq('mentee_id', user.id)
+        .in('status', ['accepted', 'completed'])
+        .maybeSingle();
+
+      if (error && error.code !== 'PGRST116') {
+        console.error('Error checking request status:', error);
+        return;
+      }
+
+      const hasAccepted = !!requestData;
+      console.log('🔍 [MentorDetail] Request status check:', {
+        mentorId: id,
+        userId: user.id,
+        hasAcceptedRequest: hasAccepted,
+        requestData
+      });
+      
+      setHasAcceptedRequest(hasAccepted);
+    } catch (error) {
+      console.error('Error checking accepted request:', error);
+    }
+  };
+
   const toggleAreaSelection = (area: string) => {
     if (selectedAreas.includes(area)) {
       setSelectedAreas(selectedAreas.filter(a => a !== area));
@@ -89,22 +129,33 @@ export default function MentorDetailScreen() {
     // Keep the form open so user can customize the message
   };
 
-  const handleContactClick = (url: string, platform: string) => {
+  const handleContactClick = async (url: string, platform: string) => {
     if (!user) {
       Alert.alert('Login Required', 'Please login to contact the mentor');
       return;
     }
     
-    if (!hasAcceptedRequest) {
-      Alert.alert(
-        'Request Not Accepted',
-        `The mentor hasn't accepted your request yet. Once they accept, you'll be able to contact them via ${platform}.`,
-        [{ text: 'OK' }]
-      );
-      return;
-    }
+    console.log('📞 [MentorDetail] Contact button clicked:', {
+      platform,
+      hasAcceptedRequest,
+      url
+    });
     
-    Linking.openURL(url);
+    // Always recheck status before attempting contact (in case it was recently accepted)
+    await checkAcceptedRequestStatus();
+    
+    // Small delay to ensure state is updated after check
+    setTimeout(() => {
+      if (hasAcceptedRequest) {
+        Linking.openURL(url);
+      } else {
+        Alert.alert(
+          'Request Not Accepted',
+          `The mentor hasn't accepted your request yet. Once they accept, you'll be able to contact them via ${platform}.`,
+          [{ text: 'OK' }]
+        );
+      }
+    }, 200);
   };
 
   const handleSubmitRequest = async () => {
@@ -161,13 +212,26 @@ export default function MentorDetailScreen() {
         status: 'pending',
       };
 
+      console.log('📤 [MentorRequest] Submitting request:', {
+        mentor_id: request.mentor_id,
+        mentor_name: mentor.full_name,
+        mentor_email: mentor.email,
+        mentee_id: request.mentee_id,
+        mentee_name: request.mentee_name,
+      });
+
       const { data: insertedRequest, error } = await supabase
         .from('mentor_requests')
         .insert([request])
         .select()
         .single();
 
-      if (error) throw error;
+      if (error) {
+        console.error('❌ [MentorRequest] Error inserting request:', error);
+        throw error;
+      }
+
+      console.log('✅ [MentorRequest] Request created successfully:', insertedRequest);
 
       // Send notification to mentor
       if (mentor.user_id) {
@@ -252,10 +316,22 @@ export default function MentorDetailScreen() {
       <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
         {/* Profile Header */}
         <View style={styles.profileHeader}>
-          <Image 
-            source={{ uri: mentor.profile_photo_url || 'https://images.unsplash.com/photo-1568602471122-7832951cc4c5?w=400' }}
-            style={styles.avatar}
-          />
+          <View style={styles.avatarContainer}>
+            <Image 
+              source={{ uri: mentor.profile_photo_url || 'https://images.unsplash.com/photo-1568602471122-7832951cc4c5?w=400' }}
+              style={styles.avatar}
+            />
+            {mentor.user_id && (
+              <TouchableOpacity
+                style={styles.viewProfileButton}
+                onPress={() => {
+                  router.push(`/user-profile/${mentor.user_id}`);
+                }}
+              >
+                <UserCircle2 size={20} color="#fff" />
+              </TouchableOpacity>
+            )}
+          </View>
           <View style={styles.profileInfo}>
             <Text style={styles.name}>{mentor.full_name}</Text>
             <Text style={styles.title}>{mentor.current_title}</Text>
@@ -590,11 +666,32 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: '#F3F4F6',
   },
+  avatarContainer: {
+    position: 'relative',
+    marginBottom: 16,
+  },
   avatar: {
     width: 100,
     height: 100,
     borderRadius: 50,
-    marginBottom: 16,
+  },
+  viewProfileButton: {
+    position: 'absolute',
+    bottom: 0,
+    right: 0,
+    backgroundColor: '#10B981',
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 3,
+    borderColor: '#fff',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.2,
+    shadowRadius: 4,
+    elevation: 4,
   },
   profileInfo: {
     alignItems: 'center',

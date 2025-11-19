@@ -15,11 +15,12 @@ import {
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
+import * as DocumentPicker from 'expo-document-picker';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/hooks/useAuth';
 import { EXPERTISE_OPTIONS, MEETING_FORMATS, DAYS_OPTIONS } from '@/constants/mentorConstants';
 
-type TabType = 'mentors' | 'applications' | 'requests';
+type TabType = 'mentors' | 'applications';
 
 interface Mentor {
   id: string;
@@ -72,6 +73,8 @@ interface Application {
   preferred_days: string[];
   linkedin_url: string | null;
   whatsapp_number: string | null;
+  short_bio: string | null;
+  detailed_bio: string | null;
   why_mentor: string;
   what_offer: string;
   verification_documents: string[] | null;
@@ -113,12 +116,36 @@ export default function AdminAlumniMentorsScreen() {
   // Data states
   const [mentors, setMentors] = useState<Mentor[]>([]);
   const [applications, setApplications] = useState<Application[]>([]);
-  const [requests, setRequests] = useState<Request[]>([]);
 
   // Modal states
   const [editingMentor, setEditingMentor] = useState<Mentor | null>(null);
   const [selectedApplication, setSelectedApplication] = useState<Application | null>(null);
-  const [selectedRequest, setSelectedRequest] = useState<Request | null>(null);
+  const [creatingMentor, setCreatingMentor] = useState(false);
+
+  // Create mentor form states
+  const [fullName, setFullName] = useState('');
+  const [email, setEmail] = useState('');
+  const [phone, setPhone] = useState('');
+  const [currentTitle, setCurrentTitle] = useState('');
+  const [company, setCompany] = useState('');
+  const [industry, setIndustry] = useState('');
+  const [yearsExperience, setYearsExperience] = useState('');
+  const [graduationYear, setGraduationYear] = useState('');
+  const [degree, setDegree] = useState('');
+  const [linkedinUrl, setLinkedinUrl] = useState('');
+  const [whatsappNumber, setWhatsappNumber] = useState('');
+  const [availableHours, setAvailableHours] = useState('');
+  const [aboutMe, setAboutMe] = useState('');
+  const [background, setBackground] = useState('');
+  const [whyMentor, setWhyMentor] = useState('');
+  const [whatOffer, setWhatOffer] = useState('');
+  const [profilePhotoUrl, setProfilePhotoUrl] = useState('');
+  const [selectedExpertise, setSelectedExpertise] = useState<string[]>([]);
+  const [selectedFormats, setSelectedFormats] = useState<string[]>([]);
+  const [selectedDays, setSelectedDays] = useState<string[]>([]);
+  const [verificationDocuments, setVerificationDocuments] = useState<any[]>([]);
+  const [uploadingDocuments, setUploadingDocuments] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
 
   // Check admin access
   useEffect(() => {
@@ -155,22 +182,7 @@ export default function AdminAlumniMentorsScreen() {
       if (appsError) throw appsError;
       setApplications(appsData || []);
 
-      // Fetch requests with mentor info
-      const { data: requestsData, error: requestsError } = await supabase
-        .from('mentor_requests')
-        .select(`
-          *,
-          mentor:alumni_mentors!mentor_id (
-            full_name,
-            email
-          )
-        `)
-        .order('created_at', { ascending: false });
-
-      if (requestsError) throw requestsError;
-      setRequests(requestsData || []);
-
-      console.log('📊 Loaded:', mentorsData?.length, 'mentors,', appsData?.length, 'applications,', requestsData?.length, 'requests');
+      console.log('📊 Loaded:', mentorsData?.length, 'mentors,', appsData?.length, 'applications');
     } catch (error) {
       console.error('Error fetching data:', error);
       Alert.alert('Error', 'Failed to load data');
@@ -188,6 +200,193 @@ export default function AdminAlumniMentorsScreen() {
     setRefreshing(true);
     fetchAllData();
   }, [fetchAllData]);
+
+  // Document picker for create mentor
+  const pickDocument = async () => {
+    try {
+      const result = await DocumentPicker.getDocumentAsync({
+        type: ['application/pdf', 'image/*', 'application/msword', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'],
+        copyToCacheDirectory: true,
+      });
+
+      if (result.canceled) return;
+
+      const file = result.assets[0];
+      
+      if (file.size && file.size > 5 * 1024 * 1024) {
+        Alert.alert('File Too Large', 'Please select a file smaller than 5MB');
+        return;
+      }
+
+      await uploadDocument(file.uri, file.name);
+    } catch (error) {
+      console.error('Error picking document:', error);
+      Alert.alert('Error', 'Failed to pick document');
+    }
+  };
+
+  const uploadDocument = async (uri: string, fileName: string) => {
+    if (!user) {
+      Alert.alert('Error', 'You must be logged in to upload documents');
+      return;
+    }
+
+    try {
+      setUploadingDocuments(true);
+
+      const fileExt = fileName.split('.').pop()?.toLowerCase() || 'pdf';
+      const filePath = `${user.id}/verification/${Date.now()}.${fileExt}`;
+
+      const formData = new FormData();
+      formData.append('file', {
+        uri: uri,
+        type: `application/${fileExt}`,
+        name: fileName,
+      } as any);
+
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) throw new Error('No active session');
+
+      const uploadResponse = await fetch(
+        `${process.env.EXPO_PUBLIC_SUPABASE_URL}/storage/v1/object/mentor-verification/${filePath}`,
+        {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${session.access_token}`,
+          },
+          body: formData,
+        }
+      );
+
+      if (!uploadResponse.ok) {
+        const errorData = await uploadResponse.json();
+        throw new Error(errorData.message || 'Upload failed');
+      }
+
+      const { data: { publicUrl } } = supabase.storage
+        .from('mentor-verification')
+        .getPublicUrl(filePath);
+
+      setVerificationDocuments([...verificationDocuments, publicUrl]);
+      Alert.alert('Success', 'Document uploaded successfully!');
+    } catch (error: any) {
+      console.error('Error uploading document:', error);
+      Alert.alert('Upload Failed', error.message || 'Failed to upload document');
+    } finally {
+      setUploadingDocuments(false);
+    }
+  };
+
+  const removeDocument = (url: string) => {
+    setVerificationDocuments(verificationDocuments.filter(doc => doc !== url));
+  };
+
+  // Create new mentor
+  const createMentor = async () => {
+    try {
+      // Validation
+      if (!fullName.trim() || !email.trim() || !currentTitle.trim()) {
+        Alert.alert('Required Fields', 'Please fill in name, email, and current title');
+        return;
+      }
+
+      if (!graduationYear.trim() || !degree.trim()) {
+        Alert.alert('Required Fields', 'Please fill in graduation year and degree');
+        return;
+      }
+
+      if (selectedExpertise.length === 0) {
+        Alert.alert('Required Fields', 'Please select at least one area of expertise');
+        return;
+      }
+
+      if (!aboutMe.trim() || !background.trim()) {
+        Alert.alert('Required Fields', 'Please provide about me and background information');
+        return;
+      }
+
+      if (!whyMentor.trim() || !whatOffer.trim()) {
+        Alert.alert('Required Fields', 'Please explain why you want to mentor and what you can offer');
+        return;
+      }
+
+      if (verificationDocuments.length === 0) {
+        Alert.alert('Required Fields', 'Please upload at least one verification document');
+        return;
+      }
+
+      setSubmitting(true);
+
+      // Insert directly into alumni_mentors (pre-approved)
+      const { data, error } = await supabase
+        .from('alumni_mentors')
+        .insert({
+          full_name: fullName.trim(),
+          email: email.trim().toLowerCase(),
+          phone: phone.trim(),
+          current_title: currentTitle.trim(),
+          company: company.trim(),
+          industry: industry.trim(),
+          years_experience: yearsExperience ? parseInt(yearsExperience) : null,
+          graduation_year: graduationYear ? parseInt(graduationYear) : null,
+          degree: degree.trim(),
+          linkedin_url: linkedinUrl.trim(),
+          whatsapp_number: whatsappNumber.trim(),
+          available_hours_per_month: availableHours ? parseInt(availableHours) : null,
+          expertise_areas: selectedExpertise,
+          meeting_formats: selectedFormats,
+          preferred_days: selectedDays,
+          about_me: aboutMe.trim(),
+          professional_background: background.trim(),
+          why_mentor: whyMentor.trim(),
+          what_can_offer: whatOffer.trim(),
+          profile_photo_url: profilePhotoUrl.trim() || null,
+          verification_documents: verificationDocuments,
+          status: 'approved',
+          application_type: 'admin_added',
+          created_by: profile?.id,
+          approved_by: profile?.id,
+          approved_at: new Date().toISOString(),
+        })
+        .select()
+        .single();
+
+      if (error) throw error;
+
+      Alert.alert('Success', 'Mentor created successfully!');
+      
+      // Reset form
+      setFullName('');
+      setEmail('');
+      setPhone('');
+      setCurrentTitle('');
+      setCompany('');
+      setIndustry('');
+      setYearsExperience('');
+      setGraduationYear('');
+      setDegree('');
+      setLinkedinUrl('');
+      setWhatsappNumber('');
+      setAvailableHours('');
+      setAboutMe('');
+      setBackground('');
+      setWhyMentor('');
+      setWhatOffer('');
+      setProfilePhotoUrl('');
+      setSelectedExpertise([]);
+      setSelectedFormats([]);
+      setSelectedDays([]);
+      setVerificationDocuments([]);
+      
+      setCreatingMentor(false);
+      fetchAllData();
+    } catch (error: any) {
+      console.error('Error creating mentor:', error);
+      Alert.alert('Error', error.message || 'Failed to create mentor');
+    } finally {
+      setSubmitting(false);
+    }
+  };
 
   // Update mentor status
   const updateMentorStatus = async (mentorId: string, newStatus: 'approved' | 'rejected' | 'inactive') => {
@@ -261,8 +460,8 @@ export default function AdminAlumniMentorsScreen() {
           linkedin_url: application.linkedin_url,
           whatsapp_number: application.whatsapp_number,
           profile_photo_url: application.profile_photo_url,
-          short_bio: application.what_offer?.substring(0, 200) || null, // First 200 chars as short bio
-          detailed_bio: application.what_offer,
+          short_bio: application.short_bio || application.what_offer?.substring(0, 200) || null,
+          detailed_bio: application.detailed_bio || application.what_offer,
           mentorship_philosophy: application.why_mentor,
           status: 'approved',
           application_type: 'self_applied',
@@ -354,36 +553,58 @@ export default function AdminAlumniMentorsScreen() {
 
   return (
     <View style={styles.container}>
-      {/* Header */}
-      <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
-          <Ionicons name="arrow-back" size={24} color="#000" />
-        </TouchableOpacity>
-        <View style={styles.headerContent}>
-          <Text style={styles.headerTitle}>Alumni Mentors Admin</Text>
-          <Text style={styles.headerSubtitle}>Manage mentors, applications & requests</Text>
+      <ScrollView
+        style={styles.scrollView}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
+        showsVerticalScrollIndicator={false}
+      >
+        {/* Header */}
+        <View style={styles.header}>
+          <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
+            <Ionicons name="arrow-back" size={24} color="#000" />
+          </TouchableOpacity>
+          <View style={styles.headerContent}>
+            <Text style={styles.headerTitle}>Alumni Mentors Admin</Text>
+            <Text style={styles.headerSubtitle}>Manage mentors, applications & requests</Text>
+          </View>
+        </View>
+
+        {/* Stats Cards */}
+        <View style={styles.statsContainer}>
+        <View style={styles.statsGrid}>
+          <View style={[styles.statCard, styles.statCardBlue]}>
+            <View style={styles.statIconContainer}>
+              <Ionicons name="people" size={24} color="#3b82f6" />
+            </View>
+            <Text style={styles.statNumber}>{mentors.length}</Text>
+            <Text style={styles.statLabel}>Total Mentors</Text>
+          </View>
+          
+          <View style={[styles.statCard, styles.statCardGreen]}>
+            <View style={styles.statIconContainer}>
+              <Ionicons name="checkmark-circle" size={24} color="#10b981" />
+            </View>
+            <Text style={styles.statNumber}>{mentors.filter(m => m.status === 'approved').length}</Text>
+            <Text style={styles.statLabel}>Active</Text>
+          </View>
+          
+          <View style={[styles.statCard, styles.statCardYellow]}>
+            <View style={styles.statIconContainer}>
+              <Ionicons name="document-text" size={24} color="#f59e0b" />
+            </View>
+            <Text style={styles.statNumber}>{applications.filter(a => a.status === 'pending').length}</Text>
+            <Text style={styles.statLabel}>Pending Apps</Text>
+          </View>
+          
+          <View style={[styles.statCard, styles.statCardPurple]}>
+            <View style={styles.statIconContainer}>
+              <Ionicons name="time" size={24} color="#8b5cf6" />
+            </View>
+            <Text style={styles.statNumber}>{applications.length}</Text>
+            <Text style={styles.statLabel}>Total Apps</Text>
+          </View>
         </View>
       </View>
-
-      {/* Stats Cards */}
-      <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.statsContainer}>
-        <View style={[styles.statCard, { backgroundColor: '#dbeafe' }]}>
-          <Text style={styles.statNumber}>{mentors.length}</Text>
-          <Text style={styles.statLabel}>Total Mentors</Text>
-        </View>
-        <View style={[styles.statCard, { backgroundColor: '#d1fae5' }]}>
-          <Text style={styles.statNumber}>{mentors.filter(m => m.status === 'approved').length}</Text>
-          <Text style={styles.statLabel}>Active</Text>
-        </View>
-        <View style={[styles.statCard, { backgroundColor: '#fef3c7' }]}>
-          <Text style={styles.statNumber}>{applications.filter(a => a.status === 'pending').length}</Text>
-          <Text style={styles.statLabel}>Pending Apps</Text>
-        </View>
-        <View style={[styles.statCard, { backgroundColor: '#fce7f3' }]}>
-          <Text style={styles.statNumber}>{requests.filter(r => r.status === 'pending').length}</Text>
-          <Text style={styles.statLabel}>Pending Requests</Text>
-        </View>
-      </ScrollView>
 
       {/* Tabs */}
       <View style={styles.tabs}>
@@ -408,26 +629,9 @@ export default function AdminAlumniMentorsScreen() {
             </View>
           )}
         </TouchableOpacity>
-        <TouchableOpacity
-          style={[styles.tab, activeTab === 'requests' && styles.activeTab]}
-          onPress={() => setActiveTab('requests')}
-        >
-          <Text style={[styles.tabText, activeTab === 'requests' && styles.activeTabText]}>
-            Requests ({requests.length})
-          </Text>
-          {requests.filter(r => r.status === 'pending').length > 0 && (
-            <View style={styles.badge}>
-              <Text style={styles.badgeText}>{requests.filter(r => r.status === 'pending').length}</Text>
-            </View>
-          )}
-        </TouchableOpacity>
       </View>
 
-      {/* Content */}
-      <ScrollView
-        style={styles.content}
-        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
-      >
+        {/* Content */}
         {/* MENTORS TAB */}
         {activeTab === 'mentors' && (
           <View>
@@ -634,79 +838,6 @@ export default function AdminAlumniMentorsScreen() {
             )}
           </View>
         )}
-
-        {/* REQUESTS TAB */}
-        {activeTab === 'requests' && (
-          <View>
-            {requests.map((request) => (
-              <TouchableOpacity
-                key={request.id}
-                style={styles.card}
-                onPress={() => setSelectedRequest(request)}
-              >
-                <View style={styles.requestHeader}>
-                  <View>
-                    <Text style={styles.cardTitle}>{request.mentee_name}</Text>
-                    {request.current_status && (
-                      <Text style={styles.cardSubtitle}>{request.current_status}</Text>
-                    )}
-                    <Text style={styles.mentorName}>
-                      → Requesting: {request.mentor.full_name}
-                    </Text>
-                  </View>
-                  <View style={[styles.statusBadge, styles[`status_${request.status}`]]}>
-                    <Text style={styles.statusText}>{request.status}</Text>
-                  </View>
-                </View>
-
-                <View style={styles.cardDetails}>
-                  <View style={styles.detailRow}>
-                    <Ionicons name="mail-outline" size={14} color="#6b7280" />
-                    <Text style={styles.detailText}>{request.mentee_email}</Text>
-                  </View>
-                </View>
-
-                {request.areas_of_interest && request.areas_of_interest.length > 0 && (
-                  <View style={styles.expertiseContainer}>
-                    {request.areas_of_interest.map((area, idx) => (
-                      <View key={idx} style={styles.expertiseChip}>
-                        <Text style={styles.expertiseText}>{area}</Text>
-                      </View>
-                    ))}
-                  </View>
-                )}
-
-                <View style={styles.messageContainer}>
-                  <Text style={styles.messageLabel}>Message:</Text>
-                  <Text style={styles.messageText} numberOfLines={3}>
-                    {request.message}
-                  </Text>
-                </View>
-
-                {request.status === 'pending' && (
-                  <TouchableOpacity
-                    style={styles.emailButton}
-                    onPress={() => contactMentee(request.mentee_email)}
-                  >
-                    <Ionicons name="mail" size={16} color="#fff" />
-                    <Text style={styles.emailButtonText}>Contact via Email</Text>
-                  </TouchableOpacity>
-                )}
-
-                <Text style={styles.cardDate}>
-                  Requested {new Date(request.created_at).toLocaleDateString()}
-                </Text>
-              </TouchableOpacity>
-            ))}
-
-            {requests.length === 0 && (
-              <View style={styles.emptyState}>
-                <Ionicons name="chatbubbles-outline" size={60} color="#d1d5db" />
-                <Text style={styles.emptyText}>No requests</Text>
-              </View>
-            )}
-          </View>
-        )}
       </ScrollView>
 
       {/* Application Detail Modal */}
@@ -760,6 +891,20 @@ export default function AdminAlumniMentorsScreen() {
                   </View>
                 </View>
 
+                {selectedApplication.short_bio && (
+                  <View style={styles.modalSection}>
+                    <Text style={styles.modalSectionLabel}>About:</Text>
+                    <Text style={styles.modalText}>{selectedApplication.short_bio}</Text>
+                  </View>
+                )}
+
+                {selectedApplication.detailed_bio && (
+                  <View style={styles.modalSection}>
+                    <Text style={styles.modalSectionLabel}>Background:</Text>
+                    <Text style={styles.modalText}>{selectedApplication.detailed_bio}</Text>
+                  </View>
+                )}
+
                 <View style={styles.modalSection}>
                   <Text style={styles.modalSectionLabel}>Why I want to mentor:</Text>
                   <Text style={styles.modalText}>{selectedApplication.why_mentor}</Text>
@@ -769,6 +914,32 @@ export default function AdminAlumniMentorsScreen() {
                   <Text style={styles.modalSectionLabel}>What I can offer:</Text>
                   <Text style={styles.modalText}>{selectedApplication.what_offer}</Text>
                 </View>
+
+                {selectedApplication.verification_documents && selectedApplication.verification_documents.length > 0 && (
+                  <View style={styles.modalSection}>
+                    <Text style={styles.modalSectionLabel}>Verification Documents:</Text>
+                    <Text style={styles.helpText}>
+                      Tap to view and verify credentials
+                    </Text>
+                    <View style={styles.documentsContainer}>
+                      {selectedApplication.verification_documents.map((docUrl, index) => (
+                        <TouchableOpacity
+                          key={index}
+                          style={styles.documentItem}
+                          onPress={() => {
+                            Linking.openURL(docUrl).catch(() => {
+                              Alert.alert('Error', 'Unable to open document');
+                            });
+                          }}
+                        >
+                          <Ionicons name="document-attach" size={20} color="#3b82f6" />
+                          <Text style={styles.documentName}>Document {index + 1}</Text>
+                          <Ionicons name="chevron-forward" size={18} color="#9ca3af" />
+                        </TouchableOpacity>
+                      ))}
+                    </View>
+                  </View>
+                )}
 
                 {selectedApplication.status === 'pending' && (
                   <View style={styles.modalActions}>
@@ -792,67 +963,348 @@ export default function AdminAlumniMentorsScreen() {
         </Modal>
       )}
 
-      {/* Request Detail Modal */}
-      {selectedRequest && (
+      {/* Create New Mentor Modal */}
+      {creatingMentor && (
         <Modal visible={true} animationType="slide" transparent={true}>
           <View style={styles.modalOverlay}>
             <View style={styles.modalContent}>
               <View style={styles.modalHeader}>
-                <Text style={styles.modalTitle}>Mentorship Request</Text>
-                <TouchableOpacity onPress={() => setSelectedRequest(null)}>
+                <Text style={styles.modalTitle}>Add New Mentor</Text>
+                <TouchableOpacity onPress={() => setCreatingMentor(false)}>
                   <Ionicons name="close" size={28} color="#000" />
                 </TouchableOpacity>
               </View>
 
               <ScrollView style={styles.modalBody}>
-                <Text style={styles.modalName}>{selectedRequest.mentee_name}</Text>
-                <Text style={styles.modalTitle2}>{selectedRequest.current_status || 'Student/Professional'}</Text>
+                <Text style={styles.formNote}>
+                  ℹ️ Create a mentor profile for alumni you've reached out to directly
+                </Text>
 
+                {/* Basic Information */}
                 <View style={styles.modalSection}>
-                  <Text style={styles.modalSectionLabel}>Contact:</Text>
-                  <Text style={styles.modalText}>{selectedRequest.mentee_email}</Text>
-                  {selectedRequest.mentee_phone && (
-                    <Text style={styles.modalText}>{selectedRequest.mentee_phone}</Text>
-                  )}
+                  <Text style={styles.sectionTitle}>Basic Information</Text>
+                  
+                  <Text style={styles.formLabel}>Full Name *</Text>
+                  <TextInput
+                    style={styles.formInput}
+                    placeholder="Enter full name"
+                    value={fullName}
+                    onChangeText={setFullName}
+                  />
+
+                  <Text style={styles.formLabel}>Email *</Text>
+                  <TextInput
+                    style={styles.formInput}
+                    placeholder="mentor@example.com"
+                    value={email}
+                    onChangeText={setEmail}
+                    keyboardType="email-address"
+                    autoCapitalize="none"
+                  />
+
+                  <Text style={styles.formLabel}>Phone</Text>
+                  <TextInput
+                    style={styles.formInput}
+                    placeholder="Phone number"
+                    value={phone}
+                    onChangeText={setPhone}
+                    keyboardType="phone-pad"
+                  />
+
+                  <Text style={styles.formLabel}>WhatsApp Number</Text>
+                  <TextInput
+                    style={styles.formInput}
+                    placeholder="WhatsApp number with country code"
+                    value={whatsappNumber}
+                    onChangeText={setWhatsappNumber}
+                    keyboardType="phone-pad"
+                  />
+
+                  <Text style={styles.formLabel}>LinkedIn URL</Text>
+                  <TextInput
+                    style={styles.formInput}
+                    placeholder="https://linkedin.com/in/..."
+                    value={linkedinUrl}
+                    onChangeText={setLinkedinUrl}
+                    autoCapitalize="none"
+                  />
                 </View>
 
+                {/* Professional Information */}
                 <View style={styles.modalSection}>
-                  <Text style={styles.modalSectionLabel}>Mentor Requested:</Text>
-                  <Text style={styles.modalText}>{selectedRequest.mentor.full_name}</Text>
-                  <Text style={styles.modalText}>{selectedRequest.mentor.email}</Text>
+                  <Text style={styles.sectionTitle}>Professional Information</Text>
+                  
+                  <Text style={styles.formLabel}>Current Title *</Text>
+                  <TextInput
+                    style={styles.formInput}
+                    placeholder="e.g., Senior Software Engineer"
+                    value={currentTitle}
+                    onChangeText={setCurrentTitle}
+                  />
+
+                  <Text style={styles.formLabel}>Company</Text>
+                  <TextInput
+                    style={styles.formInput}
+                    placeholder="Current company"
+                    value={company}
+                    onChangeText={setCompany}
+                  />
+
+                  <Text style={styles.formLabel}>Industry</Text>
+                  <TextInput
+                    style={styles.formInput}
+                    placeholder="e.g., Technology, Finance"
+                    value={industry}
+                    onChangeText={setIndustry}
+                  />
+
+                  <Text style={styles.formLabel}>Years of Experience</Text>
+                  <TextInput
+                    style={styles.formInput}
+                    placeholder="Number of years"
+                    value={yearsExperience}
+                    onChangeText={setYearsExperience}
+                    keyboardType="numeric"
+                  />
                 </View>
 
+                {/* Education */}
                 <View style={styles.modalSection}>
-                  <Text style={styles.modalSectionLabel}>Areas of Interest:</Text>
-                  <View style={styles.expertiseContainer}>
-                    {selectedRequest.areas_of_interest.map((area, idx) => (
-                      <View key={idx} style={styles.expertiseChip}>
-                        <Text style={styles.expertiseText}>{area}</Text>
-                      </View>
+                  <Text style={styles.sectionTitle}>Education</Text>
+                  
+                  <Text style={styles.formLabel}>Graduation Year *</Text>
+                  <TextInput
+                    style={styles.formInput}
+                    placeholder="e.g., 2018"
+                    value={graduationYear}
+                    onChangeText={setGraduationYear}
+                    keyboardType="numeric"
+                  />
+
+                  <Text style={styles.formLabel}>Degree *</Text>
+                  <TextInput
+                    style={styles.formInput}
+                    placeholder="e.g., BSc Computer Science"
+                    value={degree}
+                    onChangeText={setDegree}
+                  />
+                </View>
+
+                {/* Expertise */}
+                <View style={styles.modalSection}>
+                  <Text style={styles.sectionTitle}>Areas of Expertise *</Text>
+                  <Text style={styles.formHelperText}>Select at least one area</Text>
+                  <View style={styles.chipsContainer}>
+                    {EXPERTISE_OPTIONS.map((option) => (
+                      <TouchableOpacity
+                        key={option}
+                        style={[
+                          styles.chip,
+                          selectedExpertise.includes(option) && styles.chipSelected,
+                        ]}
+                        onPress={() => {
+                          if (selectedExpertise.includes(option)) {
+                            setSelectedExpertise(selectedExpertise.filter(e => e !== option));
+                          } else {
+                            setSelectedExpertise([...selectedExpertise, option]);
+                          }
+                        }}
+                      >
+                        <Text style={[
+                          styles.chipText,
+                          selectedExpertise.includes(option) && styles.chipTextSelected,
+                        ]}>
+                          {option}
+                        </Text>
+                      </TouchableOpacity>
                     ))}
                   </View>
                 </View>
 
+                {/* Meeting Formats */}
                 <View style={styles.modalSection}>
-                  <Text style={styles.modalSectionLabel}>Message:</Text>
-                  <Text style={styles.modalText}>{selectedRequest.message}</Text>
+                  <Text style={styles.sectionTitle}>Preferred Meeting Formats</Text>
+                  <View style={styles.chipsContainer}>
+                    {MEETING_FORMATS.map((format) => (
+                      <TouchableOpacity
+                        key={format}
+                        style={[
+                          styles.chip,
+                          selectedFormats.includes(format) && styles.chipSelected,
+                        ]}
+                        onPress={() => {
+                          if (selectedFormats.includes(format)) {
+                            setSelectedFormats(selectedFormats.filter(f => f !== format));
+                          } else {
+                            setSelectedFormats([...selectedFormats, format]);
+                          }
+                        }}
+                      >
+                        <Text style={[
+                          styles.chipText,
+                          selectedFormats.includes(format) && styles.chipTextSelected,
+                        ]}>
+                          {format}
+                        </Text>
+                      </TouchableOpacity>
+                    ))}
+                  </View>
                 </View>
 
-                {selectedRequest.status === 'pending' && (
-                  <View style={styles.modalActions}>
-                    <TouchableOpacity
-                      style={[styles.modalButton, styles.approveButton]}
-                      onPress={() => contactMentee(selectedRequest.mentee_email)}
-                    >
-                      <Ionicons name="mail" size={20} color="#fff" style={{ marginRight: 8 }} />
-                      <Text style={styles.modalButtonText}>Contact Mentee via Email</Text>
-                    </TouchableOpacity>
-                  </View>
-                )}
+                {/* Availability */}
+                <View style={styles.modalSection}>
+                  <Text style={styles.sectionTitle}>Availability</Text>
+                  
+                  <Text style={styles.formLabel}>Available Hours per Month</Text>
+                  <TextInput
+                    style={styles.formInput}
+                    placeholder="Number of hours"
+                    value={availableHours}
+                    onChangeText={setAvailableHours}
+                    keyboardType="numeric"
+                  />
 
-                <Text style={styles.modalNote}>
-                  ℹ️ Admin can facilitate connection. Mentor will receive notification.
-                </Text>
+                  <Text style={styles.formLabel}>Preferred Days</Text>
+                  <View style={styles.chipsContainer}>
+                    {DAYS_OPTIONS.map((day) => (
+                      <TouchableOpacity
+                        key={day}
+                        style={[
+                          styles.chip,
+                          selectedDays.includes(day) && styles.chipSelected,
+                        ]}
+                        onPress={() => {
+                          if (selectedDays.includes(day)) {
+                            setSelectedDays(selectedDays.filter(d => d !== day));
+                          } else {
+                            setSelectedDays([...selectedDays, day]);
+                          }
+                        }}
+                      >
+                        <Text style={[
+                          styles.chipText,
+                          selectedDays.includes(day) && styles.chipTextSelected,
+                        ]}>
+                          {day}
+                        </Text>
+                      </TouchableOpacity>
+                    ))}
+                  </View>
+                </View>
+
+                {/* Bio */}
+                <View style={styles.modalSection}>
+                  <Text style={styles.sectionTitle}>About *</Text>
+                  
+                  <Text style={styles.formLabel}>About Me (500 chars) *</Text>
+                  <TextInput
+                    style={[styles.formInput, styles.textArea]}
+                    placeholder="Brief introduction about yourself..."
+                    value={aboutMe}
+                    onChangeText={setAboutMe}
+                    multiline
+                    numberOfLines={4}
+                    maxLength={500}
+                  />
+                  <Text style={styles.charCount}>{aboutMe.length}/500</Text>
+
+                  <Text style={styles.formLabel}>Professional Background (1000 chars) *</Text>
+                  <TextInput
+                    style={[styles.formInput, styles.textArea]}
+                    placeholder="Your professional journey and achievements..."
+                    value={background}
+                    onChangeText={setBackground}
+                    multiline
+                    numberOfLines={6}
+                    maxLength={1000}
+                  />
+                  <Text style={styles.charCount}>{background.length}/1000</Text>
+                </View>
+
+                {/* Motivation */}
+                <View style={styles.modalSection}>
+                  <Text style={styles.sectionTitle}>Motivation *</Text>
+                  
+                  <Text style={styles.formLabel}>Why do you want to mentor? *</Text>
+                  <TextInput
+                    style={[styles.formInput, styles.textArea]}
+                    placeholder="Share your motivation..."
+                    value={whyMentor}
+                    onChangeText={setWhyMentor}
+                    multiline
+                    numberOfLines={4}
+                  />
+
+                  <Text style={styles.formLabel}>What can you offer? *</Text>
+                  <TextInput
+                    style={[styles.formInput, styles.textArea]}
+                    placeholder="Skills, advice, connections you can share..."
+                    value={whatOffer}
+                    onChangeText={setWhatOffer}
+                    multiline
+                    numberOfLines={4}
+                  />
+                </View>
+
+                {/* Documents */}
+                <View style={styles.modalSection}>
+                  <Text style={styles.sectionTitle}>Verification Documents *</Text>
+                  <Text style={styles.formHelperText}>
+                    Upload ID, diploma, or professional certificates (max 5MB each)
+                  </Text>
+                  
+                  <TouchableOpacity
+                    style={styles.uploadButton}
+                    onPress={pickDocument}
+                    disabled={uploadingDocuments}
+                  >
+                    {uploadingDocuments ? (
+                      <ActivityIndicator color="#16a34a" />
+                    ) : (
+                      <>
+                        <Ionicons name="cloud-upload-outline" size={24} color="#16a34a" />
+                        <Text style={styles.uploadButtonText}>Upload Document</Text>
+                      </>
+                    )}
+                  </TouchableOpacity>
+
+                  {verificationDocuments.length > 0 && (
+                    <View style={styles.documentsListContainer}>
+                      {verificationDocuments.map((doc, index) => (
+                        <View key={index} style={styles.documentItem}>
+                          <Ionicons name="document-text" size={20} color="#16a34a" />
+                          <Text style={styles.documentText} numberOfLines={1}>
+                            Document {index + 1}
+                          </Text>
+                          <TouchableOpacity onPress={() => removeDocument(doc)}>
+                            <Ionicons name="close-circle" size={20} color="#ef4444" />
+                          </TouchableOpacity>
+                        </View>
+                      ))}
+                    </View>
+                  )}
+                </View>
+
+                <View style={styles.modalActions}>
+                  <TouchableOpacity
+                    style={[styles.modalButton, { backgroundColor: '#e5e7eb' }]}
+                    onPress={() => setCreatingMentor(false)}
+                    disabled={submitting}
+                  >
+                    <Text style={[styles.modalButtonText, { color: '#374151' }]}>Cancel</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={[styles.modalButton, { backgroundColor: '#16a34a' }]}
+                    onPress={createMentor}
+                    disabled={submitting}
+                  >
+                    {submitting ? (
+                      <ActivityIndicator color="#fff" />
+                    ) : (
+                      <Text style={styles.modalButtonText}>Create Mentor</Text>
+                    )}
+                  </TouchableOpacity>
+                </View>
               </ScrollView>
             </View>
           </View>
@@ -1071,12 +1523,24 @@ export default function AdminAlumniMentorsScreen() {
           </View>
         </Modal>
       )}
+
+      {/* Floating Action Button - Add New Mentor */}
+      <TouchableOpacity
+        style={styles.fab}
+        onPress={() => setCreatingMentor(true)}
+      >
+        <Ionicons name="add" size={28} color="#fff" />
+      </TouchableOpacity>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
+    flex: 1,
+    backgroundColor: '#f9fafb',
+  },
+  scrollView: {
     flex: 1,
     backgroundColor: '#f9fafb',
   },
@@ -1094,7 +1558,7 @@ const styles = StyleSheet.create({
   header: {
     backgroundColor: '#fff',
     paddingTop: 60,
-    paddingBottom: 20,
+    paddingBottom: 16,
     paddingHorizontal: 20,
     borderBottomWidth: 1,
     borderBottomColor: '#e5e7eb',
@@ -1102,44 +1566,90 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   backButton: {
-    marginRight: 15,
+    marginRight: 12,
+    padding: 4,
   },
   headerContent: {
     flex: 1,
   },
   headerTitle: {
-    fontSize: 24,
+    fontSize: 22,
     fontWeight: '700',
     color: '#111827',
+    letterSpacing: -0.5,
   },
   headerSubtitle: {
-    fontSize: 14,
-    color: '#6b7280',
-    marginTop: 4,
-  },
-  statsContainer: {
-    backgroundColor: '#fff',
-    paddingVertical: 16,
-    paddingHorizontal: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: '#e5e7eb',
-  },
-  statCard: {
-    width: 90,
-    padding: 12,
-    borderRadius: 10,
-    marginHorizontal: 4,
-    alignItems: 'center',
-  },
-  statNumber: {
-    fontSize: 24,
-    fontWeight: '700',
-    color: '#111827',
-  },
-  statLabel: {
-    fontSize: 11,
+    fontSize: 13,
     color: '#6b7280',
     marginTop: 2,
+  },
+  statsContainer: {
+    backgroundColor: '#f9fafb',
+    paddingTop: 8,
+    paddingBottom: 8,
+    paddingHorizontal: 16,
+  },
+  statsGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+  },
+  statCard: {
+    flex: 1,
+    minWidth: '48%',
+    maxWidth: '48.5%',
+    backgroundColor: '#fff',
+    borderRadius: 10,
+    padding: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.06,
+    shadowRadius: 4,
+    elevation: 2,
+    borderLeftWidth: 3,
+  },
+  statCardBlue: {
+    borderLeftColor: '#3b82f6',
+    backgroundColor: '#eff6ff',
+  },
+  statCardGreen: {
+    borderLeftColor: '#10b981',
+    backgroundColor: '#f0fdf4',
+  },
+  statCardYellow: {
+    borderLeftColor: '#f59e0b',
+    backgroundColor: '#fffbeb',
+  },
+  statCardPurple: {
+    borderLeftColor: '#8b5cf6',
+    backgroundColor: '#f5f3ff',
+  },
+  statIconContainer: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: '#fff',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 6,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.08,
+    shadowRadius: 2,
+    elevation: 1,
+  },
+  statNumber: {
+    fontSize: 20,
+    fontWeight: '700',
+    color: '#111827',
+    marginBottom: 2,
+  },
+  statLabel: {
+    fontSize: 10,
+    color: '#6b7280',
+    fontWeight: '500',
     textAlign: 'center',
   },
   tabs: {
@@ -1150,14 +1660,14 @@ const styles = StyleSheet.create({
   },
   tab: {
     flex: 1,
-    paddingVertical: 16,
+    paddingVertical: 14,
     alignItems: 'center',
     flexDirection: 'row',
     justifyContent: 'center',
-    gap: 8,
+    gap: 6,
   },
   activeTab: {
-    borderBottomWidth: 2,
+    borderBottomWidth: 3,
     borderBottomColor: '#16a34a',
   },
   tabText: {
@@ -1167,7 +1677,7 @@ const styles = StyleSheet.create({
   },
   activeTabText: {
     color: '#16a34a',
-    fontWeight: '600',
+    fontWeight: '700',
   },
   badge: {
     backgroundColor: '#ef4444',
@@ -1183,65 +1693,70 @@ const styles = StyleSheet.create({
     fontSize: 11,
     fontWeight: '700',
   },
-  content: {
-    flex: 1,
-    padding: 16,
-  },
   card: {
     backgroundColor: '#fff',
     borderRadius: 12,
-    padding: 16,
-    marginBottom: 12,
+    padding: 14,
+    marginHorizontal: 16,
+    marginTop: 12,
     borderWidth: 1,
     borderColor: '#e5e7eb',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.04,
+    shadowRadius: 3,
+    elevation: 1,
   },
   cardHeader: {
     flexDirection: 'row',
-    alignItems: 'flex-start',
-    marginBottom: 12,
+    alignItems: 'center',
+    marginBottom: 10,
   },
   mentorPhoto: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
-    marginRight: 12,
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    marginRight: 10,
   },
   avatarPlaceholder: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
+    width: 44,
+    height: 44,
+    borderRadius: 22,
     backgroundColor: '#16a34a',
     alignItems: 'center',
     justifyContent: 'center',
-    marginRight: 12,
+    marginRight: 10,
   },
   avatarText: {
     color: '#fff',
-    fontSize: 20,
+    fontSize: 18,
     fontWeight: '700',
   },
   cardInfo: {
     flex: 1,
+    justifyContent: 'center',
   },
   cardTitle: {
-    fontSize: 16,
+    fontSize: 15,
     fontWeight: '600',
     color: '#111827',
+    marginBottom: 2,
   },
   cardSubtitle: {
-    fontSize: 13,
+    fontSize: 12,
     color: '#6b7280',
-    marginTop: 2,
+    lineHeight: 16,
   },
   cardCompany: {
-    fontSize: 12,
+    fontSize: 11,
     color: '#9ca3af',
-    marginTop: 2,
+    marginTop: 1,
   },
   statusBadge: {
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 10,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 8,
+    alignSelf: 'flex-start',
   },
   status_pending: {
     backgroundColor: '#fef3c7',
@@ -1265,57 +1780,60 @@ const styles = StyleSheet.create({
     backgroundColor: '#e0e7ff',
   },
   statusText: {
-    fontSize: 11,
-    fontWeight: '600',
+    fontSize: 10,
+    fontWeight: '700',
     color: '#111827',
     textTransform: 'capitalize',
   },
   cardDetails: {
-    marginBottom: 12,
-    gap: 6,
+    marginBottom: 10,
+    gap: 5,
   },
   detailRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
+    gap: 6,
   },
   detailText: {
-    fontSize: 13,
+    fontSize: 12,
     color: '#374151',
+    flex: 1,
   },
   expertiseContainer: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: 6,
-    marginBottom: 12,
+    gap: 5,
+    marginBottom: 10,
   },
   expertiseChip: {
     backgroundColor: '#f3f4f6',
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 12,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 10,
   },
   expertiseText: {
-    fontSize: 11,
+    fontSize: 10,
     color: '#374151',
     fontWeight: '500',
   },
   moreText: {
-    fontSize: 11,
+    fontSize: 10,
     color: '#9ca3af',
     alignSelf: 'center',
+    fontWeight: '500',
   },
   cardActions: {
     flexDirection: 'row',
-    gap: 8,
-    marginTop: 12,
-    paddingTop: 12,
+    gap: 6,
+    marginTop: 10,
+    paddingTop: 10,
     borderTopWidth: 1,
-    borderTopColor: '#e5e7eb',
+    borderTopColor: '#f3f4f6',
   },
   actionButton: {
     flex: 1,
-    paddingVertical: 10,
+    paddingVertical: 9,
+    paddingHorizontal: 10,
     borderRadius: 8,
     alignItems: 'center',
     justifyContent: 'center',
@@ -1344,13 +1862,14 @@ const styles = StyleSheet.create({
   },
   actionButtonText: {
     color: '#fff',
-    fontSize: 13,
+    fontSize: 12,
     fontWeight: '600',
   },
   cardDate: {
-    fontSize: 11,
+    fontSize: 10,
     color: '#9ca3af',
-    marginTop: 8,
+    marginTop: 6,
+    fontWeight: '500',
   },
   requestHeader: {
     flexDirection: 'row',
@@ -1399,13 +1918,14 @@ const styles = StyleSheet.create({
   emptyState: {
     alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: 60,
+    paddingVertical: 48,
+    paddingHorizontal: 24,
   },
   emptyText: {
-    fontSize: 18,
+    fontSize: 16,
     fontWeight: '600',
     color: '#9ca3af',
-    marginTop: 12,
+    marginTop: 10,
   },
   modalOverlay: {
     flex: 1,
@@ -1510,5 +2030,126 @@ const styles = StyleSheet.create({
   textArea: {
     minHeight: 80,
     textAlignVertical: 'top',
+  },
+  fab: {
+    position: 'absolute',
+    right: 20,
+    bottom: 20,
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    backgroundColor: '#16a34a',
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 8,
+  },
+  helpText: {
+    fontSize: 12,
+    color: '#6b7280',
+    marginBottom: 8,
+  },
+  documentsContainer: {
+    gap: 8,
+  },
+  documentItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#eff6ff',
+    borderWidth: 1,
+    borderColor: '#bfdbfe',
+    borderRadius: 8,
+    padding: 12,
+    gap: 10,
+  },
+  documentName: {
+    flex: 1,
+    fontSize: 14,
+    color: '#1e40af',
+    fontWeight: '500',
+  },
+  formNote: {
+    fontSize: 13,
+    color: '#6b7280',
+    fontStyle: 'italic',
+    marginTop: 12,
+    textAlign: 'center',
+    paddingBottom: 12,
+  },
+  sectionTitle: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#111827',
+    marginBottom: 12,
+    marginTop: 8,
+  },
+  formHelperText: {
+    fontSize: 13,
+    color: '#6b7280',
+    marginBottom: 12,
+  },
+  chipsContainer: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+  },
+  chip: {
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 20,
+    backgroundColor: '#f3f4f6',
+    borderWidth: 1,
+    borderColor: '#d1d5db',
+  },
+  chipSelected: {
+    backgroundColor: '#dcfce7',
+    borderColor: '#16a34a',
+  },
+  chipText: {
+    fontSize: 13,
+    color: '#6b7280',
+    fontWeight: '500',
+  },
+  chipTextSelected: {
+    color: '#16a34a',
+    fontWeight: '600',
+  },
+  charCount: {
+    fontSize: 12,
+    color: '#9ca3af',
+    textAlign: 'right',
+    marginTop: 4,
+  },
+  uploadButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    borderRadius: 8,
+    borderWidth: 2,
+    borderColor: '#16a34a',
+    borderStyle: 'dashed',
+    backgroundColor: '#f0fdf4',
+    marginTop: 8,
+  },
+  uploadButtonText: {
+    fontSize: 15,
+    color: '#16a34a',
+    fontWeight: '600',
+  },
+  documentsListContainer: {
+    marginTop: 12,
+    gap: 8,
+  },
+  documentText: {
+    flex: 1,
+    fontSize: 14,
+    color: '#16a34a',
+    fontWeight: '500',
   },
 });

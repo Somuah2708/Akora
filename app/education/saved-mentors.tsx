@@ -33,25 +33,116 @@ export default function SavedMentorsScreen() {
   const [refreshing, setRefreshing] = useState(false);
 
   useEffect(() => {
-    fetchFavorites();
-  }, []);
+    if (user) {
+      console.log('🔍 [SavedMentors] User detected, fetching favorites for:', user.id);
+      fetchFavorites();
+      
+      // Set up real-time subscription for bookmarks
+      console.log('🔔 [SavedMentors] Setting up real-time subscription');
+      const subscription = supabase
+        .channel('education_bookmarks_changes')
+        .on(
+          'postgres_changes',
+          {
+            event: '*',
+            schema: 'public',
+            table: 'education_bookmarks',
+            filter: `user_id=eq.${user.id}`
+          },
+          (payload) => {
+            console.log('🔔 [SavedMentors] Bookmark change detected:', payload.eventType);
+            // Refetch favorites when any change occurs
+            fetchFavorites();
+          }
+        )
+        .subscribe();
+
+      // Cleanup subscription on unmount
+      return () => {
+        console.log('🔕 [SavedMentors] Cleaning up real-time subscription');
+        subscription.unsubscribe();
+      };
+    } else {
+      console.log('⚠️ [SavedMentors] No user found, setting loading to false');
+      setLoading(false);
+    }
+  }, [user]);
 
   const fetchFavorites = async () => {
-    if (!user) return;
+    if (!user) {
+      console.log('❌ [SavedMentors] fetchFavorites called but no user');
+      setLoading(false);
+      setRefreshing(false);
+      return;
+    }
+
+    console.log('📥 [SavedMentors] Fetching bookmarks for user:', user.id);
 
     try {
       const { data, error } = await supabase
-        .from('user_favorite_mentors')
-        .select('*')
+        .from('education_bookmarks')
+        .select(`
+          id,
+          mentor_id,
+          created_at,
+          alumni_mentors!inner (
+            id,
+            full_name,
+            current_title,
+            company,
+            expertise_areas,
+            short_bio,
+            profile_photo_url,
+            years_of_experience
+          )
+        `)
         .eq('user_id', user.id)
-        .order('favorited_at', { ascending: false });
+        .not('mentor_id', 'is', null)
+        .order('created_at', { ascending: false });
 
-      if (error) throw error;
-      setFavorites(data || []);
-    } catch (error) {
-      console.error('Error fetching favorites:', error);
+      if (error) {
+        console.error('❌ [SavedMentors] Query error:', error);
+        console.error('❌ [SavedMentors] Error details:', {
+          message: error.message,
+          code: error.code,
+          details: error.details,
+          hint: error.hint
+        });
+        throw error;
+      }
+      
+      console.log('✅ [SavedMentors] Raw data received:', data?.length || 0, 'items');
+      console.log('✅ [SavedMentors] Sample data:', data?.[0]);
+      
+      // Transform the data to match the expected format
+      const transformedData = (data || []).map(item => {
+        console.log('🔄 [SavedMentors] Transforming item:', item);
+        return {
+          mentor_id: item.mentor_id!,
+          full_name: item.alumni_mentors.full_name,
+          current_title: item.alumni_mentors.current_title,
+          company: item.alumni_mentors.company || '',
+          expertise_areas: item.alumni_mentors.expertise_areas || [],
+          bio: item.alumni_mentors.short_bio || '',
+          profile_photo_url: item.alumni_mentors.profile_photo_url || '',
+          years_of_experience: item.alumni_mentors.years_of_experience || 0,
+          favorited_at: item.created_at
+        };
+      });
+      
+      console.log('✅ [SavedMentors] Transformed data:', transformedData.length, 'mentors');
+      setFavorites(transformedData);
+    } catch (error: any) {
+      console.error('❌ [SavedMentors] Error fetching favorites:', error);
+      console.error('❌ [SavedMentors] Error details:', {
+        message: error.message,
+        code: error.code,
+        details: error.details,
+        hint: error.hint
+      });
       Alert.alert('Error', 'Failed to load saved mentors');
     } finally {
+      console.log('✅ [SavedMentors] Setting loading and refreshing to false');
       setLoading(false);
       setRefreshing(false);
     }
@@ -76,7 +167,7 @@ export default function SavedMentorsScreen() {
           onPress: async () => {
             try {
               const { error } = await supabase
-                .from('mentor_favorites')
+                .from('education_bookmarks')
                 .delete()
                 .eq('user_id', user.id)
                 .eq('mentor_id', mentorId);
@@ -202,7 +293,7 @@ export default function SavedMentorsScreen() {
             </Text>
             <TouchableOpacity
               style={styles.browseButton}
-              onPress={() => router.push('/education')}
+              onPress={() => router.push('/education?tab=mentors')}
             >
               <Text style={styles.browseButtonText}>Browse Mentors</Text>
             </TouchableOpacity>
