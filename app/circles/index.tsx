@@ -439,7 +439,15 @@ export default function CirclesScreen() {
   };
 
   const renderCircleCard = (circle: Circle) => (
-    <View key={circle.id} style={styles.circleCard}>
+    <TouchableOpacity 
+      key={circle.id} 
+      style={styles.circleCard}
+      onPress={() => {
+        console.log('🔵 Circle card pressed, navigating to:', `/circles/${circle.id}`);
+        router.push(`/circles/${circle.id}` as any);
+      }}
+      activeOpacity={0.7}
+    >
       <View style={styles.circleHeader}>
         <View style={styles.circleInfo}>
           <View style={styles.circleTitleRow}>
@@ -447,7 +455,7 @@ export default function CirclesScreen() {
             {circle.is_private && <Lock size={16} color="#666" />}
           </View>
           <Text style={styles.circleCategory}>{circle.category}</Text>
-          <Text style={styles.circleDescription}>{circle.description}</Text>
+          <Text style={styles.circleDescription} numberOfLines={2}>{circle.description}</Text>
         </View>
       </View>
       
@@ -462,7 +470,10 @@ export default function CirclesScreen() {
             <>
               <TouchableOpacity
                 style={styles.chatButton}
-                onPress={() => openGroupChat(circle)}
+                onPress={(e) => {
+                  e.stopPropagation();
+                  openGroupChat(circle);
+                }}
               >
                 <MessageCircle size={16} color="#007AFF" />
                 <Text style={styles.chatButtonText}>Chat</Text>
@@ -478,7 +489,10 @@ export default function CirclesScreen() {
           ) : (
             <TouchableOpacity
               style={styles.joinButton}
-              onPress={() => joinCircle(circle)}
+              onPress={(e) => {
+                e.stopPropagation();
+                joinCircle(circle);
+              }}
             >
               <Text style={styles.joinButtonText}>
                 {circle.is_private ? 'Request to Join' : 'Join'}
@@ -487,7 +501,7 @@ export default function CirclesScreen() {
           )}
         </View>
       </View>
-    </View>
+    </TouchableOpacity>
   );
 
   const myCircles = filteredCircles.filter(circle => circle.created_by === user?.id);

@@ -39,6 +39,48 @@ export default function EducationDetailScreen() {
   const fetchOpportunityDetails = async () => {
     try {
       setLoading(true);
+      
+      // Try scholarships table first
+      const { data: scholarshipData, error: scholarshipError } = await supabase
+        .from('scholarships')
+        .select('*')
+        .eq('id', id)
+        .single();
+
+      if (!scholarshipError && scholarshipData) {
+        setOpportunity({ ...scholarshipData, category_name: 'Scholarships' });
+        setLoading(false);
+        return;
+      }
+      
+      // Try universities table
+      const { data: universityData, error: universityError } = await supabase
+        .from('universities')
+        .select('*')
+        .eq('id', id)
+        .single();
+
+      if (!universityError && universityData) {
+        setOpportunity({ ...universityData, category_name: 'Universities' });
+        fetchAlumniMentors(universityData.title || universityData.name);
+        setLoading(false);
+        return;
+      }
+      
+      // Try events table
+      const { data: eventData, error: eventError } = await supabase
+        .from('events')
+        .select('*')
+        .eq('id', id)
+        .single();
+
+      if (!eventError && eventData) {
+        setOpportunity({ ...eventData, category_name: 'Events' });
+        setLoading(false);
+        return;
+      }
+      
+      // Fall back to products_services for marketplace items
       const { data, error } = await supabase
         .from('products_services')
         .select('*')
@@ -47,11 +89,6 @@ export default function EducationDetailScreen() {
 
       if (error) throw error;
       setOpportunity(data);
-      
-      // If it's a university, fetch alumni mentors
-      if (data?.category_name === 'Universities') {
-        fetchAlumniMentors(data.title);
-      }
     } catch (error) {
       console.error('Error fetching opportunity details:', error);
       Alert.alert('Error', 'Failed to load details.');
@@ -254,12 +291,15 @@ export default function EducationDetailScreen() {
           )}
 
           {/* Funding Amount (for Scholarships) */}
-          {isScholarship && opportunity.funding_amount && (
+          {isScholarship && (opportunity.amount || opportunity.funding_amount) && (
             <View style={styles.fundingCard}>
               <Wallet size={20} color="#4CAF50" />
               <View>
                 <Text style={styles.fundingLabel}>Funding Amount</Text>
-                <Text style={styles.fundingAmount}>{opportunity.funding_currency === 'GHS' ? '₵' : '$'}{opportunity.funding_amount}</Text>
+                <Text style={styles.fundingAmount}>
+                  {(opportunity.funding_currency === 'GHS' || opportunity.funding_currency === 'ghc') ? '₵' : '$'}
+                  {opportunity.amount || opportunity.funding_amount}
+                </Text>
               </View>
             </View>
           )}
@@ -329,14 +369,85 @@ export default function EducationDetailScreen() {
           )}
 
           {/* Eligibility Criteria */}
-          {opportunity.eligibility_criteria && (
+          {(opportunity.eligibility_criteria || opportunity.eligibility) && (
             <View style={styles.section}>
               <Text style={styles.sectionTitle}>Eligibility Requirements</Text>
               <View style={styles.eligibilityBox}>
                 <BookOpen size={20} color="#4169E1" />
-                <Text style={styles.eligibilityText}>{opportunity.eligibility_criteria}</Text>
+                <Text style={styles.eligibilityText}>{opportunity.eligibility_criteria || opportunity.eligibility}</Text>
               </View>
             </View>
+          )}
+
+          {/* Scholarship-Specific Details */}
+          {isScholarship && (
+            <>
+              {/* Source Organization */}
+              {opportunity.source_organization && (
+                <View style={styles.section}>
+                  <Text style={styles.sectionTitle}>Organization</Text>
+                  <Text style={styles.description}>{opportunity.source_organization}</Text>
+                </View>
+              )}
+
+              {/* Scholarship Types */}
+              {opportunity.scholarship_types && opportunity.scholarship_types.length > 0 && (
+                <View style={styles.section}>
+                  <Text style={styles.sectionTitle}>Scholarship Type</Text>
+                  <View style={styles.tagsContainer}>
+                    {opportunity.scholarship_types.map((type: string, index: number) => (
+                      <View key={index} style={styles.tag}>
+                        <Text style={styles.tagText}>{type}</Text>
+                      </View>
+                    ))}
+                  </View>
+                </View>
+              )}
+
+              {/* Eligibility Levels */}
+              {opportunity.eligibility_levels && opportunity.eligibility_levels.length > 0 && (
+                <View style={styles.section}>
+                  <Text style={styles.sectionTitle}>Eligibility Level</Text>
+                  <View style={styles.tagsContainer}>
+                    {opportunity.eligibility_levels.map((level: string, index: number) => (
+                      <View key={index} style={styles.tag}>
+                        <Text style={styles.tagText}>{level}</Text>
+                      </View>
+                    ))}
+                  </View>
+                </View>
+              )}
+
+              {/* Fields of Study */}
+              {opportunity.fields_of_study && opportunity.fields_of_study.length > 0 && (
+                <View style={styles.section}>
+                  <Text style={styles.sectionTitle}>Fields of Study</Text>
+                  <View style={styles.tagsContainer}>
+                    {opportunity.fields_of_study.map((field: string, index: number) => (
+                      <View key={index} style={styles.tag}>
+                        <Text style={styles.tagText}>{field}</Text>
+                      </View>
+                    ))}
+                  </View>
+                </View>
+              )}
+
+              {/* Requirements */}
+              {opportunity.requirements && (
+                <View style={styles.section}>
+                  <Text style={styles.sectionTitle}>Requirements</Text>
+                  <Text style={styles.description}>{opportunity.requirements}</Text>
+                </View>
+              )}
+
+              {/* Benefits */}
+              {opportunity.benefits && (
+                <View style={styles.section}>
+                  <Text style={styles.sectionTitle}>Benefits</Text>
+                  <Text style={styles.description}>{opportunity.benefits}</Text>
+                </View>
+              )}
+            </>
           )}
 
           {/* Contact Information */}
@@ -800,6 +911,39 @@ const styles = StyleSheet.create({
   },
   browseMentorsText: {
     fontSize: 13,
+    fontFamily: 'Inter-SemiBold',
+    color: '#FFFFFF',
+  },
+  tagsContainer: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+  },
+  tag: {
+    backgroundColor: '#EEF2FF',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: '#C7D2FE',
+  },
+  tagText: {
+    fontSize: 13,
+    fontFamily: 'Inter-SemiBold',
+    color: '#4169E1',
+  },
+  applicationButton: {
+    backgroundColor: '#10B981',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    paddingVertical: 14,
+    borderRadius: 12,
+    marginTop: 8,
+  },
+  applicationButtonText: {
+    fontSize: 16,
     fontFamily: 'Inter-SemiBold',
     color: '#FFFFFF',
   },

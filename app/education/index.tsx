@@ -105,10 +105,9 @@ export default function EducationScreen() {
     try {
       setLoading(true);
       const { data, error } = await supabase
-        .from('products_services')
+        .from('universities')
         .select('*')
         .eq('is_approved', true)
-        .eq('category_name', 'Universities')
         .ilike('location', '%Ghana%')
         .order('created_at', { ascending: false });
 
@@ -131,37 +130,17 @@ export default function EducationScreen() {
     try {
       setLoading(true);
       
-      // Fetch legacy scholarships from products_services
-      const { data: legacyData, error: legacyError } = await supabase
-        .from('products_services')
+      // Fetch from dedicated scholarships table
+      const { data, error } = await supabase
+        .from('scholarships')
         .select('*')
         .eq('is_approved', true)
-        .eq('category_name', 'Scholarships')
         .order('created_at', { ascending: false });
 
-      if (legacyError) throw legacyError;
+      if (error) throw error;
 
-      // Fetch approved user-submitted scholarships
-      const { data: submittedData, error: submittedError } = await supabase
-        .from('approved_scholarships')
-        .select('*');
-
-      if (submittedError) {
-        console.warn('Error fetching user-submitted scholarships:', submittedError);
-      }
-
-      // Combine both sources
-      const combined = [
-        ...(legacyData || []),
-        ...(submittedData || []).map((s: any) => ({
-          ...s,
-          category_name: 'Scholarships',
-          is_user_submitted: true,
-        })),
-      ];
-
-      console.log('📚 Fetched scholarships:', legacyData?.length, 'legacy +', submittedData?.length, 'user-submitted');
-      setScholarships(combined);
+      console.log('📚 Fetched scholarships:', data?.length, 'items');
+      setScholarships(data || []);
     } catch (error) {
       console.error('Error fetching scholarships:', error);
       Alert.alert('Error', 'Failed to load scholarships.');
@@ -259,10 +238,9 @@ export default function EducationScreen() {
     try {
       setLoading(true);
       const { data, error } = await supabase
-        .from('products_services')
+        .from('events')
         .select('*')
         .eq('is_approved', true)
-        .eq('category_name', 'Educational Events')
         .order('created_at', { ascending: false });
 
       if (error) throw error;
@@ -826,15 +804,25 @@ export default function EducationScreen() {
             </View>
           </View>
 
-          {/* Submit Scholarship Button */}
+          {/* Submit Scholarship CTA */}
           {user && (
             <TouchableOpacity
-              style={styles.submitScholarshipButton}
+              style={styles.submitScholarshipCTA}
               onPress={() => router.push('/education/submit-scholarship' as any)}
-              activeOpacity={0.7}
+              activeOpacity={0.9}
             >
-              <Plus size={18} color="#FFFFFF" />
-              <Text style={styles.submitScholarshipButtonText}>Submit a Scholarship</Text>
+              <View style={styles.submitScholarshipContent}>
+                <View style={styles.submitScholarshipIconBox}>
+                  <Plus size={24} color="#FFFFFF" />
+                </View>
+                <View style={{flex: 1}}>
+                  <Text style={styles.submitScholarshipTitle}>Post a Scholarship</Text>
+                  <Text style={styles.submitScholarshipSubtitle}>Share opportunities with the community</Text>
+                </View>
+                <View style={styles.submitScholarshipArrow}>
+                  <ChevronRight size={20} color="#10B981" />
+                </View>
+              </View>
             </TouchableOpacity>
           )}
 
@@ -858,18 +846,38 @@ export default function EducationScreen() {
                 }
                 const currencySymbol = scholarship.funding_currency === 'GHS' ? '₵' : '$';
                 
-                // Calculate days remaining
+                // Calculate deadline and format date
                 let daysRemaining = null;
                 let deadlineStatus = '';
-                if (scholarship.deadline_date) {
-                  const deadline = new Date(scholarship.deadline_date);
-                  const now = new Date();
-                  daysRemaining = Math.ceil((deadline.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
-                  if (daysRemaining > 0) {
-                    deadlineStatus = `${daysRemaining} days left`;
+                let formattedDeadline = '';
+                
+                // Check for deadline_date or deadline fields
+                const deadlineValue = scholarship.deadline_date || scholarship.deadline;
+                
+                if (deadlineValue) {
+                  // Try to parse as date
+                  const deadline = new Date(deadlineValue);
+                  if (!isNaN(deadline.getTime())) {
+                    // Format date as "Dec 25, 2025"
+                    formattedDeadline = deadline.toLocaleDateString('en-US', { 
+                      month: 'short', 
+                      day: 'numeric', 
+                      year: 'numeric' 
+                    });
+                    
+                    const now = new Date();
+                    daysRemaining = Math.ceil((deadline.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
+                    if (daysRemaining > 0) {
+                      deadlineStatus = `Due ${formattedDeadline}`;
+                    } else {
+                      deadlineStatus = 'Expired';
+                    }
                   } else {
-                    deadlineStatus = 'Expired';
+                    // If not a valid date, use the text as-is
+                    deadlineStatus = deadlineValue;
                   }
+                } else if (scholarship.deadline_text) {
+                  deadlineStatus = scholarship.deadline_text;
                 }
                 
                 return (
@@ -888,11 +896,11 @@ export default function EducationScreen() {
                       <View style={styles.imageGradient} />
                       
                       {/* Funding Amount Badge */}
-                      {scholarship.funding_amount && (
+                      {(scholarship.amount || scholarship.funding_amount) && (
                         <View style={styles.fundingAmountBadge}>
-                          <Wallet size={16} color="#FFFFFF" />
+                          <Wallet size={14} color="#FFFFFF" />
                           <Text style={styles.fundingAmountText}>
-                            {currencySymbol}{scholarship.funding_amount}
+                            {currencySymbol}{scholarship.amount || scholarship.funding_amount}
                           </Text>
                         </View>
                       )}
@@ -917,33 +925,38 @@ export default function EducationScreen() {
                     </View>
                     
                     <View style={styles.modernCardContent}>
-                      <View style={styles.scholarshipTypeBadge}>
-                        <GraduationCap size={14} color="#F59E0B" />
-                        <Text style={styles.scholarshipTypeBadgeText}>Scholarship</Text>
+                      <View style={styles.cardHeaderRow}>
+                        <View style={styles.scholarshipTypeBadge}>
+                          <GraduationCap size={12} color="#F59E0B" />
+                          <Text style={styles.scholarshipTypeBadgeText}>Scholarship</Text>
+                        </View>
                       </View>
                       
                       <Text style={styles.modernCardTitle} numberOfLines={2}>{scholarship.title}</Text>
                       
-                      <Text style={styles.modernCardDescription} numberOfLines={3}>
-                        {scholarship.description}
-                      </Text>
-                      
-                      {/* Deadline Info */}
-                      {(deadlineStatus || scholarship.deadline_text) && (
-                        <View style={styles.deadlineContainer}>
-                          <Clock size={14} color={daysRemaining !== null && daysRemaining > 0 && daysRemaining <= 7 ? '#EF4444' : '#6B7280'} />
+                      {/* Deadline Info - More Prominent */}
+                      {deadlineStatus && (
+                        <View style={[
+                          styles.prominentDeadline,
+                          daysRemaining !== null && daysRemaining > 0 && daysRemaining <= 7 && styles.urgentDeadlineBadge
+                        ]}>
+                          <Clock size={14} color={daysRemaining !== null && daysRemaining > 0 && daysRemaining <= 7 ? '#EF4444' : '#F59E0B'} />
                           <Text style={[
-                            styles.deadlineInfoText,
-                            daysRemaining !== null && daysRemaining > 0 && daysRemaining <= 7 && styles.urgentDeadline
+                            styles.prominentDeadlineText,
+                            daysRemaining !== null && daysRemaining > 0 && daysRemaining <= 7 && styles.urgentDeadlineText
                           ]}>
-                            {deadlineStatus || scholarship.deadline_text}
+                            {deadlineStatus}
                           </Text>
                         </View>
                       )}
                       
-                      <TouchableOpacity style={[styles.modernViewButton, {backgroundColor: '#FFF9E6'}]}>
-                        <Text style={[styles.modernViewButtonText, {color: '#F59E0B'}]}>Apply Now</Text>
-                        <ChevronRight size={16} color="#F59E0B" />
+                      <Text style={styles.modernCardDescription} numberOfLines={2}>
+                        {scholarship.description}
+                      </Text>
+                      
+                      <TouchableOpacity style={styles.applyNowButton}>
+                        <Text style={styles.applyNowButtonText}>View Details</Text>
+                        <ChevronRight size={16} color="#FFFFFF" />
                       </TouchableOpacity>
                     </View>
                   </TouchableOpacity>
@@ -2337,19 +2350,19 @@ const styles = StyleSheet.create({
   },
   modernScholarshipCard: {
     backgroundColor: '#FFFFFF',
-    borderRadius: 20,
+    borderRadius: 24,
     overflow: 'hidden',
-    shadowColor: '#F59E0B',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.12,
-    shadowRadius: 12,
-    elevation: 5,
+    shadowColor: '#000000',
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.08,
+    shadowRadius: 16,
+    elevation: 8,
     borderWidth: 1,
-    borderColor: '#FEF3C7',
+    borderColor: '#F3F4F6',
   },
   modernCardImageContainer: {
     width: '100%',
-    height: 200,
+    height: 180,
     position: 'relative',
     backgroundColor: '#F3F4F6',
   },
@@ -2362,7 +2375,7 @@ const styles = StyleSheet.create({
     bottom: 0,
     left: 0,
     right: 0,
-    height: 80,
+    height: 100,
     backgroundColor: 'transparent',
   },
   modernBookmarkButton: {
@@ -2372,48 +2385,50 @@ const styles = StyleSheet.create({
     width: 40,
     height: 40,
     borderRadius: 20,
-    backgroundColor: 'rgba(0, 0, 0, 0.35)',
+    backgroundColor: 'rgba(0, 0, 0, 0.2)',
     alignItems: 'center',
     justifyContent: 'center',
-    shadowColor: '#000000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.25,
-    shadowRadius: 4,
-    elevation: 4,
+    backdropFilter: 'blur(10px)',
   },
   fundingAmountBadge: {
     position: 'absolute',
-    top: 12,
+    bottom: 12,
     left: 12,
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
     backgroundColor: 'rgba(16, 185, 129, 0.95)',
-    paddingHorizontal: 14,
-    paddingVertical: 8,
-    borderRadius: 12,
-    shadowColor: '#10B981',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 10,
+    shadowColor: '#000000',
     shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.3,
+    shadowOpacity: 0.15,
     shadowRadius: 4,
     elevation: 3,
   },
   fundingAmountText: {
-    fontSize: 14,
+    fontSize: 13,
     fontFamily: 'Inter-SemiBold',
     color: '#FFFFFF',
     letterSpacing: 0.3,
   },
   modernCardContent: {
-    padding: 18,
+    padding: 20,
     gap: 12,
+  },
+  cardHeaderRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 4,
   },
   modernCardTitle: {
     fontSize: 18,
-    fontFamily: 'Inter-SemiBold',
+    fontFamily: 'Inter-Bold',
     color: '#111827',
-    lineHeight: 24,
-    letterSpacing: -0.2,
+    lineHeight: 26,
+    letterSpacing: -0.3,
   },
   modernLocationRow: {
     flexDirection: 'row',
@@ -2429,7 +2444,7 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontFamily: 'Inter-Regular',
     color: '#6B7280',
-    lineHeight: 20,
+    lineHeight: 22,
   },
   modernApplicationBadge: {
     flexDirection: 'row',
@@ -2454,35 +2469,81 @@ const styles = StyleSheet.create({
     gap: 6,
     alignSelf: 'flex-start',
     backgroundColor: '#FEF3C7',
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 8,
+  },
+  scholarshipTypeBadgeText: {
+    fontSize: 11,
+    fontFamily: 'Inter-SemiBold',
+    color: '#D97706',
+    letterSpacing: 0.3,
+  },
+  prominentDeadline: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    alignSelf: 'flex-start',
+    backgroundColor: '#FEF3C7',
     paddingHorizontal: 12,
     paddingVertical: 6,
     borderRadius: 8,
-    borderWidth: 1,
-    borderColor: '#F59E0B',
+    marginTop: 8,
+    marginBottom: 8,
   },
-  scholarshipTypeBadgeText: {
-    fontSize: 12,
+  prominentDeadlineText: {
+    fontSize: 13,
     fontFamily: 'Inter-SemiBold',
-    color: '#F59E0B',
-    letterSpacing: 0.3,
+    color: '#D97706',
+    letterSpacing: 0.2,
+  },
+  urgentDeadlineBadge: {
+    backgroundColor: '#FEE2E2',
+  },
+  urgentDeadlineText: {
+    color: '#EF4444',
   },
   deadlineContainer: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
     backgroundColor: '#F3F4F6',
-    paddingHorizontal: 12,
-    paddingVertical: 8,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
     borderRadius: 8,
-    alignSelf: 'flex-start',
+  },
+  urgentDeadlineContainer: {
+    backgroundColor: '#FEE2E2',
   },
   deadlineInfoText: {
-    fontSize: 13,
+    fontSize: 11,
     fontFamily: 'Inter-SemiBold',
     color: '#6B7280',
   },
   urgentDeadline: {
     color: '#EF4444',
+  },
+  applyNowButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#2563EB',
+    paddingVertical: 14,
+    paddingHorizontal: 16,
+    borderRadius: 14,
+    gap: 8,
+    marginTop: 8,
+    shadowColor: '#2563EB',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.2,
+    shadowRadius: 8,
+    elevation: 4,
+  },
+  applyNowButtonText: {
+    fontSize: 14,
+    fontFamily: 'Inter-SemiBold',
+    color: '#FFFFFF',
+    letterSpacing: 0.3,
   },
   modernViewButton: {
     flexDirection: 'row',
@@ -2530,6 +2591,60 @@ const styles = StyleSheet.create({
     color: '#9CA3AF',
     textAlign: 'center',
     lineHeight: 20,
+  },
+  submitScholarshipCTA: {
+    marginHorizontal: 16,
+    marginBottom: 24,
+    backgroundColor: '#2563EB',
+    borderRadius: 20,
+    padding: 20,
+    shadowColor: '#2563EB',
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.25,
+    shadowRadius: 12,
+    elevation: 8,
+    overflow: 'hidden',
+  },
+  submitScholarshipContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 16,
+    zIndex: 2,
+  },
+  submitScholarshipIconBox: {
+    width: 52,
+    height: 52,
+    borderRadius: 14,
+    backgroundColor: 'rgba(255, 255, 255, 0.15)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.2)',
+  },
+  submitScholarshipTitle: {
+    fontSize: 18,
+    fontFamily: 'Inter-Bold',
+    color: '#FFFFFF',
+    letterSpacing: -0.3,
+  },
+  submitScholarshipSubtitle: {
+    fontSize: 13,
+    fontFamily: 'Inter-Medium',
+    color: 'rgba(255, 255, 255, 0.9)',
+    marginTop: 2,
+  },
+  submitScholarshipArrow: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: '#FFFFFF',
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: '#000000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 2,
   },
   submitScholarshipButton: {
     flexDirection: 'row',

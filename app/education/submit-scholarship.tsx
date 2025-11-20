@@ -1,9 +1,10 @@
-import { View, Text, StyleSheet, ScrollView, TextInput, TouchableOpacity, Alert, ActivityIndicator } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TextInput, TouchableOpacity, Alert, ActivityIndicator, Image } from 'react-native';
 import { useState } from 'react';
 import { useRouter } from 'expo-router';
-import { ArrowLeft, Award, DollarSign, Calendar, FileText, Globe, Send, CheckCircle } from 'lucide-react-native';
+import { ArrowLeft, Award, DollarSign, Calendar, FileText, Globe, Send, CheckCircle, Upload, X } from 'lucide-react-native';
 import { useAuth } from '@/hooks/useAuth';
 import { supabase } from '@/lib/supabase';
+import { pickMedia, uploadMedia } from '@/lib/media';
 
 const SCHOLARSHIP_TYPES = [
   'Merit-based',
@@ -75,8 +76,32 @@ export default function SubmitScholarshipScreen() {
   
   // Additional
   const [imageUrl, setImageUrl] = useState('');
+  const [imageUri, setImageUri] = useState('');
+  const [uploadingImage, setUploadingImage] = useState(false);
   const [isRenewable, setIsRenewable] = useState(false);
   const [numberOfAwards, setNumberOfAwards] = useState('');
+
+  const handlePickImage = async () => {
+    const asset = await pickMedia();
+    if (asset) {
+      setImageUri(asset.uri);
+      // Upload immediately
+      setUploadingImage(true);
+      const publicUrl = await uploadMedia(asset.uri, user!.id, 'image', asset.fileName, asset.mimeType);
+      setUploadingImage(false);
+      
+      if (publicUrl) {
+        setImageUrl(publicUrl);
+      } else {
+        setImageUri(''); // Clear on failed upload
+      }
+    }
+  };
+
+  const handleRemoveImage = () => {
+    setImageUri('');
+    setImageUrl('');
+  };
 
   const toggleField = (field: string) => {
     if (selectedFields.includes(field)) {
@@ -215,15 +240,31 @@ export default function SubmitScholarshipScreen() {
               textAlignVertical="top"
             />
 
-            <Text style={styles.label}>Image URL (Optional)</Text>
-            <TextInput
-              style={styles.input}
-              value={imageUrl}
-              onChangeText={setImageUrl}
-              placeholder="https://example.com/scholarship-image.jpg"
-              placeholderTextColor="#999999"
-              autoCapitalize="none"
-            />
+            <Text style={styles.label}>Scholarship Image (Optional)</Text>
+            <Text style={styles.helpText}>Upload an image for the scholarship</Text>
+            {imageUri ? (
+              <View style={styles.imagePreviewContainer}>
+                <Image source={{ uri: imageUri }} style={styles.imagePreview} />
+                <TouchableOpacity style={styles.removeImageButton} onPress={handleRemoveImage}>
+                  <X size={16} color="#FFFFFF" />
+                </TouchableOpacity>
+              </View>
+            ) : (
+              <TouchableOpacity 
+                style={styles.uploadButton} 
+                onPress={handlePickImage}
+                disabled={uploadingImage}
+              >
+                {uploadingImage ? (
+                  <ActivityIndicator size="small" color="#4169E1" />
+                ) : (
+                  <>
+                    <Upload size={20} color="#4169E1" />
+                    <Text style={styles.uploadButtonText}>Upload Image</Text>
+                  </>
+                )}
+              </TouchableOpacity>
+            )}
           </View>
 
           {/* Funding Details */}
@@ -646,5 +687,45 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontFamily: 'Inter-SemiBold',
     color: '#FFFFFF',
+  },
+  uploadButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 10,
+    backgroundColor: '#F0F4FF',
+    borderWidth: 2,
+    borderColor: '#4169E1',
+    borderStyle: 'dashed',
+    borderRadius: 12,
+    paddingVertical: 32,
+    paddingHorizontal: 20,
+  },
+  uploadButtonText: {
+    fontSize: 14,
+    fontFamily: 'Inter-SemiBold',
+    color: '#4169E1',
+  },
+  imagePreviewContainer: {
+    position: 'relative',
+    borderRadius: 12,
+    overflow: 'hidden',
+    marginBottom: 12,
+  },
+  imagePreview: {
+    width: '100%',
+    height: 200,
+    borderRadius: 12,
+  },
+  removeImageButton: {
+    position: 'absolute',
+    top: 12,
+    right: 12,
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: 'rgba(0, 0, 0, 0.6)',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
 });

@@ -35,7 +35,7 @@ interface University {
 
 export default function AdminEducationUniversitiesScreen() {
   const router = useRouter();
-  const { user, profile } = useAuth();
+  const { profile } = useAuth();
   const [universities, setUniversities] = useState<University[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -53,37 +53,28 @@ export default function AdminEducationUniversitiesScreen() {
   const [programsOffered, setProgramsOffered] = useState('');
   const [imageUrl, setImageUrl] = useState('');
 
+  // Check admin access
   useEffect(() => {
-    checkAdminAccess();
-    fetchUniversities();
-  }, []);
-
-  const checkAdminAccess = async () => {
-    if (!user) {
-      Alert.alert('Access Denied', 'You must be logged in to access this page.');
-      router.back();
+    if (profile === null) {
       return;
     }
-
-    const { data } = await supabase
-      .from('profiles')
-      .select('is_admin, role')
-      .eq('id', user.id)
-      .single();
-
-    if (!data?.is_admin && data?.role !== 'admin') {
-      Alert.alert('Access Denied', 'You need admin privileges to access this page.');
+    
+    if (!profile?.is_admin) {
+      Alert.alert('Access Denied', 'You do not have permission to access this page.');
       router.back();
     }
-  };
+  }, [profile, router]);
+
+  useEffect(() => {
+    fetchUniversities();
+  }, []);
 
   const fetchUniversities = async () => {
     try {
       setLoading(true);
       const { data, error } = await supabase
-        .from('products_services')
+        .from('universities')
         .select('*')
-        .eq('category_name', 'Universities')
         .order('created_at', { ascending: false });
 
       if (error) throw error;
@@ -140,23 +131,23 @@ export default function AdminEducationUniversitiesScreen() {
 
     try {
       const universityData = {
+        user_id: editingUniversity?.user_id || profile!.id,
+        title: name.trim(),
         name: name.trim(),
         description: description.trim() || null,
         location: location.trim() || null,
         website_url: websiteUrl.trim() || null,
         contact_email: contactEmail.trim() || null,
-        contact_phone: contactPhone.trim() || null,
-        programs_offered: programsOffered.trim() || null,
+        phone: contactPhone.trim() || null,
+        programs_offered: programsOffered.trim() ? [programsOffered.trim()] : null,
         image_url: imageUrl.trim() || null,
-        category_name: 'Universities',
         is_approved: true,
-        price: '0',
       };
 
       if (editingUniversity) {
         // Update existing university
         const { error } = await supabase
-          .from('products_services')
+          .from('universities')
           .update(universityData)
           .eq('id', editingUniversity.id);
 
@@ -165,7 +156,7 @@ export default function AdminEducationUniversitiesScreen() {
       } else {
         // Create new university
         const { error } = await supabase
-          .from('products_services')
+          .from('universities')
           .insert([universityData]);
 
         if (error) throw error;
@@ -192,7 +183,7 @@ export default function AdminEducationUniversitiesScreen() {
           onPress: async () => {
             try {
               const { error } = await supabase
-                .from('products_services')
+                .from('universities')
                 .delete()
                 .eq('id', university.id);
 
@@ -210,7 +201,7 @@ export default function AdminEducationUniversitiesScreen() {
   };
 
   const filteredUniversities = universities.filter((university) =>
-    university.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+    (university.name || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
     (university.location || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
     (university.description || '').toLowerCase().includes(searchQuery.toLowerCase())
   );

@@ -38,9 +38,8 @@ export default function AllUniversitiesScreen() {
     try {
       setLoading(true);
       const { data, error } = await supabase
-        .from('products_services')
+        .from('universities')
         .select('*')
-        .eq('category_name', 'Universities')
         .eq('is_approved', true)
         .order('created_at', { ascending: false });
 
