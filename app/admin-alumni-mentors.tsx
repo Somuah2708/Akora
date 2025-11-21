@@ -34,8 +34,8 @@ interface Mentor {
   company: string | null;
   industry: string | null;
   years_of_experience: number | null;
-  graduation_year: number | null;
-  degree: string | null;
+  university: string | null;
+  position_at_university: string | null;
   expertise_areas: string[];
   available_hours: string | null;
   meeting_formats: string[];
@@ -66,8 +66,8 @@ interface Application {
   company: string | null;
   industry: string | null;
   years_of_experience: number | null;
-  graduation_year: number | null;
-  degree: string | null;
+  university: string | null;
+  position_at_university: string | null;
   expertise_areas: string[];
   available_hours: string | null;
   meeting_formats: string[];
@@ -131,8 +131,8 @@ export default function AdminAlumniMentorsScreen() {
   const [company, setCompany] = useState('');
   const [industry, setIndustry] = useState('');
   const [yearsExperience, setYearsExperience] = useState('');
-  const [graduationYear, setGraduationYear] = useState('');
-  const [degree, setDegree] = useState('');
+  const [university, setUniversity] = useState('');
+  const [position, setPosition] = useState('');
   const [linkedinUrl, setLinkedinUrl] = useState('');
   const [whatsappNumber, setWhatsappNumber] = useState('');
   const [availableHours, setAvailableHours] = useState('');
@@ -148,6 +148,11 @@ export default function AdminAlumniMentorsScreen() {
   const [uploadingDocuments, setUploadingDocuments] = useState(false);
   const [submitting, setSubmitting] = useState(false);
 
+  // University picker
+  const [universities, setUniversities] = useState<any[]>([]);
+  const [showUniversityPicker, setShowUniversityPicker] = useState(false);
+  const [loadingUniversities, setLoadingUniversities] = useState(false);
+
   // Check admin access
   useEffect(() => {
     if (profile === null) {
@@ -159,6 +164,34 @@ export default function AdminAlumniMentorsScreen() {
       router.back();
     }
   }, [profile, router]);
+
+  // Fetch universities
+  const fetchUniversities = useCallback(async () => {
+    try {
+      setLoadingUniversities(true);
+      const { data, error } = await supabase
+        .from('universities')
+        .select('id, title, location, country')
+        .eq('is_approved', true)
+        .order('title', { ascending: true });
+
+      if (error) throw error;
+      setUniversities(data || []);
+    } catch (error) {
+      console.error('Error fetching universities:', error);
+    } finally {
+      setLoadingUniversities(false);
+    }
+  }, []);
+
+  const selectUniversity = (uni: any) => {
+    if (editingMentor) {
+      setEditingMentor({ ...editingMentor, university: uni.title });
+    } else {
+      setUniversity(uni.title);
+    }
+    setShowUniversityPicker(false);
+  };
 
   // Fetch all data
   const fetchAllData = useCallback(async () => {
@@ -195,7 +228,8 @@ export default function AdminAlumniMentorsScreen() {
 
   useEffect(() => {
     fetchAllData();
-  }, [fetchAllData]);
+    fetchUniversities();
+  }, [fetchAllData, fetchUniversities]);
 
   const onRefresh = useCallback(() => {
     setRefreshing(true);
@@ -291,11 +325,6 @@ export default function AdminAlumniMentorsScreen() {
         return;
       }
 
-      if (!graduationYear.trim() || !degree.trim()) {
-        Alert.alert('Required Fields', 'Please fill in graduation year and degree');
-        return;
-      }
-
       if (selectedExpertise.length === 0) {
         Alert.alert('Required Fields', 'Please select at least one area of expertise');
         return;
@@ -329,8 +358,8 @@ export default function AdminAlumniMentorsScreen() {
           company: company.trim(),
           industry: industry.trim(),
           years_experience: yearsExperience ? parseInt(yearsExperience) : null,
-          graduation_year: graduationYear ? parseInt(graduationYear) : null,
-          degree: degree.trim(),
+          university: university.trim() || null,
+          position_at_university: position.trim() || null,
           linkedin_url: linkedinUrl.trim(),
           whatsapp_number: whatsappNumber.trim(),
           available_hours_per_month: availableHours ? parseInt(availableHours) : null,
@@ -364,8 +393,8 @@ export default function AdminAlumniMentorsScreen() {
       setCompany('');
       setIndustry('');
       setYearsExperience('');
-      setGraduationYear('');
-      setDegree('');
+      setUniversity('');
+      setPosition('');
       setLinkedinUrl('');
       setWhatsappNumber('');
       setAvailableHours('');
@@ -452,8 +481,8 @@ export default function AdminAlumniMentorsScreen() {
           company: application.company,
           industry: application.industry,
           years_of_experience: application.years_of_experience,
-          graduation_year: application.graduation_year,
-          degree: application.degree,
+          university: application.university || null,
+          position_at_university: application.position_at_university || null,
           expertise_areas: application.expertise_areas,
           available_hours: application.available_hours,
           meeting_formats: application.meeting_formats,
@@ -876,11 +905,11 @@ export default function AdminAlumniMentorsScreen() {
                   <Text style={styles.modalText}>
                     {selectedApplication.years_of_experience || 'Not specified'} years
                   </Text>
-                  {selectedApplication.degree && (
-                    <Text style={styles.modalText}>Degree: {selectedApplication.degree}</Text>
+                  {selectedApplication.university && (
+                    <Text style={styles.modalText}>University: {selectedApplication.university}</Text>
                   )}
-                  {selectedApplication.graduation_year && (
-                    <Text style={styles.modalText}>Graduated: {selectedApplication.graduation_year}</Text>
+                  {selectedApplication.position_at_university && (
+                    <Text style={styles.modalText}>Position: {selectedApplication.position_at_university}</Text>
                   )}
                 </View>
 
@@ -1083,23 +1112,25 @@ export default function AdminAlumniMentorsScreen() {
 
                 {/* Education */}
                 <View style={styles.modalSection}>
-                  <Text style={styles.sectionTitle}>Education</Text>
+                  <Text style={styles.sectionTitle}>Current Institution (Optional)</Text>
                   
-                  <Text style={styles.formLabel}>Graduation Year *</Text>
-                  <TextInput
-                    style={styles.formInput}
-                    placeholder="e.g., 2018"
-                    value={graduationYear}
-                    onChangeText={setGraduationYear}
-                    keyboardType="numeric"
-                  />
+                  <Text style={styles.formLabel}>University / Institution Where You Work</Text>
+                  <TouchableOpacity
+                    style={styles.pickerButton}
+                    onPress={() => setShowUniversityPicker(true)}
+                  >
+                    <Text style={[styles.pickerButtonText, !university && styles.placeholderText]}>
+                      {university || 'Select a university from the list'}
+                    </Text>
+                    <Ionicons name="chevron-down" size={20} color="#666666" />
+                  </TouchableOpacity>
 
-                  <Text style={styles.formLabel}>Degree *</Text>
+                  <Text style={styles.formLabel}>Position at University</Text>
                   <TextInput
                     style={styles.formInput}
-                    placeholder="e.g., BSc Computer Science"
-                    value={degree}
-                    onChangeText={setDegree}
+                    placeholder="e.g., Lecturer, Professor, Administrative Staff"
+                    value={position}
+                    onChangeText={setPosition}
                   />
                 </View>
 
@@ -1400,21 +1431,59 @@ export default function AdminAlumniMentorsScreen() {
                     keyboardType="numeric"
                   />
 
-                  <Text style={styles.formLabel}>Graduation Year</Text>
-                  <TextInput
-                    style={styles.formInput}
-                    value={editingMentor.graduation_year?.toString() || ''}
-                    onChangeText={(text) => setEditingMentor({ ...editingMentor, graduation_year: parseInt(text) || null })}
-                    placeholder="Graduation Year"
-                    keyboardType="numeric"
-                  />
+                  <Text style={styles.formLabel}>University / Institution</Text>
+                  {showUniversityPicker && editingMentor ? (
+                    <View style={styles.inlinePickerContainer}>
+                      <View style={styles.inlinePickerHeader}>
+                        <Text style={styles.inlinePickerTitle}>Select University</Text>
+                        <TouchableOpacity onPress={() => setShowUniversityPicker(false)}>
+                          <Ionicons name="close-circle" size={24} color="#666" />
+                        </TouchableOpacity>
+                      </View>
+                      {loadingUniversities ? (
+                        <View style={styles.inlinePickerLoading}>
+                          <ActivityIndicator size="small" color="#4169E1" />
+                        </View>
+                      ) : (
+                        <ScrollView style={styles.inlinePickerList} nestedScrollEnabled={true}>
+                          {universities.map((item) => (
+                            <TouchableOpacity
+                              key={item.id}
+                              style={styles.inlinePickerItem}
+                              onPress={() => selectUniversity(item)}
+                            >
+                              <View style={styles.universityInfo}>
+                                <Text style={styles.inlinePickerItemTitle}>{item.title}</Text>
+                                <Text style={styles.inlinePickerItemSubtitle}>
+                                  {item.location}{item.country ? `, ${item.country}` : ''}
+                                </Text>
+                              </View>
+                              {editingMentor.university === item.title && (
+                                <Ionicons name="checkmark-circle" size={20} color="#4169E1" />
+                              )}
+                            </TouchableOpacity>
+                          ))}
+                        </ScrollView>
+                      )}
+                    </View>
+                  ) : (
+                    <TouchableOpacity
+                      style={styles.pickerButton}
+                      onPress={() => setShowUniversityPicker(true)}
+                    >
+                      <Text style={[styles.pickerButtonText, !editingMentor.university && styles.placeholderText]}>
+                        {editingMentor.university || 'Select a university from the list'}
+                      </Text>
+                      <Ionicons name="chevron-down" size={20} color="#666666" />
+                    </TouchableOpacity>
+                  )}
 
-                  <Text style={styles.formLabel}>Degree</Text>
+                  <Text style={styles.formLabel}>Position at University</Text>
                   <TextInput
                     style={styles.formInput}
-                    value={editingMentor.degree || ''}
-                    onChangeText={(text) => setEditingMentor({ ...editingMentor, degree: text })}
-                    placeholder="Degree"
+                    value={editingMentor.position_at_university || ''}
+                    onChangeText={(text) => setEditingMentor({ ...editingMentor, position_at_university: text })}
+                    placeholder="e.g., Lecturer, Professor"
                   />
 
                   <Text style={styles.formLabel}>Available Hours</Text>
@@ -1505,8 +1574,8 @@ export default function AdminAlumniMentorsScreen() {
                             company: editingMentor.company,
                             industry: editingMentor.industry,
                             years_of_experience: editingMentor.years_of_experience,
-                            graduation_year: editingMentor.graduation_year,
-                            degree: editingMentor.degree,
+                            university: editingMentor.university,
+                            position_at_university: editingMentor.position_at_university,
                             available_hours: editingMentor.available_hours,
                             linkedin_url: editingMentor.linkedin_url,
                             whatsapp_number: editingMentor.whatsapp_number,
@@ -1544,6 +1613,57 @@ export default function AdminAlumniMentorsScreen() {
       >
         <Ionicons name="add" size={28} color="#fff" />
       </TouchableOpacity>
+
+      {/* University Picker Modal - Only for Create Form */}
+      <Modal
+        visible={showUniversityPicker && !editingMentor}
+        animationType="slide"
+        transparent={true}
+        onRequestClose={() => setShowUniversityPicker(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Select University</Text>
+              <TouchableOpacity onPress={() => setShowUniversityPicker(false)}>
+                <Ionicons name="close" size={24} color="#333333" />
+              </TouchableOpacity>
+            </View>
+
+            {loadingUniversities ? (
+              <View style={styles.modalLoading}>
+                <ActivityIndicator size="large" color="#4169E1" />
+                <Text style={styles.modalLoadingText}>Loading universities...</Text>
+              </View>
+            ) : (
+              <ScrollView style={styles.modalList}>
+                {universities.map((item) => (
+                  <TouchableOpacity
+                    key={item.id}
+                    style={styles.universityItem}
+                    onPress={() => selectUniversity(item)}
+                  >
+                    <View style={styles.universityInfo}>
+                      <Text style={styles.universityTitle}>{item.title}</Text>
+                      <Text style={styles.universityLocation}>
+                        {item.location}{item.country ? `, ${item.country}` : ''}
+                      </Text>
+                    </View>
+                    {university === item.title && (
+                      <Ionicons name="checkmark-circle" size={20} color="#4169E1" />
+                    )}
+                  </TouchableOpacity>
+                ))}
+                {universities.length === 0 && (
+                  <View style={styles.emptyState}>
+                    <Text style={styles.emptyText}>No universities available</Text>
+                  </View>
+                )}
+              </ScrollView>
+            )}
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }
@@ -2161,5 +2281,146 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: '#16a34a',
     fontWeight: '500',
+  },
+  pickerButton: {
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1,
+    borderColor: '#D1D5DB',
+    borderRadius: 8,
+    paddingVertical: 12,
+    paddingHorizontal: 12,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginTop: 4,
+  },
+  pickerButtonText: {
+    fontSize: 15,
+    color: '#1F2937',
+    flex: 1,
+  },
+  placeholderText: {
+    color: '#999999',
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'flex-end',
+  },
+  modalContent: {
+    backgroundColor: '#FFFFFF',
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    maxHeight: '80%',
+    paddingBottom: 20,
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 20,
+    paddingVertical: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: '#F3F4F6',
+  },
+  modalTitle: {
+    fontSize: 18,
+    fontWeight: '600',
+    color: '#1F2937',
+  },
+  modalLoading: {
+    padding: 40,
+    alignItems: 'center',
+    gap: 12,
+  },
+  modalLoadingText: {
+    fontSize: 14,
+    color: '#6B7280',
+  },
+  modalList: {
+    paddingHorizontal: 16,
+  },
+  universityItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: 16,
+    paddingHorizontal: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: '#F3F4F6',
+  },
+  universityInfo: {
+    flex: 1,
+    gap: 4,
+  },
+  universityTitle: {
+    fontSize: 15,
+    fontWeight: '500',
+    color: '#1F2937',
+  },
+  universityLocation: {
+    fontSize: 13,
+    color: '#6B7280',
+  },
+  emptyState: {
+    padding: 40,
+    alignItems: 'center',
+  },
+  emptyText: {
+    fontSize: 14,
+    color: '#9CA3AF',
+    textAlign: 'center',
+  },
+  inlinePickerContainer: {
+    backgroundColor: '#F9FAFB',
+    borderWidth: 1,
+    borderColor: '#D1D5DB',
+    borderRadius: 8,
+    marginTop: 4,
+    maxHeight: 300,
+  },
+  inlinePickerHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: '#E5E7EB',
+    backgroundColor: '#FFFFFF',
+    borderTopLeftRadius: 8,
+    borderTopRightRadius: 8,
+  },
+  inlinePickerTitle: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#374151',
+  },
+  inlinePickerLoading: {
+    padding: 20,
+    alignItems: 'center',
+  },
+  inlinePickerList: {
+    maxHeight: 250,
+  },
+  inlinePickerItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: 12,
+    paddingHorizontal: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: '#F3F4F6',
+    backgroundColor: '#FFFFFF',
+  },
+  inlinePickerItemTitle: {
+    fontSize: 14,
+    fontWeight: '500',
+    color: '#1F2937',
+  },
+  inlinePickerItemSubtitle: {
+    fontSize: 12,
+    color: '#6B7280',
+    marginTop: 2,
   },
 });

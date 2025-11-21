@@ -42,6 +42,7 @@ export default function EducationScreen() {
   const [isAdmin, setIsAdmin] = useState(false);
   const [checkingAdmin, setCheckingAdmin] = useState(true);
   const [adminMenuVisible, setAdminMenuVisible] = useState(false);
+  const [bookmarkMenuVisible, setBookmarkMenuVisible] = useState(false);
   
   const [fontsLoaded] = useFonts({
     'Inter-Regular': Inter_400Regular,
@@ -100,7 +101,7 @@ export default function EducationScreen() {
     loadRole();
   }, [loadRole]);
 
-  // Fetch Ghanaian universities only
+  // Fetch all approved universities
   const fetchUniversities = useCallback(async () => {
     try {
       setLoading(true);
@@ -108,7 +109,6 @@ export default function EducationScreen() {
         .from('universities')
         .select('*')
         .eq('is_approved', true)
-        .ilike('location', '%Ghana%')
         .order('created_at', { ascending: false });
 
       if (error) throw error;
@@ -626,26 +626,51 @@ export default function EducationScreen() {
               onChangeText={setSearchQuery}
             />
           </View>
+          <TouchableOpacity 
+            style={styles.bookmarkIconButton}
+            onPress={() => setBookmarkMenuVisible(!bookmarkMenuVisible)}
+          >
+            <Bookmark size={22} color="#4169E1" fill={bookmarkMenuVisible ? "#4169E1" : "none"} />
+          </TouchableOpacity>
         </View>
 
-        {/* Quick Actions */}
-        <View style={styles.quickActions}>
-          <Link href="/education/my-applications" asChild>
-            <TouchableOpacity style={styles.quickActionButton}>
-              <Text style={styles.quickActionText}>My Applications</Text>
+        {/* Bookmark Dropdown Menu */}
+        {bookmarkMenuVisible && (
+          <View style={styles.bookmarkDropdown}>
+            <TouchableOpacity 
+              style={styles.bookmarkDropdownItem}
+              onPress={() => {
+                setBookmarkMenuVisible(false);
+                router.push('/education/saved-opportunities?type=universities' as any);
+              }}
+            >
+              <Building2 size={18} color="#4169E1" />
+              <Text style={styles.bookmarkDropdownText}>Saved Universities</Text>
             </TouchableOpacity>
-          </Link>
-          <Link href="/education/saved-opportunities" asChild>
-            <TouchableOpacity style={styles.quickActionButton}>
-              <Text style={styles.quickActionText}>Saved ↓</Text>
+            <View style={styles.bookmarkDropdownDivider} />
+            <TouchableOpacity 
+              style={styles.bookmarkDropdownItem}
+              onPress={() => {
+                setBookmarkMenuVisible(false);
+                router.push('/education/saved-opportunities?type=scholarships' as any);
+              }}
+            >
+              <Award size={18} color="#4169E1" />
+              <Text style={styles.bookmarkDropdownText}>Saved Scholarships</Text>
             </TouchableOpacity>
-          </Link>
-          <Link href="/education/saved-mentors" asChild>
-            <TouchableOpacity style={styles.quickActionButton}>
-              <Text style={styles.quickActionText}>Saved ↓</Text>
+            <View style={styles.bookmarkDropdownDivider} />
+            <TouchableOpacity 
+              style={styles.bookmarkDropdownItem}
+              onPress={() => {
+                setBookmarkMenuVisible(false);
+                router.push('/education/saved-mentors' as any);
+              }}
+            >
+              <Users size={18} color="#4169E1" />
+              <Text style={styles.bookmarkDropdownText}>Saved Alumni Mentors</Text>
             </TouchableOpacity>
-          </Link>
-        </View>
+          </View>
+        )}
 
         {/* Segmented Tabs */}
         <View style={styles.segmentedTabs}>
@@ -1155,11 +1180,11 @@ export default function EducationScreen() {
               style={styles.adminMenuItem}
               onPress={() => {
                 setAdminMenuVisible(false);
-                router.push('/admin-alumni-mentors' as any);
+                router.push('/admin-education-universities' as any);
               }}
             >
-              <Users size={20} color="#4169E1" />
-              <Text style={styles.adminMenuItemText}>Alumni Mentors</Text>
+              <GraduationCap size={20} color="#4169E1" />
+              <Text style={styles.adminMenuItemText}>Universities</Text>
               <ChevronRight size={20} color="#94A3B8" />
             </TouchableOpacity>
 
@@ -1179,11 +1204,11 @@ export default function EducationScreen() {
               style={styles.adminMenuItem}
               onPress={() => {
                 setAdminMenuVisible(false);
-                router.push('/admin-education-universities' as any);
+                router.push('/admin-alumni-mentors' as any);
               }}
             >
-              <GraduationCap size={20} color="#4169E1" />
-              <Text style={styles.adminMenuItemText}>Universities</Text>
+              <Users size={20} color="#4169E1" />
+              <Text style={styles.adminMenuItemText}>Alumni Mentors</Text>
               <ChevronRight size={20} color="#94A3B8" />
             </TouchableOpacity>
 
@@ -1282,15 +1307,33 @@ const styles = StyleSheet.create({
     padding: 8,
   },
   searchContainer: {
-    padding: 16,
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    gap: 10,
+    marginBottom: 16,
   },
   searchInputContainer: {
+    flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: '#F8F9FA',
     borderRadius: 12,
     paddingHorizontal: 16,
     height: 48,
+  },
+  bookmarkIconButton: {
+    width: 48,
+    height: 48,
+    backgroundColor: '#F8F9FA',
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 2,
+    elevation: 1,
   },
   searchInput: {
     flex: 1,
@@ -1532,6 +1575,37 @@ const styles = StyleSheet.create({
     color: '#4169E1',
     letterSpacing: 0.1,
     textAlign: 'center',
+  },
+  bookmarkDropdown: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 12,
+    marginHorizontal: 16,
+    marginBottom: 16,
+    paddingVertical: 8,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
+    elevation: 5,
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+  },
+  bookmarkDropdownItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    gap: 12,
+  },
+  bookmarkDropdownText: {
+    fontSize: 15,
+    fontFamily: 'Inter-Regular',
+    color: '#1F2937',
+  },
+  bookmarkDropdownDivider: {
+    height: 1,
+    backgroundColor: '#F3F4F6',
+    marginHorizontal: 16,
   },
   loadingText: {
     textAlign: 'center',

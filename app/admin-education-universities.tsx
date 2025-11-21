@@ -13,24 +13,42 @@ import {
   Image,
 } from 'react-native';
 import { useRouter } from 'expo-router';
-import { ArrowLeft, Plus, Search, Edit, Trash2, GraduationCap, MapPin, Globe, Phone, Mail } from 'lucide-react-native';
+import { ArrowLeft, Plus, Search, Edit, Trash2, GraduationCap, MapPin, Globe, Phone, Mail, Upload, X, Calendar, Users, BookOpen } from 'lucide-react-native';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/hooks/useAuth';
+import { pickMedia, uploadMedia } from '@/lib/media';
 
 interface University {
   id: string;
+  title: string;
   name: string;
   description: string;
-  price: string;
   image_url: string | null;
-  category_name: string;
   is_approved: boolean;
   created_at: string;
+  // Location
   location?: string;
+  country?: string;
+  city?: string;
+  address?: string;
+  // Contact
   website_url?: string;
   contact_email?: string;
-  contact_phone?: string;
-  programs_offered?: string;
+  phone?: string;
+  // Academic
+  programs_offered?: string[];
+  accreditation?: string;
+  ranking?: number;
+  // Admission
+  admission_requirements?: string;
+  application_deadline?: string;
+  tuition_fees?: string;
+  // Additional
+  established_year?: number;
+  student_population?: number;
+  campus_size?: string;
+  is_featured?: boolean;
+  view_count?: number;
 }
 
 export default function AdminEducationUniversitiesScreen() {
@@ -43,15 +61,22 @@ export default function AdminEducationUniversitiesScreen() {
   const [editingUniversity, setEditingUniversity] = useState<University | null>(null);
   const [creatingUniversity, setCreatingUniversity] = useState(false);
 
-  // Form states
-  const [name, setName] = useState('');
+  // Form states - Basic
+  const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
+  const [imageUrl, setImageUrl] = useState('');
+  const [imageUri, setImageUri] = useState('');
+  const [uploadingImage, setUploadingImage] = useState(false);
+  
+  // Location
   const [location, setLocation] = useState('');
+  const [country, setCountry] = useState('');
+  const [address, setAddress] = useState('');
+  
+  // Contact
   const [websiteUrl, setWebsiteUrl] = useState('');
   const [contactEmail, setContactEmail] = useState('');
-  const [contactPhone, setContactPhone] = useState('');
-  const [programsOffered, setProgramsOffered] = useState('');
-  const [imageUrl, setImageUrl] = useState('');
+  const [phone, setPhone] = useState('');
 
   // Check admin access
   useEffect(() => {
@@ -99,48 +124,98 @@ export default function AdminEducationUniversitiesScreen() {
   };
 
   const openEditModal = (university: University) => {
-    setName(university.name);
+    // Basic
+    setTitle(university.title || university.name);
     setDescription(university.description || '');
+    setImageUrl(university.image_url || '');
+    setImageUri(university.image_url || '');
+    
+    // Location
     setLocation(university.location || '');
+    setCountry(university.country || '');
+    setAddress(university.address || '');
+    
+    // Contact
     setWebsiteUrl(university.website_url || '');
     setContactEmail(university.contact_email || '');
-    setContactPhone(university.contact_phone || '');
-    setProgramsOffered(university.programs_offered || '');
-    setImageUrl(university.image_url || '');
+    setPhone(university.phone || '');
+    
     setEditingUniversity(university);
   };
 
   const resetForm = () => {
-    setName('');
+    // Basic
+    setTitle('');
     setDescription('');
+    setImageUrl('');
+    setImageUri('');
+    
+    // Location
     setLocation('');
+    setCountry('');
+    setAddress('');
+    
+    // Contact
     setWebsiteUrl('');
     setContactEmail('');
-    setContactPhone('');
-    setProgramsOffered('');
-    setImageUrl('');
+    setPhone('');
+    
     setEditingUniversity(null);
     setCreatingUniversity(false);
   };
 
+  const handlePickImage = async () => {
+    if (!profile?.id) return;
+    
+    const asset = await pickMedia();
+    if (asset) {
+      setImageUri(asset.uri);
+      setUploadingImage(true);
+      const publicUrl = await uploadMedia(asset.uri, profile.id, 'image', asset.fileName, asset.mimeType);
+      setUploadingImage(false);
+      
+      if (publicUrl) {
+        setImageUrl(publicUrl);
+      } else {
+        setImageUri('');
+      }
+    }
+  };
+
+  const handleRemoveImage = () => {
+    setImageUri('');
+    setImageUrl('');
+  };
+
   const handleSaveUniversity = async () => {
-    if (!name.trim()) {
-      Alert.alert('Validation Error', 'University name is required.');
+    if (!title.trim()) {
+      Alert.alert('Validation Error', 'University name/title is required.');
+      return;
+    }
+
+    if (!description.trim()) {
+      Alert.alert('Validation Error', 'Description is required.');
       return;
     }
 
     try {
       const universityData = {
         user_id: editingUniversity?.user_id || profile!.id,
-        title: name.trim(),
-        name: name.trim(),
-        description: description.trim() || null,
-        location: location.trim() || null,
-        website_url: websiteUrl.trim() || null,
-        contact_email: contactEmail.trim() || null,
-        phone: contactPhone.trim() || null,
-        programs_offered: programsOffered.trim() ? [programsOffered.trim()] : null,
+        title: title.trim(),
+        name: title.trim(), // Keep name same as title for compatibility
+        description: description.trim(),
         image_url: imageUrl.trim() || null,
+        
+        // Location
+        location: location.trim() || null,
+        country: country.trim() || null,
+        address: address.trim() || null,
+        
+        // Contact
+        website_url: websiteUrl.trim() && (websiteUrl.trim().startsWith('http://') || websiteUrl.trim().startsWith('https://')) ? websiteUrl.trim() : null,
+        contact_email: contactEmail.trim() || null,
+        phone: phone.trim() || null,
+        
         is_approved: true,
       };
 
@@ -259,7 +334,7 @@ export default function AdminEducationUniversitiesScreen() {
         ) : (
           filteredUniversities.map((university) => (
             <View key={university.id} style={styles.universityCard}>
-              {university.image_url && (
+              {university.image_url && university.image_url.trim() !== '' && (university.image_url.startsWith('http://') || university.image_url.startsWith('https://')) && (
                 <Image
                   source={{ uri: university.image_url }}
                   style={styles.universityImage}
@@ -340,24 +415,19 @@ export default function AdminEducationUniversitiesScreen() {
               </TouchableOpacity>
             </View>
 
-            <ScrollView style={styles.modalBody}>
-              <Text style={styles.formLabel}>University Name *</Text>
+            <ScrollView style={styles.modalBody} showsVerticalScrollIndicator={false}>
+              {/* BASIC INFORMATION */}
+              <Text style={styles.sectionHeader}>Basic Information</Text>
+              
+              <Text style={styles.formLabel}>University Name/Title *</Text>
               <TextInput
                 style={styles.formInput}
                 placeholder="e.g., University of Ghana"
-                value={name}
-                onChangeText={setName}
+                value={title}
+                onChangeText={setTitle}
               />
 
-              <Text style={styles.formLabel}>Location</Text>
-              <TextInput
-                style={styles.formInput}
-                placeholder="e.g., Accra, Ghana"
-                value={location}
-                onChangeText={setLocation}
-              />
-
-              <Text style={styles.formLabel}>Description</Text>
+              <Text style={styles.formLabel}>Description *</Text>
               <TextInput
                 style={[styles.formInput, styles.textArea]}
                 placeholder="Brief description of the university..."
@@ -367,10 +437,69 @@ export default function AdminEducationUniversitiesScreen() {
                 numberOfLines={4}
               />
 
+              {/* Image Upload */}
+              <Text style={styles.formLabel}>University Image</Text>
+              {imageUri ? (
+                <View style={styles.imagePreviewContainer}>
+                  <Image source={{ uri: imageUri }} style={styles.imagePreview} />
+                  <TouchableOpacity 
+                    style={styles.removeImageButton}
+                    onPress={handleRemoveImage}
+                  >
+                    <X size={20} color="#FFFFFF" />
+                  </TouchableOpacity>
+                </View>
+              ) : (
+                <TouchableOpacity
+                  style={styles.uploadButton}
+                  onPress={handlePickImage}
+                  disabled={uploadingImage}
+                >
+                  {uploadingImage ? (
+                    <ActivityIndicator size="small" color="#4169E1" />
+                  ) : (
+                    <>
+                      <Upload size={20} color="#4169E1" />
+                      <Text style={styles.uploadButtonText}>Upload Image</Text>
+                    </>
+                  )}
+                </TouchableOpacity>
+              )}
+
+              {/* LOCATION INFORMATION */}
+              <Text style={styles.sectionHeader}>Location</Text>
+              
+              <Text style={styles.formLabel}>Location/City</Text>
+              <TextInput
+                style={styles.formInput}
+                placeholder="e.g., Accra"
+                value={location}
+                onChangeText={setLocation}
+              />
+
+              <Text style={styles.formLabel}>Country</Text>
+              <TextInput
+                style={styles.formInput}
+                placeholder="e.g., Ghana"
+                value={country}
+                onChangeText={setCountry}
+              />
+
+              <Text style={styles.formLabel}>Address</Text>
+              <TextInput
+                style={styles.formInput}
+                placeholder="e.g., Legon, Accra"
+                value={address}
+                onChangeText={setAddress}
+              />
+
+              {/* CONTACT INFORMATION */}
+              <Text style={styles.sectionHeader}>Contact Information</Text>
+              
               <Text style={styles.formLabel}>Website URL</Text>
               <TextInput
                 style={styles.formInput}
-                placeholder="https://..."
+                placeholder="https://www.university.edu.gh"
                 value={websiteUrl}
                 onChangeText={setWebsiteUrl}
                 autoCapitalize="none"
@@ -379,39 +508,20 @@ export default function AdminEducationUniversitiesScreen() {
               <Text style={styles.formLabel}>Contact Email</Text>
               <TextInput
                 style={styles.formInput}
-                placeholder="admissions@university.edu"
+                placeholder="admissions@university.edu.gh"
                 value={contactEmail}
                 onChangeText={setContactEmail}
                 keyboardType="email-address"
                 autoCapitalize="none"
               />
 
-              <Text style={styles.formLabel}>Contact Phone</Text>
+              <Text style={styles.formLabel}>Phone</Text>
               <TextInput
                 style={styles.formInput}
                 placeholder="+233 XX XXX XXXX"
-                value={contactPhone}
-                onChangeText={setContactPhone}
+                value={phone}
+                onChangeText={setPhone}
                 keyboardType="phone-pad"
-              />
-
-              <Text style={styles.formLabel}>Programs Offered</Text>
-              <TextInput
-                style={[styles.formInput, styles.textArea]}
-                placeholder="List of programs or faculties..."
-                value={programsOffered}
-                onChangeText={setProgramsOffered}
-                multiline
-                numberOfLines={3}
-              />
-
-              <Text style={styles.formLabel}>Image URL</Text>
-              <TextInput
-                style={styles.formInput}
-                placeholder="https://..."
-                value={imageUrl}
-                onChangeText={setImageUrl}
-                autoCapitalize="none"
               />
 
               <TouchableOpacity
@@ -647,12 +757,28 @@ const styles = StyleSheet.create({
   modalBody: {
     padding: 20,
   },
+  sectionHeader: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#1F2937',
+    marginTop: 20,
+    marginBottom: 12,
+    paddingBottom: 8,
+    borderBottomWidth: 2,
+    borderBottomColor: '#4169E1',
+  },
   formLabel: {
     fontSize: 14,
     fontWeight: '600',
     color: '#374151',
     marginBottom: 8,
     marginTop: 12,
+  },
+  formHint: {
+    fontSize: 12,
+    color: '#6B7280',
+    marginBottom: 6,
+    fontStyle: 'italic',
   },
   formInput: {
     backgroundColor: '#F9FAFB',
@@ -667,6 +793,51 @@ const styles = StyleSheet.create({
   textArea: {
     minHeight: 100,
     textAlignVertical: 'top',
+  },
+  uploadButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 10,
+    backgroundColor: '#EEF2FF',
+    borderWidth: 2,
+    borderColor: '#4169E1',
+    borderStyle: 'dashed',
+    borderRadius: 12,
+    paddingVertical: 20,
+    marginTop: 8,
+  },
+  uploadButtonText: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: '#4169E1',
+  },
+  imagePreviewContainer: {
+    position: 'relative',
+    marginTop: 8,
+    borderRadius: 12,
+    overflow: 'hidden',
+  },
+  imagePreview: {
+    width: '100%',
+    height: 200,
+    borderRadius: 12,
+  },
+  removeImageButton: {
+    position: 'absolute',
+    top: 12,
+    right: 12,
+    backgroundColor: '#EF4444',
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.25,
+    shadowRadius: 4,
+    elevation: 5,
   },
   saveButton: {
     backgroundColor: '#4169E1',

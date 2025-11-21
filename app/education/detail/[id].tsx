@@ -2,7 +2,7 @@ import { View, Text, StyleSheet, ScrollView, Image, TouchableOpacity, ActivityIn
 import { useFonts, Inter_400Regular, Inter_600SemiBold } from '@expo-google-fonts/inter';
 import { useEffect, useState } from 'react';
 import { SplashScreen, useRouter, useLocalSearchParams } from 'expo-router';
-import { ArrowLeft, MapPin, Globe, Mail, Award, Calendar, Wallet, BookOpen, Share2, Bookmark, ExternalLink, Users, Briefcase, GraduationCap } from 'lucide-react-native';
+import { ArrowLeft, MapPin, Globe, Mail, Phone, Award, Calendar, Wallet, BookOpen, Share2, Bookmark, ExternalLink, Users, Briefcase, GraduationCap } from 'lucide-react-native';
 import { supabase } from '../../../lib/supabase';
 import { useAuth } from '../../../hooks/useAuth';
 
@@ -106,7 +106,7 @@ export default function EducationDetailScreen() {
         .from('alumni_mentors')
         .select('*')
         .eq('status', 'approved')
-        .or(`university.eq.${universityName},university_id.eq.${id}`)
+        .ilike('university', `%${universityName}%`)
         .order('created_at', { ascending: false })
         .limit(10);
 
@@ -270,6 +270,14 @@ export default function EducationDetailScreen() {
             <View style={styles.infoRow}>
               <MapPin size={18} color="#666666" />
               <Text style={styles.infoText}>{opportunity.location}</Text>
+            </View>
+          )}
+
+          {/* Address (for Universities) */}
+          {opportunity.address && (
+            <View style={styles.infoRow}>
+              <MapPin size={18} color="#666666" />
+              <Text style={styles.infoText}>{opportunity.address}</Text>
             </View>
           )}
 
@@ -454,9 +462,15 @@ export default function EducationDetailScreen() {
           <View style={styles.section}>
             <Text style={styles.sectionTitle}>Contact Information</Text>
             {opportunity.contact_email && (
-              <TouchableOpacity style={styles.contactButton} onPress={handleContactEmail}>
+              <TouchableOpacity style={styles.contactButton} onPress={() => Linking.openURL(`mailto:${opportunity.contact_email}`)}>
                 <Mail size={18} color="#4169E1" />
                 <Text style={styles.contactText}>{opportunity.contact_email}</Text>
+              </TouchableOpacity>
+            )}
+            {opportunity.phone && (
+              <TouchableOpacity style={styles.contactButton} onPress={() => Linking.openURL(`tel:${opportunity.phone}`)}>
+                <Phone size={18} color="#4169E1" />
+                <Text style={styles.contactText}>{opportunity.phone}</Text>
               </TouchableOpacity>
             )}
             {opportunity.website_url && (

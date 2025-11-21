@@ -1,7 +1,7 @@
-import { View, Text, StyleSheet, ScrollView, TextInput, TouchableOpacity, Alert, ActivityIndicator } from 'react-native';
-import { useState } from 'react';
+import { View, Text, StyleSheet, ScrollView, TextInput, TouchableOpacity, Alert, ActivityIndicator, Modal, FlatList } from 'react-native';
+import { useState, useEffect } from 'react';
 import { useRouter } from 'expo-router';
-import { ArrowLeft, User, Briefcase, GraduationCap, Heart, Calendar, FileText, Upload, CheckCircle } from 'lucide-react-native';
+import { ArrowLeft, User, Briefcase, GraduationCap, Heart, Calendar, FileText, Upload, CheckCircle, ChevronDown, X } from 'lucide-react-native';
 import { useAuth } from '@/hooks/useAuth';
 import { supabase } from '@/lib/supabase';
 import { EXPERTISE_OPTIONS, MEETING_FORMATS, DAYS_OPTIONS, INDUSTRY_OPTIONS } from '@/constants/mentorConstants';
@@ -22,9 +22,13 @@ export default function VolunteerMentorScreen() {
   const [industry, setIndustry] = useState('');
   const [yearsExperience, setYearsExperience] = useState('');
   const [university, setUniversity] = useState('');
-  const [graduationYear, setGraduationYear] = useState('');
-  const [degree, setDegree] = useState('');
+  const [position, setPosition] = useState('');
   const [linkedinUrl, setLinkedinUrl] = useState('');
+  
+  // University picker
+  const [universities, setUniversities] = useState<any[]>([]);
+  const [showUniversityPicker, setShowUniversityPicker] = useState(false);
+  const [loadingUniversities, setLoadingUniversities] = useState(false);
   const [whatsappNumber, setWhatsappNumber] = useState('');
   const [availableHours, setAvailableHours] = useState('');
   const [aboutMe, setAboutMe] = useState('');
@@ -46,6 +50,34 @@ export default function VolunteerMentorScreen() {
     } else {
       setList([...list, item]);
     }
+  };
+
+  // Fetch universities on mount
+  useEffect(() => {
+    fetchUniversities();
+  }, []);
+
+  const fetchUniversities = async () => {
+    try {
+      setLoadingUniversities(true);
+      const { data, error } = await supabase
+        .from('universities')
+        .select('id, title, location, country')
+        .eq('is_approved', true)
+        .order('title', { ascending: true });
+
+      if (error) throw error;
+      setUniversities(data || []);
+    } catch (error) {
+      console.error('Error fetching universities:', error);
+    } finally {
+      setLoadingUniversities(false);
+    }
+  };
+
+  const selectUniversity = (uni: any) => {
+    setUniversity(uni.title);
+    setShowUniversityPicker(false);
   };
 
   const pickDocument = async () => {
@@ -138,11 +170,6 @@ export default function VolunteerMentorScreen() {
       return;
     }
 
-    if (!graduationYear.trim() || !degree.trim()) {
-      Alert.alert('Missing Info', 'Please provide your graduation year and degree');
-      return;
-    }
-
     if (selectedExpertise.length === 0) {
       Alert.alert('Missing Info', 'Please select at least one area of expertise');
       return;
@@ -185,8 +212,7 @@ export default function VolunteerMentorScreen() {
         industry: industry.trim() || null,
         years_of_experience: yearsExperience ? parseInt(yearsExperience) : null,
         university: university.trim() || null,
-        graduation_year: parseInt(graduationYear),
-        degree: degree.trim(),
+        position_at_university: position.trim() || null,
         expertise_areas: selectedExpertise,
         available_hours: availableHours.trim() || 'Flexible',
         meeting_formats: selectedFormats.length > 0 ? selectedFormats : ['Video Call'],
@@ -371,31 +397,24 @@ export default function VolunteerMentorScreen() {
           </View>
 
           <Text style={styles.label}>University / Institution Where You Work (Optional)</Text>
-          <Text style={styles.helpText}>Only fill if you're currently a staff member or faculty at a university</Text>
-          <TextInput
-            style={styles.input}
-            value={university}
-            onChangeText={setUniversity}
-            placeholder="e.g., University of Ghana, KNUST, Ashesi University, etc."
-            placeholderTextColor="#999999"
-          />
+          <Text style={styles.helpText}>Select the institution where you currently work or are affiliated with</Text>
+          <TouchableOpacity
+            style={styles.pickerButton}
+            onPress={() => setShowUniversityPicker(true)}
+          >
+            <Text style={[styles.pickerButtonText, !university && styles.placeholderText]}>
+              {university || 'Select a university from the list'}
+            </Text>
+            <ChevronDown size={20} color="#666666" />
+          </TouchableOpacity>
 
-          <Text style={styles.label}>Graduation Year *</Text>
+          <Text style={styles.label}>Your Position at the University (Optional)</Text>
+          <Text style={styles.helpText}>Your role or title at the institution</Text>
           <TextInput
             style={styles.input}
-            value={graduationYear}
-            onChangeText={setGraduationYear}
-            placeholder="e.g., 2015"
-            keyboardType="number-pad"
-            placeholderTextColor="#999999"
-          />
-
-          <Text style={styles.label}>Degree / Program *</Text>
-          <TextInput
-            style={styles.input}
-            value={degree}
-            onChangeText={setDegree}
-            placeholder="e.g., BSc Computer Science"
+            value={position}
+            onChangeText={setPosition}
+            placeholder="e.g., Lecturer, Professor, Administrative Staff, etc."
             placeholderTextColor="#999999"
           />
         </View>
@@ -637,6 +656,59 @@ export default function VolunteerMentorScreen() {
 
         <View style={{ height: 40 }} />
       </ScrollView>
+
+      {/* University Picker Modal */}
+      <Modal
+        visible={showUniversityPicker}
+        animationType="slide"
+        transparent={true}
+        onRequestClose={() => setShowUniversityPicker(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Select University</Text>
+              <TouchableOpacity onPress={() => setShowUniversityPicker(false)}>
+                <X size={24} color="#333333" />
+              </TouchableOpacity>
+            </View>
+
+            {loadingUniversities ? (
+              <View style={styles.modalLoading}>
+                <ActivityIndicator size="large" color="#4169E1" />
+                <Text style={styles.modalLoadingText}>Loading universities...</Text>
+              </View>
+            ) : (
+              <FlatList
+                data={universities}
+                keyExtractor={(item) => item.id}
+                renderItem={({ item }) => (
+                  <TouchableOpacity
+                    style={styles.universityItem}
+                    onPress={() => selectUniversity(item)}
+                  >
+                    <View style={styles.universityInfo}>
+                      <Text style={styles.universityTitle}>{item.title}</Text>
+                      <Text style={styles.universityLocation}>
+                        {item.location}{item.country ? `, ${item.country}` : ''}
+                      </Text>
+                    </View>
+                    {university === item.title && (
+                      <CheckCircle size={20} color="#4169E1" />
+                    )}
+                  </TouchableOpacity>
+                )}
+                ListEmptyComponent={
+                  <View style={styles.emptyState}>
+                    <Text style={styles.emptyText}>No universities available</Text>
+                  </View>
+                }
+                contentContainerStyle={styles.modalList}
+              />
+            )}
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }
@@ -856,6 +928,95 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '600',
     color: '#FFFFFF',
+    textAlign: 'center',
+  },
+  pickerButton: {
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1,
+    borderColor: '#D1D5DB',
+    borderRadius: 8,
+    paddingVertical: 14,
+    paddingHorizontal: 12,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginTop: 4,
+  },
+  pickerButtonText: {
+    fontSize: 15,
+    color: '#1F2937',
+    flex: 1,
+  },
+  placeholderText: {
+    color: '#999999',
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'flex-end',
+  },
+  modalContent: {
+    backgroundColor: '#FFFFFF',
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    maxHeight: '80%',
+    paddingBottom: 20,
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 20,
+    paddingVertical: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: '#F3F4F6',
+  },
+  modalTitle: {
+    fontSize: 18,
+    fontWeight: '600',
+    color: '#1F2937',
+  },
+  modalLoading: {
+    padding: 40,
+    alignItems: 'center',
+    gap: 12,
+  },
+  modalLoadingText: {
+    fontSize: 14,
+    color: '#6B7280',
+  },
+  modalList: {
+    paddingHorizontal: 16,
+  },
+  universityItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: 16,
+    paddingHorizontal: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: '#F3F4F6',
+  },
+  universityInfo: {
+    flex: 1,
+    gap: 4,
+  },
+  universityTitle: {
+    fontSize: 15,
+    fontWeight: '500',
+    color: '#1F2937',
+  },
+  universityLocation: {
+    fontSize: 13,
+    color: '#6B7280',
+  },
+  emptyState: {
+    padding: 40,
+    alignItems: 'center',
+  },
+  emptyText: {
+    fontSize: 14,
+    color: '#9CA3AF',
     textAlign: 'center',
   },
 });
