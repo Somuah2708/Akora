@@ -1,9 +1,10 @@
-import { View, Text, StyleSheet, ScrollView, Image, TouchableOpacity, TextInput, Dimensions, Animated } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, Image, TouchableOpacity, TextInput, Dimensions, Animated, Modal } from 'react-native';
 import { useFonts, Inter_400Regular, Inter_600SemiBold } from '@expo-google-fonts/inter';
 import { useEffect, useState, useCallback, useRef } from 'react';
 import { SplashScreen, useRouter } from 'expo-router';
-import { Search, Filter, ShoppingBag, Star, MessageCircle, Share2, ArrowLeft, ChevronRight, Briefcase, GraduationCap, Wrench, Palette, Coffee, Stethoscope, Book, Camera, Plus, CircleAlert as AlertCircle } from 'lucide-react-native';
+import { Search, Filter, ArrowDownWideNarrow as SortDesc, MapPin, SearchSlash, ArrowLeft, Briefcase, GraduationCap, Wrench, Palette, Coffee, Stethoscope, Book, Camera, Plus, ShoppingBag } from 'lucide-react-native';
 import { supabase, type ProductService, type Profile } from '@/lib/supabase';
+import { SAMPLE_PRODUCTS } from '@/lib/marketplace';
 import { useAuth } from '@/hooks/useAuth';
 import { Alert } from 'react-native';
 
@@ -48,6 +49,12 @@ export default function ServicesScreen() {
   const [featuredBusinesses, setFeaturedBusinesses] = useState<ProductServiceWithUser[]>([]);
   const [loading, setLoading] = useState(true);
   const [userProfile, setUserProfile] = useState<Profile | null>(null);
+  const [sortOption, setSortOption] = useState<'newest' | 'price_low' | 'price_high'>('newest');
+  const [typeFilter, setTypeFilter] = useState<'all' | 'product' | 'service'>('all');
+  const [isFilterVisible, setIsFilterVisible] = useState(false);
+  const [minPrice, setMinPrice] = useState('');
+  const [maxPrice, setMaxPrice] = useState('');
+  const [conditionFilter, setConditionFilter] = useState<'any' | 'new' | 'used'>('any');
   
   // Animation ref for shopping bag
   const bagScale = useRef(new Animated.Value(1)).current;
@@ -86,8 +93,19 @@ export default function ServicesScreen() {
         .order('created_at', { ascending: false });
       
       if (productsError) throw productsError;
-      if (!productsData) {
-        setProducts([]);
+      if (!productsData || productsData.length === 0) {
+        const sampleWithUser = SAMPLE_PRODUCTS.map(sample => ({
+          ...(sample as any),
+          user: {
+            id: 'sample-user-id',
+            username: 'akora_marketplace',
+            full_name: 'Akora Marketplace',
+            avatar_url: 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=400&auto=format&fit=crop&q=60',
+            created_at: new Date().toISOString(),
+          } as Profile,
+        })) as unknown as ProductServiceWithUser[];
+
+        setProducts(sampleWithUser);
         setFeaturedBusinesses([]);
         return;
       }
@@ -174,8 +192,7 @@ export default function ServicesScreen() {
       Alert.alert('Authentication Required', 'Please sign in to add a listing');
       return;
     }
-    
-    router.push('/create-listing');
+    router.push('/services/create');
   };
 
   // Animate shopping bag with bounce and swing effect
@@ -225,84 +242,253 @@ export default function ServicesScreen() {
     return () => clearInterval(interval);
   }, [bagScale, bagRotation]);
 
-  // Filter products based on selected category and search query
-  const filteredProducts = products.filter(product => {
-    // Filter by category
-    const matchesCategory = selectedCategory 
-      ? (() => {
-          const category = CATEGORIES.find(cat => cat.id === selectedCategory);
-          return category && product.category_name === category.name;
-        })()
-      : true;
-    
-    // Filter by search query
-    const matchesSearch = searchQuery.trim() === '' 
-      ? true
-      : product.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        product.description.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        product.category_name.toLowerCase().includes(searchQuery.toLowerCase());
-    
-    return matchesCategory && matchesSearch;
-  });
+  // Filter products based on selected category, search query, and filters
+  const filteredProducts = products
+    .filter(product => {
+      const matchesType =
+        typeFilter === 'all' ? true : (product as any).type === typeFilter;
+
+      const matchesCategory = selectedCategory 
+        ? (() => {
+            const category = CATEGORIES.find(cat => cat.id === selectedCategory);
+            return category && product.category_name === category.name;
+          })()
+        : true;
+
+      const query = searchQuery.trim().toLowerCase();
+      const matchesSearch = query === '' 
+        ? true
+        : product.title.toLowerCase().includes(query) ||
+          (product.description || '').toLowerCase().includes(query) ||
+          (product.category_name || '').toLowerCase().includes(query);
+      const numericMin = minPrice ? Number(minPrice.replace(/[^0-9.]/g, '')) : null;
+      const numericMax = maxPrice ? Number(maxPrice.replace(/[^0-9.]/g, '')) : null;
+      const priceValue = product.price ?? 0;
+      const matchesMin = numericMin != null ? priceValue >= numericMin : true;
+      const matchesMax = numericMax != null ? priceValue <= numericMax : true;
+
+      const matchesCondition =
+        conditionFilter === 'any'
+          ? true
+          : ((product as any).condition || 'not_applicable') === conditionFilter;
+
+      return (
+        matchesType &&
+        matchesCategory &&
+        matchesSearch &&
+        matchesMin &&
+        matchesMax &&
+        matchesCondition
+      );
+    })
+    .sort((a, b) => {
+      if (sortOption === 'newest') {
+        return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
+      }
+      if (sortOption === 'price_low') {
+        return (a.price || 0) - (b.price || 0);
+      }
+      if (sortOption === 'price_high') {
+        return (b.price || 0) - (a.price || 0);
+      }
+      return 0;
+    });
 
   if (!fontsLoaded) {
     return null;
   }
 
   const formatPrice = (price: number) => {
-    return `$${price}${price % 1 === 0 ? '' : '/hr'}`;
+    if (!price || price <= 0) return 'Price on request';
+    return `GHS ${price.toLocaleString()}`;
   };
 
   return (
     <View style={styles.container}>
+      {/* Filters modal */}
+      <Modal
+        visible={isFilterVisible}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setIsFilterVisible(false)}
+      >
+        <View style={styles.filterOverlay}>
+          <TouchableOpacity
+            style={styles.filterBackdrop}
+            activeOpacity={1}
+            onPress={() => setIsFilterVisible(false)}
+          />
+          <View style={styles.filterSheet}>
+            <View style={styles.filterSheetHeader}>
+              <Text style={styles.filterTitle}>Filters</Text>
+              <TouchableOpacity
+                onPress={() => {
+                  setMinPrice('');
+                  setMaxPrice('');
+                  setConditionFilter('any');
+                  setIsFilterVisible(false);
+                }}
+              >
+                <Text style={styles.filterClearText}>Clear</Text>
+              </TouchableOpacity>
+            </View>
+
+            <View style={styles.filterSection}>
+              <Text style={styles.filterLabel}>Price range (GHS)</Text>
+              <View style={styles.priceRowFilter}>
+                <View style={styles.priceFieldWrapper}>
+                  <Text style={styles.priceFieldPrefix}>Min</Text>
+                  <TextInput
+                    style={styles.priceFieldInput}
+                    placeholder="0"
+                    placeholderTextColor="#94A3B8"
+                    keyboardType="numeric"
+                    value={minPrice}
+                    onChangeText={setMinPrice}
+                  />
+                </View>
+                <View style={styles.priceFieldWrapper}>
+                  <Text style={styles.priceFieldPrefix}>Max</Text>
+                  <TextInput
+                    style={styles.priceFieldInput}
+                    placeholder="Any"
+                    placeholderTextColor="#94A3B8"
+                    keyboardType="numeric"
+                    value={maxPrice}
+                    onChangeText={setMaxPrice}
+                  />
+                </View>
+              </View>
+            </View>
+
+            <View style={styles.filterSection}>
+              <Text style={styles.filterLabel}>Condition</Text>
+              <View style={styles.typeToggleRow}>
+                {[
+                  { key: 'any', label: 'Any' },
+                  { key: 'new', label: 'New' },
+                  { key: 'used', label: 'Used' },
+                ].map((opt) => {
+                  const selected = conditionFilter === opt.key;
+                  return (
+                    <TouchableOpacity
+                      key={opt.key}
+                      style={[
+                        styles.typeChip,
+                        selected && styles.typeChipSelected,
+                      ]}
+                      onPress={() => setConditionFilter(opt.key as 'any' | 'new' | 'used')}
+                    >
+                      <Text
+                        style={[
+                          styles.typeChipText,
+                          selected && styles.typeChipTextSelected,
+                        ]}
+                      >
+                        {opt.label}
+                      </Text>
+                    </TouchableOpacity>
+                  );
+                })}
+              </View>
+            </View>
+
+            <TouchableOpacity
+              style={styles.applyFilterButton}
+              onPress={() => setIsFilterVisible(false)}
+            >
+              <Text style={styles.applyFilterText}>Apply filters</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
       <ScrollView style={styles.scrollView} showsVerticalScrollIndicator={false}>
         <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.push('/(tabs)/hub')} style={styles.backButton}>
-          <ArrowLeft size={24} color="#000000" />
-        </TouchableOpacity>
-        <Text style={styles.title}>Akora Marketplace</Text>
-        <TouchableOpacity 
-          style={styles.cartButton}
-          onPress={() => router.push('/cart')}
-        >
-          <Animated.View
-            style={{
-              transform: [
-                { scale: bagScale },
-                {
-                  rotate: bagRotation.interpolate({
-                    inputRange: [-1, 1],
-                    outputRange: ['-10deg', '10deg'],
-                  }),
-                },
-              ],
-            }}
-          >
-            <ShoppingBag size={24} color="#000000" />
-          </Animated.View>
-          <View style={styles.cartBadge}>
-            <Text style={styles.cartBadgeText}>2</Text>
+          <TouchableOpacity onPress={() => router.push('/(tabs)/hub')} style={styles.backButton}>
+            <ArrowLeft size={24} color="#020617" />
+          </TouchableOpacity>
+          <View style={styles.headerTextContainer}>
+            <Text style={styles.title}>Akora Marketplace</Text>
+            <Text style={styles.subtitle}>Buy & sell within the Akora community</Text>
           </View>
-        </TouchableOpacity>
-      </View>
-
-      <View style={styles.searchContainer}>
-        <View style={styles.searchInputContainer}>
-          <Search size={20} color="#666666" />
-          <TextInput
-            style={styles.searchInput}
-            placeholder="Search products and services..."
-            placeholderTextColor="#666666"
-            value={searchQuery}
-            onChangeText={setSearchQuery}
-          />
+          <View style={{ width: 32 }} />
         </View>
-        <TouchableOpacity style={styles.filterButton}>
-          <Filter size={20} color="#666666" />
-        </TouchableOpacity>
-      </View>
 
-      <ScrollView
+        <View style={styles.searchContainer}>
+          <View style={styles.searchInputContainer}>
+            <Search size={20} color="#94A3B8" />
+            <TextInput
+              style={styles.searchInput}
+              placeholder="Search in Products & Services"
+              placeholderTextColor="#94A3B8"
+              value={searchQuery}
+              onChangeText={setSearchQuery}
+              autoCapitalize="none"
+            />
+            {searchQuery.length > 0 && (
+              <TouchableOpacity onPress={() => setSearchQuery('')} style={styles.clearSearchButton}>
+                <SearchSlash size={18} color="#94A3B8" />
+              </TouchableOpacity>
+            )}
+          </View>
+          <TouchableOpacity style={styles.filterButton} onPress={() => setIsFilterVisible(true)}>
+            <Filter size={20} color="#0F172A" />
+          </TouchableOpacity>
+        </View>
+
+        <View style={styles.sortRow}>
+          <View style={styles.sortLeft}>
+            <MapPin size={16} color="#64748B" />
+            <Text style={styles.sortText}>Ghana • All locations</Text>
+          </View>
+          <View style={styles.sortRightRow}>
+            <View style={styles.typeToggleRow}>
+              {[
+                { key: 'all', label: 'All' },
+                { key: 'product', label: 'Products' },
+                { key: 'service', label: 'Services' },
+              ].map((opt) => {
+                const selected = typeFilter === opt.key;
+                return (
+                  <TouchableOpacity
+                    key={opt.key}
+                    style={[
+                      styles.typeChip,
+                      selected && styles.typeChipSelected,
+                    ]}
+                    onPress={() => setTypeFilter(opt.key as 'all' | 'product' | 'service')}
+                  >
+                    <Text
+                      style={[
+                        styles.typeChipText,
+                        selected && styles.typeChipTextSelected,
+                      ]}
+                    >
+                      {opt.label}
+                    </Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+            <TouchableOpacity 
+              style={styles.sortButton}
+              onPress={() => {
+                if (sortOption === 'newest') setSortOption('price_low');
+                else if (sortOption === 'price_low') setSortOption('price_high');
+                else setSortOption('newest');
+              }}
+            >
+              <SortDesc size={18} color="#0F172A" />
+              <Text style={styles.sortButtonText}>
+                {sortOption === 'newest' && 'Newest'}
+                {sortOption === 'price_low' && 'Price: Low to High'}
+                {sortOption === 'price_high' && 'Price: High to Low'}
+              </Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+
+        <ScrollView
         horizontal
         showsHorizontalScrollIndicator={false}
         style={styles.categoriesScroll}
@@ -336,64 +522,7 @@ export default function ServicesScreen() {
 
       <View style={styles.section}>
         <View style={styles.sectionHeader}>
-          <Text style={styles.sectionTitle}>Featured Businesses</Text>
-          <TouchableOpacity style={styles.seeAllButton}>
-            <Text style={styles.seeAllText}>See All</Text>
-            <ChevronRight size={16} color="#666666" />
-          </TouchableOpacity>
-        </View>
-
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          contentContainerStyle={styles.featuredContent}
-        >
-          {loading ? (
-            <View style={styles.loadingContainer}>
-              <Text style={styles.loadingText}>Loading featured businesses...</Text>
-            </View>
-          ) : featuredBusinesses.length === 0 ? (
-            <View style={styles.emptyContainer}>
-              <Text style={styles.emptyText}>No featured businesses yet</Text>
-            </View>
-          ) : (
-            featuredBusinesses.map((business) => (
-              <TouchableOpacity key={business.id} style={styles.featuredCard}>
-                <Image source={{ uri: business.image_url || 'https://images.unsplash.com/photo-1497366216548-37526070297c?w=800&auto=format&fit=crop&q=60' }} style={styles.featuredImage} />
-                <View style={styles.featuredBadge}>
-                  <Star size={12} color="#FFB800" fill="#FFB800" />
-                  <Text style={styles.featuredBadgeText}>Featured</Text>
-                </View>
-                <View style={styles.featuredInfo}>
-                  <Image 
-                    source={{ 
-                      uri: business.user?.avatar_url || 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=400&auto=format&fit=crop&q=60'
-                    }} 
-                    style={styles.businessAvatar} 
-                  />
-                  <View style={styles.businessInfo}>
-                    <Text style={styles.businessName}>{business.title}</Text>
-                    <Text style={styles.businessOwner}>by {business.user?.full_name || business.user?.username}</Text>
-                    <View style={styles.ratingContainer}>
-                      <Star size={14} color="#FFB800" fill="#FFB800" />
-                      <Text style={styles.rating}>{business.rating}</Text>
-                      <Text style={styles.reviews}>({business.reviews})</Text>
-                    </View>
-                  </View>
-                </View>
-              </TouchableOpacity>
-            ))
-          )}
-        </ScrollView>
-      </View>
-
-      <View style={styles.section}>
-        <View style={styles.sectionHeader}>
-          <Text style={styles.sectionTitle}>Popular Products & Services</Text>
-          <TouchableOpacity style={styles.seeAllButton}>
-            <Text style={styles.seeAllText}>See All</Text>
-            <ChevronRight size={16} color="#666666" />
-          </TouchableOpacity>
+          <Text style={styles.sectionTitle}>Latest listings</Text>
         </View>
 
         <View style={styles.productsGrid}>
@@ -403,10 +532,11 @@ export default function ServicesScreen() {
             </View>
           ) : filteredProducts.length === 0 ? (
             <View style={styles.emptyContainer}>
-              <Text style={styles.emptyText}>
+              <Text style={styles.emptyTextTitle}>No listings found</Text>
+              <Text style={styles.emptyTextSubtitle}>
                 {selectedCategory 
-                  ? 'No products or services in this category yet' 
-                  : 'No products or services available yet'}
+                  ? 'Try changing the category or filters.'
+                  : 'Be the first to post something in the marketplace!'}
               </Text>
             </View>
           ) : (
@@ -417,30 +547,16 @@ export default function ServicesScreen() {
                 onPress={() => router.push(`/listing/${product.id}`)}
               >
                 <Image 
-                  source={{ uri: product.image_url || 'https://images.unsplash.com/photo-1460925895917-afdab827c52f?w=800&auto=format&fit=crop&q=60' }} 
+                  source={{ uri: (product as any).image_urls?.[0] || product.image_url || 'https://images.unsplash.com/photo-1460925895917-afdab827c52f?w=800&auto=format&fit=crop&q=60' }} 
                   style={styles.productImage} 
                 />
                 <View style={styles.productContent}>
-                  <Text style={styles.productName} numberOfLines={2}>{product.title}</Text>
-                  <Text style={styles.businessName} numberOfLines={1}>
-                    {product.user?.full_name || product.user?.username}
-                  </Text>
                   <Text style={styles.price}>{formatPrice(product.price || 0)}</Text>
-                  <View style={styles.productFooter}>
-                    <View style={styles.ratingContainer}>
-                      <Star size={12} color="#FFB800" fill="#FFB800" />
-                      <Text style={styles.rating}>{product.rating}</Text>
-                      <Text style={styles.reviews}>({product.reviews})</Text>
-                    </View>
-                    <TouchableOpacity 
-                      style={styles.addButton}
-                      onPress={(e) => {
-                        e.stopPropagation();
-                        router.push(`/listing/${product.id}`);
-                      }}
-                    >
-                      <Text style={styles.addButtonText}>View</Text>
-                    </TouchableOpacity>
+                  <Text style={styles.productName} numberOfLines={2}>{product.title}</Text>
+                  <View style={styles.metaRow}>
+                    <Text style={styles.metaText} numberOfLines={1}>
+                      {product.location_area || product.location_city || product.location_region || 'Location not set'}
+                    </Text>
                   </View>
                 </View>
               </TouchableOpacity>
@@ -477,49 +593,40 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: 16,
-    paddingTop: 60,
+    paddingTop: 56,
     paddingBottom: 16,
     backgroundColor: '#FFFFFF',
   },
   backButton: {
     padding: 8,
   },
+  headerTextContainer: {
+    flex: 1,
+    marginLeft: 4,
+  },
   title: {
-    fontSize: 24,
+    fontSize: 22,
     fontFamily: 'Inter-SemiBold',
-    color: '#000000',
+    color: '#020617',
   },
-  cartButton: {
-    padding: 8,
-    position: 'relative',
-  },
-  cartBadge: {
-    position: 'absolute',
-    top: 4,
-    right: 4,
-    backgroundColor: '#FF4444',
-    borderRadius: 10,
-    width: 20,
-    height: 20,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  cartBadgeText: {
-    color: '#FFFFFF',
-    fontSize: 12,
-    fontFamily: 'Inter-SemiBold',
+  subtitle: {
+    fontSize: 13,
+    marginTop: 2,
+    fontFamily: 'Inter-Regular',
+    color: '#64748B',
   },
   searchContainer: {
     flexDirection: 'row',
-    padding: 16,
-    gap: 12,
+    paddingHorizontal: 16,
+    paddingBottom: 12,
+    gap: 8,
   },
   searchInputContainer: {
     flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#F8F9FA',
-    borderRadius: 12,
+    backgroundColor: '#F1F5F9',
+    borderRadius: 999,
     paddingHorizontal: 16,
     height: 48,
   },
@@ -528,15 +635,77 @@ const styles = StyleSheet.create({
     marginLeft: 12,
     fontSize: 16,
     fontFamily: 'Inter-Regular',
-    color: '#000000',
+    color: '#0F172A',
+  },
+  clearSearchButton: {
+    paddingHorizontal: 4,
   },
   filterButton: {
     width: 48,
     height: 48,
-    backgroundColor: '#F8F9FA',
+    backgroundColor: '#E5EDFF',
     borderRadius: 12,
     justifyContent: 'center',
     alignItems: 'center',
+  },
+  sortRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 16,
+    marginBottom: 12,
+  },
+  sortLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  sortRightRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  sortText: {
+    fontSize: 13,
+    fontFamily: 'Inter-Regular',
+    color: '#64748B',
+  },
+  sortButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 999,
+    backgroundColor: '#EEF2FF',
+  },
+  sortButtonText: {
+    fontSize: 13,
+    fontFamily: 'Inter-SemiBold',
+    color: '#1D4ED8',
+  },
+  typeToggleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#E5E7EB',
+    borderRadius: 999,
+    padding: 2,
+  },
+  typeChip: {
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 999,
+  },
+  typeChipSelected: {
+    backgroundColor: '#FFFFFF',
+  },
+  typeChipText: {
+    fontSize: 11,
+    fontFamily: 'Inter-SemiBold',
+    color: '#4B5563',
+  },
+  typeChipTextSelected: {
+    color: '#111827',
   },
   categoriesScroll: {
     marginBottom: 24,
@@ -575,7 +744,7 @@ const styles = StyleSheet.create({
     width: 80,
   },
   section: {
-    marginBottom: 24,
+    marginBottom: 16,
   },
   sectionHeader: {
     flexDirection: 'row',
@@ -599,70 +768,6 @@ const styles = StyleSheet.create({
     fontFamily: 'Inter-Regular',
     color: '#666666',
   },
-  featuredContent: {
-    paddingHorizontal: 16,
-    gap: 16,
-  },
-  featuredCard: {
-    width: width - 80,
-    borderRadius: 16,
-    backgroundColor: '#FFFFFF',
-    shadowColor: '#000000',
-    shadowOffset: {
-      width: 0,
-      height: 2,
-    },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
-    overflow: 'hidden',
-  },
-  featuredImage: {
-    width: '100%',
-    height: 200,
-  },
-  featuredBadge: {
-    position: 'absolute',
-    top: 16,
-    right: 16,
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#FFFFFF',
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 20,
-    gap: 4,
-  },
-  featuredBadgeText: {
-    fontSize: 12,
-    fontFamily: 'Inter-SemiBold',
-    color: '#000000',
-  },
-  featuredInfo: {
-    flexDirection: 'row',
-    padding: 16,
-    gap: 12,
-  },
-  businessAvatar: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
-  },
-  businessInfo: {
-    flex: 1,
-  },
-  businessName: {
-    fontSize: 16,
-    fontFamily: 'Inter-SemiBold',
-    color: '#000000',
-    marginBottom: 4,
-  },
-  businessOwner: {
-    fontSize: 14,
-    fontFamily: 'Inter-Regular',
-    color: '#666666',
-    marginBottom: 8,
-  },
   ratingContainer: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -682,56 +787,43 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     flexWrap: 'wrap',
     paddingHorizontal: 16,
-    gap: 16,
+    gap: 12,
   },
   productCard: {
     width: CARD_WIDTH,
     backgroundColor: '#FFFFFF',
-    borderRadius: 12,
+    borderRadius: 10,
     overflow: 'hidden',
-    shadowColor: '#000000',
-    shadowOffset: {
-      width: 0,
-      height: 2,
-    },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
   },
   productImage: {
     width: '100%',
-    height: 150,
+    height: 140,
   },
   productContent: {
-    padding: 12,
+    padding: 10,
   },
   productName: {
-    fontSize: 14,
+    fontSize: 13,
     fontFamily: 'Inter-SemiBold',
-    color: '#000000',
-    marginBottom: 4,
+    color: '#0F172A',
+    marginTop: 2,
   },
   price: {
-    fontSize: 16,
+    fontSize: 15,
     fontFamily: 'Inter-SemiBold',
-    color: '#4169E1',
-    marginBottom: 8,
+    color: '#16A34A',
   },
-  productFooter: {
+  metaRow: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
     alignItems: 'center',
+    marginTop: 4,
   },
-  addButton: {
-    backgroundColor: '#000000',
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 16,
-  },
-  addButtonText: {
-    fontSize: 12,
-    fontFamily: 'Inter-SemiBold',
-    color: '#FFFFFF',
+  metaText: {
+    fontSize: 11,
+    fontFamily: 'Inter-Regular',
+    color: '#6B7280',
   },
   loadingContainer: {
     width: '100%',
@@ -746,14 +838,21 @@ const styles = StyleSheet.create({
   },
   emptyContainer: {
     width: '100%',
-    padding: 20,
+    paddingVertical: 40,
+    paddingHorizontal: 24,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  emptyText: {
+  emptyTextTitle: {
     fontSize: 16,
+    fontFamily: 'Inter-SemiBold',
+    color: '#0F172A',
+    marginBottom: 4,
+  },
+  emptyTextSubtitle: {
+    fontSize: 14,
     fontFamily: 'Inter-Regular',
-    color: '#666666',
+    color: '#6B7280',
     textAlign: 'center',
   },
   floatingButton: {
@@ -795,5 +894,81 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontFamily: 'Inter-Regular',
     color: '#666666',
+  },
+  filterOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(15, 23, 42, 0.35)',
+    justifyContent: 'flex-end',
+  },
+  filterBackdrop: {
+    flex: 1,
+  },
+  filterSheet: {
+    backgroundColor: '#FFFFFF',
+    paddingHorizontal: 16,
+    paddingTop: 16,
+    paddingBottom: 24,
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+  },
+  filterSheetHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 16,
+  },
+  filterTitle: {
+    fontSize: 18,
+    fontFamily: 'Inter-SemiBold',
+    color: '#0F172A',
+  },
+  filterClearText: {
+    fontSize: 13,
+    fontFamily: 'Inter-SemiBold',
+    color: '#6B7280',
+  },
+  filterSection: {
+    marginBottom: 16,
+  },
+  filterLabel: {
+    fontSize: 13,
+    fontFamily: 'Inter-SemiBold',
+    color: '#111827',
+    marginBottom: 8,
+  },
+  priceRowFilter: {
+    flexDirection: 'row',
+    gap: 12,
+  },
+  priceFieldWrapper: {
+    flex: 1,
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+    borderRadius: 10,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+  },
+  priceFieldPrefix: {
+    fontSize: 11,
+    fontFamily: 'Inter-Regular',
+    color: '#6B7280',
+    marginBottom: 2,
+  },
+  priceFieldInput: {
+    fontSize: 14,
+    fontFamily: 'Inter-Regular',
+    color: '#0F172A',
+  },
+  applyFilterButton: {
+    marginTop: 8,
+    backgroundColor: '#4169E1',
+    paddingVertical: 12,
+    borderRadius: 999,
+    alignItems: 'center',
+  },
+  applyFilterText: {
+    fontSize: 15,
+    fontFamily: 'Inter-SemiBold',
+    color: '#FFFFFF',
   },
 });

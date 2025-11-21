@@ -1,9 +1,8 @@
-import { View, Text, StyleSheet, ScrollView, Image, TouchableOpacity, Dimensions, ActivityIndicator, Alert } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, Image, TouchableOpacity, Dimensions, ActivityIndicator, Alert, Linking } from 'react-native';
 import { useFonts, Inter_400Regular, Inter_600SemiBold, Inter_700Bold } from '@expo-google-fonts/inter';
 import { useEffect, useState, useCallback } from 'react';
 import { SplashScreen, useRouter, useLocalSearchParams, useFocusEffect } from 'expo-router';
-import { ArrowLeft, Star, Heart, ShoppingCart, MapPin, Clock, Award, Share2, MessageCircle, Phone, Mail } from 'lucide-react-native';
-import { LinearGradient } from 'expo-linear-gradient';
+import { ArrowLeft, Heart, MapPin, Clock, ShieldAlert, Share2, MessageCircle, Phone, MessageSquareMore } from 'lucide-react-native';
 import { supabase, type ProductService, type Profile } from '@/lib/supabase';
 import { SAMPLE_PRODUCTS } from '@/lib/marketplace';
 import { useAuth } from '@/hooks/useAuth';
@@ -26,100 +25,13 @@ export default function ProductDetailScreen() {
   const [product, setProduct] = useState<ProductServiceWithUser | null>(null);
   const [loading, setLoading] = useState(true);
   const [isBookmarked, setIsBookmarked] = useState(false);
+  const [otherListings, setOtherListings] = useState<ProductServiceWithUser[]>([]);
 
   const [fontsLoaded] = useFonts({
     'Inter-Regular': Inter_400Regular,
     'Inter-SemiBold': Inter_600SemiBold,
     'Inter-Bold': Inter_700Bold,
   });
-
-  useEffect(() => {
-    fetchProductDetails();
-    checkBookmarkStatus();
-  }, [id]);
-
-  // Re-check bookmark status when user changes or component refocuses
-  useEffect(() => {
-    checkBookmarkStatus();
-  }, [user, id]);
-
-  // Re-check bookmark status when page comes into focus (navigating back)
-  useFocusEffect(
-    useCallback(() => {
-      checkBookmarkStatus();
-    }, [user, id])
-  );
-
-  const fetchProductDetails = async () => {
-    try {
-      setLoading(true);
-
-      // Create sample user profile
-      const sampleUser: Profile = {
-        id: 'sample-user',
-        username: 'akora_demo',
-        full_name: 'Akora Demo',
-        avatar_url: 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=400',
-        created_at: new Date().toISOString(),
-      };
-
-      // Try to find in sample products first
-      const sampleProduct = SAMPLE_PRODUCTS.find(p => p.id === id);
-      
-      if (sampleProduct) {
-        setProduct({
-          ...sampleProduct,
-          user_id: sampleUser.id,
-          user: sampleUser,
-          image_url: sampleProduct.image_url,
-          created_at: new Date().toISOString(),
-          updated_at: new Date().toISOString(),
-          is_featured: false,
-          is_premium_listing: false,
-          is_approved: true,
-        } as ProductServiceWithUser);
-        setLoading(false);
-        return;
-      }
-
-      // If not in samples, try database
-      try {
-        const { data: dbProduct, error } = await supabase
-          .from('products_services')
-          .select('*')
-          .eq('id', id)
-          .single();
-
-        if (error) throw error;
-
-        if (dbProduct) {
-          // Try to fetch user profile
-          let userProfile: Profile | undefined = undefined;
-          if (dbProduct.user_id) {
-            const { data: profileData } = await supabase
-              .from('profiles')
-              .select('*')
-              .eq('id', dbProduct.user_id)
-              .single();
-            if (profileData) userProfile = profileData as Profile;
-          }
-          setProduct({
-            ...dbProduct,
-            user: userProfile,
-            rating: dbProduct.rating?.toString() || '4.5',
-            reviews: dbProduct.reviews || 0,
-          } as ProductServiceWithUser);
-        }
-      } catch (dbError) {
-        console.log('Product not found in database');
-      }
-    } catch (error) {
-      console.error('Error fetching product details:', error);
-      Alert.alert('Error', 'Failed to load product details');
-    } finally {
-      setLoading(false);
-    }
-  };
 
   const checkBookmarkStatus = async () => {
     if (!user || !id) return;
@@ -139,6 +51,82 @@ export default function ProductDetailScreen() {
       // Not bookmarked
     }
   };
+
+  const fetchProduct = useCallback(async () => {
+    if (!id) return;
+
+    try {
+      // Try from sample products first
+      const fromSample = SAMPLE_PRODUCTS.find((p) => String(p.id) === String(id));
+      if (fromSample) {
+        const sampleWithUser: ProductServiceWithUser = {
+          ...(fromSample as any),
+          user: {
+            id: 'sample-user-id',
+            username: 'akora_marketplace',
+            full_name: 'Akora Marketplace',
+            avatar_url:
+              'https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=400&auto=format&fit=crop&q=60',
+            created_at: new Date().toISOString(),
+          } as Profile,
+        };
+        setProduct(sampleWithUser);
+        return;
+      }
+
+      // Otherwise fetch from DB
+      const { data, error } = await supabase
+        .from('products_services')
+        .select('*')
+        .eq('id', id as string)
+        .maybeSingle();
+
+      if (error) throw error;
+
+      if (!data) {
+        console.log('Product not found in database');
+        setProduct(null);
+        return;
+      }
+
+      const { data: profile, error: profileError } = await supabase
+        .from('profiles')
+        .select('id, username, full_name, avatar_url')
+        .eq('id', data.user_id)
+        .maybeSingle();
+
+      if (profileError) throw profileError;
+
+      setProduct({
+        ...(data as any),
+        user: (profile as Profile) || ({} as Profile),
+      } as ProductServiceWithUser);
+
+      // Fetch other listings from same seller
+      const { data: others, error: othersError } = await supabase
+        .from('products_services')
+        .select('*')
+        .eq('user_id', data.user_id)
+        .neq('id', data.id)
+        .order('created_at', { ascending: false })
+        .limit(10);
+
+      if (!othersError && others && others.length > 0) {
+        const othersWithUser: ProductServiceWithUser[] = others.map((item) => ({
+          ...(item as any),
+          user: (profile as Profile) || ({} as Profile),
+        }));
+        setOtherListings(othersWithUser);
+      } else {
+        setOtherListings([]);
+      }
+    } catch (error) {
+      console.error('Error fetching product details:', error);
+      Alert.alert('Error', 'Failed to load product details');
+    } finally {
+      setLoading(false);
+    }
+  }, [id]);
 
   const toggleBookmark = async () => {
     if (!user) {
@@ -173,12 +161,50 @@ export default function ProductDetailScreen() {
     }
   };
 
-  const handleAddToCart = () => {
-    Alert.alert('Added to Cart', `${product?.title} has been added to your cart`);
+  const handleCallSeller = () => {
+    const phone = (product as any)?.contact_phone || (product as any)?.phone;
+    if (!phone) {
+      Alert.alert('No phone number', 'This seller has not added a phone number yet.');
+      return;
+    }
+    Linking.openURL(`tel:${phone}`).catch(() => {
+      Alert.alert('Error', 'Could not open the dialer on this device.');
+    });
   };
 
-  const handleContactSeller = () => {
-    Alert.alert('Contact Seller', 'Message feature coming soon!');
+  const handleWhatsAppSeller = () => {
+    const raw = (product as any)?.contact_whatsapp || (product as any)?.phone;
+    if (!raw) {
+      Alert.alert('No WhatsApp', 'This seller has not added a WhatsApp number yet.');
+      return;
+    }
+    const phone = raw.replace(/[^0-9]/g, '');
+    const url = `https://wa.me/${phone}`;
+    Linking.openURL(url).catch(() => {
+      Alert.alert('Error', 'Could not open WhatsApp.');
+    });
+  };
+
+  const handleMessageOnAkora = () => {
+    Alert.alert('Coming soon', 'In-app messaging for marketplace listings will be available soon.');
+  };
+
+  const handleReportAd = () => {
+    Alert.alert(
+      'Report this ad',
+      'If this ad looks suspicious, please report it to the Akora team.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Report',
+          style: 'destructive',
+          onPress: () => {
+            console.log('Ad reported', id);
+            Alert.alert('Thank you', 'We have received your report.');
+          },
+        },
+      ]
+    );
   };
 
   useEffect(() => {
@@ -186,6 +212,11 @@ export default function ProductDetailScreen() {
       SplashScreen.hideAsync();
     }
   }, [fontsLoaded]);
+
+  useEffect(() => {
+    fetchProduct();
+    checkBookmarkStatus();
+  }, [fetchProduct]);
 
   if (!fontsLoaded || loading) {
     return (
@@ -208,24 +239,61 @@ export default function ProductDetailScreen() {
   }
 
   const formatPrice = (price: number) => {
-    return `₵${price}`;
+    if (!price || price <= 0) return 'Price on request';
+    return `GHS ${price.toLocaleString()}`;
+  };
+
+  const imageUrls = (product as any)?.image_urls || (product.image_url ? [product.image_url] : ['https://images.unsplash.com/photo-1460925895917-afdab827c52f?w=800']);
+
+  const isOwner = user && product && user.id === product.user_id;
+  const isAdmin = (user as any)?.is_admin;
+
+  const handleDeleteListing = async () => {
+    if (!product) return;
+
+    Alert.alert(
+      'Delete this ad?',
+      'This action cannot be undone.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              const { error } = await supabase
+                .from('products_services')
+                .delete()
+                .eq('id', product.id);
+
+              if (error) throw error;
+              Alert.alert('Deleted', 'The listing has been removed.');
+              router.replace('/services');
+            } catch (err) {
+              console.error('Error deleting listing', err);
+              Alert.alert('Error', 'Could not delete this listing.');
+            }
+          },
+        },
+      ]
+    );
   };
 
   return (
     <View style={styles.container}>
-      {/* Header with Back Button */}
+      {/* Header */}
       <View style={styles.header}>
         <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
-          <ArrowLeft size={24} color="#000000" />
+          <ArrowLeft size={24} color="#020617" />
         </TouchableOpacity>
         <View style={styles.headerActions}>
           <TouchableOpacity onPress={() => Alert.alert('Share', 'Share feature coming soon!')} style={styles.headerButton}>
-            <Share2 size={22} color="#000000" />
+            <Share2 size={20} color="#0F172A" />
           </TouchableOpacity>
           <TouchableOpacity onPress={toggleBookmark} style={styles.headerButton}>
             <Heart 
-              size={22} 
-              color={isBookmarked ? '#EF4444' : '#000000'}
+              size={20} 
+              color={isBookmarked ? '#EF4444' : '#0F172A'}
               fill={isBookmarked ? '#EF4444' : 'none'}
             />
           </TouchableOpacity>
@@ -233,152 +301,164 @@ export default function ProductDetailScreen() {
       </View>
 
       <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>
-        {/* Product Image */}
-        <Image 
-          source={{ uri: product.image_url || 'https://images.unsplash.com/photo-1460925895917-afdab827c52f?w=800' }} 
-          style={styles.productImage}
-        />
+        {/* Image gallery (simple horizontal scroll) */}
+        <ScrollView
+          horizontal
+          pagingEnabled
+          showsHorizontalScrollIndicator={false}
+          style={styles.galleryScroll}
+        >
+          {imageUrls.map((url, index) => (
+            <Image
+              key={`${url}-${index}`}
+              source={{ uri: url }}
+              style={styles.productImage}
+            />
+          ))}
+        </ScrollView>
 
-        {/* Product Info Card */}
+        {/* Main Card */}
         <View style={styles.contentCard}>
-          {/* Category Badge */}
-          <View style={styles.categoryBadge}>
-            <Text style={styles.categoryText}>{product.category_name}</Text>
+          <View style={styles.categoryRow}>
+            {product.category_name && (
+              <View style={styles.categoryBadge}>
+                <Text style={styles.categoryText} numberOfLines={1}>{product.category_name}</Text>
+              </View>
+            )}
           </View>
 
-          {/* Title and Price */}
+          <Text style={styles.productPrice}>{formatPrice(product.price || 0)}</Text>
           <Text style={styles.productTitle}>{product.title}</Text>
-          <View style={styles.priceRow}>
-            <Text style={styles.productPrice}>{formatPrice(product.price || 0)}</Text>
-            <Text style={styles.priceUnit}>/hour</Text>
-          </View>
 
-          {/* Rating and Reviews */}
-          <View style={styles.ratingSection}>
-            <View style={styles.ratingContainer}>
-              <Star size={18} color="#FFB800" fill="#FFB800" />
-              <Text style={styles.ratingText}>{product.rating || '4.5'}</Text>
-              <Text style={styles.reviewsText}>({product.reviews || 0} reviews)</Text>
+          <View style={styles.metaRowTop}>
+            <View style={styles.metaItemRow}>
+              <MapPin size={16} color="#6B7280" />
+              <Text style={styles.metaText} numberOfLines={1}>
+                {(product as any).location_area || (product as any).location_city || (product as any).location_region || 'Ghana'}
+              </Text>
             </View>
-            <View style={styles.verifiedBadge}>
-              <Award size={16} color="#10B981" />
-              <Text style={styles.verifiedText}>Verified Seller</Text>
+            <View style={styles.metaItemRow}>
+              <Clock size={16} color="#6B7280" />
+              <Text style={styles.metaText}>
+                Posted recently
+              </Text>
             </View>
           </View>
 
-          {/* Divider */}
           <View style={styles.divider} />
 
           {/* Description */}
           <View style={styles.section}>
             <Text style={styles.sectionTitle}>Description</Text>
-            <Text style={styles.descriptionText}>{product.description}</Text>
+            <Text style={styles.descriptionText}>{product.description || 'No description provided.'}</Text>
           </View>
 
-          {/* Divider */}
           <View style={styles.divider} />
 
-          {/* Seller Information */}
+          {/* Seller */}
           <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Seller Information</Text>
+            <Text style={styles.sectionTitle}>Seller</Text>
             <View style={styles.sellerCard}>
               <Image 
                 source={{ uri: product.user?.avatar_url || 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=400' }}
                 style={styles.sellerAvatar}
               />
               <View style={styles.sellerInfo}>
-                <Text style={styles.sellerName}>{product.user?.full_name || 'Anonymous'}</Text>
-                <View style={styles.sellerStats}>
-                  <View style={styles.statItem}>
-                    <Star size={14} color="#FFB800" fill="#FFB800" />
-                    <Text style={styles.statText}>4.9</Text>
-                  </View>
-                  <View style={styles.statDivider} />
-                  <View style={styles.statItem}>
-                    <Award size={14} color="#4169E1" />
-                    <Text style={styles.statText}>98% positive</Text>
-                  </View>
-                </View>
+                <Text style={styles.sellerName}>{product.user?.full_name || product.user?.username || 'Akora seller'}</Text>
+                <Text style={styles.sellerMeta}>Member of Akora community</Text>
               </View>
             </View>
 
-            {/* Contact Buttons */}
-            <View style={styles.contactButtons}>
-              <TouchableOpacity style={styles.contactButton} onPress={handleContactSeller}>
-                <MessageCircle size={18} color="#4169E1" />
-                <Text style={styles.contactButtonText}>Message</Text>
+            <View style={styles.contactButtonsRow}>
+              <TouchableOpacity style={styles.primaryContactButton} onPress={handleCallSeller}>
+                <Phone size={18} color="#FFFFFF" />
+                <Text style={styles.primaryContactText}>Call</Text>
               </TouchableOpacity>
-              <TouchableOpacity style={styles.contactButton} onPress={() => Alert.alert('Call', 'Phone feature coming soon!')}>
-                <Phone size={18} color="#4169E1" />
-                <Text style={styles.contactButtonText}>Call</Text>
+              <TouchableOpacity style={styles.secondaryContactButton} onPress={handleWhatsAppSeller}>
+                <MessageCircle size={18} color="#16A34A" />
+                <Text style={styles.secondaryContactText}>WhatsApp</Text>
               </TouchableOpacity>
             </View>
+
+            {(isOwner || isAdmin) && (
+              <View style={styles.ownerActionsRow}>
+                {isOwner && (
+                  <TouchableOpacity
+                    style={styles.ownerActionButton}
+                    onPress={() => router.push(`/services/edit/${product.id}`)}
+                  >
+                    <Text style={styles.ownerActionText}>Edit ad</Text>
+                  </TouchableOpacity>
+                )}
+                <TouchableOpacity
+                  style={[styles.ownerActionButton, styles.ownerActionDanger]}
+                  onPress={handleDeleteListing}
+                >
+                  <Text style={[styles.ownerActionText, styles.ownerActionDangerText]}>
+                    Delete ad
+                  </Text>
+                </TouchableOpacity>
+              </View>
+            )}
           </View>
 
-          {/* Divider */}
           <View style={styles.divider} />
 
-          {/* Contact Information */}
+          {/* Safety & Report */}
           <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Contact Information</Text>
-            {product.user?.email && (
-              <View style={styles.detailRow}>
-                <View style={styles.detailItem}>
-                  <Mail size={16} color="#4169E1" />
-                  <Text style={styles.detailLabel}>Email</Text>
-                </View>
-                <Text style={styles.detailValue}>{product.user.email}</Text>
-              </View>
-            )}
-            {product.user?.phone && (
-              <View style={styles.detailRow}>
-                <View style={styles.detailItem}>
-                  <Phone size={16} color="#10B981" />
-                  <Text style={styles.detailLabel}>Phone</Text>
-                </View>
-                <Text style={styles.detailValue}>{product.user.phone}</Text>
-              </View>
-            )}
-            {!product.user?.email && !product.user?.phone && (
-              <Text style={styles.noContactText}>No contact information available</Text>
-            )}
-          </View>
-
-          {/* Divider */}
-          <View style={styles.divider} />
-
-          {/* Additional Details */}
-          <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Additional Information</Text>
-            <View style={styles.detailRow}>
-              <View style={styles.detailItem}>
-                <MapPin size={16} color="#666666" />
-                <Text style={styles.detailLabel}>Location</Text>
-              </View>
-              <Text style={styles.detailValue}>Accra, Ghana</Text>
+            <View style={styles.safetyHeaderRow}>
+              <Text style={styles.sectionTitle}>Safety tips</Text>
+              <TouchableOpacity onPress={handleReportAd} style={styles.reportButton}>
+                <ShieldAlert size={16} color="#DC2626" />
+                <Text style={styles.reportButtonText}>Report this ad</Text>
+              </TouchableOpacity>
             </View>
-            <View style={styles.detailRow}>
-              <View style={styles.detailItem}>
-                <Clock size={16} color="#666666" />
-                <Text style={styles.detailLabel}>Response Time</Text>
-              </View>
-              <Text style={styles.detailValue}>Within 1 hour</Text>
-            </View>
-            <View style={styles.detailRow}>
-              <View style={styles.detailItem}>
-                <Award size={16} color="#666666" />
-                <Text style={styles.detailLabel}>Experience</Text>
-              </View>
-              <Text style={styles.detailValue}>5+ years</Text>
+            <View style={styles.safetyList}>
+              <Text style={styles.safetyItem}>• Meet in a public place.</Text>
+              <Text style={styles.safetyItem}>• Inspect the item carefully before paying.</Text>
+              <Text style={styles.safetyItem}>• Do not share sensitive personal information.</Text>
+              <Text style={styles.safetyItem}>• Use trusted payment methods when possible.</Text>
             </View>
           </View>
 
-          <View style={{ height: 100 }} />
+          {otherListings.length > 0 && (
+            <>
+              <View style={styles.divider} />
+              <View style={styles.section}>
+                <Text style={styles.sectionTitle}>More from this seller</Text>
+                <ScrollView
+                  horizontal
+                  showsHorizontalScrollIndicator={false}
+                  contentContainerStyle={styles.moreFromScroll}
+                >
+                  {otherListings.map((item) => (
+                    <TouchableOpacity
+                      key={item.id}
+                      style={styles.moreItemCard}
+                      onPress={() => router.push(`/services/${item.id}`)}
+                    >
+                      <Image
+                        source={{ uri: item.image_url || 'https://images.unsplash.com/photo-1460925895917-afdab827c52f?w=800' }}
+                        style={styles.moreItemImage}
+                      />
+                      <View style={styles.moreItemContent}>
+                        <Text style={styles.moreItemPrice} numberOfLines={1}>
+                          {formatPrice(item.price || 0)}
+                        </Text>
+                        <Text style={styles.moreItemTitle} numberOfLines={2}>
+                          {item.title}
+                        </Text>
+                      </View>
+                    </TouchableOpacity>
+                  ))}
+                </ScrollView>
+              </View>
+            </>
+          )}
+
+          <View style={{ height: 40 }} />
         </View>
       </ScrollView>
-
-      {/* Bottom Action Bar */}
-      {/* Removed Add to Cart button from details page */}
     </View>
   );
 }
@@ -393,117 +473,90 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: 16,
-    paddingTop: 60,
-    paddingBottom: 16,
-    backgroundColor: '#FFFFFF',
-    zIndex: 10,
+    paddingTop: 56,
+    paddingBottom: 12,
   },
   backButton: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: '#F5F5F5',
-    alignItems: 'center',
-    justifyContent: 'center',
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: '#F1F5F9',
   },
   headerActions: {
     flexDirection: 'row',
     gap: 12,
   },
   headerButton: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: '#F5F5F5',
-    alignItems: 'center',
-    justifyContent: 'center',
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: '#F1F5F9',
   },
   scrollContent: {
-    paddingBottom: 20,
+    paddingBottom: 24,
+  },
+  galleryScroll: {
+    backgroundColor: '#F3F4F6',
   },
   productImage: {
     width: width,
-    height: width * 0.8,
-    backgroundColor: '#F5F5F5',
+    height: width * 0.75,
+    backgroundColor: '#F3F4F6',
   },
   contentCard: {
     backgroundColor: '#FFFFFF',
     borderTopLeftRadius: 24,
     borderTopRightRadius: 24,
-    marginTop: -24,
-    paddingHorizontal: 20,
-    paddingTop: 24,
+    marginTop: -18,
+    paddingHorizontal: 16,
+    paddingTop: 18,
+  },
+  categoryRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 8,
   },
   categoryBadge: {
     alignSelf: 'flex-start',
-    backgroundColor: '#EBF1FF',
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    borderRadius: 20,
-    marginBottom: 16,
+    backgroundColor: '#EFF6FF',
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 999,
   },
   categoryText: {
-    fontSize: 13,
+    fontSize: 11,
     fontFamily: 'Inter-SemiBold',
-    color: '#4169E1',
-  },
-  productTitle: {
-    fontSize: 24,
-    fontFamily: 'Inter-Bold',
-    color: '#000000',
-    marginBottom: 12,
-    lineHeight: 32,
-  },
-  priceRow: {
-    flexDirection: 'row',
-    alignItems: 'baseline',
-    marginBottom: 16,
+    color: '#1D4ED8',
   },
   productPrice: {
-    fontSize: 32,
-    fontFamily: 'Inter-Bold',
-    color: '#4169E1',
+    fontSize: 22,
+    fontFamily: 'Inter-SemiBold',
+    color: '#16A34A',
+    marginBottom: 4,
   },
-  priceUnit: {
-    fontSize: 16,
-    fontFamily: 'Inter-Regular',
-    color: '#666666',
-    marginLeft: 8,
+  productTitle: {
+    fontSize: 18,
+    fontFamily: 'Inter-SemiBold',
+    color: '#0F172A',
+    marginBottom: 10,
   },
-  ratingSection: {
+  metaRowTop: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    marginBottom: 24,
+    marginBottom: 14,
   },
-  ratingContainer: {
+  metaItemRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
+    flex: 1,
   },
-  ratingText: {
-    fontSize: 16,
-    fontFamily: 'Inter-SemiBold',
-    color: '#000000',
-  },
-  reviewsText: {
-    fontSize: 14,
-    fontFamily: 'Inter-Regular',
-    color: '#666666',
-  },
-  verifiedBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    backgroundColor: '#F0FDF4',
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 16,
-  },
-  verifiedText: {
+  metaText: {
     fontSize: 12,
-    fontFamily: 'Inter-SemiBold',
-    color: '#10B981',
+    fontFamily: 'Inter-Regular',
+    color: '#6B7280',
   },
   divider: {
     height: 1,
@@ -516,14 +569,14 @@ const styles = StyleSheet.create({
   sectionTitle: {
     fontSize: 18,
     fontFamily: 'Inter-SemiBold',
-    color: '#000000',
+    color: '#0F172A',
     marginBottom: 12,
   },
   descriptionText: {
-    fontSize: 15,
+    fontSize: 14,
     fontFamily: 'Inter-Regular',
-    color: '#666666',
-    lineHeight: 24,
+    color: '#4B5563',
+    lineHeight: 22,
   },
   sellerCard: {
     flexDirection: 'row',
@@ -543,57 +596,53 @@ const styles = StyleSheet.create({
     marginLeft: 16,
   },
   sellerName: {
-    fontSize: 16,
+    fontSize: 15,
     fontFamily: 'Inter-SemiBold',
-    color: '#000000',
-    marginBottom: 4,
+    color: '#0F172A',
+    marginBottom: 2,
   },
-  sellerUsername: {
-    fontSize: 14,
+  sellerMeta: {
+    fontSize: 12,
     fontFamily: 'Inter-Regular',
-    color: '#666666',
-    marginBottom: 8,
+    color: '#6B7280',
   },
-  sellerStats: {
+  contactButtonsRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 12,
+    gap: 8,
+    marginTop: 16,
   },
-  statItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-  },
-  statText: {
-    fontSize: 13,
-    fontFamily: 'Inter-SemiBold',
-    color: '#000000',
-  },
-  statDivider: {
-    width: 1,
-    height: 16,
-    backgroundColor: '#D1D5DB',
-  },
-  contactButtons: {
-    flexDirection: 'row',
-    gap: 12,
-  },
-  contactButton: {
+  primaryContactButton: {
     flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 8,
-    paddingVertical: 12,
-    borderRadius: 12,
-    borderWidth: 1.5,
-    borderColor: '#4169E1',
-    backgroundColor: '#FFFFFF',
+    gap: 6,
+    paddingVertical: 10,
+    borderRadius: 999,
+    backgroundColor: '#16A34A',
   },
-  contactButtonText: {
+  primaryContactText: {
     fontSize: 14,
     fontFamily: 'Inter-SemiBold',
-    color: '#4169E1',
+    color: '#FFFFFF',
+  },
+  secondaryContactButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    paddingVertical: 10,
+    paddingHorizontal: 10,
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+    backgroundColor: '#FFFFFF',
+  },
+  secondaryContactText: {
+    fontSize: 13,
+    fontFamily: 'Inter-SemiBold',
+    color: '#0F172A',
   },
   detailRow: {
     flexDirection: 'row',
@@ -601,78 +650,40 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     paddingVertical: 12,
   },
-  detailItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-  },
-  detailLabel: {
-    fontSize: 14,
-    fontFamily: 'Inter-Regular',
-    color: '#666666',
-  },
-  detailValue: {
-    fontSize: 14,
-    fontFamily: 'Inter-SemiBold',
-    color: '#000000',
-  },
   noContactText: {
     fontSize: 14,
     fontFamily: 'Inter-Regular',
-    color: '#999999',
-    fontStyle: 'italic',
-    paddingVertical: 8,
-  },
-  bottomBar: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 16,
-    paddingHorizontal: 20,
-    paddingVertical: 16,
-    backgroundColor: '#FFFFFF',
-    borderTopWidth: 1,
-    borderTopColor: '#E5E7EB',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: -4 },
-    shadowOpacity: 0.1,
-    shadowRadius: 12,
-    elevation: 12,
-  },
-  priceInfo: {
-    flex: 1,
-  },
-  bottomPriceLabel: {
-    fontSize: 12,
-    fontFamily: 'Inter-Regular',
     color: '#666666',
-    marginBottom: 4,
+    marginTop: 8,
   },
-  bottomPrice: {
-    fontSize: 20,
-    fontFamily: 'Inter-Bold',
-    color: '#4169E1',
-  },
-  addToCartButton: {
-    flex: 1.5,
-    borderRadius: 12,
-    overflow: 'hidden',
-    shadowColor: '#4169E1',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 8,
-    elevation: 6,
-  },
-  addToCartGradient: {
+  safetyHeaderRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
-    gap: 8,
-    paddingVertical: 14,
+    justifyContent: 'space-between',
+    marginBottom: 8,
   },
-  addToCartText: {
-    fontSize: 15,
-    fontFamily: 'Inter-Bold',
-    color: '#FFFFFF',
+  reportButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 999,
+    backgroundColor: '#FEF2F2',
+  },
+  reportButtonText: {
+    fontSize: 12,
+    fontFamily: 'Inter-SemiBold',
+    color: '#DC2626',
+  },
+  safetyList: {
+    marginTop: 4,
+    gap: 2,
+  },
+  safetyItem: {
+    fontSize: 13,
+    fontFamily: 'Inter-Regular',
+    color: '#4B5563',
   },
   loadingContainer: {
     flex: 1,
@@ -709,5 +720,63 @@ const styles = StyleSheet.create({
     fontSize: 15,
     fontFamily: 'Inter-SemiBold',
     color: '#FFFFFF',
+  },
+  ownerActionsRow: {
+    flexDirection: 'row',
+    justifyContent: 'flex-start',
+    gap: 12,
+    marginTop: 12,
+  },
+  ownerActionButton: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+    backgroundColor: '#F9FAFB',
+  },
+  ownerActionDanger: {
+    backgroundColor: '#FEF2F2',
+    borderColor: '#FECACA',
+  },
+  ownerActionText: {
+    fontSize: 12,
+    fontFamily: 'Inter-SemiBold',
+    color: '#111827',
+  },
+  ownerActionDangerText: {
+    color: '#DC2626',
+  },
+  moreFromScroll: {
+    paddingTop: 8,
+    paddingBottom: 4,
+  },
+  moreItemCard: {
+    width: 160,
+    marginRight: 12,
+    borderRadius: 12,
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+    overflow: 'hidden',
+  },
+  moreItemImage: {
+    width: '100%',
+    height: 100,
+    backgroundColor: '#F3F4F6',
+  },
+  moreItemContent: {
+    padding: 8,
+  },
+  moreItemPrice: {
+    fontSize: 13,
+    fontFamily: 'Inter-SemiBold',
+    color: '#16A34A',
+  },
+  moreItemTitle: {
+    fontSize: 12,
+    fontFamily: 'Inter-Regular',
+    color: '#111827',
+    marginTop: 2,
   },
 });

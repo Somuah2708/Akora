@@ -242,10 +242,16 @@ export type ProductService = {
   description: string;
   price: number | null;
   image_url?: string;
+  image_urls?: string[];
   category_name: string;
+  type?: 'product' | 'service';
   contact_email?: string;
   contact_phone?: string;
+  contact_whatsapp?: string;
   location?: string;
+  location_city?: string | null;
+  location_region?: string | null;
+  location_area?: string | null;
   is_featured: boolean;
   is_premium_listing: boolean;
   is_approved?: boolean;
