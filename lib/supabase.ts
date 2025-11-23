@@ -252,11 +252,41 @@ export type ProductService = {
   location_city?: string | null;
   location_region?: string | null;
   location_area?: string | null;
+  region_id?: string | null;
+  city_id?: string | null;
+  location_details?: string | null;
   is_featured: boolean;
   is_premium_listing: boolean;
   is_approved?: boolean;
   created_at: string;
   user?: Profile;
+};
+
+export type Region = {
+  id: string;
+  name: string;
+  slug: string;
+  is_active: boolean;
+  created_at: string;
+  updated_at: string;
+};
+
+export type City = {
+  id: string;
+  region_id: string;
+  name: string;
+  slug: string;
+  is_active: boolean;
+  created_at: string;
+  updated_at: string;
+};
+
+export type LocationWithCount = {
+  region_id: string;
+  region_name: string;
+  city_id: string | null;
+  city_name: string | null;
+  item_count: number;
 };
 
 export type Job = {

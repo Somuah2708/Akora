@@ -1,4 +1,4 @@
-import { View, Text, StyleSheet, ScrollView, Image, TouchableOpacity, Alert, ActivityIndicator, TextInput } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, Image, TouchableOpacity, Alert, ActivityIndicator, TextInput, Dimensions } from 'react-native';
 import { useFonts, Inter_400Regular, Inter_600SemiBold } from '@expo-google-fonts/inter';
 import { useEffect, useState } from 'react';
 import { SplashScreen, useRouter, useLocalSearchParams } from 'expo-router';
@@ -213,9 +213,15 @@ export default function ListingDetailScreen() {
 
       <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
         {(() => {
-          // Parse image_url - it could be a single URL or JSON array
+          // Get images from image_urls array (new format) or image_url (legacy)
           let images: string[] = [];
-          if (listing.image_url) {
+          
+          // Try image_urls array first (new format)
+          if (listing.image_urls && Array.isArray(listing.image_urls) && listing.image_urls.length > 0) {
+            images = listing.image_urls;
+          } 
+          // Fallback to image_url (legacy format)
+          else if (listing.image_url) {
             if (listing.image_url.startsWith('[')) {
               try {
                 images = JSON.parse(listing.image_url);
@@ -234,20 +240,37 @@ export default function ListingDetailScreen() {
 
           return (
             <>
-              {/* Main Image Display */}
+              {/* Main Image Display with Swipeable Gallery */}
               <View style={styles.mainImageContainer}>
-                <Image
-                  source={{ uri: images[selectedImageIndex] }}
-                  style={styles.mainImage}
-                  resizeMode="cover"
-                />
-                {images.length > 1 && (
-                  <View style={styles.imageCounter}>
-                    <Text style={styles.imageCounterText}>
-                      {selectedImageIndex + 1} / {images.length}
-                    </Text>
-                  </View>
-                )}
+                <ScrollView
+                  horizontal
+                  pagingEnabled
+                  showsHorizontalScrollIndicator={false}
+                  onMomentumScrollEnd={(event) => {
+                    const offsetX = event.nativeEvent.contentOffset.x;
+                    const imageWidth = event.nativeEvent.layoutMeasurement.width;
+                    const index = Math.round(offsetX / imageWidth);
+                    setSelectedImageIndex(index);
+                  }}
+                  scrollEventThrottle={16}
+                  style={styles.imageScrollView}
+                >
+                  {images.map((imageUri, index) => (
+                    <Image
+                      key={index}
+                      source={{ uri: imageUri }}
+                      style={styles.mainImage}
+                      resizeMode="cover"
+                    />
+                  ))}
+                </ScrollView>
+                
+                {/* Image Counter Badge (always show) */}
+                <View style={styles.imageCounter}>
+                  <Text style={styles.imageCounterText}>
+                    {selectedImageIndex + 1} / {images.length}
+                  </Text>
+                </View>
               </View>
               
               {/* Image Gallery Thumbnails */}
@@ -346,7 +369,19 @@ export default function ListingDetailScreen() {
 
               <View style={styles.priceSection}>
                 <Text style={styles.priceLabel}>Price</Text>
-                <Text style={styles.priceValue}>${listing.price}</Text>
+                {listing.pricing_type === 'contact' ? (
+                  <View>
+                    <Text style={styles.callForPriceText}>Call for Price</Text>
+                    <Text style={styles.callForPriceSubtext}>Contact seller for pricing</Text>
+                  </View>
+                ) : listing.pricing_type === 'negotiable' ? (
+                  <View>
+                    <Text style={styles.priceValue}>GHS {listing.price?.toLocaleString()}</Text>
+                    <Text style={styles.negotiableLabel}>Price Negotiable</Text>
+                  </View>
+                ) : (
+                  <Text style={styles.priceValue}>GHS {listing.price?.toLocaleString()}</Text>
+                )}
               </View>
 
               <View style={styles.section}>
@@ -453,9 +488,12 @@ const styles = StyleSheet.create({
     backgroundColor: '#F8F9FA',
     position: 'relative',
   },
+  imageScrollView: {
+    flex: 1,
+  },
   mainImage: {
-    width: '100%',
-    height: '100%',
+    width: Dimensions.get('window').width,
+    height: 350,
   },
   imageCounter: {
     position: 'absolute',
@@ -578,6 +616,23 @@ const styles = StyleSheet.create({
     fontSize: 32,
     fontFamily: 'Inter-SemiBold',
     color: '#4169E1',
+  },
+  callForPriceText: {
+    fontSize: 24,
+    fontFamily: 'Inter-SemiBold',
+    color: '#FF9500',
+  },
+  callForPriceSubtext: {
+    fontSize: 14,
+    fontFamily: 'Inter-Regular',
+    color: '#666666',
+    marginTop: 4,
+  },
+  negotiableLabel: {
+    fontSize: 14,
+    fontFamily: 'Inter-Medium',
+    color: '#34C759',
+    marginTop: 4,
   },
   section: {
     marginBottom: 20,
