@@ -486,7 +486,7 @@ export default function WorkplaceScreen() {
                         {images.map((uri, idx) => (
                           <Image 
                             key={`${uri}-${idx}`}
-                            source={{ uri }} 
+                            source={{ uri, cache: 'force-cache' }} 
                             style={[styles.featuredImage, { width: CARD_WIDTH_FEATURED }]} 
                             resizeMode="cover"
                           />
@@ -598,7 +598,7 @@ export default function WorkplaceScreen() {
                       {images.map((uri, idx) => (
                         <Image 
                           key={`${uri}-${idx}`}
-                          source={{ uri }} 
+                          source={{ uri, cache: 'force-cache' }} 
                           style={[styles.opportunityImage, { width: OPP_CARD_WIDTH }]} 
                           resizeMode="cover"
                         />
@@ -786,13 +786,16 @@ const styles = StyleSheet.create({
     height: 200,
     backgroundColor: '#F3F4F6',
     position: 'relative',
+    overflow: 'hidden',
   },
   imageGallery: {
     width: '100%',
     height: '100%',
   },
   featuredImage: {
+    width: width - 48,
     height: 200,
+    backgroundColor: '#F3F4F6',
   },
   imageIndicatorContainer: {
     position: 'absolute',
@@ -904,9 +907,12 @@ const styles = StyleSheet.create({
     height: 180,
     backgroundColor: '#F3F4F6',
     position: 'relative',
+    overflow: 'hidden',
   },
   opportunityImage: {
+    width: width - 32,
     height: 180,
+    backgroundColor: '#F3F4F6',
   },
   opportunityInfo: {
     flex: 1,
