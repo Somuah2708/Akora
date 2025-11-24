@@ -340,7 +340,7 @@ export default function CreateListingScreen() {
           pricing_type: pricingType, // Store pricing type (will add to database)
           category_name: category,
           type: listingType,
-          // condition,  // Removed - column doesn't exist in database
+          condition,
           region_id: selectedRegionId || null,
           city_id: selectedCityId || null,
           location: selectedCityName && selectedRegionName 

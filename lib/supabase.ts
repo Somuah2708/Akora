@@ -245,6 +245,7 @@ export type ProductService = {
   image_urls?: string[];
   category_name: string;
   type?: 'product' | 'service';
+  condition?: 'new' | 'used' | 'not_applicable';
   contact_email?: string;
   contact_phone?: string;
   contact_whatsapp?: string;

@@ -2,7 +2,7 @@ import { View, Text, StyleSheet, ScrollView, Image, TouchableOpacity, Dimensions
 import { useFonts, Inter_400Regular, Inter_600SemiBold } from '@expo-google-fonts/inter';
 import { useEffect, useState, useCallback } from 'react';
 import { SplashScreen, useRouter, useLocalSearchParams } from 'expo-router';
-import { ArrowLeft, Star } from 'lucide-react-native';
+import { ArrowLeft, Star, X } from 'lucide-react-native';
 import { supabase, type ProductService, type Profile } from '@/lib/supabase';
 
 SplashScreen.preventAutoHideAsync();
@@ -102,7 +102,28 @@ export default function CategoryScreen() {
   }
 
   const formatPrice = (price: number) => {
-    return `$${price}${price % 1 === 0 ? '' : '/hr'}`;
+    return `GHS ${price?.toLocaleString() || 0}`;
+  };
+
+  // Helper function to format relative time (same as home screen)
+  const getRelativeTime = (dateString: string): string => {
+    const now = new Date();
+    const past = new Date(dateString);
+    const diffMs = now.getTime() - past.getTime();
+    const diffMins = Math.floor(diffMs / 60000);
+    const diffHours = Math.floor(diffMs / 3600000);
+    const diffDays = Math.floor(diffMs / 86400000);
+    const diffWeeks = Math.floor(diffDays / 7);
+    const diffMonths = Math.floor(diffDays / 30);
+    const diffYears = Math.floor(diffDays / 365);
+
+    if (diffMins < 1) return 'Just now';
+    if (diffMins < 60) return `${diffMins} ${diffMins === 1 ? 'min' : 'mins'} ago`;
+    if (diffHours < 24) return `${diffHours} ${diffHours === 1 ? 'hour' : 'hours'} ago`;
+    if (diffDays < 7) return `${diffDays} ${diffDays === 1 ? 'day' : 'days'} ago`;
+    if (diffWeeks < 4) return `${diffWeeks} ${diffWeeks === 1 ? 'week' : 'weeks'} ago`;
+    if (diffMonths < 12) return `${diffMonths} ${diffMonths === 1 ? 'month' : 'months'} ago`;
+    return `${diffYears} ${diffYears === 1 ? 'year' : 'years'} ago`;
   };
 
   return (
@@ -126,28 +147,37 @@ export default function CategoryScreen() {
           </View>
         ) : (
           <View style={styles.productsGrid}>
-            {products.slice(0, 2).map((product) => (
-              <TouchableOpacity key={product.id} style={styles.productCard}>
+            {products.map((product) => (
+              <TouchableOpacity 
+                key={product.id} 
+                style={styles.productCard}
+                onPress={() => router.push(`/listing/${product.id}`)}
+              >
                 <Image 
-                  source={{ uri: product.image_url || 'https://images.unsplash.com/photo-1460925895917-afdab827c52f?w=800&auto=format&fit=crop&q=60' }} 
+                  source={{ uri: (product as any).image_urls?.[0] || product.image_url || 'https://images.unsplash.com/photo-1460925895917-afdab827c52f?w=800&auto=format&fit=crop&q=60' }} 
                   style={styles.productImage} 
                 />
-                <View style={styles.productContent}>
-                  <Text style={styles.productName} numberOfLines={2}>{product.title}</Text>
-                  <Text style={styles.businessName} numberOfLines={1}>
-                    {product.user?.full_name || product.user?.username}
-                  </Text>
-                  <Text style={styles.price}>{formatPrice(product.price ?? 0)}</Text>
-                  <View style={styles.productFooter}>
-                    <View style={styles.ratingContainer}>
-                      <Star size={12} color="#FFB800" fill="#FFB800" />
-                      <Text style={styles.rating}>{product.rating}</Text>
-                      <Text style={styles.reviews}>({product.reviews})</Text>
-                    </View>
-                    <TouchableOpacity style={styles.viewButton}>
-                      <Text style={styles.viewButtonText}>View</Text>
-                    </TouchableOpacity>
+                {(product as any).condition && (product as any).condition !== 'not_applicable' && (
+                  <View style={[
+                    styles.conditionBadge, 
+                    (product as any).condition === 'new' ? styles.conditionBadgeNew : styles.conditionBadgeUsed
+                  ]}>
+                    <Text style={styles.conditionBadgeText}>
+                      {(product as any).condition === 'new' ? 'NEW' : 'USED'}
+                    </Text>
                   </View>
+                )}
+                <View style={styles.productContent}>
+                  <Text style={styles.price}>{formatPrice(product.price || 0)}</Text>
+                  <Text style={styles.productName} numberOfLines={2}>{product.title}</Text>
+                  <View style={styles.metaRow}>
+                    <Text style={styles.metaText} numberOfLines={1}>
+                      {(product as any).location_area || (product as any).location_city || (product as any).location_region || 'Location not set'}
+                    </Text>
+                  </View>
+                  <Text style={styles.timeStamp}>
+                    {getRelativeTime(product.created_at)}
+                  </Text>
                 </View>
               </TouchableOpacity>
             ))}
@@ -213,76 +243,70 @@ const styles = StyleSheet.create({
   productsGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: 16,
+    gap: 12,
   },
   productCard: {
     width: CARD_WIDTH,
     backgroundColor: '#FFFFFF',
-    borderRadius: 12,
+    borderRadius: 10,
     overflow: 'hidden',
-    shadowColor: '#000000',
-    shadowOffset: {
-      width: 0,
-      height: 2,
-    },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+    position: 'relative',
   },
   productImage: {
     width: '100%',
-    height: 150,
+    height: 140,
   },
-  productContent: {
-    padding: 12,
+  conditionBadge: {
+    position: 'absolute',
+    top: 8,
+    right: 8,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 4,
+    zIndex: 1,
   },
-  productName: {
-    fontSize: 14,
-    fontFamily: 'Inter-SemiBold',
-    color: '#000000',
-    marginBottom: 4,
+  conditionBadgeNew: {
+    backgroundColor: '#10B981',
   },
-  businessName: {
-    fontSize: 12,
-    fontFamily: 'Inter-Regular',
-    color: '#666666',
-    marginBottom: 4,
+  conditionBadgeUsed: {
+    backgroundColor: '#F59E0B',
   },
-  price: {
-    fontSize: 16,
-    fontFamily: 'Inter-SemiBold',
-    color: '#4169E1',
-    marginBottom: 8,
-  },
-  productFooter: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-  },
-  ratingContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-  },
-  rating: {
-    fontSize: 12,
-    fontFamily: 'Inter-SemiBold',
-    color: '#000000',
-  },
-  reviews: {
-    fontSize: 12,
-    fontFamily: 'Inter-Regular',
-    color: '#666666',
-  },
-  viewButton: {
-    backgroundColor: '#000000',
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 16,
-  },
-  viewButtonText: {
-    fontSize: 12,
+  conditionBadgeText: {
+    fontSize: 10,
     fontFamily: 'Inter-SemiBold',
     color: '#FFFFFF',
+    letterSpacing: 0.5,
+  },
+  productContent: {
+    padding: 10,
+  },
+  productName: {
+    fontSize: 13,
+    fontFamily: 'Inter-SemiBold',
+    color: '#0F172A',
+    marginTop: 2,
+  },
+  price: {
+    fontSize: 15,
+    fontFamily: 'Inter-SemiBold',
+    color: '#16A34A',
+  },
+  metaRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 4,
+  },
+  metaText: {
+    fontSize: 11,
+    fontFamily: 'Inter-Regular',
+    color: '#6B7280',
+  },
+  timeStamp: {
+    fontSize: 10,
+    fontFamily: 'Inter-Regular',
+    color: '#9CA3AF',
+    marginTop: 4,
   },
 });
