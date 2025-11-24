@@ -3,7 +3,7 @@ import { useFonts, Inter_400Regular, Inter_600SemiBold } from '@expo-google-font
 import { useEffect, useState, useCallback } from 'react';
 import { SplashScreen, useRouter, useFocusEffect } from 'expo-router';
 import { Search, Filter, ArrowLeft, Briefcase, Clock, MapPin, Building2, GraduationCap, ChevronRight, BookOpen, Users, Wallet, Plus, Calendar } from 'lucide-react-native';
-import { supabase } from '@/lib/supabase';
+import { supabase, Job } from '@/lib/supabase';
 import { useAuth } from '@/hooks/useAuth';
 
 SplashScreen.preventAutoHideAsync();
@@ -87,8 +87,8 @@ export default function WorkplaceScreen() {
   const router = useRouter();
   const { user } = useAuth();
   const [activeFilter, setActiveFilter] = useState('all');
-  const [jobListings, setJobListings] = useState<any[]>([]);
-  const [filteredJobs, setFilteredJobs] = useState<any[]>([]);
+  const [jobListings, setJobListings] = useState<Job[]>([]);
+  const [filteredJobs, setFilteredJobs] = useState<Job[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [showFilterModal, setShowFilterModal] = useState(false);
   const [selectedCategory, setSelectedCategory] = useState<string>('');
@@ -106,11 +106,11 @@ export default function WorkplaceScreen() {
   const fetchJobListings = async () => {
     try {
       setLoading(true);
+      console.log('🔍 Fetching job listings from jobs table...');
       const { data, error } = await supabase
-        .from('products_services')
+        .from('jobs')
         .select('*')
-        .in('category_name', ['Full Time Jobs', 'Internships', 'National Service', 'Part Time', 'Remote Work', 'Volunteering'])
-        .or('is_approved.eq.true,approval_status.eq.approved')
+        .eq('is_approved', true)
         .order('created_at', { ascending: false });
       
       if (error) {
@@ -119,6 +119,9 @@ export default function WorkplaceScreen() {
       }
       
       console.log('💼 Fetched job listings:', data?.length || 0);
+      if (data && data.length > 0) {
+        console.log('📋 Sample job:', data[0]);
+      }
       setJobListings(data || []);
       setFilteredJobs(data || []);
     } catch (error) {
@@ -152,23 +155,21 @@ export default function WorkplaceScreen() {
   const filterJobs = (search: string, category: string, currency: string, minPriceVal: string, maxPriceVal: string) => {
     let filtered = jobListings;
 
-    // Filter by category
+    // Filter by job type
     if (category && category !== '') {
-      filtered = filtered.filter(job => job.category_name === category);
+      filtered = filtered.filter(job => job.job_type === category);
     }
 
-    // Filter by currency
-    if (currency && currency !== '') {
-      filtered = filtered.filter(job => job.currency === currency);
-    }
-
-    // Filter by price range
+    // Filter by salary (jobs use salary field, not price)
     if (minPriceVal || maxPriceVal) {
       filtered = filtered.filter(job => {
-        const jobPrice = parseFloat(job.price || 0);
+        // Parse salary from string like "$2,000 - $3,500/month"
+        const salaryStr = job.salary || '';
+        const salaryMatch = salaryStr.match(/\$?([\d,]+)/);
+        const jobSalary = salaryMatch ? parseFloat(salaryMatch[1].replace(/,/g, '')) : 0;
         const min = minPriceVal ? parseFloat(minPriceVal) : 0;
         const max = maxPriceVal ? parseFloat(maxPriceVal) : Infinity;
-        return jobPrice >= min && jobPrice <= max;
+        return jobSalary >= min && jobSalary <= max;
       });
     }
 
@@ -178,13 +179,17 @@ export default function WorkplaceScreen() {
       filtered = filtered.filter(job => {
         const title = (job.title || '').toLowerCase();
         const description = (job.description || '').toLowerCase();
-        const category = (job.category_name || '').toLowerCase();
-        const price = (job.price || '').toString().toLowerCase();
+        const company = (job.company || '').toLowerCase();
+        const location = (job.location || '').toLowerCase();
+        const jobType = (job.job_type || '').toLowerCase();
+        const salary = (job.salary || '').toLowerCase();
         
         return title.includes(searchLower) || 
                description.includes(searchLower) || 
-               category.includes(searchLower) ||
-               price.includes(searchLower);
+               company.includes(searchLower) ||
+               location.includes(searchLower) ||
+               jobType.includes(searchLower) ||
+               salary.includes(searchLower);
       });
     }
 
@@ -463,39 +468,56 @@ export default function WorkplaceScreen() {
                   images = ['https://images.unsplash.com/photo-1486406146926-c627a92ad1ab?w=800'];
                 }
                 
+                const CARD_WIDTH_FEATURED = width - 48;
+                
                 return (
                   <TouchableOpacity 
                     key={job.id} 
                     style={styles.featuredCard}
                     onPress={() => handleJobPress(job.id)}
                   >
-                    <ScrollView horizontal showsHorizontalScrollIndicator={false} pagingEnabled>
-                      {images.map((uri, idx) => (
-                        <Image 
-                          key={uri + idx}
-                          source={{ uri }} 
-                          style={styles.featuredImage} 
-                        />
-                      ))}
-                    </ScrollView>
+                    <View style={styles.featuredImageContainer}>
+                      <ScrollView 
+                        horizontal 
+                        pagingEnabled
+                        showsHorizontalScrollIndicator={false}
+                        style={styles.imageGallery}
+                      >
+                        {images.map((uri, idx) => (
+                          <Image 
+                            key={`${uri}-${idx}`}
+                            source={{ uri }} 
+                            style={[styles.featuredImage, { width: CARD_WIDTH_FEATURED }]} 
+                            resizeMode="cover"
+                          />
+                        ))}
+                      </ScrollView>
+                      {images.length > 1 && (
+                        <View style={styles.imageIndicatorContainer}>
+                          {images.map((_, idx) => (
+                            <View key={idx} style={styles.imageIndicator} />
+                          ))}
+                        </View>
+                      )}
+                    </View>
                     <View style={styles.featuredInfo}>
                       <View style={styles.jobTypeTag}>
                         <Clock size={14} color="#4169E1" />
-                        <Text style={styles.jobTypeText}>{job.category_name}</Text>
+                        <Text style={styles.jobTypeText}>{job.job_type}</Text>
                       </View>
                       <Text style={styles.jobTitle}>{job.title}</Text>
                       <View style={styles.companyInfo}>
                         <Building2 size={14} color="#666666" />
-                        <Text style={styles.companyName}>{job.description?.split('|')[0] || 'Company'}</Text>
+                        <Text style={styles.companyName}>{job.company}</Text>
                       </View>
                       <View style={styles.locationInfo}>
                         <MapPin size={14} color="#666666" />
-                        <Text style={styles.locationText}>{job.description?.split('|')[1] || 'Location'}</Text>
+                        <Text style={styles.locationText}>{job.location}</Text>
                       </View>
-                      {job.price && (
+                      {job.salary && (
                         <View style={styles.salaryInfo}>
                           <Wallet size={14} color="#666666" />
-                          <Text style={styles.salaryText}>₵{job.price}/month</Text>
+                          <Text style={styles.salaryText}>{job.salary}</Text>
                         </View>
                       )}
                     </View>
@@ -528,11 +550,6 @@ export default function WorkplaceScreen() {
             </View>
           ) : (
             filteredJobs.slice(0, 5).map((job) => {
-              // Parse description
-              const parts = (job.description || '').split('|');
-              const company = parts[0]?.trim() || 'Company';
-              const location = parts[1]?.trim() || 'Location';
-              
               // Parse images
               let images = [];
               if (job.image_url) {
@@ -563,33 +580,50 @@ export default function WorkplaceScreen() {
               const daysLeft = Math.ceil((deadline.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
               const deadlineText = daysLeft > 0 ? `${daysLeft} days left` : 'Expired';
 
+              const OPP_CARD_WIDTH = width - 32;
+
               return (
                 <TouchableOpacity 
                   key={job.id} 
                   style={styles.opportunityCard}
                   onPress={() => handleJobPress(job.id)}
                 >
-                  <ScrollView horizontal showsHorizontalScrollIndicator={false} pagingEnabled>
-                    {images.map((uri, idx) => (
-                      <Image 
-                        key={uri + idx}
-                        source={{ uri }} 
-                        style={styles.opportunityImage} 
-                      />
-                    ))}
-                  </ScrollView>
+                  <View style={styles.opportunityImageContainer}>
+                    <ScrollView 
+                      horizontal 
+                      pagingEnabled
+                      showsHorizontalScrollIndicator={false}
+                      style={styles.imageGallery}
+                    >
+                      {images.map((uri, idx) => (
+                        <Image 
+                          key={`${uri}-${idx}`}
+                          source={{ uri }} 
+                          style={[styles.opportunityImage, { width: OPP_CARD_WIDTH }]} 
+                          resizeMode="cover"
+                        />
+                      ))}
+                    </ScrollView>
+                    {images.length > 1 && (
+                      <View style={styles.imageIndicatorContainer}>
+                        {images.map((_, idx) => (
+                          <View key={idx} style={styles.imageIndicator} />
+                        ))}
+                      </View>
+                    )}
+                  </View>
                   <View style={styles.opportunityInfo}>
                     <Text style={styles.opportunityTitle}>{job.title}</Text>
-                    <Text style={styles.organizationName}>{company}</Text>
+                    <Text style={styles.organizationName}>{job.company}</Text>
                     <View style={styles.opportunityDetails}>
                       <View style={styles.detailItem}>
                         <MapPin size={14} color="#666666" />
-                        <Text style={styles.detailText}>{location}</Text>
+                        <Text style={styles.detailText}>{job.location}</Text>
                       </View>
-                      {job.price && (
+                      {job.salary && (
                         <View style={styles.detailItem}>
                           <Wallet size={14} color="#666666" />
-                          <Text style={styles.detailText}>₵{job.price}/month</Text>
+                          <Text style={styles.detailText}>{job.salary}</Text>
                         </View>
                       )}
                       <View style={styles.detailItem}>
@@ -747,9 +781,37 @@ const styles = StyleSheet.create({
     elevation: 3,
     overflow: 'hidden',
   },
-  featuredImage: {
+  featuredImageContainer: {
     width: '100%',
-    height: 160,
+    height: 200,
+    backgroundColor: '#F3F4F6',
+    position: 'relative',
+  },
+  imageGallery: {
+    width: '100%',
+    height: '100%',
+  },
+  featuredImage: {
+    height: 200,
+  },
+  imageIndicatorContainer: {
+    position: 'absolute',
+    bottom: 12,
+    left: 0,
+    right: 0,
+    flexDirection: 'row',
+    justifyContent: 'center',
+    gap: 6,
+  },
+  imageIndicator: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: 'rgba(255, 255, 255, 0.8)',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.3,
+    shadowRadius: 2,
   },
   featuredInfo: {
     padding: 16,
@@ -823,7 +885,6 @@ const styles = StyleSheet.create({
     color: '#666666',
   },
   opportunityCard: {
-    flexDirection: 'row',
     backgroundColor: '#FFFFFF',
     marginHorizontal: 16,
     marginBottom: 16,
@@ -838,9 +899,14 @@ const styles = StyleSheet.create({
     shadowRadius: 4,
     elevation: 3,
   },
+  opportunityImageContainer: {
+    width: '100%',
+    height: 180,
+    backgroundColor: '#F3F4F6',
+    position: 'relative',
+  },
   opportunityImage: {
-    width: 100,
-    height: 100,
+    height: 180,
   },
   opportunityInfo: {
     flex: 1,

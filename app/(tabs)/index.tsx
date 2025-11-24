@@ -11,6 +11,7 @@ import { isYouTubeUrl, getYouTubeThumbnail, extractYouTubeVideoId } from '@/lib/
 import ExpandableText from '@/components/ExpandableText';
 import { useVideoSettings } from '@/contexts/VideoSettingsContext';
 import { useNotifications } from '@/contexts/NotificationContext';
+import NotificationBellIcon from '@/components/NotificationBellIcon';
 
 SplashScreen.preventAutoHideAsync();
 
@@ -1404,21 +1405,7 @@ export default function HomeScreen() {
         <View style={styles.header}>
         <Text style={styles.logoText}>Akora</Text>
         <View style={styles.headerIcons}>
-          <TouchableOpacity
-            style={styles.headerIconWithBadge}
-            onPress={() => router.push('/notifications')}
-          >
-            <View>
-              <Bell size={24} color="#000000" strokeWidth={2} fill="none" />
-              {unreadNotifications > 0 && (
-                <View style={styles.notificationBadge}>
-                  <Text style={styles.notificationBadgeText}>
-                    {unreadNotifications > 99 ? '99+' : unreadNotifications}
-                  </Text>
-                </View>
-              )}
-            </View>
-          </TouchableOpacity>
+          <NotificationBellIcon />
         </View>
       </View>
 

@@ -30,6 +30,8 @@ export default function CreateJobListingScreen() {
   const [salary, setSalary] = useState('');
   const [currency, setCurrency] = useState('USD'); // USD or GHS (Ghana Cedis)
   const [email, setEmail] = useState('');
+  const [applicationLink, setApplicationLink] = useState('');
+  const [requirements, setRequirements] = useState('');
   const [imageUrl, setImageUrl] = useState('');
   const [uploadedImages, setUploadedImages] = useState<string[]>([]);
   const [useUrlInput, setUseUrlInput] = useState(false);
@@ -82,6 +84,8 @@ export default function CreateJobListingScreen() {
       setSalary('');
       setCurrency('USD');
       setEmail('');
+      setApplicationLink('');
+      setRequirements('');
       setImageUrl('');
       setUploadedImages([]);
       setCategory('');
@@ -115,6 +119,11 @@ export default function CreateJobListingScreen() {
       return;
     }
 
+    if (!applicationLink.trim()) {
+      alert('Please provide an application link or email');
+      return;
+    }
+
     try {
       setIsSubmitting(true);
       
@@ -129,34 +138,29 @@ export default function CreateJobListingScreen() {
       // Format salary with currency
       const formattedSalary = salary.trim() ? `${currency} ${salary}` : null;
       
-      // Construct description with email if provided
-      let fullDescription = `${company.trim()} | ${location.trim()} | ${description.trim()}`;
-      if (email.trim()) {
-        fullDescription += ` | Email: ${email.trim()}`;
-      }
-      
       // Insert the job listing
-      // TODO: Set is_approved: false and approval_status: 'pending' when approval system is ready
       const { data: newListing, error: listingError } = await supabase
-        .from('products_services')
+        .from('jobs')
         .insert({
           user_id: user?.id,
           title: title.trim(),
-          description: fullDescription,
-          price: salary.trim() ? Number(salary) : 0,
+          company: company.trim(),
+          location: location.trim(),
+          job_type: category,
+          salary: formattedSalary,
+          description: description.trim(),
+          requirements: requirements.trim() || null,
+          application_link: applicationLink.trim(),
           image_url: finalImageUrls.length > 0 ? JSON.stringify(finalImageUrls) : null,
-          category_name: category,
           is_featured: false,
-          is_premium_listing: false,
-          is_approved: true, // Auto-approve for now (change to false when approval system is enabled)
-          approval_status: 'approved', // Auto-approve for now (change to 'pending' when approval system is enabled)
-          creator_email: email.trim() || null,
+          is_approved: true,
         })
         .select()
         .single();
 
       if (listingError) throw listingError;
 
+      console.log('✅ Job listing created successfully:', newListing);
       alert('✅ Success! Your job listing has been created successfully!');
       
       // Navigate to workplace
@@ -232,7 +236,7 @@ export default function CreateJobListingScreen() {
           <Text style={styles.label}>Description</Text>
           <TextInput
             style={[styles.input, styles.textArea]}
-            placeholder="Provide details about the job, requirements, responsibilities, etc."
+            placeholder="Provide details about the job, responsibilities, etc."
             placeholderTextColor="#666666"
             multiline
             value={description}
@@ -242,6 +246,36 @@ export default function CreateJobListingScreen() {
           />
         </View>
         
+        <View style={styles.formGroup}>
+          <Text style={styles.label}>Requirements (Optional)</Text>
+          <TextInput
+            style={[styles.input, styles.textArea]}
+            placeholder="List job requirements, qualifications, skills needed, etc."
+            placeholderTextColor="#666666"
+            multiline
+            value={requirements}
+            onChangeText={setRequirements}
+            maxLength={1000}
+            textAlignVertical="top"
+          />
+        </View>
+        
+        <View style={styles.formGroup}>
+          <Text style={styles.label}>Application Link *</Text>
+          <View style={styles.emailContainer}>
+            <Mail size={20} color="#666666" />
+            <TextInput
+              style={styles.emailInput}
+              placeholder="Enter application URL or email"
+              placeholderTextColor="#666666"
+              keyboardType="email-address"
+              autoCapitalize="none"
+              value={applicationLink}
+              onChangeText={setApplicationLink}
+            />
+          </View>
+        </View>
+
         <View style={styles.formGroup}>
           <Text style={styles.label}>Contact Email (Optional)</Text>
           <View style={styles.emailContainer}>

@@ -278,6 +278,42 @@ export type Job = {
   user?: Profile;
 };
 
+export type JobApplication = {
+  id: string;
+  job_id: string;
+  applicant_id: string;
+  full_name: string;
+  email: string;
+  phone: string;
+  cover_letter?: string;
+  resume_url?: string;
+  additional_documents?: string[];
+  portfolio_url?: string;
+  linkedin_url?: string;
+  years_of_experience?: number;
+  expected_salary?: string;
+  availability_date?: string;
+  status: 'pending' | 'reviewing' | 'shortlisted' | 'rejected' | 'accepted';
+  reviewed_at?: string;
+  reviewed_by?: string;
+  review_notes?: string;
+  created_at: string;
+  updated_at: string;
+  job?: Job;
+  applicant?: Profile;
+};
+
+export type JobApplicationNotification = {
+  id: string;
+  application_id: string;
+  recipient_id: string;
+  notification_type: 'new_application' | 'status_changed' | 'message';
+  title: string;
+  message: string;
+  is_read: boolean;
+  created_at: string;
+};
+
 export type Campaign = {
   id: string;
   title: string;

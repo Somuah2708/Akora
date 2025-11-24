@@ -1,10 +1,11 @@
-import { View, Text, StyleSheet, ScrollView, TextInput, TouchableOpacity, Image, ActivityIndicator, Linking } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TextInput, TouchableOpacity, Image, ActivityIndicator, Linking, Alert } from 'react-native';
 import { useFonts, Inter_400Regular, Inter_600SemiBold } from '@expo-google-fonts/inter';
 import { useEffect, useState } from 'react';
 import { SplashScreen, useRouter, useLocalSearchParams } from 'expo-router';
-import { ArrowLeft, Briefcase, MapPin, Building2, Wallet, Clock, Mail, Phone, FileText, Upload, Send, User } from 'lucide-react-native';
-import { supabase } from '@/lib/supabase';
+import { ArrowLeft, Briefcase, MapPin, Building2, Wallet, Clock, Mail, Phone, FileText, Upload, Send, User, Link as LinkIcon, Calendar, DollarSign } from 'lucide-react-native';
+import { supabase, Job, JobApplication } from '@/lib/supabase';
 import { useAuth } from '@/hooks/useAuth';
+import * as DocumentPicker from 'expo-document-picker';
 
 SplashScreen.preventAutoHideAsync();
 
@@ -13,7 +14,7 @@ export default function JobApplicationScreen() {
   const { id } = useLocalSearchParams();
   const { user } = useAuth();
   
-  const [job, setJob] = useState<any>(null);
+  const [job, setJob] = useState<Job | null>(null);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   
@@ -22,8 +23,14 @@ export default function JobApplicationScreen() {
   const [email, setEmail] = useState('');
   const [phone, setPhone] = useState('');
   const [coverLetter, setCoverLetter] = useState('');
-  const [qualifications, setQualifications] = useState('');
-  const [cvFile, setCvFile] = useState<any>(null);
+  const [portfolioUrl, setPortfolioUrl] = useState('');
+  const [linkedinUrl, setLinkedinUrl] = useState('');
+  const [yearsOfExperience, setYearsOfExperience] = useState('');
+  const [expectedSalary, setExpectedSalary] = useState('');
+  const [availabilityDate, setAvailabilityDate] = useState('');
+  const [resumeUri, setResumeUri] = useState('');
+  const [resumeName, setResumeName] = useState('');
+  const [additionalDocs, setAdditionalDocs] = useState<{uri: string; name: string}[]>([]);
   
   const [fontsLoaded] = useFonts({
     'Inter-Regular': Inter_400Regular,
@@ -50,49 +57,16 @@ export default function JobApplicationScreen() {
     try {
       setLoading(true);
       const { data, error } = await supabase
-        .from('products_services')
+        .from('jobs')
         .select('*')
         .eq('id', id)
         .single();
 
       if (error) throw error;
-
-      if (data) {
-        // Parse description: "Company | Location | Description | Email: email"
-        const parts = (data.description || '').split(' | ');
-        let company = parts[0] || '';
-        let location = parts[1] || '';
-        let description = parts.slice(2).join(' | ');
-        
-        // Extract email if present
-        let contactEmail = '';
-        const emailMatch = description.match(/Email:\s*(.+?)(?:\s*\||$)/);
-        if (emailMatch) {
-          contactEmail = emailMatch[1].trim();
-          description = description.replace(/\s*\|\s*Email:.*$/, '').trim();
-        }
-
-        // Parse image URL
-        let imageUrl = data.image_url;
-        if (imageUrl && typeof imageUrl === 'string' && imageUrl.startsWith('[')) {
-          try {
-            const parsed = JSON.parse(imageUrl);
-            imageUrl = Array.isArray(parsed) && parsed.length > 0 ? parsed[0] : imageUrl;
-          } catch (e) {}
-        }
-
-        setJob({
-          ...data,
-          company,
-          location,
-          description,
-          contactEmail,
-          image_url: imageUrl,
-        });
-      }
+      setJob(data);
     } catch (error) {
-      console.error('Error fetching job details:', error);
-      alert('Failed to load job details');
+      console.error('Error fetching job:', error);
+      Alert.alert('Error', 'Failed to load job details');
     } finally {
       setLoading(false);
     }
@@ -100,18 +74,20 @@ export default function JobApplicationScreen() {
 
   const fetchUserProfile = async () => {
     try {
-      const { data, error } = await supabase
+      const { data, error} = await supabase
         .from('profiles')
-        .select('full_name, email, phone')
+        .select('full_name, phone')
         .eq('id', user?.id)
         .single();
 
-      if (error) throw error;
-
       if (data) {
         setFullName(data.full_name || '');
-        setEmail(data.email || '');
         setPhone(data.phone || '');
+      }
+      
+      // Pre-fill email from user object
+      if (user?.email) {
+        setEmail(user.email);
       }
     } catch (error) {
       console.error('Error fetching user profile:', error);
@@ -119,92 +95,147 @@ export default function JobApplicationScreen() {
   };
 
   const pickDocument = async () => {
-    // For web/demo purposes, we'll use a text input for CV file path/URL
-    const cvPath = prompt('Enter your CV file name or URL (e.g., "John_Doe_CV.pdf" or a URL):');
-    if (cvPath && cvPath.trim()) {
-      setCvFile({ name: cvPath.trim(), uri: cvPath.trim() });
+    try {
+      const result = await DocumentPicker.getDocumentAsync({
+        type: ['application/pdf', 'application/msword', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'],
+        copyToCacheDirectory: true,
+      });
+
+      if (!result.canceled && result.assets && result.assets[0]) {
+        setResumeUri(result.assets[0].uri);
+        setResumeName(result.assets[0].name);
+      }
+    } catch (error) {
+      console.error('Error picking resume:', error);
+      Alert.alert('Error', 'Failed to pick resume file');
     }
+  };
+
+  const pickAdditionalDocs = async () => {
+    try {
+      const result = await DocumentPicker.getDocumentAsync({
+        type: ['application/pdf', 'application/msword', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document', 'image/*'],
+        copyToCacheDirectory: true,
+        multiple: true,
+      });
+
+      if (!result.canceled && result.assets) {
+        const newDocs = result.assets.map(asset => ({
+          uri: asset.uri,
+          name: asset.name,
+        }));
+        setAdditionalDocs([...additionalDocs, ...newDocs]);
+      }
+    } catch (error) {
+      console.error('Error picking documents:', error);
+      Alert.alert('Error', 'Failed to pick documents');
+    }
+  };
+
+  const removeAdditionalDoc = (index: number) => {
+    setAdditionalDocs(additionalDocs.filter((_, i) => i !== index));
   };
 
   const handleSubmit = async () => {
     // Validation
     if (!fullName.trim()) {
-      alert('Please enter your full name');
+      Alert.alert('Required Field', 'Please enter your full name');
       return;
     }
+    
     if (!email.trim()) {
-      alert('Please enter your email address');
+      Alert.alert('Required Field', 'Please enter your email');
       return;
     }
+    
     if (!phone.trim()) {
-      alert('Please enter your phone number');
+      Alert.alert('Required Field', 'Please enter your phone number');
       return;
     }
-    if (!coverLetter.trim()) {
-      alert('Please write a cover letter');
+
+    if (!resumeUri) {
+      Alert.alert('Required Field', 'Please upload your resume');
       return;
     }
-    if (!qualifications.trim()) {
-      alert('Please describe your qualifications');
+
+    if (!user) {
+      Alert.alert('Authentication Required', 'Please sign in to apply for jobs');
+      router.replace('/auth/sign-in');
       return;
     }
 
     try {
       setSubmitting(true);
 
-      // Compose email content
-      const emailSubject = `Job Application: ${job?.title}`;
-      const emailBody = `
-Hello,
+      // For now, we'll store document URIs directly
+      // In production, you would upload to Supabase Storage first
+      const documentUrls = additionalDocs.map(doc => doc.uri);
 
-I am writing to apply for the ${job?.title} position at ${job?.company}.
+      // Check if user already applied
+      const { data: existingApplication } = await supabase
+        .from('job_applications')
+        .select('id')
+        .eq('job_id', id)
+        .eq('applicant_id', user.id)
+        .single();
 
-APPLICANT INFORMATION:
-Name: ${fullName}
-Email: ${email}
-Phone: ${phone}
-
-COVER LETTER:
-${coverLetter}
-
-QUALIFICATIONS & EXPERIENCE:
-${qualifications}
-
-${cvFile ? `\nCV File: ${cvFile.name}` : ''}
-
-Best regards,
-${fullName}
-
----
-Application submitted via Akora Workplace
-      `.trim();
-
-      const recipientEmail = job?.contactEmail || '';
-      
-      if (!recipientEmail) {
-        alert('No contact email found for this job posting. Please contact the employer directly.');
+      if (existingApplication) {
+        Alert.alert('Already Applied', 'You have already applied for this job');
         return;
       }
 
-      // Open email app with pre-filled content
-      const mailtoUrl = `mailto:${recipientEmail}?subject=${encodeURIComponent(emailSubject)}&body=${encodeURIComponent(emailBody)}`;
-      
-      try {
-        const supported = await Linking.canOpenURL(mailtoUrl);
-        
-        if (supported) {
-          await Linking.openURL(mailtoUrl);
-          alert('✅ Application Ready!\n\nYour email app has been opened with all your information:\n• Full Name\n• Email & Phone\n• Cover Letter\n• Qualifications\n\nPlease review and send the email to complete your application.');
-          router.back();
-        } else {
-          alert(`Please send your application to: ${recipientEmail}\n\nSubject: ${emailSubject}\n\nAll your information has been prepared:\n• Full Name: ${fullName}\n• Email: ${email}\n• Phone: ${phone}\n• Cover Letter & Qualifications included`);
-        }
-      } catch (error) {
-        alert(`Please send your application to: ${recipientEmail}\n\nSubject: ${emailSubject}\n\nInclude your cover letter, qualifications, and CV.`);
+      // Insert application
+      const { data: newApplication, error: applicationError } = await supabase
+        .from('job_applications')
+        .insert({
+          job_id: id,
+          applicant_id: user.id,
+          full_name: fullName.trim(),
+          email: email.trim(),
+          phone: phone.trim(),
+          cover_letter: coverLetter.trim() || null,
+          resume_url: resumeUri,
+          additional_documents: documentUrls.length > 0 ? documentUrls : null,
+          portfolio_url: portfolioUrl.trim() || null,
+          linkedin_url: linkedinUrl.trim() || null,
+          years_of_experience: yearsOfExperience ? parseInt(yearsOfExperience) : null,
+          expected_salary: expectedSalary.trim() || null,
+          availability_date: availabilityDate.trim() || null,
+          status: 'pending',
+        })
+        .select()
+        .single();
+
+      if (applicationError) throw applicationError;
+
+      // Create notification for job poster
+      if (job && newApplication) {
+        await supabase
+          .from('job_application_notifications')
+          .insert({
+            application_id: newApplication.id,
+            recipient_id: job.user_id,
+            notification_type: 'new_application',
+            title: 'New Job Application',
+            message: `${fullName} has applied for your job posting: ${job.title}`,
+          });
       }
+
+      console.log('✅ Application submitted successfully:', newApplication);
+      
+      Alert.alert(
+        'Application Submitted!',
+        'Your application has been submitted successfully. The employer will review it and get back to you.',
+        [
+          {
+            text: 'OK',
+            onPress: () => router.back(),
+          },
+        ]
+      );
     } catch (error: any) {
       console.error('Error submitting application:', error);
-      alert(`Error: ${error.message || 'Failed to submit application'}`);
+      Alert.alert('Error', error.message || 'Failed to submit application');
     } finally {
       setSubmitting(false);
     }
@@ -262,20 +293,13 @@ Application submitted via Akora Workplace
             
             <View style={styles.infoRow}>
               <Briefcase size={16} color="#666666" />
-              <Text style={styles.infoText}>{job.category_name}</Text>
+              <Text style={styles.infoText}>{job.job_type}</Text>
             </View>
             
-            {job.price && (
+            {job.salary && (
               <View style={styles.infoRow}>
                 <Wallet size={16} color="#666666" />
-                <Text style={styles.salaryText}>₵{job.price}/month</Text>
-              </View>
-            )}
-            
-            {job.contactEmail && (
-              <View style={styles.infoRow}>
-                <Mail size={16} color="#4169E1" />
-                <Text style={styles.contactEmail}>{job.contactEmail}</Text>
+                <Text style={styles.salaryText}>{job.salary}</Text>
               </View>
             )}
           </View>
@@ -283,6 +307,13 @@ Application submitted via Akora Workplace
           <View style={styles.descriptionContainer}>
             <Text style={styles.descriptionTitle}>Job Description</Text>
             <Text style={styles.description}>{job.description}</Text>
+            
+            {job.requirements && (
+              <>
+                <Text style={[styles.descriptionTitle, { marginTop: 16 }]}>Requirements</Text>
+                <Text style={styles.description}>{job.requirements}</Text>
+              </>
+            )}
           </View>
         </View>
 
@@ -339,7 +370,7 @@ Application submitted via Akora Workplace
           </View>
 
           <View style={styles.formGroup}>
-            <Text style={styles.label}>Cover Letter *</Text>
+            <Text style={styles.label}>Cover Letter (Optional)</Text>
             <TextInput
               style={[styles.input, styles.textArea]}
               placeholder="Write a brief cover letter explaining why you're interested in this position..."
@@ -353,41 +384,125 @@ Application submitted via Akora Workplace
           </View>
 
           <View style={styles.formGroup}>
-            <Text style={styles.label}>Qualifications & Experience *</Text>
-            <TextInput
-              style={[styles.input, styles.textArea]}
-              placeholder="List your relevant qualifications, education, and work experience..."
-              placeholderTextColor="#999999"
-              multiline
-              numberOfLines={6}
-              textAlignVertical="top"
-              value={qualifications}
-              onChangeText={setQualifications}
-            />
-          </View>
-
-          <View style={styles.formGroup}>
-            <Text style={styles.label}>Upload CV (Optional)</Text>
+            <Text style={styles.label}>Upload Resume/CV *</Text>
             <TouchableOpacity style={styles.uploadButton} onPress={pickDocument}>
               <Upload size={24} color="#4169E1" />
               <Text style={styles.uploadButtonText}>
-                {cvFile ? cvFile.name : 'Choose PDF or Word file'}
+                {resumeName || 'Choose PDF or Word file'}
               </Text>
             </TouchableOpacity>
-            {cvFile && (
+            {resumeName && (
               <View style={styles.fileInfo}>
                 <FileText size={16} color="#10B981" />
-                <Text style={styles.fileName}>{cvFile.name}</Text>
-                <TouchableOpacity onPress={() => setCvFile(null)}>
+                <Text style={styles.fileName}>{resumeName}</Text>
+                <TouchableOpacity onPress={() => { setResumeUri(''); setResumeName(''); }}>
                   <Text style={styles.removeFile}>✕</Text>
                 </TouchableOpacity>
               </View>
             )}
           </View>
 
+          <View style={styles.formGroup}>
+            <Text style={styles.label}>Additional Documents (Optional)</Text>
+            <TouchableOpacity style={styles.uploadButton} onPress={pickAdditionalDocs}>
+              <Upload size={24} color="#4169E1" />
+              <Text style={styles.uploadButtonText}>
+                Upload Certificates, Portfolio, etc.
+              </Text>
+            </TouchableOpacity>
+            {additionalDocs.map((doc, index) => (
+              <View key={index} style={styles.fileInfo}>
+                <FileText size={16} color="#10B981" />
+                <Text style={styles.fileName}>{doc.name}</Text>
+                <TouchableOpacity onPress={() => removeAdditionalDoc(index)}>
+                  <Text style={styles.removeFile}>✕</Text>
+                </TouchableOpacity>
+              </View>
+            ))}
+          </View>
+
+          {/* Professional Details */}
+          <View style={[styles.sectionHeader, { marginTop: 24 }]}>
+            <Briefcase size={20} color="#4169E1" />
+            <Text style={styles.sectionTitle}>Professional Details (Optional)</Text>
+          </View>
+
+          <View style={styles.formGroup}>
+            <Text style={styles.label}>Years of Experience</Text>
+            <View style={styles.inputContainer}>
+              <Briefcase size={20} color="#666666" />
+              <TextInput
+                style={styles.input}
+                placeholder="e.g., 3"
+                placeholderTextColor="#999999"
+                keyboardType="numeric"
+                value={yearsOfExperience}
+                onChangeText={setYearsOfExperience}
+              />
+            </View>
+          </View>
+
+          <View style={styles.formGroup}>
+            <Text style={styles.label}>Expected Salary</Text>
+            <View style={styles.inputContainer}>
+              <DollarSign size={20} color="#666666" />
+              <TextInput
+                style={styles.input}
+                placeholder="e.g., $3,000/month"
+                placeholderTextColor="#999999"
+                value={expectedSalary}
+                onChangeText={setExpectedSalary}
+              />
+            </View>
+          </View>
+
+          <View style={styles.formGroup}>
+            <Text style={styles.label}>Available to Start</Text>
+            <View style={styles.inputContainer}>
+              <Calendar size={20} color="#666666" />
+              <TextInput
+                style={styles.input}
+                placeholder="e.g., Immediately, 2 weeks notice"
+                placeholderTextColor="#999999"
+                value={availabilityDate}
+                onChangeText={setAvailabilityDate}
+              />
+            </View>
+          </View>
+
+          <View style={styles.formGroup}>
+            <Text style={styles.label}>Portfolio URL</Text>
+            <View style={styles.inputContainer}>
+              <LinkIcon size={20} color="#666666" />
+              <TextInput
+                style={styles.input}
+                placeholder="https://your-portfolio.com"
+                placeholderTextColor="#999999"
+                autoCapitalize="none"
+                value={portfolioUrl}
+                onChangeText={setPortfolioUrl}
+              />
+            </View>
+          </View>
+
+          <View style={styles.formGroup}>
+            <Text style={styles.label}>LinkedIn Profile</Text>
+            <View style={styles.inputContainer}>
+              <LinkIcon size={20} color="#666666" />
+              <TextInput
+                style={styles.input}
+                placeholder="https://linkedin.com/in/yourprofile"
+                placeholderTextColor="#999999"
+                autoCapitalize="none"
+                value={linkedinUrl}
+                onChangeText={setLinkedinUrl}
+              />
+            </View>
+          </View>
+
           <View style={styles.infoNote}>
             <Text style={styles.infoNoteText}>
-              * Required fields. Your application will be sent to the employer via email.
+              * Required fields. Your application will be saved and sent to the employer for review.
             </Text>
           </View>
 

@@ -3,7 +3,7 @@ import { useFonts, Inter_400Regular, Inter_600SemiBold, Inter_700Bold } from '@e
 import { useEffect, useState } from 'react';
 import { SplashScreen, useRouter, useLocalSearchParams } from 'expo-router';
 import { ArrowLeft, Briefcase, MapPin, Building2, Wallet, Clock, Mail, Phone, Calendar, Edit } from 'lucide-react-native';
-import { supabase } from '@/lib/supabase';
+import { supabase, Job } from '@/lib/supabase';
 import { useAuth } from '@/hooks/useAuth';
 import { LinearGradient } from 'expo-linear-gradient';
 
@@ -14,7 +14,7 @@ export default function JobDetailScreen() {
   const { id } = useLocalSearchParams();
   const { user } = useAuth();
   
-  const [job, setJob] = useState<any>(null);
+  const [job, setJob] = useState<Job | null>(null);
   const [loading, setLoading] = useState(true);
   
   const [fontsLoaded] = useFonts({
@@ -39,7 +39,7 @@ export default function JobDetailScreen() {
     try {
       setLoading(true);
       const { data, error } = await supabase
-        .from('products_services')
+        .from('jobs')
         .select('*')
         .eq('id', id)
         .single();
@@ -47,37 +47,6 @@ export default function JobDetailScreen() {
       if (error) throw error;
 
       if (data) {
-        // Parse description: "Company | Location | Description | Email: email"
-        const parts = (data.description || '').split(' | ');
-        let company = parts[0] || '';
-        let location = parts[1] || '';
-        let description = parts.slice(2).join(' | ');
-        
-        // Extract email and phone if present
-        let contactEmail = '';
-        let contactPhone = '';
-        
-        const emailMatch = description.match(/Email:\s*([^\s|]+)/);
-        if (emailMatch) {
-          contactEmail = emailMatch[1].trim();
-          description = description.replace(/\s*\|\s*Email:[^|]*/, '').trim();
-        }
-        
-        const phoneMatch = description.match(/Phone:\s*([^\s|]+)/);
-        if (phoneMatch) {
-          contactPhone = phoneMatch[1].trim();
-          description = description.replace(/\s*\|\s*Phone:[^|]*/, '').trim();
-        }
-
-        // Parse image URL
-        let imageUrl = data.image_url;
-        if (imageUrl && typeof imageUrl === 'string' && imageUrl.startsWith('[')) {
-          try {
-            const parsed = JSON.parse(imageUrl);
-            imageUrl = Array.isArray(parsed) && parsed.length > 0 ? parsed[0] : imageUrl;
-          } catch (e) {}
-        }
-
         // Calculate days since posted
         const postedDate = new Date(data.created_at);
         const today = new Date();
@@ -97,17 +66,11 @@ export default function JobDetailScreen() {
 
         setJob({
           ...data,
-          company,
-          location,
-          description,
-          contactEmail,
-          contactPhone,
-          image_url: imageUrl,
           postedAgo,
           deadline: deadline.toLocaleDateString(),
           daysUntilDeadline,
           isOwner: user && user.id === data.user_id,
-        });
+        } as any);
       }
     } catch (error) {
       console.error('Error fetching job details:', error);
@@ -156,12 +119,55 @@ export default function JobDetailScreen() {
       </View>
 
       <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
-        {/* Company Logo */}
-        {job.image_url && (
-          <View style={styles.logoContainer}>
-            <Image source={{ uri: job.image_url }} style={styles.companyLogo} />
-          </View>
-        )}
+        {/* Company Logo / Images Gallery */}
+        {(() => {
+          // Parse image URLs from job
+          let images = [];
+          if (job.image_url) {
+            if (typeof job.image_url === 'string' && job.image_url.startsWith('[')) {
+              try {
+                const parsed = JSON.parse(job.image_url);
+                images = Array.isArray(parsed) ? parsed : [job.image_url];
+              } catch (e) {
+                images = [job.image_url];
+              }
+            } else {
+              images = [job.image_url];
+            }
+          }
+          
+          if (images.length === 0) {
+            images = ['https://images.unsplash.com/photo-1486406146926-c627a92ad1ab?w=800'];
+          }
+
+          const { width: screenWidth } = require('react-native').Dimensions.get('window');
+          
+          return images.length > 0 ? (
+            <View style={styles.imageGalleryContainer}>
+              <ScrollView
+                horizontal
+                pagingEnabled
+                showsHorizontalScrollIndicator={false}
+                style={styles.imageGallery}
+              >
+                {images.map((uri, index) => (
+                  <Image
+                    key={`${uri}-${index}`}
+                    source={{ uri }}
+                    style={[styles.galleryImage, { width: screenWidth }]}
+                  />
+                ))}
+              </ScrollView>
+              {images.length > 1 && (
+                <View style={styles.imageIndicatorContainer}>
+                  {images.map((_, index) => (
+                    <View key={index} style={styles.imageIndicator} />
+                  ))}
+                </View>
+              )}
+            </View>
+          ) : null;
+        })()}
 
         {/* Job Title & Company */}
         <View style={styles.titleSection}>
@@ -183,14 +189,14 @@ export default function JobDetailScreen() {
           <View style={styles.infoCard}>
             <Briefcase size={20} color="#4169E1" />
             <Text style={styles.infoLabel}>Job Type</Text>
-            <Text style={styles.infoValue}>{job.category_name}</Text>
+            <Text style={styles.infoValue}>{job.job_type}</Text>
           </View>
 
-          {job.price && (
+          {job.salary && (
             <View style={styles.infoCard}>
               <Wallet size={20} color="#4169E1" />
               <Text style={styles.infoLabel}>Salary</Text>
-              <Text style={styles.infoValue}>₵{job.price}/month</Text>
+              <Text style={styles.infoValue}>{job.salary}</Text>
             </View>
           )}
 
@@ -218,33 +224,42 @@ export default function JobDetailScreen() {
           <Text style={styles.descriptionText}>{job.description}</Text>
         </View>
 
-        {/* Contact Information */}
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Contact Information</Text>
-          
-          {job.contactEmail && (
-            <View style={styles.contactRow}>
-              <Mail size={18} color="#4169E1" />
-              <View style={styles.contactInfo}>
-                <Text style={styles.contactLabel}>Email</Text>
-                <Text style={styles.contactValue}>{job.contactEmail}</Text>
-              </View>
-            </View>
-          )}
+        {/* Requirements */}
+        {job.requirements && (
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>Requirements</Text>
+            <Text style={styles.descriptionText}>{job.requirements}</Text>
+          </View>
+        )}
 
-          {job.contactPhone && (
-            <View style={styles.contactRow}>
-              <Phone size={18} color="#4169E1" />
-              <View style={styles.contactInfo}>
-                <Text style={styles.contactLabel}>Phone</Text>
-                <Text style={styles.contactValue}>{job.contactPhone}</Text>
-              </View>
+        {/* Application Information */}
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>How to Apply</Text>
+          
+          <View style={styles.contactRow}>
+            <Mail size={18} color="#4169E1" />
+            <View style={styles.contactInfo}>
+              <Text style={styles.contactLabel}>Application Link</Text>
+              <Text style={styles.contactValue}>{job.application_link}</Text>
             </View>
-          )}
+          </View>
         </View>
 
-        {/* Apply Button */}
-        {!job.isOwner && job.daysUntilDeadline > 0 && (
+        {/* Apply Button or View Applications Button */}
+        {job.isOwner ? (
+          <TouchableOpacity 
+            style={styles.viewApplicationsButton}
+            onPress={() => router.push(`/job-applications-review/${job.id}` as any)}
+          >
+            <LinearGradient
+              colors={['#10B981', '#059669']}
+              style={styles.applyButtonGradient}
+            >
+              <Briefcase size={20} color="#FFFFFF" />
+              <Text style={styles.applyButtonText}>View Applications</Text>
+            </LinearGradient>
+          </TouchableOpacity>
+        ) : (job as any).daysUntilDeadline > 0 ? (
           <TouchableOpacity 
             style={styles.applyButton}
             onPress={() => router.push(`/job-application/${job.id}` as any)}
@@ -256,9 +271,7 @@ export default function JobDetailScreen() {
               <Text style={styles.applyButtonText}>Apply Now</Text>
             </LinearGradient>
           </TouchableOpacity>
-        )}
-
-        {job.daysUntilDeadline <= 0 && (
+        ) : (
           <View style={styles.closedBanner}>
             <Text style={styles.closedBannerText}>Applications Closed</Text>
           </View>
@@ -313,6 +326,39 @@ const styles = StyleSheet.create({
   },
   content: {
     flex: 1,
+  },
+  imageGalleryContainer: {
+    width: '100%',
+    height: 300,
+    backgroundColor: '#F3F4F6',
+    position: 'relative',
+  },
+  imageGallery: {
+    width: '100%',
+    height: '100%',
+  },
+  galleryImage: {
+    height: 300,
+    resizeMode: 'cover',
+  },
+  imageIndicatorContainer: {
+    position: 'absolute',
+    bottom: 16,
+    left: 0,
+    right: 0,
+    flexDirection: 'row',
+    justifyContent: 'center',
+    gap: 6,
+  },
+  imageIndicator: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: 'rgba(255, 255, 255, 0.8)',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.3,
+    shadowRadius: 2,
   },
   logoContainer: {
     alignItems: 'center',
@@ -453,9 +499,18 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     overflow: 'hidden',
   },
+  viewApplicationsButton: {
+    marginHorizontal: 16,
+    marginBottom: 32,
+    borderRadius: 12,
+    overflow: 'hidden',
+  },
   applyButtonGradient: {
     paddingVertical: 18,
     alignItems: 'center',
+    justifyContent: 'center',
+    flexDirection: 'row',
+    gap: 8,
   },
   applyButtonText: {
     fontSize: 18,
