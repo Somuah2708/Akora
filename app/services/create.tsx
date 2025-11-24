@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   View,
   Text,
@@ -9,10 +9,11 @@ import {
   Alert,
   Platform,
   Image,
+  Modal,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useAuth } from '@/hooks/useAuth';
-import { supabase } from '@/lib/supabase';
+import { supabase, type Region, type City } from '@/lib/supabase';
 import * as ImagePicker from 'expo-image-picker';
 import {
   ArrowLeft,
@@ -20,6 +21,8 @@ import {
   Loader2,
   Plus,
   X,
+  MapPin,
+  Check,
 } from 'lucide-react-native';
 
 const CATEGORIES = [
@@ -46,6 +49,8 @@ type ListingType = 'product' | 'service';
 
 type Condition = 'new' | 'used' | 'not_applicable';
 
+type PricingType = 'fixed' | 'negotiable' | 'contact';
+
 export default function CreateListingScreen() {
   const router = useRouter();
   const { user } = useAuth();
@@ -53,6 +58,7 @@ export default function CreateListingScreen() {
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
   const [price, setPrice] = useState('');
+  const [pricingType, setPricingType] = useState<PricingType>('fixed');
   const [listingType, setListingType] = useState<ListingType>('product');
   const [category, setCategory] = useState('');
   const [condition, setCondition] = useState<Condition>('not_applicable');
@@ -63,12 +69,182 @@ export default function CreateListingScreen() {
   const [imageUris, setImageUris] = useState<string[]>([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
+  // Dynamic location states
+  const [regions, setRegions] = useState<Region[]>([]);
+  const [cities, setCities] = useState<City[]>([]);
+  const [selectedRegionId, setSelectedRegionId] = useState<string>('');
+  const [selectedCityId, setSelectedCityId] = useState<string>('');
+  const [isRegionPickerVisible, setIsRegionPickerVisible] = useState(false);
+  const [isCityPickerVisible, setIsCityPickerVisible] = useState(false);
+  const [isAddRegionVisible, setIsAddRegionVisible] = useState(false);
+  const [isAddCityVisible, setIsAddCityVisible] = useState(false);
+  const [newRegionName, setNewRegionName] = useState('');
+  const [newCityName, setNewCityName] = useState('');
+
+  // Fetch regions and cities from database
+  const fetchLocations = useCallback(async () => {
+    try {
+      // Fetch regions
+      const { data: regionsData, error: regionsError } = await supabase
+        .from('regions')
+        .select('*')
+        .eq('is_active', true)
+        .order('name');
+      
+      if (regionsError) throw regionsError;
+      setRegions(regionsData || []);
+
+      // Fetch cities
+      const { data: citiesData, error: citiesError } = await supabase
+        .from('cities')
+        .select('*')
+        .eq('is_active', true)
+        .order('name');
+      
+      if (citiesError) throw citiesError;
+      setCities(citiesData || []);
+    } catch (error) {
+      console.error('Error fetching locations:', error);
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchLocations();
+  }, [fetchLocations]);
+
+  // Get selected region/city names
+  const selectedRegionName = regions.find(r => r.id === selectedRegionId)?.name || '';
+  const selectedCityName = cities.find(c => c.id === selectedCityId)?.name || '';
+
+  // Get cities for selected region
+  const citiesForRegion = cities.filter(c => c.region_id === selectedRegionId);
+
+  // Handle adding new region
+  const handleAddNewRegion = async () => {
+    if (!newRegionName.trim()) {
+      Alert.alert('Missing Information', 'Please enter a region name');
+      return;
+    }
+
+    if (!user) {
+      Alert.alert('Authentication Required', 'Please sign in to add a region');
+      return;
+    }
+
+    try {
+      // Check if region already exists
+      const existingRegion = regions.find(r => 
+        r.name.toLowerCase() === newRegionName.trim().toLowerCase()
+      );
+
+      if (existingRegion) {
+        Alert.alert('Region Exists', 'This region already exists. Please select it from the list.');
+        setIsAddRegionVisible(false);
+        setNewRegionName('');
+        return;
+      }
+
+      const { data, error } = await supabase.rpc('add_new_location', {
+        p_region_name: newRegionName.trim(),
+        p_city_name: 'Main City', // Placeholder city
+        p_user_id: user.id
+      });
+
+      if (error) throw error;
+
+      Alert.alert(
+        'Success!',
+        `Region "${newRegionName}" has been added!`,
+        [
+          {
+            text: 'OK',
+            onPress: () => {
+              setIsAddRegionVisible(false);
+              setNewRegionName('');
+              fetchLocations(); // Refresh locations
+              if (data) {
+                setSelectedRegionId(data.region_id);
+              }
+            }
+          }
+        ]
+      );
+    } catch (error: any) {
+      console.error('Error adding region:', error);
+      Alert.alert('Error', error.message || 'Failed to add region');
+    }
+  };
+
+  // Handle adding new city
+  const handleAddNewCity = async () => {
+    if (!newCityName.trim()) {
+      Alert.alert('Missing Information', 'Please enter a city name');
+      return;
+    }
+
+    if (!selectedRegionId) {
+      Alert.alert('Select Region First', 'Please select a region before adding a city');
+      return;
+    }
+
+    if (!user) {
+      Alert.alert('Authentication Required', 'Please sign in to add a city');
+      return;
+    }
+
+    try {
+      // Check if city already exists in this region
+      const existingCity = cities.find(c => 
+        c.region_id === selectedRegionId && 
+        c.name.toLowerCase() === newCityName.trim().toLowerCase()
+      );
+
+      if (existingCity) {
+        Alert.alert('City Exists', 'This city already exists in the selected region. Please select it from the list.');
+        setIsAddCityVisible(false);
+        setNewCityName('');
+        return;
+      }
+
+      const selectedRegion = regions.find(r => r.id === selectedRegionId);
+      
+      const { data, error } = await supabase.rpc('add_new_location', {
+        p_region_name: selectedRegion?.name || '',
+        p_city_name: newCityName.trim(),
+        p_user_id: user.id
+      });
+
+      if (error) throw error;
+
+      Alert.alert(
+        'Success!',
+        `City "${newCityName}" has been added to ${selectedRegion?.name}!`,
+        [
+          {
+            text: 'OK',
+            onPress: () => {
+              setIsAddCityVisible(false);
+              setNewCityName('');
+              fetchLocations(); // Refresh locations
+              if (data) {
+                setSelectedCityId(data.city_id);
+              }
+            }
+          }
+        ]
+      );
+    } catch (error: any) {
+      console.error('Error adding city:', error);
+      Alert.alert('Error', error.message || 'Failed to add city');
+    }
+  };
+
   const canSubmit =
     !!user &&
     title.trim().length > 3 &&
     description.trim().length > 10 &&
     category.trim().length > 0 &&
-    price.trim().length > 0;
+    (pricingType === 'contact' || price.trim().length > 0); // Price optional if "Call for Price"
 
   const handleSubmit = async () => {
     if (!user) {
@@ -81,10 +257,14 @@ export default function CreateListingScreen() {
       return;
     }
 
-    const numericPrice = Number(price.replace(/[^0-9.]/g, ''));
-    if (Number.isNaN(numericPrice) || numericPrice < 0) {
-      Alert.alert('Invalid price', 'Please enter a valid price in GHS.');
-      return;
+    // Validate price only if not "Call for Price"
+    let numericPrice = 0;
+    if (pricingType !== 'contact') {
+      numericPrice = Number(price.replace(/[^0-9.]/g, ''));
+      if (Number.isNaN(numericPrice) || numericPrice < 0) {
+        Alert.alert('Invalid price', 'Please enter a valid price in GHS.');
+        return;
+      }
     }
 
     try {
@@ -101,31 +281,51 @@ export default function CreateListingScreen() {
             continue;
           }
 
-          const fileExt = uri.split('.').pop() || 'jpg';
-          const path = `products/${user.id}/${Date.now()}-${Math.random()
-            .toString(36)
-            .slice(2)}.${fileExt}`;
+          try {
+            const fileExt = uri.split('.').pop() || 'jpg';
+            const fileName = `${Date.now()}-${Math.random().toString(36).slice(2)}.${fileExt}`;
+            const path = `products/${user.id}/${fileName}`;
 
-          const resp = await fetch(uri);
-          const blob = await resp.blob();
-
-          const { error: uploadError } = await supabase.storage
-            .from('product-images')
-            .upload(path, blob, {
-              contentType: blob.type || 'image/jpeg',
+            // For React Native, read file and convert to ArrayBuffer using FileReader
+            const response = await fetch(uri);
+            const fileBlob = await response.blob();
+            
+            // Convert blob to ArrayBuffer using FileReader
+            const arrayBuffer = await new Promise<ArrayBuffer>((resolve, reject) => {
+              const reader = new FileReader();
+              reader.onloadend = () => {
+                if (reader.result instanceof ArrayBuffer) {
+                  resolve(reader.result);
+                } else {
+                  reject(new Error('Failed to read file'));
+                }
+              };
+              reader.onerror = reject;
+              reader.readAsArrayBuffer(fileBlob);
             });
 
-          if (uploadError) {
-            console.error('Error uploading image', uploadError);
-            continue;
-          }
+            const { error: uploadError } = await supabase.storage
+              .from('product-images')
+              .upload(path, arrayBuffer, {
+                contentType: 'image/jpeg',
+              });
 
-          const { data: publicUrlData } = supabase.storage
-            .from('product-images')
-            .getPublicUrl(path);
+            if (uploadError) {
+              console.error('Error uploading image', uploadError);
+              Alert.alert('Upload Warning', `Could not upload image: ${fileName}`);
+              continue;
+            }
 
-          if (publicUrlData?.publicUrl) {
-            results.push(publicUrlData.publicUrl);
+            const { data: publicUrlData } = supabase.storage
+              .from('product-images')
+              .getPublicUrl(path);
+
+            if (publicUrlData?.publicUrl) {
+              results.push(publicUrlData.publicUrl);
+            }
+          } catch (imgError: any) {
+            console.error('Error processing image:', imgError);
+            Alert.alert('Image Error', 'Failed to process one or more images');
           }
         }
         uploadedUrls = results;
@@ -136,12 +336,18 @@ export default function CreateListingScreen() {
         .insert({
           title: title.trim(),
           description: description.trim(),
-          price: numericPrice,
+          price: pricingType === 'contact' ? 0 : numericPrice, // Store 0 for "Call for Price"
+          pricing_type: pricingType, // Store pricing type (will add to database)
           category_name: category,
           type: listingType,
           condition,
-          location_city: locationCity.trim() || null,
-          location_region: locationRegion.trim() || null,
+          region_id: selectedRegionId || null,
+          city_id: selectedCityId || null,
+          location: selectedCityName && selectedRegionName 
+            ? `${selectedCityName}, ${selectedRegionName}` 
+            : (locationCity.trim() || null),
+          location_city: selectedCityName || locationCity.trim() || null,
+          location_region: selectedRegionName || locationRegion.trim() || null,
           contact_phone: contactPhone.trim() || null,
           contact_whatsapp: contactWhatsapp.trim() || null,
           image_url: uploadedUrls[0] || null,
@@ -179,6 +385,205 @@ export default function CreateListingScreen() {
 
   return (
     <View style={styles.container}>
+      {/* Region Picker Modal */}
+      <Modal
+        visible={isRegionPickerVisible}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setIsRegionPickerVisible(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <TouchableOpacity
+            style={styles.modalBackdrop}
+            activeOpacity={1}
+            onPress={() => setIsRegionPickerVisible(false)}
+          />
+          <View style={styles.modalSheet}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Select Region</Text>
+              <TouchableOpacity onPress={() => setIsRegionPickerVisible(false)}>
+                <X size={24} color="#64748B" />
+              </TouchableOpacity>
+            </View>
+
+            <ScrollView style={styles.optionsList} showsVerticalScrollIndicator={false}>
+              {regions.map((region) => (
+                <TouchableOpacity
+                  key={region.id}
+                  style={styles.optionItem}
+                  onPress={() => {
+                    setSelectedRegionId(region.id);
+                    setSelectedCityId(''); // Reset city when region changes
+                    setIsRegionPickerVisible(false);
+                  }}
+                >
+                  <Text style={styles.optionText}>{region.name}</Text>
+                  {selectedRegionId === region.id && (
+                    <Check size={20} color="#4169E1" />
+                  )}
+                </TouchableOpacity>
+              ))}
+              
+              {/* Add New Region Button */}
+              <TouchableOpacity
+                style={styles.addOptionButton}
+                onPress={() => {
+                  setIsRegionPickerVisible(false);
+                  setIsAddRegionVisible(true);
+                }}
+              >
+                <Plus size={20} color="#4169E1" />
+                <Text style={styles.addOptionText}>Add your region</Text>
+              </TouchableOpacity>
+            </ScrollView>
+          </View>
+        </View>
+      </Modal>
+
+      {/* City Picker Modal */}
+      <Modal
+        visible={isCityPickerVisible}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setIsCityPickerVisible(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <TouchableOpacity
+            style={styles.modalBackdrop}
+            activeOpacity={1}
+            onPress={() => setIsCityPickerVisible(false)}
+          />
+          <View style={styles.modalSheet}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Select City / Town</Text>
+              <TouchableOpacity onPress={() => setIsCityPickerVisible(false)}>
+                <X size={24} color="#64748B" />
+              </TouchableOpacity>
+            </View>
+
+            <ScrollView style={styles.optionsList} showsVerticalScrollIndicator={false}>
+              {citiesForRegion.map((city) => (
+                <TouchableOpacity
+                  key={city.id}
+                  style={styles.optionItem}
+                  onPress={() => {
+                    setSelectedCityId(city.id);
+                    setIsCityPickerVisible(false);
+                  }}
+                >
+                  <Text style={styles.optionText}>{city.name}</Text>
+                  {selectedCityId === city.id && (
+                    <Check size={20} color="#4169E1" />
+                  )}
+                </TouchableOpacity>
+              ))}
+              
+              {/* Add New City Button */}
+              <TouchableOpacity
+                style={styles.addOptionButton}
+                onPress={() => {
+                  setIsCityPickerVisible(false);
+                  setIsAddCityVisible(true);
+                }}
+              >
+                <Plus size={20} color="#4169E1" />
+                <Text style={styles.addOptionText}>Add your city</Text>
+              </TouchableOpacity>
+            </ScrollView>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Add Region Modal */}
+      <Modal
+        visible={isAddRegionVisible}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setIsAddRegionVisible(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <TouchableOpacity
+            style={styles.modalBackdrop}
+            activeOpacity={1}
+            onPress={() => setIsAddRegionVisible(false)}
+          />
+          <View style={styles.addLocationSheet}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Add New Region</Text>
+              <TouchableOpacity onPress={() => setIsAddRegionVisible(false)}>
+                <X size={24} color="#64748B" />
+              </TouchableOpacity>
+            </View>
+
+            <Text style={styles.addLocationDescription}>
+              Can't find your region? Add it here and it will be available for everyone!
+            </Text>
+
+            <TextInput
+              style={styles.addLocationInput}
+              placeholder="Enter region name (e.g., Greater Accra)"
+              placeholderTextColor="#94A3B8"
+              value={newRegionName}
+              onChangeText={setNewRegionName}
+              autoCapitalize="words"
+              autoFocus
+            />
+
+            <TouchableOpacity
+              style={styles.addLocationSubmitButton}
+              onPress={handleAddNewRegion}
+            >
+              <Text style={styles.addLocationSubmitText}>Add Region</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Add City Modal */}
+      <Modal
+        visible={isAddCityVisible}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setIsAddCityVisible(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <TouchableOpacity
+            style={styles.modalBackdrop}
+            activeOpacity={1}
+            onPress={() => setIsAddCityVisible(false)}
+          />
+          <View style={styles.addLocationSheet}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Add New City</Text>
+              <TouchableOpacity onPress={() => setIsAddCityVisible(false)}>
+                <X size={24} color="#64748B" />
+              </TouchableOpacity>
+            </View>
+
+            <Text style={styles.addLocationDescription}>
+              Add your city to {selectedRegionName}. It will be available for all users!
+            </Text>
+
+            <TextInput
+              style={styles.addLocationInput}
+              placeholder="Enter city name (e.g., Madina, Kumasi)"
+              placeholderTextColor="#94A3B8"
+              value={newCityName}
+              onChangeText={setNewCityName}
+              autoCapitalize="words"
+              autoFocus
+            />
+
+            <TouchableOpacity
+              style={styles.addLocationSubmitButton}
+              onPress={handleAddNewCity}
+            >
+              <Text style={styles.addLocationSubmitText}>Add City</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+
       <View style={styles.header}>
         <TouchableOpacity style={styles.backButton} onPress={() => router.back()}>
           <ArrowLeft size={20} color="#020617" />
@@ -271,18 +676,67 @@ export default function CreateListingScreen() {
 
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Pricing</Text>
-          <Text style={styles.label}>Price (GHS) *</Text>
-          <View style={styles.priceRow}>
-            <Text style={styles.pricePrefix}>GHS</Text>
-            <TextInput
-              style={[styles.input, styles.priceInput]}
-              placeholder="0.00"
-              placeholderTextColor="#9CA3AF"
-              keyboardType={Platform.select({ ios: 'decimal-pad', android: 'numeric' })}
-              value={price}
-              onChangeText={setPrice}
-            />
+          
+          {/* Pricing Type Selection */}
+          <Text style={styles.label}>Price Type *</Text>
+          <View style={styles.chipRow}>
+            {[
+              { key: 'fixed', label: 'Fixed Price', desc: 'Set a specific price' },
+              { key: 'negotiable', label: 'Negotiable', desc: 'Open to offers' },
+              { key: 'contact', label: 'Call for Price', desc: 'Buyer contacts you' },
+            ].map((opt) => {
+              const selected = pricingType === opt.key;
+              return (
+                <TouchableOpacity
+                  key={opt.key}
+                  style={[styles.priceTypeChip, selected && styles.priceTypeChipSelected]}
+                  onPress={() => setPricingType(opt.key as PricingType)}
+                >
+                  <Text style={[styles.priceTypeLabel, selected && styles.priceTypeLabelSelected]}>
+                    {opt.label}
+                  </Text>
+                  <Text style={[styles.priceTypeDesc, selected && styles.priceTypeDescSelected]}>
+                    {opt.desc}
+                  </Text>
+                </TouchableOpacity>
+              );
+            })}
           </View>
+
+          {/* Show price input only for fixed and negotiable */}
+          {(pricingType === 'fixed' || pricingType === 'negotiable') && (
+            <>
+              <Text style={styles.label}>
+                Price (GHS) {pricingType === 'negotiable' ? '(Starting)' : '*'}
+              </Text>
+              <View style={styles.priceRow}>
+                <Text style={styles.pricePrefix}>GHS</Text>
+                <TextInput
+                  style={[styles.input, styles.priceInput]}
+                  placeholder="0.00"
+                  placeholderTextColor="#9CA3AF"
+                  keyboardType={Platform.select({ ios: 'decimal-pad', android: 'numeric' })}
+                  value={price}
+                  onChangeText={setPrice}
+                />
+                {pricingType === 'negotiable' && (
+                  <Text style={styles.negotiableTag}>or best offer</Text>
+                )}
+              </View>
+            </>
+          )}
+
+          {/* Call for Price message */}
+          {pricingType === 'contact' && (
+            <View style={styles.contactPriceInfo}>
+              <Text style={styles.contactPriceText}>
+                💬 Buyers will contact you directly for pricing information
+              </Text>
+              <Text style={styles.contactPriceSubtext}>
+                Make sure to provide accurate contact details below
+              </Text>
+            </View>
+          )}
 
           <Text style={styles.label}>Condition</Text>
           <View style={styles.chipRow}>
@@ -309,23 +763,46 @@ export default function CreateListingScreen() {
 
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Location</Text>
-          <Text style={styles.label}>City / Town</Text>
-          <TextInput
-            style={styles.input}
-            placeholder="Eg. Accra, Kumasi, Cape Coast"
-            placeholderTextColor="#9CA3AF"
-            value={locationCity}
-            onChangeText={setLocationCity}
-          />
+          
+          {/* Region Picker */}
+          <Text style={styles.label}>Region *</Text>
+          <TouchableOpacity 
+            style={styles.locationButton}
+            onPress={() => setIsRegionPickerVisible(true)}
+          >
+            <MapPin size={20} color={selectedRegionName ? '#4169E1' : '#9CA3AF'} />
+            <Text style={[
+              styles.locationButtonText,
+              selectedRegionName && styles.locationButtonTextSelected
+            ]}>
+              {selectedRegionName || 'Select your region'}
+            </Text>
+            <ChevronDown size={20} color="#9CA3AF" />
+          </TouchableOpacity>
 
-          <Text style={styles.label}>Region</Text>
-          <TextInput
-            style={styles.input}
-            placeholder="Eg. Greater Accra"
-            placeholderTextColor="#9CA3AF"
-            value={locationRegion}
-            onChangeText={setLocationRegion}
-          />
+          {/* City Picker */}
+          {selectedRegionId && (
+            <>
+              <Text style={[styles.label, { marginTop: 16 }]}>City / Town *</Text>
+              <TouchableOpacity 
+                style={styles.locationButton}
+                onPress={() => setIsCityPickerVisible(true)}
+              >
+                <MapPin size={20} color={selectedCityName ? '#4169E1' : '#9CA3AF'} />
+                <Text style={[
+                  styles.locationButtonText,
+                  selectedCityName && styles.locationButtonTextSelected
+                ]}>
+                  {selectedCityName || 'Select your city'}
+                </Text>
+                <ChevronDown size={20} color="#9CA3AF" />
+              </TouchableOpacity>
+            </>
+          )}
+          
+          <Text style={styles.helperText}>
+            Can't find your location? You can add it when you select the picker.
+          </Text>
         </View>
 
         <View style={styles.section}>
@@ -536,6 +1013,62 @@ const styles = StyleSheet.create({
   priceInput: {
     flex: 1,
   },
+  negotiableTag: {
+    fontSize: 12,
+    fontFamily: 'Inter-Regular',
+    color: '#10B981',
+    marginLeft: 8,
+  },
+  priceTypeChip: {
+    flex: 1,
+    padding: 12,
+    borderRadius: 8,
+    borderWidth: 2,
+    borderColor: '#E5E7EB',
+    backgroundColor: '#FFFFFF',
+    alignItems: 'center',
+  },
+  priceTypeChipSelected: {
+    backgroundColor: '#EFF6FF',
+    borderColor: '#1D4ED8',
+  },
+  priceTypeLabel: {
+    fontSize: 13,
+    fontFamily: 'Inter-SemiBold',
+    color: '#1F2937',
+    marginBottom: 2,
+  },
+  priceTypeLabelSelected: {
+    color: '#1D4ED8',
+  },
+  priceTypeDesc: {
+    fontSize: 11,
+    fontFamily: 'Inter-Regular',
+    color: '#6B7280',
+    textAlign: 'center',
+  },
+  priceTypeDescSelected: {
+    color: '#3B82F6',
+  },
+  contactPriceInfo: {
+    backgroundColor: '#FEF3C7',
+    padding: 12,
+    borderRadius: 8,
+    borderLeftWidth: 3,
+    borderLeftColor: '#F59E0B',
+    marginTop: 8,
+  },
+  contactPriceText: {
+    fontSize: 13,
+    fontFamily: 'Inter-SemiBold',
+    color: '#92400E',
+    marginBottom: 4,
+  },
+  contactPriceSubtext: {
+    fontSize: 12,
+    fontFamily: 'Inter-Regular',
+    color: '#78350F',
+  },
   chipRow: {
     flexDirection: 'row',
     flexWrap: 'wrap',
@@ -647,6 +1180,123 @@ const styles = StyleSheet.create({
   },
   submitButtonText: {
     fontSize: 15,
+    fontFamily: 'Inter-SemiBold',
+    color: '#FFFFFF',
+  },
+  locationButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+    borderRadius: 10,
+    backgroundColor: '#FFFFFF',
+  },
+  locationButtonText: {
+    flex: 1,
+    fontSize: 15,
+    fontFamily: 'Inter-Regular',
+    color: '#9CA3AF',
+  },
+  locationButtonTextSelected: {
+    color: '#0F172A',
+    fontFamily: 'Inter-SemiBold',
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(15, 23, 42, 0.4)',
+    justifyContent: 'flex-end',
+  },
+  modalBackdrop: {
+    flex: 1,
+  },
+  modalSheet: {
+    backgroundColor: '#FFFFFF',
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    maxHeight: '70%',
+    paddingBottom: 20,
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 20,
+    paddingVertical: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: '#F1F5F9',
+  },
+  modalTitle: {
+    fontSize: 18,
+    fontFamily: 'Inter-SemiBold',
+    color: '#0F172A',
+  },
+  optionsList: {
+    paddingHorizontal: 20,
+  },
+  optionItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: '#F1F5F9',
+  },
+  optionText: {
+    fontSize: 15,
+    fontFamily: 'Inter-Regular',
+    color: '#0F172A',
+  },
+  addOptionButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    paddingVertical: 16,
+    marginTop: 8,
+  },
+  addOptionText: {
+    fontSize: 15,
+    fontFamily: 'Inter-SemiBold',
+    color: '#4169E1',
+  },
+  addLocationSheet: {
+    backgroundColor: '#FFFFFF',
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    paddingHorizontal: 20,
+    paddingTop: 20,
+    paddingBottom: 32,
+  },
+  addLocationDescription: {
+    fontSize: 14,
+    fontFamily: 'Inter-Regular',
+    color: '#64748B',
+    marginTop: 8,
+    marginBottom: 20,
+    lineHeight: 20,
+  },
+  addLocationInput: {
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    borderRadius: 10,
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    fontSize: 15,
+    fontFamily: 'Inter-Regular',
+    color: '#0F172A',
+    backgroundColor: '#F8FAFC',
+    marginBottom: 16,
+  },
+  addLocationSubmitButton: {
+    backgroundColor: '#4169E1',
+    paddingVertical: 14,
+    borderRadius: 10,
+    alignItems: 'center',
+  },
+  addLocationSubmitText: {
+    fontSize: 16,
     fontFamily: 'Inter-SemiBold',
     color: '#FFFFFF',
   },

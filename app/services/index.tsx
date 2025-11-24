@@ -2,8 +2,8 @@ import { View, Text, StyleSheet, ScrollView, Image, TouchableOpacity, TextInput,
 import { useFonts, Inter_400Regular, Inter_600SemiBold } from '@expo-google-fonts/inter';
 import { useEffect, useState, useCallback, useRef } from 'react';
 import { SplashScreen, useRouter } from 'expo-router';
-import { Search, Filter, ArrowDownWideNarrow as SortDesc, MapPin, SearchSlash, ArrowLeft, Briefcase, GraduationCap, Wrench, Palette, Coffee, Stethoscope, Book, Camera, Plus, ShoppingBag } from 'lucide-react-native';
-import { supabase, type ProductService, type Profile } from '@/lib/supabase';
+import { Search, Filter, ArrowDownWideNarrow as SortDesc, MapPin, SearchSlash, ArrowLeft, Briefcase, GraduationCap, Wrench, Palette, Coffee, Stethoscope, Book, Camera, Plus, ShoppingBag, X, Bookmark } from 'lucide-react-native';
+import { supabase, type ProductService, type Profile, type Region, type City, type LocationWithCount } from '@/lib/supabase';
 import { SAMPLE_PRODUCTS } from '@/lib/marketplace';
 import { useAuth } from '@/hooks/useAuth';
 import { Alert } from 'react-native';
@@ -40,6 +40,27 @@ interface ProductServiceWithUser extends ProductService {
   reviews?: number;
 }
 
+// Helper function to format relative time
+const getRelativeTime = (dateString: string): string => {
+  const now = new Date();
+  const past = new Date(dateString);
+  const diffMs = now.getTime() - past.getTime();
+  const diffMins = Math.floor(diffMs / 60000);
+  const diffHours = Math.floor(diffMs / 3600000);
+  const diffDays = Math.floor(diffMs / 86400000);
+  const diffWeeks = Math.floor(diffDays / 7);
+  const diffMonths = Math.floor(diffDays / 30);
+  const diffYears = Math.floor(diffDays / 365);
+
+  if (diffMins < 1) return 'Just now';
+  if (diffMins < 60) return `${diffMins} ${diffMins === 1 ? 'min' : 'mins'} ago`;
+  if (diffHours < 24) return `${diffHours} ${diffHours === 1 ? 'hour' : 'hours'} ago`;
+  if (diffDays < 7) return `${diffDays} ${diffDays === 1 ? 'day' : 'days'} ago`;
+  if (diffWeeks < 4) return `${diffWeeks} ${diffWeeks === 1 ? 'week' : 'weeks'} ago`;
+  if (diffMonths < 12) return `${diffMonths} ${diffMonths === 1 ? 'month' : 'months'} ago`;
+  return `${diffYears} ${diffYears === 1 ? 'year' : 'years'} ago`;
+};
+
 export default function ServicesScreen() {
   const router = useRouter();
   const { user } = useAuth();
@@ -49,12 +70,54 @@ export default function ServicesScreen() {
   const [featuredBusinesses, setFeaturedBusinesses] = useState<ProductServiceWithUser[]>([]);
   const [loading, setLoading] = useState(true);
   const [userProfile, setUserProfile] = useState<Profile | null>(null);
-  const [sortOption, setSortOption] = useState<'newest' | 'price_low' | 'price_high'>('newest');
+  const [sortOption, setSortOption] = useState<'newest' | 'price_low' | 'price_high' | 'price_high_low'>('newest');
   const [typeFilter, setTypeFilter] = useState<'all' | 'product' | 'service'>('all');
   const [isFilterVisible, setIsFilterVisible] = useState(false);
   const [minPrice, setMinPrice] = useState('');
   const [maxPrice, setMaxPrice] = useState('');
   const [conditionFilter, setConditionFilter] = useState<'any' | 'new' | 'used'>('any');
+  const [selectedRegion, setSelectedRegion] = useState<string>('all');
+  const [selectedCity, setSelectedCity] = useState<string>('all');
+  const [regions, setRegions] = useState<Region[]>([]);
+  const [cities, setCities] = useState<City[]>([]);
+  const [locationCounts, setLocationCounts] = useState<LocationWithCount[]>([]);
+
+// Fetch regions and cities from database
+const fetchLocations = useCallback(async () => {
+  try {
+    // Fetch regions
+    const { data: regionsData, error: regionsError } = await supabase
+      .from('regions')
+      .select('*')
+      .eq('is_active', true)
+      .order('name');
+    
+    if (regionsError) throw regionsError;
+    setRegions(regionsData || []);
+
+    // Fetch cities
+    const { data: citiesData, error: citiesError } = await supabase
+      .from('cities')
+      .select('*')
+      .eq('is_active', true)
+      .order('name');
+    
+    if (citiesError) throw citiesError;
+    setCities(citiesData || []);
+
+    // Fetch location counts
+    const { data: countsData, error: countsError } = await supabase
+      .rpc('get_location_stats');
+    
+    if (countsError) {
+      console.log('Location stats not available:', countsError);
+    } else {
+      setLocationCounts(countsData || []);
+    }
+  } catch (error) {
+    console.error('Error fetching locations:', error);
+  }
+}, []);
   
   // Animation ref for shopping bag
   const bagScale = useRef(new Animated.Value(1)).current;
@@ -178,7 +241,8 @@ export default function ServicesScreen() {
   useEffect(() => {
     fetchProducts();
     fetchUserProfile();
-  }, [fetchProducts, fetchUserProfile]);
+    fetchLocations();
+  }, [fetchProducts, fetchUserProfile, fetchLocations]);
 
   const handleCategoryPress = (categoryId: string) => {
     const category = CATEGORIES.find(cat => cat.id === categoryId);
@@ -193,6 +257,52 @@ export default function ServicesScreen() {
       return;
     }
     router.push('/services/create');
+  };
+
+  const handleAddNewLocation = async () => {
+    if (!newRegionName.trim() || !newCityName.trim()) {
+      Alert.alert('Missing Information', 'Please enter both region and city names');
+      return;
+    }
+
+    if (!user) {
+      Alert.alert('Authentication Required', 'Please sign in to add a location');
+      return;
+    }
+
+    try {
+      const { data, error } = await supabase.rpc('add_new_location', {
+        p_region_name: newRegionName.trim(),
+        p_city_name: newCityName.trim(),
+        p_user_id: user.id
+      });
+
+      if (error) throw error;
+
+      Alert.alert(
+        'Success!',
+        `Location added: ${newRegionName} - ${newCityName}`,
+        [
+          {
+            text: 'OK',
+            onPress: () => {
+              setIsAddLocationVisible(false);
+              setNewRegionName('');
+              setNewCityName('');
+              fetchLocations(); // Refresh locations
+              // Set the newly added location as selected
+              if (data) {
+                setSelectedRegion(data.region_id);
+                setSelectedCity(data.city_id);
+              }
+            }
+          }
+        ]
+      );
+    } catch (error: any) {
+      console.error('Error adding location:', error);
+      Alert.alert('Error', error.message || 'Failed to add location');
+    }
   };
 
   // Animate shopping bag with bounce and swing effect
@@ -261,6 +371,7 @@ export default function ServicesScreen() {
         : product.title.toLowerCase().includes(query) ||
           (product.description || '').toLowerCase().includes(query) ||
           (product.category_name || '').toLowerCase().includes(query);
+      
       const numericMin = minPrice ? Number(minPrice.replace(/[^0-9.]/g, '')) : null;
       const numericMax = maxPrice ? Number(maxPrice.replace(/[^0-9.]/g, '')) : null;
       const priceValue = product.price ?? 0;
@@ -272,13 +383,46 @@ export default function ServicesScreen() {
           ? true
           : ((product as any).condition || 'not_applicable') === conditionFilter;
 
+      // Location filter - check if product location matches selected region and city
+      const matchesLocation = selectedRegion === 'all' 
+        ? true 
+        : (() => {
+            // If using new location system with region_id and city_id
+            if ((product as any).region_id) {
+              const regionMatch = selectedRegion === (product as any).region_id;
+              if (!regionMatch) return false;
+              
+              // If specific city is selected, match city too
+              if (selectedCity !== 'all') {
+                return selectedCity === (product as any).city_id;
+              }
+              return true;
+            }
+            
+            // Fallback to old location string matching
+            const productLocation = ((product as any).location || '').toLowerCase();
+            const selectedRegionData = regions.find(r => r.id === selectedRegion);
+            const regionName = selectedRegionData?.name.toLowerCase() || '';
+            
+            // If specific city is selected, match both region and city
+            if (selectedCity !== 'all') {
+              const selectedCityData = cities.find(c => c.id === selectedCity);
+              const cityName = selectedCityData?.name.toLowerCase() || '';
+              return productLocation.includes(regionName) && productLocation.includes(cityName);
+            }
+            
+            // Otherwise just match region
+            return productLocation.includes(regionName);
+          })();
+
       return (
         matchesType &&
         matchesCategory &&
         matchesSearch &&
         matchesMin &&
         matchesMax &&
-        matchesCondition
+        matchesCondition &&
+        matchesLocation
       );
     })
     .sort((a, b) => {
@@ -305,7 +449,7 @@ export default function ServicesScreen() {
 
   return (
     <View style={styles.container}>
-      {/* Filters modal */}
+      {/* Comprehensive Filters Modal - Tonaton/Jiji Style */}
       <Modal
         visible={isFilterVisible}
         transparent
@@ -318,29 +462,251 @@ export default function ServicesScreen() {
             activeOpacity={1}
             onPress={() => setIsFilterVisible(false)}
           />
-          <View style={styles.filterSheet}>
+          <ScrollView style={styles.filterSheet} bounces={false}>
             <View style={styles.filterSheetHeader}>
-              <Text style={styles.filterTitle}>Filters</Text>
+              <Text style={styles.filterTitle}>Filter Results</Text>
               <TouchableOpacity
                 onPress={() => {
+                  setSelectedRegion('all');
+                  setSelectedCity('all');
+                  setTypeFilter('all');
+                  setConditionFilter('any');
                   setMinPrice('');
                   setMaxPrice('');
-                  setConditionFilter('any');
-                  setIsFilterVisible(false);
+                  setSortOption('newest');
                 }}
               >
-                <Text style={styles.filterClearText}>Clear</Text>
+                <Text style={styles.filterClearText}>Reset All</Text>
               </TouchableOpacity>
             </View>
 
+            {/* Location - Region & City (Tonaton/Jiji style) */}
             <View style={styles.filterSection}>
-              <Text style={styles.filterLabel}>Price range (GHS)</Text>
+              <Text style={styles.filterLabel}>Location</Text>
+              
+              {/* Region Selection */}
+              <Text style={styles.filterSubLabel}>Region</Text>
+              <ScrollView 
+                horizontal 
+                showsHorizontalScrollIndicator={false}
+                style={styles.optionsScroll}
+                contentContainerStyle={styles.optionsScrollContent}
+              >
+                <TouchableOpacity
+                  style={[
+                    styles.optionChip,
+                    selectedRegion === 'all' && styles.optionChipSelected,
+                  ]}
+                  onPress={() => {
+                    setSelectedRegion('all');
+                    setSelectedCity('all');
+                  }}
+                >
+                  <Text
+                    style={[
+                      styles.optionChipText,
+                      selectedRegion === 'all' && styles.optionChipTextSelected,
+                    ]}
+                  >
+                    All Ghana
+                  </Text>
+                </TouchableOpacity>
+                {regions.map((region) => {
+                  const selected = selectedRegion === region.id;
+                  const count = locationCounts.filter(lc => lc.region_id === region.id).reduce((sum, lc) => sum + (lc.item_count || 0), 0);
+                  return (
+                    <TouchableOpacity
+                      key={region.id}
+                      style={[
+                        styles.optionChip,
+                        selected && styles.optionChipSelected,
+                      ]}
+                      onPress={() => {
+                        setSelectedRegion(region.id);
+                        setSelectedCity('all');
+                      }}
+                    >
+                      <Text
+                        style={[
+                          styles.optionChipText,
+                          selected && styles.optionChipTextSelected,
+                        ]}
+                      >
+                        {region.name}
+                        {count > 0 && ` (${count})`}
+                      </Text>
+                    </TouchableOpacity>
+                  );
+                })}
+              </ScrollView>
+
+              {/* City Selection - Shows only when region is selected */}
+              {selectedRegion !== 'all' && (
+                <>
+                  <Text style={[styles.filterSubLabel, { marginTop: 16 }]}>City/District</Text>
+                  <ScrollView 
+                    horizontal 
+                    showsHorizontalScrollIndicator={false}
+                    style={styles.optionsScroll}
+                    contentContainerStyle={styles.optionsScrollContent}
+                  >
+                    <TouchableOpacity
+                      style={[
+                        styles.optionChip,
+                        selectedCity === 'all' && styles.optionChipSelected,
+                      ]}
+                      onPress={() => setSelectedCity('all')}
+                    >
+                      <Text
+                        style={[
+                          styles.optionChipText,
+                          selectedCity === 'all' && styles.optionChipTextSelected,
+                        ]}
+                      >
+                        All Cities
+                      </Text>
+                    </TouchableOpacity>
+                    {cities.filter(city => city.region_id === selectedRegion).map((city) => {
+                      const selected = selectedCity === city.id;
+                      const count = locationCounts.find(lc => lc.city_id === city.id)?.item_count || 0;
+                      return (
+                        <TouchableOpacity
+                          key={city.id}
+                          style={[
+                            styles.optionChip,
+                            selected && styles.optionChipSelected,
+                          ]}
+                          onPress={() => setSelectedCity(city.id)}
+                        >
+                          <Text
+                            style={[
+                              styles.optionChipText,
+                              selected && styles.optionChipTextSelected,
+                            ]}
+                          >
+                            {city.name}
+                            {count > 0 && ` (${count})`}
+                          </Text>
+                        </TouchableOpacity>
+                      );
+                    })}
+                  </ScrollView>
+                </>
+              )}
+            </View>
+
+            {/* Category */}
+            <View style={styles.filterSection}>
+              <Text style={styles.filterLabel}>Category</Text>
+              <ScrollView 
+                horizontal 
+                showsHorizontalScrollIndicator={false}
+                contentContainerStyle={styles.categoryScroll}
+              >
+                {CATEGORIES.map((cat) => {
+                  const IconComp = cat.icon;
+                  return (
+                    <TouchableOpacity
+                      key={cat.id}
+                      style={[
+                        styles.categoryOptionChip,
+                        selectedCategory === cat.id && styles.categoryOptionChipSelected,
+                      ]}
+                      onPress={() => setSelectedCategory(selectedCategory === cat.id ? null : cat.id)}
+                    >
+                      <IconComp 
+                        size={16} 
+                        color={selectedCategory === cat.id ? '#FFFFFF' : '#64748B'} 
+                      />
+                      <Text
+                        style={[
+                          styles.categoryOptionText,
+                          selectedCategory === cat.id && styles.categoryOptionTextSelected,
+                        ]}
+                      >
+                        {cat.name}
+                      </Text>
+                    </TouchableOpacity>
+                  );
+                })}
+              </ScrollView>
+            </View>
+
+            {/* Type Filter */}
+            <View style={styles.filterSection}>
+              <Text style={styles.filterLabel}>Type</Text>
+              <View style={styles.optionsGrid}>
+                {[
+                  { key: 'all', label: 'All' },
+                  { key: 'product', label: 'Products' },
+                  { key: 'service', label: 'Services' },
+                ].map((opt) => {
+                  const selected = typeFilter === opt.key;
+                  return (
+                    <TouchableOpacity
+                      key={opt.key}
+                      style={[
+                        styles.optionChip,
+                        selected && styles.optionChipSelected,
+                      ]}
+                      onPress={() => setTypeFilter(opt.key as 'all' | 'product' | 'service')}
+                    >
+                      <Text
+                        style={[
+                          styles.optionChipText,
+                          selected && styles.optionChipTextSelected,
+                        ]}
+                      >
+                        {opt.label}
+                      </Text>
+                    </TouchableOpacity>
+                  );
+                })}
+              </View>
+            </View>
+
+            {/* Condition */}
+            <View style={styles.filterSection}>
+              <Text style={styles.filterLabel}>Condition</Text>
+              <View style={styles.optionsGrid}>
+                {[
+                  { key: 'any', label: 'Any Condition' },
+                  { key: 'new', label: 'Brand New' },
+                  { key: 'used', label: 'Used' },
+                ].map((opt) => {
+                  const selected = conditionFilter === opt.key;
+                  return (
+                    <TouchableOpacity
+                      key={opt.key}
+                      style={[
+                        styles.optionChip,
+                        selected && styles.optionChipSelected,
+                      ]}
+                      onPress={() => setConditionFilter(opt.key as 'any' | 'new' | 'used')}
+                    >
+                      <Text
+                        style={[
+                          styles.optionChipText,
+                          selected && styles.optionChipTextSelected,
+                        ]}
+                      >
+                        {opt.label}
+                      </Text>
+                    </TouchableOpacity>
+                  );
+                })}
+              </View>
+            </View>
+
+            {/* Price Range */}
+            <View style={styles.filterSection}>
+              <Text style={styles.filterLabel}>Price Range (GHS)</Text>
               <View style={styles.priceRowFilter}>
                 <View style={styles.priceFieldWrapper}>
-                  <Text style={styles.priceFieldPrefix}>Min</Text>
+                  <Text style={styles.priceFieldPrefix}>From</Text>
                   <TextInput
                     style={styles.priceFieldInput}
-                    placeholder="0"
+                    placeholder="Min price"
                     placeholderTextColor="#94A3B8"
                     keyboardType="numeric"
                     value={minPrice}
@@ -348,10 +714,10 @@ export default function ServicesScreen() {
                   />
                 </View>
                 <View style={styles.priceFieldWrapper}>
-                  <Text style={styles.priceFieldPrefix}>Max</Text>
+                  <Text style={styles.priceFieldPrefix}>To</Text>
                   <TextInput
                     style={styles.priceFieldInput}
-                    placeholder="Any"
+                    placeholder="Max price"
                     placeholderTextColor="#94A3B8"
                     keyboardType="numeric"
                     value={maxPrice}
@@ -361,28 +727,29 @@ export default function ServicesScreen() {
               </View>
             </View>
 
+            {/* Sort By */}
             <View style={styles.filterSection}>
-              <Text style={styles.filterLabel}>Condition</Text>
-              <View style={styles.typeToggleRow}>
+              <Text style={styles.filterLabel}>Sort By</Text>
+              <View style={styles.optionsGrid}>
                 {[
-                  { key: 'any', label: 'Any' },
-                  { key: 'new', label: 'New' },
-                  { key: 'used', label: 'Used' },
+                  { key: 'newest', label: 'Newest First' },
+                  { key: 'price_low', label: 'Price: Low to High' },
+                  { key: 'price_high', label: 'Price: High to Low' },
                 ].map((opt) => {
-                  const selected = conditionFilter === opt.key;
+                  const selected = sortOption === opt.key;
                   return (
                     <TouchableOpacity
                       key={opt.key}
                       style={[
-                        styles.typeChip,
-                        selected && styles.typeChipSelected,
+                        styles.optionChip,
+                        selected && styles.optionChipSelected,
                       ]}
-                      onPress={() => setConditionFilter(opt.key as 'any' | 'new' | 'used')}
+                      onPress={() => setSortOption(opt.key as any)}
                     >
                       <Text
                         style={[
-                          styles.typeChipText,
-                          selected && styles.typeChipTextSelected,
+                          styles.optionChipText,
+                          selected && styles.optionChipTextSelected,
                         ]}
                       >
                         {opt.label}
@@ -397,9 +764,11 @@ export default function ServicesScreen() {
               style={styles.applyFilterButton}
               onPress={() => setIsFilterVisible(false)}
             >
-              <Text style={styles.applyFilterText}>Apply filters</Text>
+              <Text style={styles.applyFilterText}>Show Results</Text>
             </TouchableOpacity>
-          </View>
+            
+            <View style={{ height: 40 }} />
+          </ScrollView>
         </View>
       </Modal>
       <ScrollView style={styles.scrollView} showsVerticalScrollIndicator={false}>
@@ -411,7 +780,12 @@ export default function ServicesScreen() {
             <Text style={styles.title}>Akora Marketplace</Text>
             <Text style={styles.subtitle}>Buy & sell within the Akora community</Text>
           </View>
-          <View style={{ width: 32 }} />
+          <TouchableOpacity 
+            onPress={() => router.push('/services/saved')} 
+            style={styles.bookmarkButton}
+          >
+            <Bookmark size={24} color="#020617" />
+          </TouchableOpacity>
         </View>
 
         <View style={styles.searchContainer}>
@@ -436,56 +810,43 @@ export default function ServicesScreen() {
           </TouchableOpacity>
         </View>
 
-        <View style={styles.sortRow}>
-          <View style={styles.sortLeft}>
-            <MapPin size={16} color="#64748B" />
-            <Text style={styles.sortText}>Ghana • All locations</Text>
+        {/* Location Display & Active Filters - Tonaton/Jiji Style */}
+        <View style={styles.locationBar}>
+          <View style={styles.locationInfo}>
+            <MapPin size={16} color="#4169E1" />
+            <Text style={styles.locationText}>
+              {selectedRegion === 'all' 
+                ? 'All Ghana' 
+                : `${regions.find(r => r.id === selectedRegion)?.name || ''}${
+                    selectedCity !== 'all' 
+                      ? ` • ${cities.find(c => c.id === selectedCity)?.name || ''}` 
+                      : ''
+                  }`}
+            </Text>
           </View>
-          <View style={styles.sortRightRow}>
-            <View style={styles.typeToggleRow}>
-              {[
-                { key: 'all', label: 'All' },
-                { key: 'product', label: 'Products' },
-                { key: 'service', label: 'Services' },
-              ].map((opt) => {
-                const selected = typeFilter === opt.key;
-                return (
-                  <TouchableOpacity
-                    key={opt.key}
-                    style={[
-                      styles.typeChip,
-                      selected && styles.typeChipSelected,
-                    ]}
-                    onPress={() => setTypeFilter(opt.key as 'all' | 'product' | 'service')}
-                  >
-                    <Text
-                      style={[
-                        styles.typeChipText,
-                        selected && styles.typeChipTextSelected,
-                      ]}
-                    >
-                      {opt.label}
-                    </Text>
-                  </TouchableOpacity>
-                );
-              })}
-            </View>
+          {(selectedRegion !== 'all' || selectedCategory || typeFilter !== 'all' || conditionFilter !== 'any') && (
             <TouchableOpacity 
-              style={styles.sortButton}
               onPress={() => {
-                if (sortOption === 'newest') setSortOption('price_low');
-                else if (sortOption === 'price_low') setSortOption('price_high');
-                else setSortOption('newest');
+                setSelectedRegion('all');
+                setSelectedCity('all');
+                setSelectedCategory(null);
+                setTypeFilter('all');
+                setConditionFilter('any');
+                setMinPrice('');
+                setMaxPrice('');
               }}
+              style={styles.clearFiltersBtn}
             >
-              <SortDesc size={18} color="#0F172A" />
-              <Text style={styles.sortButtonText}>
-                {sortOption === 'newest' && 'Newest'}
-                {sortOption === 'price_low' && 'Price: Low to High'}
-                {sortOption === 'price_high' && 'Price: High to Low'}
-              </Text>
+              <Text style={styles.clearFiltersBtnText}>Clear filters</Text>
             </TouchableOpacity>
-          </View>
+          )}
+        </View>
+
+        {/* Results Count */}
+        <View style={styles.resultsCount}>
+          <Text style={styles.resultsCountText}>
+            {filteredProducts.length} {filteredProducts.length === 1 ? 'result' : 'results'} found
+          </Text>
         </View>
 
         <ScrollView
@@ -550,6 +911,16 @@ export default function ServicesScreen() {
                   source={{ uri: (product as any).image_urls?.[0] || product.image_url || 'https://images.unsplash.com/photo-1460925895917-afdab827c52f?w=800&auto=format&fit=crop&q=60' }} 
                   style={styles.productImage} 
                 />
+                {product.condition && product.condition !== 'not_applicable' && (
+                  <View style={[
+                    styles.conditionBadge, 
+                    product.condition === 'new' ? styles.conditionBadgeNew : styles.conditionBadgeUsed
+                  ]}>
+                    <Text style={styles.conditionBadgeText}>
+                      {product.condition === 'new' ? 'NEW' : 'USED'}
+                    </Text>
+                  </View>
+                )}
                 <View style={styles.productContent}>
                   <Text style={styles.price}>{formatPrice(product.price || 0)}</Text>
                   <Text style={styles.productName} numberOfLines={2}>{product.title}</Text>
@@ -558,6 +929,9 @@ export default function ServicesScreen() {
                       {product.location_area || product.location_city || product.location_region || 'Location not set'}
                     </Text>
                   </View>
+                  <Text style={styles.timeStamp}>
+                    {getRelativeTime(product.created_at)}
+                  </Text>
                 </View>
               </TouchableOpacity>
             ))
@@ -598,6 +972,9 @@ const styles = StyleSheet.create({
     backgroundColor: '#FFFFFF',
   },
   backButton: {
+    padding: 8,
+  },
+  bookmarkButton: {
     padding: 8,
   },
   headerTextContainer: {
@@ -648,64 +1025,158 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
   },
-  sortRow: {
+  filtersScrollContainer: {
+    marginBottom: 20,
+    maxHeight: 44,
+  },
+  filtersScrollContent: {
+    paddingHorizontal: 16,
+    gap: 8,
+    alignItems: 'center',
+  },
+  filterChipGroup: {
+    flexDirection: 'row',
+    gap: 8,
+  },
+  filterChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderRadius: 999,
+    backgroundColor: '#F1F5F9',
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+  },
+  filterChipSelected: {
+    backgroundColor: '#4169E1',
+    borderColor: '#4169E1',
+  },
+  filterChipText: {
+    fontSize: 13,
+    fontFamily: 'Inter-SemiBold',
+    color: '#475569',
+  },
+  filterChipTextSelected: {
+    color: '#FFFFFF',
+  },
+  sortChip: {
+    backgroundColor: '#EEF2FF',
+    borderColor: '#DBEAFE',
+  },
+  sortChipText: {
+    fontSize: 13,
+    fontFamily: 'Inter-SemiBold',
+    color: '#4169E1',
+  },
+  locationBar: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: 16,
-    marginBottom: 12,
+    paddingVertical: 12,
+    backgroundColor: '#F8FAFC',
+    borderBottomWidth: 1,
+    borderBottomColor: '#E2E8F0',
   },
-  sortLeft: {
+  locationInfo: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
   },
-  sortRightRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
+  locationText: {
+    fontSize: 14,
+    fontFamily: 'Inter-SemiBold',
+    color: '#0F172A',
   },
-  sortText: {
+  clearFiltersBtn: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 6,
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+  },
+  clearFiltersBtnText: {
+    fontSize: 12,
+    fontFamily: 'Inter-SemiBold',
+    color: '#64748B',
+  },
+  resultsCount: {
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    backgroundColor: '#FFFFFF',
+  },
+  resultsCountText: {
     fontSize: 13,
     fontFamily: 'Inter-Regular',
     color: '#64748B',
   },
-  sortButton: {
+  optionsGrid: {
     flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    borderRadius: 999,
-    backgroundColor: '#EEF2FF',
+    flexWrap: 'wrap',
+    gap: 8,
   },
-  sortButtonText: {
+  optionChip: {
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderRadius: 8,
+    backgroundColor: '#F8FAFC',
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+  },
+  optionChipSelected: {
+    backgroundColor: '#4169E1',
+    borderColor: '#4169E1',
+  },
+  optionChipText: {
     fontSize: 13,
     fontFamily: 'Inter-SemiBold',
-    color: '#1D4ED8',
+    color: '#475569',
   },
-  typeToggleRow: {
+  optionChipTextSelected: {
+    color: '#FFFFFF',
+  },
+  filterSubLabel: {
+    fontSize: 12,
+    fontFamily: 'Inter-SemiBold',
+    color: '#64748B',
+    marginTop: 4,
+    marginBottom: 8,
+  },
+  categoryScroll: {
+    gap: 8,
+  },
+  categoryOptionChip: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#E5E7EB',
-    borderRadius: 999,
-    padding: 2,
+    gap: 8,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderRadius: 8,
+    backgroundColor: '#F8FAFC',
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
   },
-  typeChip: {
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 999,
+  categoryOptionChipSelected: {
+    backgroundColor: '#4169E1',
+    borderColor: '#4169E1',
   },
-  typeChipSelected: {
-    backgroundColor: '#FFFFFF',
-  },
-  typeChipText: {
-    fontSize: 11,
+  categoryOptionText: {
+    fontSize: 13,
     fontFamily: 'Inter-SemiBold',
-    color: '#4B5563',
+    color: '#475569',
   },
-  typeChipTextSelected: {
-    color: '#111827',
+  categoryOptionTextSelected: {
+    color: '#FFFFFF',
+  },
+  optionsScroll: {
+    maxHeight: 150,
+  },
+  optionsScrollContent: {
+    gap: 8,
+    paddingBottom: 4,
   },
   categoriesScroll: {
     marginBottom: 24,
@@ -796,10 +1267,32 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
     borderWidth: 1,
     borderColor: '#E5E7EB',
+    position: 'relative',
   },
   productImage: {
     width: '100%',
     height: 140,
+  },
+  conditionBadge: {
+    position: 'absolute',
+    top: 8,
+    right: 8,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 4,
+    zIndex: 1,
+  },
+  conditionBadgeNew: {
+    backgroundColor: '#10B981',
+  },
+  conditionBadgeUsed: {
+    backgroundColor: '#F59E0B',
+  },
+  conditionBadgeText: {
+    fontSize: 10,
+    fontFamily: 'Inter-SemiBold',
+    color: '#FFFFFF',
+    letterSpacing: 0.5,
   },
   productContent: {
     padding: 10,
@@ -824,6 +1317,12 @@ const styles = StyleSheet.create({
     fontSize: 11,
     fontFamily: 'Inter-Regular',
     color: '#6B7280',
+  },
+  timeStamp: {
+    fontSize: 10,
+    fontFamily: 'Inter-Regular',
+    color: '#9CA3AF',
+    marginTop: 4,
   },
   loadingContainer: {
     width: '100%',
@@ -904,6 +1403,7 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   filterSheet: {
+    maxHeight: '85%',
     backgroundColor: '#FFFFFF',
     paddingHorizontal: 16,
     paddingTop: 16,

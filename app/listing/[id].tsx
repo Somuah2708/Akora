@@ -1,16 +1,52 @@
-import { View, Text, StyleSheet, ScrollView, Image, TouchableOpacity, Alert, ActivityIndicator, TextInput } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, Image, TouchableOpacity, Alert, ActivityIndicator, TextInput, Dimensions, Linking, Modal } from 'react-native';
 import { useFonts, Inter_400Regular, Inter_600SemiBold } from '@expo-google-fonts/inter';
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import { SplashScreen, useRouter, useLocalSearchParams } from 'expo-router';
-import { ArrowLeft, Star, MessageCircle, Share2, Edit, Trash2, Save, X, MapPin, Mail, Phone } from 'lucide-react-native';
-import { supabase, type ProductService, type Profile } from '@/lib/supabase';
+import { ArrowLeft, Star, MessageCircle, Share2, Edit, Trash2, Save, X, MapPin, Mail, Phone, Camera, Plus, ChevronDown, Bookmark } from 'lucide-react-native';
+import { supabase, type ProductService, type Profile, type Region, type City } from '@/lib/supabase';
 import { useAuth } from '@/hooks/useAuth';
+import * as ImagePicker from 'expo-image-picker';
 
 SplashScreen.preventAutoHideAsync();
 
 interface ProductServiceWithUser extends ProductService {
   user: Profile;
 }
+
+// Helper function to format condition display
+const formatCondition = (condition?: string): string => {
+  switch (condition) {
+    case 'new':
+      return 'Brand New';
+    case 'used':
+      return 'Used';
+    case 'not_applicable':
+      return 'N/A';
+    default:
+      return 'N/A';
+  }
+};
+
+// Helper function to format relative time
+const getRelativeTime = (dateString: string): string => {
+  const now = new Date();
+  const past = new Date(dateString);
+  const diffMs = now.getTime() - past.getTime();
+  const diffMins = Math.floor(diffMs / 60000);
+  const diffHours = Math.floor(diffMs / 3600000);
+  const diffDays = Math.floor(diffMs / 86400000);
+  const diffWeeks = Math.floor(diffDays / 7);
+  const diffMonths = Math.floor(diffDays / 30);
+  const diffYears = Math.floor(diffDays / 365);
+
+  if (diffMins < 1) return 'Just now';
+  if (diffMins < 60) return `${diffMins} ${diffMins === 1 ? 'min' : 'mins'} ago`;
+  if (diffHours < 24) return `${diffHours} ${diffHours === 1 ? 'hour' : 'hours'} ago`;
+  if (diffDays < 7) return `${diffDays} ${diffDays === 1 ? 'day' : 'days'} ago`;
+  if (diffWeeks < 4) return `${diffWeeks} ${diffWeeks === 1 ? 'week' : 'weeks'} ago`;
+  if (diffMonths < 12) return `${diffMonths} ${diffMonths === 1 ? 'month' : 'months'} ago`;
+  return `${diffYears} ${diffYears === 1 ? 'year' : 'years'} ago`;
+};
 
 export default function ListingDetailScreen() {
   const router = useRouter();
@@ -19,11 +55,30 @@ export default function ListingDetailScreen() {
   const [listing, setListing] = useState<ProductServiceWithUser | null>(null);
   const [loading, setLoading] = useState(true);
   const [isEditing, setIsEditing] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
+  const [selectedImageIndex, setSelectedImageIndex] = useState(0);
+  const [isSaved, setIsSaved] = useState(false);
+  const imageScrollViewRef = useRef<ScrollView>(null);
+  
+  // Edit form states
   const [editedTitle, setEditedTitle] = useState('');
   const [editedDescription, setEditedDescription] = useState('');
   const [editedPrice, setEditedPrice] = useState('');
-  const [isSaving, setIsSaving] = useState(false);
-  const [selectedImageIndex, setSelectedImageIndex] = useState(0);
+  const [editedPricingType, setEditedPricingType] = useState<'fixed' | 'negotiable' | 'contact'>('fixed');
+  const [editedCondition, setEditedCondition] = useState<'new' | 'used' | 'not_applicable'>('not_applicable');
+  const [editedCategory, setEditedCategory] = useState('');
+  const [editedListingType, setEditedListingType] = useState<'product' | 'service'>('product');
+  const [editedContactPhone, setEditedContactPhone] = useState('');
+  const [editedContactWhatsapp, setEditedContactWhatsapp] = useState('');
+  const [editedImageUris, setEditedImageUris] = useState<string[]>([]);
+  
+  // Location states
+  const [regions, setRegions] = useState<Region[]>([]);
+  const [cities, setCities] = useState<City[]>([]);
+  const [editedRegionId, setEditedRegionId] = useState<string>('');
+  const [editedCityId, setEditedCityId] = useState<string>('');
+  const [isRegionPickerVisible, setIsRegionPickerVisible] = useState(false);
+  const [isCityPickerVisible, setIsCityPickerVisible] = useState(false);
 
   const [fontsLoaded] = useFonts({
     'Inter-Regular': Inter_400Regular,
@@ -38,7 +93,39 @@ export default function ListingDetailScreen() {
 
   useEffect(() => {
     fetchListing();
+    fetchLocations();
   }, [id]);
+
+  useEffect(() => {
+    // Re-check saved status when user changes or when returning to screen
+    if (user && id) {
+      checkIfSaved();
+    }
+  }, [user, id]);
+
+  const fetchLocations = async () => {
+    try {
+      const { data: regionsData, error: regionsError } = await supabase
+        .from('regions')
+        .select('*')
+        .eq('is_active', true)
+        .order('name');
+      
+      if (regionsError) throw regionsError;
+      setRegions(regionsData || []);
+
+      const { data: citiesData, error: citiesError } = await supabase
+        .from('cities')
+        .select('*')
+        .eq('is_active', true)
+        .order('name');
+      
+      if (citiesError) throw citiesError;
+      setCities(citiesData || []);
+    } catch (error) {
+      console.error('Error fetching locations:', error);
+    }
+  };
 
   const fetchListing = async () => {
     try {
@@ -65,7 +152,29 @@ export default function ListingDetailScreen() {
         setEditedTitle(listingData.title);
         setEditedDescription(listingData.description);
         setEditedPrice(listingData.price?.toString() || '0');
-        setSelectedImageIndex(0); // Reset to first image when listing loads
+        setEditedPricingType((listingData as any).pricing_type || 'fixed');
+        setEditedCondition((listingData as any).condition || 'not_applicable');
+        setEditedCategory(listingData.category_name);
+        setEditedListingType(listingData.type || 'product');
+        setEditedContactPhone((listingData as any).contact_phone || '');
+        setEditedContactWhatsapp((listingData as any).contact_whatsapp || '');
+        setEditedRegionId((listingData as any).region_id || '');
+        setEditedCityId((listingData as any).city_id || '');
+        
+        // Set images from image_urls array
+        let images: string[] = [];
+        if ((listingData as any).image_urls && Array.isArray((listingData as any).image_urls)) {
+          images = (listingData as any).image_urls;
+        } else if (listingData.image_url) {
+          images = [listingData.image_url];
+        }
+        setEditedImageUris(images);
+        setSelectedImageIndex(0);
+      }
+
+      // Check if listing is saved (separate from listing fetch to avoid blocking)
+      if (user && id) {
+        checkIfSaved();
       }
     } catch (error) {
       console.error('Error fetching listing:', error);
@@ -75,35 +184,214 @@ export default function ListingDetailScreen() {
     }
   };
 
+  const checkIfSaved = async () => {
+    if (!user || !id) return;
+
+    try {
+      const { data: savedData, error } = await supabase
+        .from('saved_listings')
+        .select('id')
+        .eq('user_id', user.id)
+        .eq('listing_id', id)
+        .maybeSingle(); // Use maybeSingle instead of single to avoid error when no record exists
+      
+      if (!error) {
+        setIsSaved(!!savedData);
+      }
+    } catch (error) {
+      console.error('Error checking saved status:', error);
+      // Don't show alert, just fail silently
+    }
+  };
+
+  const toggleSave = async () => {
+    if (!user) {
+      Alert.alert('Sign in required', 'Please sign in to save listings');
+      return;
+    }
+
+    try {
+      if (isSaved) {
+        // Show message that it's already saved
+        Alert.alert('Already Saved', 'This item is already in your saved listings');
+        return;
+      }
+
+      // Check if already saved in database (in case state is out of sync)
+      const { data: existingData } = await supabase
+        .from('saved_listings')
+        .select('id')
+        .eq('user_id', user.id)
+        .eq('listing_id', id)
+        .single();
+
+      if (existingData) {
+        // Already saved in database, update local state
+        setIsSaved(true);
+        Alert.alert('Already Saved', 'This item is already in your saved listings');
+        return;
+      }
+
+      // Save
+      const { error } = await supabase
+        .from('saved_listings')
+        .insert({
+          user_id: user.id,
+          listing_id: id,
+        });
+
+      if (error) throw error;
+      setIsSaved(true);
+      Alert.alert('Saved!', 'Item added to your saved listings');
+    } catch (error) {
+      console.error('Error toggling save:', error);
+      // Check if it's a duplicate key error
+      if ((error as any)?.code === '23505') {
+        setIsSaved(true);
+        Alert.alert('Already Saved', 'This item is already in your saved listings');
+      } else {
+        Alert.alert('Error', 'Failed to save listing');
+      }
+    }
+  };
+
   const handleEdit = () => {
     setIsEditing(true);
   };
 
   const handleCancelEdit = () => {
     setIsEditing(false);
-    setEditedTitle(listing?.title || '');
-    setEditedDescription(listing?.description || '');
-    setEditedPrice(listing?.price?.toString() || '0');
+    if (listing) {
+      setEditedTitle(listing.title);
+      setEditedDescription(listing.description);
+      setEditedPrice(listing.price?.toString() || '0');
+      setEditedPricingType((listing as any).pricing_type || 'fixed');
+      setEditedCondition((listing as any).condition || 'not_applicable');
+      setEditedCategory(listing.category_name);
+      setEditedListingType(listing.type || 'product');
+      setEditedContactPhone((listing as any).contact_phone || '');
+      setEditedContactWhatsapp((listing as any).contact_whatsapp || '');
+      setEditedRegionId((listing as any).region_id || '');
+      setEditedCityId((listing as any).city_id || '');
+      
+      let images: string[] = [];
+      if ((listing as any).image_urls && Array.isArray((listing as any).image_urls)) {
+        images = (listing as any).image_urls;
+      } else if (listing.image_url) {
+        images = [listing.image_url];
+      }
+      setEditedImageUris(images);
+    }
+  };
+
+  const handlePickImages = async () => {
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ['images'],
+      allowsMultipleSelection: true,
+      quality: 0.8,
+      selectionLimit: 5 - editedImageUris.length,
+    });
+
+    if (!result.canceled && result.assets) {
+      const newUris = result.assets.map(asset => asset.uri);
+      setEditedImageUris([...editedImageUris, ...newUris]);
+    }
+  };
+
+  const handleRemoveImage = (index: number) => {
+    setEditedImageUris(editedImageUris.filter((_, i) => i !== index));
   };
 
   const handleSaveEdit = async () => {
-    if (!editedTitle.trim() || !editedDescription.trim() || !editedPrice.trim()) {
-      Alert.alert('Error', 'Please fill in all fields');
+    if (!editedTitle.trim() || !editedDescription.trim()) {
+      Alert.alert('Error', 'Please fill in title and description');
+      return;
+    }
+
+    if (editedPricingType !== 'contact' && !editedPrice.trim()) {
+      Alert.alert('Error', 'Please enter a price or select "Call for Price"');
+      return;
+    }
+
+    if (!editedCategory.trim()) {
+      Alert.alert('Error', 'Please select a category');
+      return;
+    }
+
+    if (editedImageUris.length === 0) {
+      Alert.alert('Error', 'Please add at least one image');
       return;
     }
 
     try {
       setIsSaving(true);
 
+      // Upload new images that are local URIs (not already uploaded)
+      let uploadedUrls: string[] = [];
+      for (const uri of editedImageUris) {
+        // If it's already a supabase URL, keep it
+        if (uri.includes('supabase')) {
+          uploadedUrls.push(uri);
+        } else {
+          // Upload new image
+          const response = await fetch(uri);
+          const blob = await response.blob();
+          
+          // Convert blob to ArrayBuffer using FileReader
+          const arrayBuffer = await new Promise<ArrayBuffer>((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onloadend = () => resolve(reader.result as ArrayBuffer);
+            reader.onerror = reject;
+            reader.readAsArrayBuffer(blob);
+          });
+
+          const fileName = `${user?.id}/${Date.now()}-${Math.random().toString(36).substring(7)}.jpg`;
+          
+          const { data: uploadData, error: uploadError } = await supabase.storage
+            .from('product-images')
+            .upload(fileName, arrayBuffer, {
+              contentType: 'image/jpeg',
+              upsert: false,
+            });
+
+          if (uploadError) throw uploadError;
+
+          const { data: { publicUrl } } = supabase.storage
+            .from('product-images')
+            .getPublicUrl(fileName);
+
+          uploadedUrls.push(publicUrl);
+        }
+      }
+
+      const numericPrice = editedPricingType === 'contact' ? 0 : Number(editedPrice);
+
+      // Verify user owns this listing
+      if (listing?.user_id !== user?.id) {
+        Alert.alert('Error', 'You do not have permission to edit this listing');
+        return;
+      }
+
       const { error } = await supabase
         .from('products_services')
         .update({
           title: editedTitle.trim(),
           description: editedDescription.trim(),
-          price: Number(editedPrice),
+          price: numericPrice,
+          pricing_type: editedPricingType,
+          condition: editedCondition,
+          category_name: editedCategory.trim(),
+          type: editedListingType,
+          contact_phone: editedContactPhone.trim() || null,
+          contact_whatsapp: editedContactWhatsapp.trim() || null,
+          region_id: editedRegionId || null,
+          city_id: editedCityId || null,
+          image_url: uploadedUrls[0] || null,
+          image_urls: uploadedUrls,
           updated_at: new Date().toISOString(),
         })
-        .eq('id', id);
+        .eq('id', id)
+        .eq('user_id', user?.id);
 
       if (error) throw error;
 
@@ -148,12 +436,30 @@ export default function ListingDetailScreen() {
     );
   };
 
-  const handleContact = () => {
-    Alert.alert('Contact Seller', 'This feature will allow you to message the seller.');
-  };
+  const handleWhatsAppContact = () => {
+    if (!listing.contact_whatsapp) {
+      Alert.alert('No WhatsApp', 'Seller has not provided a WhatsApp number.');
+      return;
+    }
 
-  const handleShare = () => {
-    Alert.alert('Share Listing', 'This feature will allow you to share this listing.');
+    // Remove any non-numeric characters from the phone number
+    const phoneNumber = listing.contact_whatsapp.replace(/[^0-9]/g, '');
+    
+    // Open WhatsApp with the seller's number
+    const whatsappUrl = `https://wa.me/${phoneNumber}`;
+    
+    Linking.canOpenURL(whatsappUrl)
+      .then((supported) => {
+        if (supported) {
+          return Linking.openURL(whatsappUrl);
+        } else {
+          Alert.alert('Error', 'WhatsApp is not installed on this device.');
+        }
+      })
+      .catch((err) => {
+        console.error('Error opening WhatsApp:', err);
+        Alert.alert('Error', 'Failed to open WhatsApp.');
+      });
   };
 
   if (!fontsLoaded || loading) {
@@ -184,6 +490,11 @@ export default function ListingDetailScreen() {
           <ArrowLeft size={24} color="#000000" />
         </TouchableOpacity>
         <Text style={styles.title}>Listing Details</Text>
+        {!isOwner && !isEditing && (
+          <TouchableOpacity onPress={toggleSave} style={styles.saveButton}>
+            <Bookmark size={24} color={isSaved ? "#4169E1" : "#666666"} fill={isSaved ? "#4169E1" : "none"} />
+          </TouchableOpacity>
+        )}
         {isOwner && !isEditing && (
           <View style={styles.headerActions}>
             <TouchableOpacity onPress={handleEdit} style={styles.headerButton}>
@@ -208,14 +519,19 @@ export default function ListingDetailScreen() {
             </TouchableOpacity>
           </View>
         )}
-        {!isOwner && <View style={{ width: 40 }} />}
       </View>
 
       <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
         {(() => {
-          // Parse image_url - it could be a single URL or JSON array
+          // Get images from image_urls array (new format) or image_url (legacy)
           let images: string[] = [];
-          if (listing.image_url) {
+          
+          // Try image_urls array first (new format)
+          if (listing.image_urls && Array.isArray(listing.image_urls) && listing.image_urls.length > 0) {
+            images = listing.image_urls;
+          } 
+          // Fallback to image_url (legacy format)
+          else if (listing.image_url) {
             if (listing.image_url.startsWith('[')) {
               try {
                 images = JSON.parse(listing.image_url);
@@ -234,20 +550,38 @@ export default function ListingDetailScreen() {
 
           return (
             <>
-              {/* Main Image Display */}
+              {/* Main Image Display with Swipeable Gallery */}
               <View style={styles.mainImageContainer}>
-                <Image
-                  source={{ uri: images[selectedImageIndex] }}
-                  style={styles.mainImage}
-                  resizeMode="cover"
-                />
-                {images.length > 1 && (
-                  <View style={styles.imageCounter}>
-                    <Text style={styles.imageCounterText}>
-                      {selectedImageIndex + 1} / {images.length}
-                    </Text>
-                  </View>
-                )}
+                <ScrollView
+                  ref={imageScrollViewRef}
+                  horizontal
+                  pagingEnabled
+                  showsHorizontalScrollIndicator={false}
+                  onMomentumScrollEnd={(event) => {
+                    const offsetX = event.nativeEvent.contentOffset.x;
+                    const imageWidth = event.nativeEvent.layoutMeasurement.width;
+                    const index = Math.round(offsetX / imageWidth);
+                    setSelectedImageIndex(index);
+                  }}
+                  scrollEventThrottle={16}
+                  style={styles.imageScrollView}
+                >
+                  {images.map((imageUri, index) => (
+                    <Image
+                      key={index}
+                      source={{ uri: imageUri }}
+                      style={styles.mainImage}
+                      resizeMode="cover"
+                    />
+                  ))}
+                </ScrollView>
+                
+                {/* Image Counter Badge (always show) */}
+                <View style={styles.imageCounter}>
+                  <Text style={styles.imageCounterText}>
+                    {selectedImageIndex + 1} / {images.length}
+                  </Text>
+                </View>
               </View>
               
               {/* Image Gallery Thumbnails */}
@@ -263,7 +597,15 @@ export default function ListingDetailScreen() {
                     {images.map((imageUri, index) => (
                       <TouchableOpacity
                         key={index}
-                        onPress={() => setSelectedImageIndex(index)}
+                        onPress={() => {
+                          setSelectedImageIndex(index);
+                          // Scroll main image to selected index
+                          const { width } = Dimensions.get('window');
+                          imageScrollViewRef.current?.scrollTo({
+                            x: index * width,
+                            animated: true,
+                          });
+                        }}
                         style={[
                           styles.galleryImageContainer,
                           selectedImageIndex === index && styles.selectedGalleryImage
@@ -285,9 +627,34 @@ export default function ListingDetailScreen() {
 
         <View style={styles.detailsContainer}>
           {isEditing ? (
-            <>
+            <ScrollView showsVerticalScrollIndicator={false}>
+              {/* Images Section */}
               <View style={styles.formGroup}>
-                <Text style={styles.label}>Title</Text>
+                <Text style={styles.label}>Images ({editedImageUris.length}/5)</Text>
+                <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.imagePickerScroll}>
+                  {editedImageUris.map((uri, index) => (
+                    <View key={index} style={styles.editImageContainer}>
+                      <Image source={{ uri }} style={styles.editImage} />
+                      <TouchableOpacity
+                        style={styles.removeImageButton}
+                        onPress={() => handleRemoveImage(index)}
+                      >
+                        <X size={16} color="#FFFFFF" />
+                      </TouchableOpacity>
+                    </View>
+                  ))}
+                  {editedImageUris.length < 5 && (
+                    <TouchableOpacity style={styles.addImageButton} onPress={handlePickImages}>
+                      <Camera size={24} color="#4169E1" />
+                      <Text style={styles.addImageText}>Add Photo</Text>
+                    </TouchableOpacity>
+                  )}
+                </ScrollView>
+              </View>
+
+              {/* Title */}
+              <View style={styles.formGroup}>
+                <Text style={styles.label}>Title *</Text>
                 <TextInput
                   style={styles.input}
                   value={editedTitle}
@@ -297,13 +664,14 @@ export default function ListingDetailScreen() {
                 />
               </View>
 
+              {/* Description */}
               <View style={styles.formGroup}>
-                <Text style={styles.label}>Description</Text>
+                <Text style={styles.label}>Description *</Text>
                 <TextInput
                   style={[styles.input, styles.textArea]}
                   value={editedDescription}
                   onChangeText={setEditedDescription}
-                  placeholder="Enter description"
+                  placeholder="Describe your item or service"
                   placeholderTextColor="#999999"
                   multiline
                   numberOfLines={6}
@@ -311,18 +679,160 @@ export default function ListingDetailScreen() {
                 />
               </View>
 
+              {/* Category */}
               <View style={styles.formGroup}>
-                <Text style={styles.label}>Price ($)</Text>
+                <Text style={styles.label}>Category *</Text>
                 <TextInput
                   style={styles.input}
-                  value={editedPrice}
-                  onChangeText={setEditedPrice}
-                  placeholder="Enter price"
+                  value={editedCategory}
+                  onChangeText={setEditedCategory}
+                  placeholder="e.g., Electronics, Fashion"
                   placeholderTextColor="#999999"
-                  keyboardType="numeric"
                 />
               </View>
-            </>
+
+              {/* Type */}
+              <View style={styles.formGroup}>
+                <Text style={styles.label}>Type</Text>
+                <View style={styles.chipRow}>
+                  <TouchableOpacity
+                    style={[styles.chip, editedListingType === 'product' && styles.chipSelected]}
+                    onPress={() => setEditedListingType('product')}
+                  >
+                    <Text style={[styles.chipText, editedListingType === 'product' && styles.chipTextSelected]}>
+                      Product
+                    </Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={[styles.chip, editedListingType === 'service' && styles.chipSelected]}
+                    onPress={() => setEditedListingType('service')}
+                  >
+                    <Text style={[styles.chipText, editedListingType === 'service' && styles.chipTextSelected]}>
+                      Service
+                    </Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
+
+              {/* Condition */}
+              <View style={styles.formGroup}>
+                <Text style={styles.label}>Condition</Text>
+                <View style={styles.chipRow}>
+                  {[
+                    { key: 'new', label: 'New' },
+                    { key: 'used', label: 'Used' },
+                    { key: 'not_applicable', label: 'N/A' },
+                  ].map((opt) => (
+                    <TouchableOpacity
+                      key={opt.key}
+                      style={[styles.chip, editedCondition === opt.key && styles.chipSelected]}
+                      onPress={() => setEditedCondition(opt.key as any)}
+                    >
+                      <Text style={[styles.chipText, editedCondition === opt.key && styles.chipTextSelected]}>
+                        {opt.label}
+                      </Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+              </View>
+
+              {/* Pricing Type */}
+              <View style={styles.formGroup}>
+                <Text style={styles.label}>Pricing</Text>
+                <View style={styles.chipRow}>
+                  {[
+                    { key: 'fixed', label: 'Fixed Price' },
+                    { key: 'negotiable', label: 'Negotiable' },
+                    { key: 'contact', label: 'Call for Price' },
+                  ].map((opt) => (
+                    <TouchableOpacity
+                      key={opt.key}
+                      style={[styles.chip, editedPricingType === opt.key && styles.chipSelected]}
+                      onPress={() => setEditedPricingType(opt.key as any)}
+                    >
+                      <Text style={[styles.chipText, editedPricingType === opt.key && styles.chipTextSelected]}>
+                        {opt.label}
+                      </Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+              </View>
+
+              {/* Price */}
+              {editedPricingType !== 'contact' && (
+                <View style={styles.formGroup}>
+                  <Text style={styles.label}>Price (GHS) *</Text>
+                  <TextInput
+                    style={styles.input}
+                    value={editedPrice}
+                    onChangeText={setEditedPrice}
+                    placeholder="Enter price"
+                    placeholderTextColor="#999999"
+                    keyboardType="numeric"
+                  />
+                </View>
+              )}
+
+              {/* Location - Region */}
+              <View style={styles.formGroup}>
+                <Text style={styles.label}>Region</Text>
+                <TouchableOpacity
+                  style={styles.locationButton}
+                  onPress={() => setIsRegionPickerVisible(true)}
+                >
+                  <MapPin size={20} color={editedRegionId ? '#4169E1' : '#9CA3AF'} />
+                  <Text style={[styles.locationButtonText, editedRegionId && styles.locationButtonTextSelected]}>
+                    {regions.find(r => r.id === editedRegionId)?.name || 'Select region'}
+                  </Text>
+                  <ChevronDown size={20} color="#9CA3AF" />
+                </TouchableOpacity>
+              </View>
+
+              {/* Location - City */}
+              {editedRegionId && (
+                <View style={styles.formGroup}>
+                  <Text style={styles.label}>City</Text>
+                  <TouchableOpacity
+                    style={styles.locationButton}
+                    onPress={() => setIsCityPickerVisible(true)}
+                  >
+                    <MapPin size={20} color={editedCityId ? '#4169E1' : '#9CA3AF'} />
+                    <Text style={[styles.locationButtonText, editedCityId && styles.locationButtonTextSelected]}>
+                      {cities.find(c => c.id === editedCityId)?.name || 'Select city'}
+                    </Text>
+                    <ChevronDown size={20} color="#9CA3AF" />
+                  </TouchableOpacity>
+                </View>
+              )}
+
+              {/* Contact Phone */}
+              <View style={styles.formGroup}>
+                <Text style={styles.label}>Contact Phone</Text>
+                <TextInput
+                  style={styles.input}
+                  value={editedContactPhone}
+                  onChangeText={setEditedContactPhone}
+                  placeholder="e.g., +233 XX XXX XXXX"
+                  placeholderTextColor="#999999"
+                  keyboardType="phone-pad"
+                />
+              </View>
+
+              {/* Contact WhatsApp */}
+              <View style={styles.formGroup}>
+                <Text style={styles.label}>WhatsApp Number</Text>
+                <TextInput
+                  style={styles.input}
+                  value={editedContactWhatsapp}
+                  onChangeText={setEditedContactWhatsapp}
+                  placeholder="e.g., +233 XX XXX XXXX"
+                  placeholderTextColor="#999999"
+                  keyboardType="phone-pad"
+                />
+              </View>
+
+              <View style={{ height: 100 }} />
+            </ScrollView>
           ) : (
             <>
               <Text style={styles.listingTitle}>{listing.title}</Text>
@@ -335,18 +845,30 @@ export default function ListingDetailScreen() {
                 </View>
                 <View style={styles.sellerDetails}>
                   <Text style={styles.sellerName}>{listing.user?.full_name || 'Unknown'}</Text>
-                  <Text style={styles.sellerRole}>Verified Seller</Text>
                 </View>
-                {!isOwner && (
-                  <TouchableOpacity style={styles.contactButton} onPress={handleContact}>
-                    <MessageCircle size={20} color="#4169E1" />
-                  </TouchableOpacity>
-                )}
+              </View>
+
+              <View style={styles.timestampSection}>
+                <Text style={styles.timestampText}>
+                  Posted {getRelativeTime(listing.created_at)}
+                </Text>
               </View>
 
               <View style={styles.priceSection}>
                 <Text style={styles.priceLabel}>Price</Text>
-                <Text style={styles.priceValue}>${listing.price}</Text>
+                {listing.pricing_type === 'contact' ? (
+                  <View>
+                    <Text style={styles.callForPriceText}>Call for Price</Text>
+                    <Text style={styles.callForPriceSubtext}>Contact seller for pricing</Text>
+                  </View>
+                ) : listing.pricing_type === 'negotiable' ? (
+                  <View>
+                    <Text style={styles.priceValue}>GHS {listing.price?.toLocaleString()}</Text>
+                    <Text style={styles.negotiableLabel}>Price Negotiable</Text>
+                  </View>
+                ) : (
+                  <Text style={styles.priceValue}>GHS {listing.price?.toLocaleString()}</Text>
+                )}
               </View>
 
               <View style={styles.section}>
@@ -389,15 +911,21 @@ export default function ListingDetailScreen() {
                 </View>
               </View>
 
-              {!isOwner && (
+              {listing.condition && listing.condition !== 'not_applicable' && (
+                <View style={styles.section}>
+                  <Text style={styles.sectionTitle}>Condition</Text>
+                  <View style={[styles.categoryBadge, listing.condition === 'new' ? styles.newBadge : styles.usedBadge]}>
+                    <Text style={[styles.categoryText, listing.condition === 'new' ? styles.newBadgeText : styles.usedBadgeText]}>
+                      {formatCondition(listing.condition)}
+                    </Text>
+                  </View>
+                </View>
+              )}
+
+              {!isOwner && listing.contact_whatsapp && (
                 <View style={styles.actions}>
-                  <TouchableOpacity style={styles.primaryButton} onPress={handleContact}>
-                    <MessageCircle size={20} color="#FFFFFF" />
-                    <Text style={styles.primaryButtonText}>Contact Seller</Text>
-                  </TouchableOpacity>
-                  
-                  <TouchableOpacity style={styles.secondaryButton} onPress={handleShare}>
-                    <Share2 size={20} color="#4169E1" />
+                  <TouchableOpacity style={styles.whatsappButton} onPress={handleWhatsAppContact}>
+                    <Text style={styles.whatsappButtonText}>💬 Chat on WhatsApp</Text>
                   </TouchableOpacity>
                 </View>
               )}
@@ -405,6 +933,67 @@ export default function ListingDetailScreen() {
           )}
         </View>
       </ScrollView>
+
+      {/* Region Picker Modal */}
+      <Modal visible={isRegionPickerVisible} animationType="slide" transparent>
+        <View style={styles.modalContainer}>
+          <View style={styles.modalContent}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Select Region</Text>
+              <TouchableOpacity onPress={() => setIsRegionPickerVisible(false)}>
+                <X size={24} color="#000000" />
+              </TouchableOpacity>
+            </View>
+            <ScrollView>
+              {regions.map((region) => (
+                <TouchableOpacity
+                  key={region.id}
+                  style={styles.modalItem}
+                  onPress={() => {
+                    setEditedRegionId(region.id);
+                    setEditedCityId(''); // Reset city when region changes
+                    setIsRegionPickerVisible(false);
+                  }}
+                >
+                  <Text style={styles.modalItemText}>{region.name}</Text>
+                  {editedRegionId === region.id && <Text style={styles.checkMark}>✓</Text>}
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
+          </View>
+        </View>
+      </Modal>
+
+      {/* City Picker Modal */}
+      <Modal visible={isCityPickerVisible} animationType="slide" transparent>
+        <View style={styles.modalContainer}>
+          <View style={styles.modalContent}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Select City</Text>
+              <TouchableOpacity onPress={() => setIsCityPickerVisible(false)}>
+                <X size={24} color="#000000" />
+              </TouchableOpacity>
+            </View>
+            <ScrollView>
+              {cities
+                .filter(city => city.region_id === editedRegionId)
+                .map((city) => (
+                  <TouchableOpacity
+                    key={city.id}
+                    style={styles.modalItem}
+                    onPress={() => {
+                      setEditedCityId(city.id);
+                      setIsCityPickerVisible(false);
+                    }}
+                  >
+                    <Text style={styles.modalItemText}>{city.name}</Text>
+                    {editedCityId === city.id && <Text style={styles.checkMark}>✓</Text>}
+                  </TouchableOpacity>
+                ))}
+            </ScrollView>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }
@@ -432,10 +1021,15 @@ const styles = StyleSheet.create({
   backButton: {
     padding: 8,
   },
+  saveButton: {
+    padding: 8,
+  },
   title: {
     fontSize: 18,
     fontFamily: 'Inter-SemiBold',
     color: '#000000',
+    flex: 1,
+    textAlign: 'center',
   },
   headerActions: {
     flexDirection: 'row',
@@ -453,9 +1047,12 @@ const styles = StyleSheet.create({
     backgroundColor: '#F8F9FA',
     position: 'relative',
   },
+  imageScrollView: {
+    flex: 1,
+  },
   mainImage: {
-    width: '100%',
-    height: '100%',
+    width: Dimensions.get('window').width,
+    height: 350,
   },
   imageCounter: {
     position: 'absolute',
@@ -562,6 +1159,14 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
   },
+  timestampSection: {
+    marginBottom: 16,
+  },
+  timestampText: {
+    fontSize: 13,
+    fontFamily: 'Inter-Regular',
+    color: '#9CA3AF',
+  },
   priceSection: {
     backgroundColor: '#F8F9FA',
     borderRadius: 12,
@@ -578,6 +1183,23 @@ const styles = StyleSheet.create({
     fontSize: 32,
     fontFamily: 'Inter-SemiBold',
     color: '#4169E1',
+  },
+  callForPriceText: {
+    fontSize: 24,
+    fontFamily: 'Inter-SemiBold',
+    color: '#FF9500',
+  },
+  callForPriceSubtext: {
+    fontSize: 14,
+    fontFamily: 'Inter-Regular',
+    color: '#666666',
+    marginTop: 4,
+  },
+  negotiableLabel: {
+    fontSize: 14,
+    fontFamily: 'Inter-Medium',
+    color: '#34C759',
+    marginTop: 4,
   },
   section: {
     marginBottom: 20,
@@ -634,10 +1256,35 @@ const styles = StyleSheet.create({
     fontFamily: 'Inter-SemiBold',
     color: '#4169E1',
   },
+  newBadge: {
+    backgroundColor: '#D1FAE5',
+  },
+  newBadgeText: {
+    color: '#059669',
+  },
+  usedBadge: {
+    backgroundColor: '#FEF3C7',
+  },
+  usedBadgeText: {
+    color: '#D97706',
+  },
   actions: {
     flexDirection: 'row',
     gap: 12,
     marginTop: 20,
+  },
+  whatsappButton: {
+    flex: 1,
+    backgroundColor: '#25D366',
+    borderRadius: 12,
+    padding: 16,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  whatsappButtonText: {
+    fontSize: 16,
+    fontFamily: 'Inter-SemiBold',
+    color: '#FFFFFF',
   },
   primaryButton: {
     flex: 1,
@@ -684,6 +1331,135 @@ const styles = StyleSheet.create({
   textArea: {
     height: 120,
     textAlignVertical: 'top',
+  },
+  imagePickerScroll: {
+    marginTop: 8,
+  },
+  editImageContainer: {
+    position: 'relative',
+    marginRight: 12,
+  },
+  editImage: {
+    width: 100,
+    height: 100,
+    borderRadius: 8,
+  },
+  removeImageButton: {
+    position: 'absolute',
+    top: 4,
+    right: 4,
+    backgroundColor: '#FF4444',
+    borderRadius: 12,
+    width: 24,
+    height: 24,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  addImageButton: {
+    width: 100,
+    height: 100,
+    borderRadius: 8,
+    borderWidth: 2,
+    borderColor: '#E5E7EB',
+    borderStyle: 'dashed',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  addImageText: {
+    fontSize: 12,
+    fontFamily: 'Inter-Regular',
+    color: '#4169E1',
+    marginTop: 4,
+  },
+  chipRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+    marginTop: 8,
+  },
+  chip: {
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+    backgroundColor: '#FFFFFF',
+  },
+  chipSelected: {
+    backgroundColor: '#4169E1',
+    borderColor: '#4169E1',
+  },
+  chipText: {
+    fontSize: 14,
+    fontFamily: 'Inter-Regular',
+    color: '#666666',
+  },
+  chipTextSelected: {
+    color: '#FFFFFF',
+    fontFamily: 'Inter-SemiBold',
+  },
+  locationButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+    borderRadius: 8,
+    backgroundColor: '#FFFFFF',
+    marginTop: 8,
+  },
+  locationButtonText: {
+    flex: 1,
+    fontSize: 15,
+    fontFamily: 'Inter-Regular',
+    color: '#9CA3AF',
+  },
+  locationButtonTextSelected: {
+    color: '#0F172A',
+  },
+  modalContainer: {
+    flex: 1,
+    justifyContent: 'flex-end',
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+  },
+  modalContent: {
+    backgroundColor: '#FFFFFF',
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    maxHeight: '70%',
+    paddingBottom: 20,
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    padding: 20,
+    borderBottomWidth: 1,
+    borderBottomColor: '#F0F0F0',
+  },
+  modalTitle: {
+    fontSize: 18,
+    fontFamily: 'Inter-SemiBold',
+    color: '#000000',
+  },
+  modalItem: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    padding: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: '#F0F0F0',
+  },
+  modalItemText: {
+    fontSize: 16,
+    fontFamily: 'Inter-Regular',
+    color: '#000000',
+  },
+  checkMark: {
+    fontSize: 20,
+    color: '#4169E1',
   },
   errorText: {
     fontSize: 16,
