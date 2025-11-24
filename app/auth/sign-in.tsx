@@ -43,6 +43,8 @@ export default function SignInScreen() {
       setError('');
       
       console.log('[SignIn] Attempting to sign in...');
+      console.log('[SignIn] Supabase URL:', process.env.EXPO_PUBLIC_SUPABASE_URL);
+      
       const { data, error } = await signIn(email.trim(), password);
       
       if (error) {

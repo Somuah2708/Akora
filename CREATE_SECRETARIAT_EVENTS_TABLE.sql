@@ -72,6 +72,7 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
+DROP TRIGGER IF EXISTS trigger_secretariat_events_updated_at ON public.secretariat_events;
 CREATE TRIGGER trigger_secretariat_events_updated_at
   BEFORE UPDATE ON public.secretariat_events
   FOR EACH ROW
@@ -80,7 +81,11 @@ CREATE TRIGGER trigger_secretariat_events_updated_at
 -- Enable Row Level Security (RLS)
 ALTER TABLE public.secretariat_events ENABLE ROW LEVEL SECURITY;
 
--- RLS Policies
+-- RLS Policies (Drop existing policies first to avoid conflicts)
+DROP POLICY IF EXISTS "Users can view approved events or own events" ON public.secretariat_events;
+DROP POLICY IF EXISTS "Users can create events" ON public.secretariat_events;
+DROP POLICY IF EXISTS "Users can update own events" ON public.secretariat_events;
+DROP POLICY IF EXISTS "Users can delete own events" ON public.secretariat_events;
 
 -- Policy: Users can view approved events or their own events
 CREATE POLICY "Users can view approved events or own events"
@@ -140,7 +145,11 @@ CREATE INDEX IF NOT EXISTS idx_event_bookmarks_event_id ON public.event_bookmark
 -- Enable RLS for bookmarks
 ALTER TABLE public.event_bookmarks ENABLE ROW LEVEL SECURITY;
 
--- Bookmark policies
+-- Bookmark policies (Drop existing first)
+DROP POLICY IF EXISTS "Users can view own bookmarks" ON public.event_bookmarks;
+DROP POLICY IF EXISTS "Users can create own bookmarks" ON public.event_bookmarks;
+DROP POLICY IF EXISTS "Users can delete own bookmarks" ON public.event_bookmarks;
+
 CREATE POLICY "Users can view own bookmarks"
   ON public.event_bookmarks
   FOR SELECT
@@ -188,7 +197,11 @@ CREATE INDEX IF NOT EXISTS idx_event_registrations_email ON public.event_registr
 -- Enable RLS for registrations
 ALTER TABLE public.event_registrations ENABLE ROW LEVEL SECURITY;
 
--- Registration policies
+-- Registration policies (Drop existing first)
+DROP POLICY IF EXISTS "Users can view own registrations" ON public.event_registrations;
+DROP POLICY IF EXISTS "Event creators can view their event registrations" ON public.event_registrations;
+DROP POLICY IF EXISTS "Anyone can register for events" ON public.event_registrations;
+
 CREATE POLICY "Users can view own registrations"
   ON public.event_registrations
   FOR SELECT
@@ -226,7 +239,11 @@ CREATE INDEX IF NOT EXISTS idx_event_interests_event_id ON public.event_interest
 -- Enable RLS for interests
 ALTER TABLE public.event_interests ENABLE ROW LEVEL SECURITY;
 
--- Interest policies
+-- Interest policies (Drop existing first)
+DROP POLICY IF EXISTS "Users can view own interests" ON public.event_interests;
+DROP POLICY IF EXISTS "Users can create own interests" ON public.event_interests;
+DROP POLICY IF EXISTS "Users can delete own interests" ON public.event_interests;
+
 CREATE POLICY "Users can view own interests"
   ON public.event_interests
   FOR SELECT

@@ -127,4 +127,3 @@ COMMENT ON COLUMN job_applications.cv_url IS 'URL to uploaded CV/resume document
 -- GRANT PERMISSIONS
 -- =====================================================
 GRANT SELECT, INSERT, UPDATE, DELETE ON job_applications TO authenticated;
-GRANT USAGE ON SEQUENCE job_applications_id_seq TO authenticated;

@@ -94,21 +94,51 @@ export function useAuth() {
 
   const signIn = async (email: string, password: string) => {
     console.log('[useAuth] signIn called for:', email);
-    const { data, error } = await supabase.auth.signInWithPassword({
-      email,
-      password,
-    });
-    
-    if (data?.session) {
-      console.log('[useAuth] Sign in successful, session created:', {
-        userId: data.user?.id,
-        expiresAt: data.session.expires_at
-      });
-    } else {
-      console.log('[useAuth] Sign in failed or no session:', error);
+
+    // Lightweight probe to capture what the auth endpoint returns (helps debug HTML/errors)
+    try {
+      const base = (process.env.EXPO_PUBLIC_SUPABASE_URL || '').replace(/\/$/, '');
+      if (base) {
+        const healthUrl = `${base}/auth/v1/health`;
+        try {
+          console.log('[useAuth] Probing Supabase health endpoint:', healthUrl);
+          const probeRes = await fetch(healthUrl, { method: 'GET' });
+          const contentType = probeRes.headers.get('content-type') || 'unknown';
+          const probeText = await probeRes.text();
+          console.log('[useAuth] Health probe status:', probeRes.status, 'content-type:', contentType);
+          console.log('[useAuth] Health probe body (first 300 chars):', probeText.slice(0, 300));
+        } catch (probeErr) {
+          console.warn('[useAuth] Health probe failed:', probeErr);
+        }
+      }
+    } catch (e) {
+      console.warn('[useAuth] Unexpected error during health probe:', e);
     }
-    
-    return { data, error };
+
+    try {
+      const { data, error } = await supabase.auth.signInWithPassword({ email, password });
+
+      if (data?.session) {
+        console.log('[useAuth] Sign in successful, session created:', {
+          userId: data.user?.id,
+          expiresAt: data.session.expires_at,
+        });
+      } else {
+        // When the auth library returns a network/parse error it may set `error` or throw; log both cases
+        console.log('[useAuth] Sign in failed or no session. supabase error object:', error);
+      }
+
+      return { data, error };
+    } catch (err: any) {
+      // This catches thrown errors from the auth client (e.g., JSON parse errors)
+      console.error('[useAuth] signIn exception thrown by supabase.auth:', err);
+      // Surface the raw message to the caller in a structured way
+      const wrappedError = {
+        message: err?.message || String(err),
+        name: err?.name || 'AuthException',
+      } as any;
+      return { data: null, error: wrappedError };
+    }
   };
 
   const signUp = async (
