@@ -6,7 +6,6 @@ import {
   ScrollView,
   TouchableOpacity,
   TextInput,
-  Platform,
   Dimensions,
   Alert,
   ActivityIndicator,
@@ -24,14 +23,14 @@ import {
   GraduationCap,
   Users,
   AlertCircle,
-  MessageSquare,
   Clock,
   CheckCircle,
   Upload,
   X,
   Paperclip,
+  Headphones,
 } from 'lucide-react-native';
-import { LinearGradient } from 'expo-linear-gradient';
+import { useFonts, Inter_400Regular, Inter_600SemiBold, Inter_700Bold } from '@expo-google-fonts/inter';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/hooks/useAuth';
 import * as DocumentPicker from 'expo-document-picker';
@@ -51,6 +50,12 @@ type SupportCategory = {
 export default function AlumniCenterScreen() {
   const router = useRouter();
   const { user } = useAuth();
+  
+  const [fontsLoaded] = useFonts({
+    'Inter-Regular': Inter_400Regular,
+    'Inter-SemiBold': Inter_600SemiBold,
+    'Inter-Bold': Inter_700Bold,
+  });
   
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
   const [formData, setFormData] = useState({
@@ -328,9 +333,9 @@ export default function AlumniCenterScreen() {
 
   const renderCategorySelection = () => (
     <View style={styles.section}>
-      <Text style={styles.sectionTitle}>Select Support Category</Text>
+      <Text style={styles.sectionTitle}>Support Categories</Text>
       <Text style={styles.sectionDescription}>
-        Choose the category that best matches your request
+        Select the category that best describes your request
       </Text>
       <View style={styles.categoriesGrid}>
         {supportCategories.map((category) => {
@@ -345,16 +350,18 @@ export default function AlumniCenterScreen() {
                 isSelected && styles.categoryCardSelected,
               ]}
               onPress={() => setSelectedCategory(category.id)}
+              activeOpacity={0.8}
             >
-              <LinearGradient
-                colors={isSelected ? category.gradient as any : ['#FFFFFF', '#FFFFFF']}
-                style={styles.categoryIconContainer}
-              >
+              <View style={[
+                styles.categoryIconContainer,
+                isSelected && { backgroundColor: '#f5f5f5' },
+              ]}>
                 <IconComponent 
                   size={28} 
-                  color={isSelected ? '#FFFFFF' : category.color} 
+                  color="#1a1a1a"
+                  strokeWidth={2}
                 />
-              </LinearGradient>
+              </View>
               <Text style={[
                 styles.categoryTitle,
                 isSelected && styles.categoryTitleSelected,
@@ -369,7 +376,7 @@ export default function AlumniCenterScreen() {
               </Text>
               {isSelected && (
                 <View style={styles.selectedBadge}>
-                  <CheckCircle size={20} color={category.color} />
+                  <CheckCircle size={20} color="#1a1a1a" strokeWidth={2.5} />
                 </View>
               )}
             </TouchableOpacity>
@@ -513,17 +520,12 @@ export default function AlumniCenterScreen() {
             onPress={handleSubmitSupport}
             disabled={submitting || uploading}
           >
-            <LinearGradient
-              colors={(category?.gradient as any) || ['#4169E1', '#5B7FE8']}
-              style={styles.submitGradient}
-            >
-              {(submitting || uploading) && (
-                <ActivityIndicator size="small" color="#FFFFFF" style={{ marginRight: 8 }} />
-              )}
-              <Text style={styles.submitButtonText}>
-                {uploading ? 'Uploading Files...' : submitting ? 'Submitting...' : 'Submit Request'}
-              </Text>
-            </LinearGradient>
+            {(submitting || uploading) && (
+              <ActivityIndicator size="small" color="#FFFFFF" style={{ marginRight: 8 }} />
+            )}
+            <Text style={styles.submitButtonText}>
+              {uploading ? 'Uploading Files...' : submitting ? 'Submitting...' : 'Submit Request'}
+            </Text>
           </TouchableOpacity>
         </View>
       </View>
@@ -575,48 +577,46 @@ export default function AlumniCenterScreen() {
     }
   };
 
+  if (!fontsLoaded) {
+    return null;
+  }
+
   return (
     <View style={styles.container}>
-      {/* Header */}
-      <LinearGradient
-        colors={['#4169E1', '#5B7FE8']}
-        start={{ x: 0, y: 0 }}
-        end={{ x: 1, y: 0 }}
-        style={styles.headerGradient}
-      >
-        <View style={styles.header}>
-          <TouchableOpacity 
-            onPress={() => router.back()} 
-            style={styles.backButton}
-          >
-            <ArrowLeft size={24} color="#FFFFFF" />
-          </TouchableOpacity>
-          <View style={styles.headerCenter}>
-            <Text style={styles.headerTitle}>Alumni Support</Text>
-            <Text style={styles.headerSubtitle}>We're here to help</Text>
+      {/* Premium Header */}
+      <View style={styles.header}>
+        <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
+          <View style={styles.backButtonCircle}>
+            <ArrowLeft size={20} color="#1a1a1a" strokeWidth={2.5} />
           </View>
-          <View style={styles.headerPlaceholder} />
-        </View>
-      </LinearGradient>
+        </TouchableOpacity>
+      </View>
 
       <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
-        {/* Hero Banner */}
-        <View style={styles.heroBanner}>
-          <View style={styles.heroBannerIcon}>
-            <Heart size={40} color="#4169E1" />
+        {/* Hero Section */}
+        <View style={styles.heroSection}>
+          <View style={styles.logoContainer}>
+            <View style={styles.logoCircle}>
+              <Headphones size={40} color="#1a1a1a" strokeWidth={2} />
+            </View>
           </View>
-          <Text style={styles.heroBannerTitle}>How can we help you today?</Text>
-          <Text style={styles.heroBannerText}>
-            Submit a support request and our team will assist you within 24-48 hours
+          <Text style={styles.heroTitle}>Alumni Support Center</Text>
+          <Text style={styles.heroSubtitle}>
+            Professional assistance for all your needs
           </Text>
         </View>
 
         {/* Info Card */}
         <View style={styles.infoCard}>
-          <AlertCircle size={20} color="#4169E1" />
-          <Text style={styles.infoText}>
-            All requests are handled confidentially. Response time: 24-48 hours for normal requests, 2-4 hours for urgent matters.
-          </Text>
+          <View style={styles.infoIconCircle}>
+            <AlertCircle size={18} color="#1a1a1a" strokeWidth={2} />
+          </View>
+          <View style={styles.infoTextContainer}>
+            <Text style={styles.infoTitle}>Response Time</Text>
+            <Text style={styles.infoText}>
+              24-48 hours for standard requests • 2-4 hours for urgent matters
+            </Text>
+          </View>
         </View>
 
         {renderRecentTickets()}
@@ -632,306 +632,353 @@ export default function AlumniCenterScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#F8F9FA',
-  },
-  headerGradient: {
-    paddingTop: 50,
-    paddingBottom: 20,
+    backgroundColor: '#fafafa',
   },
   header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 16,
+    paddingHorizontal: 20,
+    paddingTop: 60,
+    paddingBottom: 20,
+    backgroundColor: '#fafafa',
   },
   backButton: {
-    padding: 8,
+    alignSelf: 'flex-start',
   },
-  headerCenter: {
-    flex: 1,
+  backButtonCircle: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: '#ffffff',
+    justifyContent: 'center',
     alignItems: 'center',
-  },
-  headerTitle: {
-    fontSize: 22,
-    fontWeight: '700',
-    color: '#FFFFFF',
-  },
-  headerSubtitle: {
-    fontSize: 14,
-    color: '#FFFFFF',
-    opacity: 0.9,
-    marginTop: 4,
-  },
-  headerPlaceholder: {
-    width: 40,
+    shadowColor: '#000000',
+    shadowOffset: {
+      width: 0,
+      height: 2,
+    },
+    shadowOpacity: 0.08,
+    shadowRadius: 8,
+    elevation: 4,
   },
   content: {
     flex: 1,
   },
-  heroBanner: {
-    margin: 16,
-    backgroundColor: '#FFFFFF',
-    borderRadius: 16,
-    padding: 24,
+  heroSection: {
+    paddingHorizontal: 20,
+    paddingVertical: 32,
     alignItems: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 8,
-    elevation: 3,
   },
-  heroBannerIcon: {
-    width: 80,
-    height: 80,
-    borderRadius: 40,
-    backgroundColor: '#E4EAFF',
-    alignItems: 'center',
+  logoContainer: {
+    marginBottom: 20,
+  },
+  logoCircle: {
+    width: 88,
+    height: 88,
+    borderRadius: 44,
+    backgroundColor: '#ffffff',
     justifyContent: 'center',
-    marginBottom: 16,
+    alignItems: 'center',
+    shadowColor: '#000000',
+    shadowOffset: {
+      width: 0,
+      height: 4,
+    },
+    shadowOpacity: 0.1,
+    shadowRadius: 12,
+    elevation: 6,
   },
-  heroBannerTitle: {
-    fontSize: 22,
-    fontWeight: '700',
-    color: '#1A1A1A',
+  heroTitle: {
+    fontSize: 32,
+    fontFamily: 'Inter-Bold',
+    color: '#1a1a1a',
     marginBottom: 8,
+    letterSpacing: -0.5,
     textAlign: 'center',
   },
-  heroBannerText: {
-    fontSize: 14,
-    color: '#666',
+  heroSubtitle: {
+    fontSize: 15,
+    fontFamily: 'Inter-Regular',
+    color: '#666666',
     textAlign: 'center',
-    lineHeight: 20,
+    lineHeight: 22,
+    paddingHorizontal: 20,
   },
   infoCard: {
     flexDirection: 'row',
-    marginHorizontal: 16,
-    marginBottom: 24,
-    backgroundColor: '#E4EAFF',
+    marginHorizontal: 20,
+    marginBottom: 32,
+    backgroundColor: '#ffffff',
+    borderRadius: 20,
+    padding: 20,
+    shadowColor: '#000000',
+    shadowOffset: {
+      width: 0,
+      height: 2,
+    },
+    shadowOpacity: 0.08,
+    shadowRadius: 12,
+    elevation: 4,
+    borderWidth: 1,
+    borderColor: '#f0f0f0',
+  },
+  infoIconCircle: {
+    width: 40,
+    height: 40,
     borderRadius: 12,
-    padding: 16,
-    gap: 12,
+    backgroundColor: '#f5f5f5',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 14,
+  },
+  infoTextContainer: {
+    flex: 1,
+  },
+  infoTitle: {
+    fontSize: 15,
+    fontFamily: 'Inter-SemiBold',
+    color: '#1a1a1a',
+    marginBottom: 4,
   },
   infoText: {
-    flex: 1,
-    fontSize: 13,
-    color: '#4169E1',
-    lineHeight: 18,
+    fontSize: 14,
+    fontFamily: 'Inter-Regular',
+    color: '#666666',
+    lineHeight: 20,
   },
   section: {
-    paddingHorizontal: 16,
-    marginBottom: 24,
+    paddingHorizontal: 20,
+    marginBottom: 32,
   },
   sectionTitle: {
-    fontSize: 20,
-    fontWeight: '700',
-    color: '#1A1A1A',
+    fontSize: 22,
+    fontFamily: 'Inter-Bold',
+    color: '#1a1a1a',
     marginBottom: 8,
+    letterSpacing: -0.3,
   },
   sectionDescription: {
-    fontSize: 14,
-    color: '#666',
-    marginBottom: 16,
-    lineHeight: 20,
+    fontSize: 15,
+    fontFamily: 'Inter-Regular',
+    color: '#666666',
+    marginBottom: 20,
+    lineHeight: 22,
   },
   categoriesGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: 12,
+    gap: 16,
   },
   categoryCard: {
-    width: (width - 44) / 2,
-    backgroundColor: '#FFFFFF',
-    borderRadius: 16,
-    padding: 16,
+    width: (width - 56) / 2,
+    backgroundColor: '#ffffff',
+    borderRadius: 20,
+    padding: 20,
     alignItems: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 8,
-    elevation: 3,
+    shadowColor: '#000000',
+    shadowOffset: {
+      width: 0,
+      height: 2,
+    },
+    shadowOpacity: 0.08,
+    shadowRadius: 12,
+    elevation: 4,
     borderWidth: 2,
-    borderColor: 'transparent',
+    borderColor: '#f0f0f0',
     position: 'relative',
   },
   categoryCardSelected: {
-    borderColor: '#4169E1',
-    backgroundColor: '#F8FAFF',
+    borderColor: '#1a1a1a',
+    backgroundColor: '#fafafa',
   },
   categoryIconContainer: {
     width: 64,
     height: 64,
-    borderRadius: 32,
+    borderRadius: 16,
+    backgroundColor: '#f5f5f5',
     alignItems: 'center',
     justifyContent: 'center',
-    marginBottom: 12,
+    marginBottom: 16,
   },
   categoryTitle: {
-    fontSize: 15,
-    fontWeight: '700',
-    color: '#1A1A1A',
+    fontSize: 16,
+    fontFamily: 'Inter-Bold',
+    color: '#1a1a1a',
     textAlign: 'center',
-    marginBottom: 6,
+    marginBottom: 8,
+    letterSpacing: -0.2,
   },
   categoryTitleSelected: {
-    color: '#4169E1',
+    color: '#1a1a1a',
   },
   categoryDescription: {
-    fontSize: 12,
-    color: '#666',
+    fontSize: 13,
+    fontFamily: 'Inter-Regular',
+    color: '#666666',
     textAlign: 'center',
-    lineHeight: 16,
+    lineHeight: 18,
   },
   categoryDescriptionSelected: {
-    color: '#4169E1',
+    color: '#666666',
   },
   selectedBadge: {
     position: 'absolute',
-    top: 8,
-    right: 8,
+    top: 12,
+    right: 12,
   },
   formHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 16,
+    marginBottom: 20,
   },
   formTitle: {
-    fontSize: 18,
-    fontWeight: '700',
-    color: '#1A1A1A',
+    fontSize: 20,
+    fontFamily: 'Inter-Bold',
+    color: '#1a1a1a',
+    letterSpacing: -0.3,
   },
   changeCategory: {
     fontSize: 14,
-    fontWeight: '600',
-    color: '#4169E1',
+    fontFamily: 'Inter-SemiBold',
+    color: '#1a1a1a',
   },
   formCard: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 16,
-    padding: 20,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 8,
-    elevation: 3,
+    backgroundColor: '#ffffff',
+    borderRadius: 20,
+    padding: 24,
+    shadowColor: '#000000',
+    shadowOffset: {
+      width: 0,
+      height: 2,
+    },
+    shadowOpacity: 0.08,
+    shadowRadius: 12,
+    elevation: 4,
+    borderWidth: 1,
+    borderColor: '#f0f0f0',
   },
   inputGroup: {
-    marginBottom: 20,
+    marginBottom: 24,
   },
   label: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#1A1A1A',
-    marginBottom: 8,
+    fontSize: 15,
+    fontFamily: 'Inter-SemiBold',
+    color: '#1a1a1a',
+    marginBottom: 10,
+    letterSpacing: -0.2,
   },
   input: {
-    backgroundColor: '#F8F9FA',
-    borderRadius: 12,
+    backgroundColor: '#fafafa',
+    borderRadius: 14,
     padding: 16,
     fontSize: 15,
-    color: '#1A1A1A',
+    fontFamily: 'Inter-Regular',
+    color: '#1a1a1a',
     borderWidth: 1,
-    borderColor: '#E5E7EB',
+    borderColor: '#f0f0f0',
   },
   textArea: {
-    height: 120,
+    height: 140,
     paddingTop: 16,
   },
   radioGroup: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: 8,
+    gap: 10,
   },
   radioOption: {
-    paddingHorizontal: 16,
-    paddingVertical: 10,
-    borderRadius: 20,
-    backgroundColor: '#F8F9FA',
-    borderWidth: 1,
-    borderColor: '#E5E7EB',
+    paddingHorizontal: 18,
+    paddingVertical: 12,
+    borderRadius: 14,
+    backgroundColor: '#fafafa',
+    borderWidth: 1.5,
+    borderColor: '#f0f0f0',
   },
   radioOptionSelected: {
-    backgroundColor: '#E4EAFF',
-    borderColor: '#4169E1',
+    backgroundColor: '#1a1a1a',
+    borderColor: '#1a1a1a',
   },
   radioText: {
     fontSize: 14,
-    fontWeight: '500',
-    color: '#666',
+    fontFamily: 'Inter-SemiBold',
+    color: '#666666',
   },
   radioTextSelected: {
-    color: '#4169E1',
-    fontWeight: '600',
+    color: '#ffffff',
   },
   submitButton: {
-    borderRadius: 12,
-    overflow: 'hidden',
-    marginTop: 8,
-    shadowColor: '#4169E1',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 8,
-    elevation: 5,
-  },
-  submitButtonDisabled: {
-    opacity: 0.6,
-  },
-  submitGradient: {
-    paddingVertical: 16,
+    backgroundColor: '#1a1a1a',
+    borderRadius: 14,
+    paddingVertical: 18,
     alignItems: 'center',
     flexDirection: 'row',
     justifyContent: 'center',
+    marginTop: 8,
+    shadowColor: '#000000',
+    shadowOffset: {
+      width: 0,
+      height: 4,
+    },
+    shadowOpacity: 0.15,
+    shadowRadius: 12,
+    elevation: 6,
+  },
+  submitButtonDisabled: {
+    opacity: 0.5,
   },
   submitButtonText: {
     fontSize: 16,
-    fontWeight: '700',
-    color: '#FFFFFF',
+    fontFamily: 'Inter-Bold',
+    color: '#ffffff',
+    letterSpacing: -0.2,
   },
   attachmentHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 8,
+    marginBottom: 12,
   },
   attachmentHint: {
     fontSize: 12,
-    color: '#999',
+    fontFamily: 'Inter-Regular',
+    color: '#999999',
   },
   uploadButton: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 8,
-    backgroundColor: '#E4EAFF',
-    paddingVertical: 14,
+    gap: 10,
+    backgroundColor: '#fafafa',
+    paddingVertical: 16,
     paddingHorizontal: 20,
-    borderRadius: 12,
+    borderRadius: 14,
     borderWidth: 1.5,
-    borderColor: '#4169E1',
+    borderColor: '#1a1a1a',
     borderStyle: 'dashed',
   },
   uploadButtonText: {
     fontSize: 15,
-    fontWeight: '600',
-    color: '#4169E1',
+    fontFamily: 'Inter-SemiBold',
+    color: '#1a1a1a',
   },
   attachmentsList: {
-    marginTop: 12,
-    gap: 8,
+    marginTop: 14,
+    gap: 10,
   },
   attachmentItem: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#F8F9FA',
-    padding: 12,
-    borderRadius: 10,
-    gap: 10,
+    backgroundColor: '#fafafa',
+    padding: 14,
+    borderRadius: 14,
+    gap: 12,
+    borderWidth: 1,
+    borderColor: '#f0f0f0',
   },
   attachmentIcon: {
-    width: 36,
-    height: 36,
-    borderRadius: 8,
-    backgroundColor: '#E4EAFF',
+    width: 40,
+    height: 40,
+    borderRadius: 12,
+    backgroundColor: '#f5f5f5',
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -940,60 +987,70 @@ const styles = StyleSheet.create({
   },
   attachmentName: {
     fontSize: 14,
-    fontWeight: '600',
-    color: '#1A1A1A',
-    marginBottom: 2,
+    fontFamily: 'Inter-SemiBold',
+    color: '#1a1a1a',
+    marginBottom: 4,
   },
   attachmentSize: {
     fontSize: 12,
-    color: '#666',
+    fontFamily: 'Inter-Regular',
+    color: '#666666',
   },
   removeButton: {
-    padding: 4,
+    padding: 6,
   },
   ticketCard: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 12,
-    padding: 16,
-    marginBottom: 12,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
+    backgroundColor: '#ffffff',
+    borderRadius: 20,
+    padding: 20,
+    marginBottom: 14,
+    shadowColor: '#000000',
+    shadowOffset: {
+      width: 0,
+      height: 2,
+    },
     shadowOpacity: 0.08,
-    shadowRadius: 6,
-    elevation: 2,
+    shadowRadius: 12,
+    elevation: 4,
+    borderWidth: 1,
+    borderColor: '#f0f0f0',
   },
   ticketHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 8,
+    marginBottom: 12,
   },
   statusBadge: {
-    paddingHorizontal: 12,
-    paddingVertical: 6,
+    paddingHorizontal: 14,
+    paddingVertical: 7,
     borderRadius: 12,
   },
   statusText: {
     fontSize: 11,
-    fontWeight: '700',
+    fontFamily: 'Inter-Bold',
+    letterSpacing: 0.5,
   },
   ticketDate: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 4,
+    gap: 6,
   },
   ticketDateText: {
-    fontSize: 12,
-    color: '#999',
+    fontSize: 13,
+    fontFamily: 'Inter-Regular',
+    color: '#666666',
   },
   ticketSubject: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#1A1A1A',
-    marginBottom: 4,
+    fontSize: 17,
+    fontFamily: 'Inter-Bold',
+    color: '#1a1a1a',
+    marginBottom: 6,
+    letterSpacing: -0.2,
   },
   ticketCategory: {
-    fontSize: 13,
-    color: '#666',
+    fontSize: 14,
+    fontFamily: 'Inter-Regular',
+    color: '#666666',
   },
 });
