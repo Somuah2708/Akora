@@ -2,7 +2,7 @@ import { View, Text, StyleSheet, ScrollView, Image, TouchableOpacity, TextInput,
 import { useFonts, Inter_400Regular, Inter_600SemiBold } from '@expo-google-fonts/inter';
 import { useEffect, useState, useCallback, useRef } from 'react';
 import { SplashScreen, useRouter } from 'expo-router';
-import { Search, Filter, ArrowDownWideNarrow as SortDesc, MapPin, SearchSlash, ArrowLeft, Briefcase, GraduationCap, Wrench, Palette, Coffee, Stethoscope, Book, Camera, Plus, ShoppingBag, X, Bookmark } from 'lucide-react-native';
+import { Search, Filter, ArrowDownWideNarrow as SortDesc, MapPin, SearchSlash, ArrowLeft, Briefcase, GraduationCap, Wrench, Palette, Coffee, Stethoscope, Book, Camera, Plus, ShoppingBag, X, Bookmark, Trash2 } from 'lucide-react-native';
 import { supabase, type ProductService, type Profile, type Region, type City, type LocationWithCount } from '@/lib/supabase';
 import { SAMPLE_PRODUCTS } from '@/lib/marketplace';
 import { useAuth } from '@/hooks/useAuth';
@@ -144,6 +144,45 @@ const fetchLocations = useCallback(async () => {
       console.error('Error fetching user profile:', error);
     }
   }, [user]);
+
+  const handleDeleteListing = useCallback(async (productId: string, productTitle: string) => {
+    if (!userProfile?.is_admin) {
+      Alert.alert('Error', 'You do not have permission to delete listings.');
+      return;
+    }
+
+    Alert.alert(
+      'Delete Listing',
+      `Are you sure you want to delete "${productTitle}"? This action cannot be undone.`,
+      [
+        {
+          text: 'Cancel',
+          style: 'cancel',
+        },
+        {
+          text: 'Delete',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              const { error } = await supabase
+                .from('products_services')
+                .delete()
+                .eq('id', productId);
+
+              if (error) throw error;
+
+              Alert.alert('Success', 'Listing deleted successfully.');
+              // Refresh the products list
+              fetchProducts();
+            } catch (error: any) {
+              console.error('Error deleting listing:', error);
+              Alert.alert('Error', error.message || 'Failed to delete listing.');
+            }
+          },
+        },
+      ]
+    );
+  }, [userProfile, fetchProducts]);
 
   const fetchProducts = useCallback(async () => {
     try {
@@ -921,6 +960,17 @@ const fetchLocations = useCallback(async () => {
                     </Text>
                   </View>
                 )}
+                {userProfile?.is_admin && (
+                  <TouchableOpacity
+                    style={styles.adminDeleteButton}
+                    onPress={(e) => {
+                      e.stopPropagation();
+                      handleDeleteListing(product.id, product.title);
+                    }}
+                  >
+                    <Trash2 size={18} color="#FFFFFF" />
+                  </TouchableOpacity>
+                )}
                 <View style={styles.productContent}>
                   <Text style={styles.price}>{formatPrice(product.price || 0)}</Text>
                   <Text style={styles.productName} numberOfLines={2}>{product.title}</Text>
@@ -1293,6 +1343,23 @@ const styles = StyleSheet.create({
     fontFamily: 'Inter-SemiBold',
     color: '#FFFFFF',
     letterSpacing: 0.5,
+  },
+  adminDeleteButton: {
+    position: 'absolute',
+    top: 8,
+    left: 8,
+    width: 36,
+    height: 36,
+    backgroundColor: '#EF4444',
+    borderRadius: 18,
+    justifyContent: 'center',
+    alignItems: 'center',
+    zIndex: 2,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.25,
+    shadowRadius: 3.84,
+    elevation: 5,
   },
   productContent: {
     padding: 10,

@@ -1,12 +1,11 @@
-import { View, Text, StyleSheet, ScrollView, TextInput, TouchableOpacity, Image, Alert, ActivityIndicator } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TextInput, TouchableOpacity, Image, Alert } from 'react-native';
 import { useFonts, Inter_400Regular, Inter_600SemiBold, Inter_700Bold } from '@expo-google-fonts/inter';
 import { useEffect, useState } from 'react';
-import { SplashScreen, useRouter, useLocalSearchParams } from 'expo-router';
-import { ArrowLeft, Upload, DollarSign, Plus, X, Image as ImageIcon, Package, Tag, Save } from 'lucide-react-native';
+import { SplashScreen, useRouter } from 'expo-router';
+import { ArrowLeft, Upload, DollarSign, Tag, Package, FileText, Image as ImageIcon, X, Palette } from 'lucide-react-native';
 import { LinearGradient } from 'expo-linear-gradient';
-import { supabase } from '@/lib/supabase';
-import { useAuth } from '@/hooks/useAuth';
 import * as ImagePicker from 'expo-image-picker';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 SplashScreen.preventAutoHideAsync();
 
@@ -21,32 +20,49 @@ const CATEGORIES = [
   'Other',
 ];
 
-const OAA_SECRETARIAT_CONTACT = '+233 302 765 432';
+const SIZES = ['XS', 'S', 'M', 'L', 'XL', 'XXL', 'One Size', 'A4', 'A5', 'Standard'];
 
-// Currency conversion rate
-const USD_TO_GHS = 10.99;
-const GHS_TO_USD = 0.091;
+const COLORS = [
+  { name: 'Black', hex: '#000000' },
+  { name: 'White', hex: '#FFFFFF' },
+  { name: 'Red', hex: '#EF4444' },
+  { name: 'Blue', hex: '#3B82F6' },
+  { name: 'Green', hex: '#10B981' },
+  { name: 'Yellow', hex: '#FBBF24' },
+  { name: 'Purple', hex: '#A855F7' },
+  { name: 'Pink', hex: '#EC4899' },
+  { name: 'Orange', hex: '#F97316' },
+  { name: 'Brown', hex: '#92400E' },
+  { name: 'Gray', hex: '#6B7280' },
+  { name: 'Navy', hex: '#1E3A8A' },
+  { name: 'Maroon', hex: '#7F1D1D' },
+  { name: 'Teal', hex: '#0D9488' },
+  { name: 'Gold', hex: '#CA8A04' },
+  { name: 'Silver', hex: '#9CA3AF' },
+];
+
+const OAA_SECRETARIAT_CONTACT = '+233 XX XXX XXXX | secretariat@oaa.com';
 
 const MAX_IMAGES = 20;
 
-export default function EditPostedItemScreen() {
+// Currency conversion rate: 1 GHS = 0.091 USD (inverse: 1 USD = 10.99 GHS)
+const GHS_TO_USD = 0.091;
+const USD_TO_GHS = 10.99;
+
+export default function PostItemScreen() {
   const router = useRouter();
-  const { itemId, productId } = useLocalSearchParams();
-  const { user } = useAuth();
-  
-  // Support both itemId and productId for backwards compatibility
-  const currentItemId = itemId || productId;
   
   const [itemName, setItemName] = useState('');
   const [description, setDescription] = useState('');
-  const [priceGHS, setPriceGHS] = useState('');
   const [priceUSD, setPriceUSD] = useState('');
+  const [priceGHS, setPriceGHS] = useState('');
   const [category, setCategory] = useState('');
+  const [selectedSizes, setSelectedSizes] = useState<string[]>([]);
   const [imageUris, setImageUris] = useState<string[]>([]);
+  const [selectedColors, setSelectedColors] = useState<string[]>([]);
+  const [condition, setCondition] = useState<'New' | 'Like New' | 'Good' | 'Fair'>('New');
   const [quantity, setQuantity] = useState('1');
   const [contactInfo, setContactInfo] = useState(OAA_SECRETARIAT_CONTACT);
-  const [uploading, setUploading] = useState(false);
-  const [loading, setLoading] = useState(true);
 
   const [fontsLoaded] = useFonts({
     'Inter-Regular': Inter_400Regular,
@@ -55,67 +71,14 @@ export default function EditPostedItemScreen() {
   });
 
   useEffect(() => {
-    loadItemData();
-  }, [currentItemId]);
-
-  const loadItemData = async () => {
-    if (!currentItemId) {
-      setLoading(false);
-      return;
-    }
-
-    try {
-      setLoading(true);
-      const { data, error } = await supabase
-        .from('secretariat_shop_products')
-        .select('*')
-        .eq('id', currentItemId as string)
-        .single();
-
-      if (error) throw error;
-
-      if (data) {
-        setItemName(data.name);
-        setDescription(data.description);
-        setPriceUSD(data.price_usd?.toString() || '');
-        setPriceGHS(data.price_ghs?.toString() || '');
-        setCategory(data.category);
-        setImageUris(data.images || []);
-        setQuantity(data.quantity?.toString() || '1');
-        setContactInfo(data.contact_info || OAA_SECRETARIAT_CONTACT);
-      }
-    } catch (error) {
-      console.error('Error loading item:', error);
-      Alert.alert('Error', 'Failed to load product details');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  useEffect(() => {
     if (fontsLoaded) {
       SplashScreen.hideAsync();
     }
   }, [fontsLoaded]);
 
-  if (!fontsLoaded || loading) {
-    return (
-      <View style={styles.container}>
-        <ActivityIndicator size="large" color="#10B981" style={{ marginTop: 100 }} />
-      </View>
-    );
+  if (!fontsLoaded) {
+    return null;
   }
-
-  const handlePriceGHSChange = (value: string) => {
-    setPriceGHS(value);
-    // Auto-calculate USD price
-    if (value && !isNaN(parseFloat(value))) {
-      const usdPrice = (parseFloat(value) * GHS_TO_USD).toFixed(2);
-      setPriceUSD(usdPrice);
-    } else {
-      setPriceUSD('');
-    }
-  };
 
   const handlePriceUSDChange = (value: string) => {
     setPriceUSD(value);
@@ -123,8 +86,15 @@ export default function EditPostedItemScreen() {
     if (value && !isNaN(parseFloat(value))) {
       const ghsPrice = (parseFloat(value) * USD_TO_GHS).toFixed(2);
       setPriceGHS(ghsPrice);
-    } else {
-      setPriceGHS('');
+    }
+  };
+
+  const handlePriceGHSChange = (value: string) => {
+    setPriceGHS(value);
+    // Auto-calculate USD price
+    if (value && !isNaN(parseFloat(value))) {
+      const usdPrice = (parseFloat(value) * GHS_TO_USD).toFixed(2);
+      setPriceUSD(usdPrice);
     }
   };
 
@@ -134,34 +104,29 @@ export default function EditPostedItemScreen() {
       return;
     }
 
-    try {
-      const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    
+    if (status !== 'granted') {
+      Alert.alert('Permission Required', 'Please grant permission to access your photos');
+      return;
+    }
+
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ['images'],
+      allowsMultipleSelection: true,
+      quality: 0.8,
+    });
+
+    if (!result.canceled) {
+      const newImages = result.assets.map(asset => asset.uri);
+      const totalImages = [...imageUris, ...newImages];
       
-      if (status !== 'granted') {
-        Alert.alert('Permission Required', 'Please grant permission to access your photos');
-        return;
+      if (totalImages.length > MAX_IMAGES) {
+        Alert.alert('Too Many Images', `You can only upload up to ${MAX_IMAGES} images. Only the first ${MAX_IMAGES - imageUris.length} will be added.`);
+        setImageUris([...imageUris, ...newImages.slice(0, MAX_IMAGES - imageUris.length)]);
+      } else {
+        setImageUris(totalImages);
       }
-
-      const result = await ImagePicker.launchImageLibraryAsync({
-        mediaTypes: ImagePicker.MediaTypeOptions.Images,
-        allowsMultipleSelection: true,
-        quality: 0.8,
-      });
-
-      if (!result.canceled && result.assets) {
-        const newImages = result.assets.map(asset => asset.uri);
-        const totalImages = [...imageUris, ...newImages];
-        
-        if (totalImages.length > MAX_IMAGES) {
-          Alert.alert('Too Many Images', `You can only upload up to ${MAX_IMAGES} images. Only the first ${MAX_IMAGES - imageUris.length} will be added.`);
-          setImageUris([...imageUris, ...newImages.slice(0, MAX_IMAGES - imageUris.length)]);
-        } else {
-          setImageUris(totalImages);
-        }
-      }
-    } catch (error) {
-      console.error('Error picking images:', error);
-      Alert.alert('Error', 'Failed to pick images');
     }
   };
 
@@ -169,128 +134,116 @@ export default function EditPostedItemScreen() {
     setImageUris(prev => prev.filter((_, i) => i !== index));
   };
 
-  const handleUpdate = async () => {
+  const toggleColor = (colorName: string) => {
+    setSelectedColors(prev => 
+      prev.includes(colorName) 
+        ? prev.filter(c => c !== colorName)
+        : [...prev, colorName]
+    );
+  };
+
+  const toggleSize = (size: string) => {
+    setSelectedSizes(prev => 
+      prev.includes(size) 
+        ? prev.filter(s => s !== size)
+        : [...prev, size]
+    );
+  };
+
+  const handleSubmit = async () => {
+    console.log('Submit button clicked!');
+    console.log('Form data:', { 
+      itemName, 
+      description, 
+      priceUSD, 
+      priceGHS, 
+      category, 
+      selectedSizes, 
+      imageUris: imageUris.length, 
+      selectedColors 
+    });
+    
     // Validation
     if (!itemName.trim()) {
+      console.log('Validation failed: itemName');
       Alert.alert('Error', 'Please enter item name');
       return;
     }
     if (!description.trim()) {
+      console.log('Validation failed: description');
       Alert.alert('Error', 'Please enter item description');
       return;
     }
     if (!priceUSD || !priceGHS) {
-      Alert.alert('Error', 'Please enter price');
+      console.log('Validation failed: prices', { priceUSD, priceGHS });
+      Alert.alert('Error', 'Please enter prices in both currencies');
       return;
     }
     if (!category) {
+      console.log('Validation failed: category');
       Alert.alert('Error', 'Please select a category');
       return;
     }
+    if (selectedSizes.length === 0) {
+      console.log('Validation failed: selectedSizes');
+      Alert.alert('Error', 'Please select at least one size option');
+      return;
+    }
     if (imageUris.length === 0) {
+      console.log('Validation failed: imageUris');
       Alert.alert('Error', 'Please upload at least one image');
       return;
     }
-    if (!user) {
-      Alert.alert('Error', 'You must be logged in to update items');
+    if (selectedColors.length === 0) {
+      console.log('Validation failed: selectedColors');
+      Alert.alert('Error', 'Please select at least one color');
       return;
     }
-
-    setUploading(true);
+    
+    console.log('All validations passed! Creating product...');
 
     try {
-      // Upload only new images (ones that don't have Supabase URLs)
-      const uploadedImageUrls: string[] = [];
+      // Create new product object
+      const newProduct = {
+        id: Date.now().toString(),
+        name: itemName,
+        description: description,
+        priceUSD: parseFloat(priceUSD),
+        priceGHS: parseFloat(priceGHS),
+        category: category,
+        sizes: selectedSizes,
+        colors: selectedColors,
+        images: imageUris,
+        condition: condition,
+        quantity: parseInt(quantity),
+        contactInfo: contactInfo,
+        datePosted: new Date().toISOString(),
+        isUserPosted: true,
+      };
+
+      // Get existing posted items
+      const existingItems = await AsyncStorage.getItem('secretariat_posted_items');
+      const postedItems = existingItems ? JSON.parse(existingItems) : [];
       
-      for (const uri of imageUris) {
-        // If it's already a Supabase URL, keep it
-        if (uri.includes('supabase')) {
-          uploadedImageUrls.push(uri);
-          continue;
-        }
+      // Add new item
+      postedItems.push(newProduct);
+      
+      // Save back to storage
+      await AsyncStorage.setItem('secretariat_posted_items', JSON.stringify(postedItems));
 
-        // Otherwise upload it
-        try {
-          const fileExt = uri.split('.').pop() || 'jpg';
-          const fileName = `${Date.now()}-${Math.random().toString(36).slice(2)}.${fileExt}`;
-          const path = `products/${user.id}/${fileName}`;
+      console.log('Item saved successfully!');
 
-          const response = await fetch(uri);
-          const fileBlob = await response.blob();
-          
-          const arrayBuffer = await new Promise<ArrayBuffer>((resolve, reject) => {
-            const reader = new FileReader();
-            reader.onloadend = () => {
-              if (reader.result instanceof ArrayBuffer) {
-                resolve(reader.result);
-              } else {
-                reject(new Error('Failed to read file'));
-              }
-            };
-            reader.onerror = reject;
-            reader.readAsArrayBuffer(fileBlob);
-          });
-
-          const { error: uploadError } = await supabase.storage
-            .from('product-images')
-            .upload(path, arrayBuffer, {
-              contentType: 'image/jpeg',
-            });
-
-          if (uploadError) {
-            console.error('Error uploading image:', uploadError);
-            continue;
-          }
-
-          const { data: publicUrlData } = supabase.storage
-            .from('product-images')
-            .getPublicUrl(path);
-
-          if (publicUrlData?.publicUrl) {
-            uploadedImageUrls.push(publicUrlData.publicUrl);
-          }
-        } catch (imgError) {
-          console.error('Error processing image:', imgError);
-        }
-      }
-
-      if (uploadedImageUrls.length === 0) {
-        throw new Error('Failed to upload images');
-      }
-
-      // Update product in database
-      const { error } = await supabase
-        .from('secretariat_shop_products')
-        .update({
-          name: itemName.trim(),
-          description: description.trim(),
-          price_usd: parseFloat(priceUSD),
-          price_ghs: parseFloat(priceGHS),
-          category: category,
-          images: uploadedImageUrls,
-          quantity: parseInt(quantity) || 1,
-          contact_info: contactInfo.trim(),
-          updated_at: new Date().toISOString(),
-        })
-        .eq('id', itemId as string);
-
-      if (error) throw error;
-
-      Alert.alert(
-        'Success!',
-        'Your item has been updated successfully!',
-        [
-          {
-            text: 'OK',
-            onPress: () => router.back(),
-          }
-        ]
-      );
-    } catch (error: any) {
-      console.error('Error updating item:', error);
-      Alert.alert('Error', error.message || 'Failed to update item. Please try again.');
-    } finally {
-      setUploading(false);
+      // Navigate immediately
+      router.replace('/secretariat-shop');
+      
+      // Show success message after navigation
+      setTimeout(() => {
+        Alert.alert('✓ Success!', 'Your item has been posted to the OAA Secretariat Shop!');
+      }, 500);
+      
+    } catch (error) {
+      console.error('Error posting item:', error);
+      Alert.alert('Error', 'Failed to post item. Please try again.');
     }
   };
 
@@ -307,8 +260,8 @@ export default function EditPostedItemScreen() {
             <ArrowLeft size={24} color="#FFFFFF" />
           </TouchableOpacity>
           <View style={styles.headerCenter}>
-            <Text style={styles.title}>Edit Item</Text>
-            <Text style={styles.subtitle}>Update product details</Text>
+            <Text style={styles.title}>Post Your Item</Text>
+            <Text style={styles.subtitle}>Share with the community</Text>
           </View>
           <View style={styles.placeholder} />
         </View>
@@ -446,41 +399,126 @@ export default function EditPostedItemScreen() {
           </View>
         </View>
 
-        {/* Quantity */}
+        {/* Sizes */}
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Stock Quantity</Text>
-          <TextInput
-            style={styles.input}
-            placeholder="e.g., 50"
-            placeholderTextColor="#94A3B8"
-            keyboardType="number-pad"
-            value={quantity}
-            onChangeText={setQuantity}
-          />
+          <Text style={styles.sectionTitle}>Available Sizes *</Text>
+          <View style={styles.sizeGrid}>
+            {SIZES.map((size) => (
+              <TouchableOpacity
+                key={size}
+                style={[
+                  styles.sizeChip,
+                  selectedSizes.includes(size) && styles.sizeChipActive
+                ]}
+                onPress={() => toggleSize(size)}
+              >
+                <Text style={[
+                  styles.sizeChipText,
+                  selectedSizes.includes(size) && styles.sizeChipTextActive
+                ]}>
+                  {size}
+                </Text>
+              </TouchableOpacity>
+            ))}
+          </View>
         </View>
 
-        {/* Contact Information */}
+        {/* Colors */}
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Contact Information</Text>
-          <TextInput
-            style={styles.input}
-            placeholder="Phone or email"
-            placeholderTextColor="#999"
-            value={contactInfo}
-            onChangeText={setContactInfo}
-          />
+          <Text style={styles.sectionTitle}>Available Colors *</Text>
+          <View style={styles.colorGrid}>
+            {COLORS.map((color) => (
+              <TouchableOpacity
+                key={color.name}
+                style={[
+                  styles.colorChip,
+                  selectedColors.includes(color.name) && styles.colorChipActive
+                ]}
+                onPress={() => toggleColor(color.name)}
+              >
+                <View style={[
+                  styles.colorCircle, 
+                  { backgroundColor: color.hex },
+                  color.name === 'White' && styles.whiteColorBorder
+                ]} />
+                <Text style={[
+                  styles.colorChipText,
+                  selectedColors.includes(color.name) && styles.colorChipTextActive
+                ]}>
+                  {color.name}
+                </Text>
+              </TouchableOpacity>
+            ))}
+          </View>
         </View>
 
-        {/* Update Button */}
-        <TouchableOpacity style={styles.submitButton} onPress={handleUpdate}>
+        {/* Condition */}
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>Condition *</Text>
+          <View style={styles.conditionRow}>
+            {(['New', 'Like New', 'Good', 'Fair'] as const).map((cond) => (
+              <TouchableOpacity
+                key={cond}
+                style={[
+                  styles.conditionButton,
+                  condition === cond && styles.conditionButtonActive
+                ]}
+                onPress={() => setCondition(cond)}
+              >
+                <Text style={[
+                  styles.conditionText,
+                  condition === cond && styles.conditionTextActive
+                ]}>
+                  {cond}
+                </Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+        </View>
+
+        {/* Additional Details */}
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>Additional Details</Text>
+          
+          <View style={styles.inputGroup}>
+            <Text style={styles.label}>Quantity Available</Text>
+            <TextInput
+              style={styles.input}
+              placeholder="1"
+              placeholderTextColor="#999"
+              value={quantity}
+              onChangeText={setQuantity}
+              keyboardType="number-pad"
+            />
+          </View>
+
+          <View style={styles.inputGroup}>
+            <Text style={styles.label}>Contact Information</Text>
+            <Text style={styles.contactHint}>OAA Secretariat contact (default)</Text>
+            <TextInput
+              style={styles.input}
+              placeholder="Phone or email"
+              placeholderTextColor="#999"
+              value={contactInfo}
+              onChangeText={setContactInfo}
+            />
+          </View>
+        </View>
+
+        {/* Submit Button */}
+        <TouchableOpacity 
+          style={styles.submitButton} 
+          onPress={handleSubmit}
+          activeOpacity={0.8}
+        >
           <LinearGradient
             colors={['#10B981', '#059669']}
             start={{ x: 0, y: 0 }}
             end={{ x: 1, y: 0 }}
             style={styles.submitGradient}
           >
-            <Save size={20} color="#FFFFFF" />
-            <Text style={styles.submitText}>Update Item</Text>
+            <Upload size={20} color="#FFFFFF" />
+            <Text style={styles.submitText}>Post Item to Shop</Text>
           </LinearGradient>
         </TouchableOpacity>
 
@@ -532,6 +570,7 @@ const styles = StyleSheet.create({
   },
   scrollContent: {
     padding: 16,
+    paddingBottom: 40,
   },
   section: {
     marginBottom: 24,
@@ -752,6 +791,12 @@ const styles = StyleSheet.create({
   colorChipTextActive: {
     color: '#FFFFFF',
   },
+  contactHint: {
+    fontSize: 12,
+    fontFamily: 'Inter-Regular',
+    color: '#10B981',
+    marginBottom: 8,
+  },
   conditionRow: {
     flexDirection: 'row',
     gap: 8,
@@ -800,6 +845,6 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
   },
   bottomPadding: {
-    height: 20,
+    height: 40,
   },
 });

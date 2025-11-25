@@ -1,15 +1,19 @@
-import { View, Text, StyleSheet, ScrollView, Image, TouchableOpacity, Dimensions, Alert } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, Image, TouchableOpacity, Dimensions, Alert, ActivityIndicator, Linking } from 'react-native';
 import { useFonts, Inter_400Regular, Inter_600SemiBold, Inter_700Bold } from '@expo-google-fonts/inter';
 import { useEffect, useState } from 'react';
 import { SplashScreen, useRouter, useLocalSearchParams } from 'expo-router';
-import { ArrowLeft, ShoppingCart, Heart, Star, Package, Truck, Shield, Plus, Minus } from 'lucide-react-native';
+import { ArrowLeft, ShoppingCart, Heart, Star, Package, Truck, Shield, Plus, Minus, Phone, MessageSquare } from 'lucide-react-native';
 import { LinearGradient } from 'expo-linear-gradient';
-import { addToCart, getCartCount, resetCartViewedStatus, markCartAsViewed } from '@/lib/secretariatCart';
-import AsyncStorage from '@react-native-async-storage/async-storage';
+import { supabase, type SecretariatShopProduct, type Profile } from '@/lib/supabase';
+import { useAuth } from '@/hooks/useAuth';
 
 SplashScreen.preventAutoHideAsync();
 
 const { width } = Dimensions.get('window');
+
+interface ShopProductWithUser extends SecretariatShopProduct {
+  user?: Profile;
+}
 
 // Sample products - same as in secretariat shop
 const SOUVENIR_PRODUCTS = [
@@ -126,16 +130,13 @@ const SOUVENIR_PRODUCTS = [
 
 export default function ProductDetailScreen() {
   const router = useRouter();
-  const params = useLocalSearchParams();
-  const productId = params.id as string;
+  const { id } = useLocalSearchParams();
+  const { user } = useAuth();
 
+  const [product, setProduct] = useState<ShopProductWithUser | null>(null);
+  const [loading, setLoading] = useState(true);
   const [selectedImage, setSelectedImage] = useState(0);
-  const [quantity, setQuantity] = useState(1);
   const [currency, setCurrency] = useState<'USD' | 'GHS'>('USD');
-  const [selectedSizes, setSelectedSizes] = useState<string[]>([]);
-  const [selectedColors, setSelectedColors] = useState<string[]>([]);
-  const [cartCount, setCartCount] = useState(0);
-  const [product, setProduct] = useState<any>(null);
 
   const [fontsLoaded] = useFonts({
     'Inter-Regular': Inter_400Regular,
@@ -143,68 +144,43 @@ export default function ProductDetailScreen() {
     'Inter-Bold': Inter_700Bold,
   });
 
-  // Load product from both sample products and posted items
-  const loadProduct = async () => {
-    // First check sample products
-    let foundProduct = SOUVENIR_PRODUCTS.find(p => p.id === productId);
-    
-    // If not found, check posted items
-    if (!foundProduct) {
-      const storedItems = await AsyncStorage.getItem('secretariat_posted_items');
-      if (storedItems) {
-        const postedItems = JSON.parse(storedItems);
-        foundProduct = postedItems.find((p: any) => p.id === productId);
-        
-        // Format posted item to match expected structure
-        if (foundProduct) {
-          foundProduct = {
-            ...foundProduct,
-            image: foundProduct.images?.[0] || foundProduct.image,
-            images: foundProduct.images || [foundProduct.image],
-            fullDescription: foundProduct.description,
-            rating: 0,
-            reviews: 0,
-            inStock: true,
-          };
-        }
+  const fetchProduct = async () => {
+    if (!id) return;
+
+    try {
+      setLoading(true);
+      const { data, error } = await supabase
+        .from('secretariat_shop_products')
+        .select('*')
+        .eq('id', id as string)
+        .single();
+
+      if (error) throw error;
+
+      if (data) {
+        // Fetch user profile
+        const { data: profile } = await supabase
+          .from('profiles')
+          .select('id, username, full_name, avatar_url')
+          .eq('id', data.user_id)
+          .single();
+
+        setProduct({
+          ...data,
+          user: profile || undefined,
+        } as ShopProductWithUser);
       }
+    } catch (error: any) {
+      console.error('Error fetching product:', error);
+      Alert.alert('Error', 'Failed to load product details');
+    } finally {
+      setLoading(false);
     }
-    
-    setProduct(foundProduct);
-    
-    if (foundProduct?.sizes && foundProduct.sizes.length > 0) {
-      setSelectedSizes([foundProduct.sizes[0]]);
-    }
-    if (foundProduct?.colors && foundProduct.colors.length > 0) {
-      setSelectedColors([foundProduct.colors[0]]);
-    }
-  };
-
-  const loadCartCount = async () => {
-    const count = await getCartCount();
-    setCartCount(count);
-  };
-
-  const toggleSize = (size: string) => {
-    setSelectedSizes(prev => 
-      prev.includes(size) 
-        ? prev.filter(s => s !== size)
-        : [...prev, size]
-    );
-  };
-
-  const toggleColor = (color: string) => {
-    setSelectedColors(prev => 
-      prev.includes(color) 
-        ? prev.filter(c => c !== color)
-        : [...prev, color]
-    );
   };
 
   useEffect(() => {
-    loadProduct();
-    loadCartCount();
-  }, [productId]);
+    fetchProduct();
+  }, [id]);
 
   useEffect(() => {
     if (fontsLoaded) {
@@ -212,48 +188,29 @@ export default function ProductDetailScreen() {
     }
   }, [fontsLoaded]);
 
-  if (!fontsLoaded || !product) {
-    return null;
+  if (!fontsLoaded || loading) {
+    return (
+      <View style={styles.container}>
+        <ActivityIndicator size="large" color="#10B981" style={{ marginTop: 100 }} />
+      </View>
+    );
   }
 
-  const price = currency === 'USD' ? product.priceUSD : product.priceGHS;
+  if (!product) {
+    return (
+      <View style={styles.container}>
+        <Text style={styles.errorText}>Product not found</Text>
+      </View>
+    );
+  }
+
+  const price = currency === 'USD' ? product.price_usd : product.price_ghs;
   const currencySymbol = currency === 'USD' ? '$' : '₵';
 
-  const handleAddToCart = async () => {
-    try {
-      await addToCart({
-        id: `cart_${Date.now()}`,
-        productId: product.id,
-        name: product.name,
-        description: product.description,
-        price: price,
-        currency: currency,
-        image: product.image,
-        category: product.category,
-      });
-
-      // Reset cart viewed status when adding new item
-      await resetCartViewedStatus();
-
-      const count = await getCartCount();
-      setCartCount(count);
-
-      Alert.alert(
-        'Added to Cart',
-        `${quantity} x ${product.name} has been added to your cart.`,
-        [
-          { text: 'Continue Shopping', style: 'cancel' },
-          { 
-            text: 'View Cart', 
-            onPress: async () => {
-              await markCartAsViewed();
-              router.push('/cart');
-            }
-          },
-        ]
-      );
-    } catch (error) {
-      Alert.alert('Error', 'Failed to add item to cart');
+  const handleContactViaPhone = () => {
+    if (product.contact_info) {
+      const phoneNumber = product.contact_info.replace(/[^0-9+]/g, '');
+      Linking.openURL(`tel:${phoneNumber}`);
     }
   };
 
@@ -264,20 +221,8 @@ export default function ProductDetailScreen() {
         <TouchableOpacity onPress={() => router.back()} style={styles.headerButton}>
           <ArrowLeft size={24} color="#000000" />
         </TouchableOpacity>
-        <TouchableOpacity
-          style={styles.headerButton}
-          onPress={async () => {
-            await markCartAsViewed();
-            router.push('/cart');
-          }}
-        >
-          <ShoppingCart size={24} color="#000000" />
-          {cartCount > 0 && (
-            <View style={styles.cartBadge}>
-              <Text style={styles.cartBadgeText}>{cartCount}</Text>
-            </View>
-          )}
-        </TouchableOpacity>
+        <Text style={styles.headerTitle}>Product Details</Text>
+        <View style={styles.headerButton} />
       </View>
 
       <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
@@ -296,7 +241,7 @@ export default function ProductDetailScreen() {
             scrollEventThrottle={16}
             style={styles.mainImageScroll}
           >
-            {product.images.map((img: string, index: number) => (
+            {(product.images || []).map((img: string, index: number) => (
               <Image
                 key={index}
                 source={{ uri: img }}
@@ -424,66 +369,21 @@ export default function ProductDetailScreen() {
             </Text>
           </View>
 
-          {/* Sizes */}
-          {product.sizes && (
-            <View style={styles.optionSection}>
-              <Text style={styles.sectionLabel}>Size (Select one or more)</Text>
-              <View style={styles.optionsRow}>
-                {product.sizes.map((size: string) => (
-                  <TouchableOpacity
-                    key={size}
-                    style={[
-                      styles.optionButton,
-                      selectedSizes.includes(size) && styles.optionButtonActive,
-                    ]}
-                    onPress={() => toggleSize(size)}
-                  >
-                    <Text
-                      style={[
-                        styles.optionText,
-                        selectedSizes.includes(size) && styles.optionTextActive,
-                      ]}
-                    >
-                      {size}
-                    </Text>
-                  </TouchableOpacity>
-                ))}
-              </View>
+          {/* Stock Quantity */}
+          <View style={styles.stockSection}>
+            <Text style={styles.sectionLabel}>Stock Availability</Text>
+            <View style={styles.stockRow}>
+              <Package size={18} color="#10B981" />
+              <Text style={styles.stockText}>
+                {product.quantity} {product.quantity === 1 ? 'item' : 'items'} in stock
+              </Text>
             </View>
-          )}
-
-          {/* Colors */}
-          {product.colors && (
-            <View style={styles.optionSection}>
-              <Text style={styles.sectionLabel}>Color (Select one or more)</Text>
-              <View style={styles.optionsRow}>
-                {product.colors.map((color: string) => (
-                  <TouchableOpacity
-                    key={color}
-                    style={[
-                      styles.colorButton,
-                      selectedColors.includes(color) && styles.colorButtonActive,
-                    ]}
-                    onPress={() => toggleColor(color)}
-                  >
-                    <Text
-                      style={[
-                        styles.colorText,
-                        selectedColors.includes(color) && styles.colorTextActive,
-                      ]}
-                    >
-                      {color}
-                    </Text>
-                  </TouchableOpacity>
-                ))}
-              </View>
-            </View>
-          )}
+          </View>
 
           {/* Description */}
           <View style={styles.descriptionSection}>
             <Text style={styles.sectionLabel}>Description</Text>
-            <Text style={styles.description}>{product.fullDescription}</Text>
+            <Text style={styles.description}>{product.description}</Text>
           </View>
 
           {/* Features */}
@@ -504,37 +404,21 @@ export default function ProductDetailScreen() {
         </View>
       </ScrollView>
 
-      {/* Bottom Bar */}
+      {/* Bottom Bar - Contact to Order */}
       <View style={styles.bottomBar}>
-        <View style={styles.quantityControl}>
-          <TouchableOpacity
-            style={styles.quantityButton}
-            onPress={() => setQuantity(Math.max(1, quantity - 1))}
-          >
-            <Minus size={20} color="#666666" />
-          </TouchableOpacity>
-          <Text style={styles.quantityText}>{quantity}</Text>
-          <TouchableOpacity
-            style={styles.quantityButton}
-            onPress={() => setQuantity(quantity + 1)}
-          >
-            <Plus size={20} color="#666666" />
-          </TouchableOpacity>
-        </View>
-
         <TouchableOpacity
-          style={styles.addToCartButton}
-          onPress={handleAddToCart}
-          activeOpacity={0.9}
+          style={styles.contactButtonFull}
+          onPress={handleContactViaPhone}
+          activeOpacity={0.8}
         >
           <LinearGradient
-            colors={['#4169E1', '#5B7FE8']}
+            colors={['#10B981', '#059669']}
             start={{ x: 0, y: 0 }}
             end={{ x: 1, y: 0 }}
-            style={styles.addToCartGradient}
+            style={styles.contactGradient}
           >
-            <ShoppingCart size={20} color="#FFFFFF" />
-            <Text style={styles.addToCartText}>Add to Cart</Text>
+            <Phone size={20} color="#FFFFFF" />
+            <Text style={styles.contactText}>Call to Order</Text>
           </LinearGradient>
         </TouchableOpacity>
       </View>
@@ -764,6 +648,25 @@ const styles = StyleSheet.create({
   descriptionSection: {
     marginBottom: 24,
   },
+  stockSection: {
+    marginBottom: 24,
+  },
+  stockRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    backgroundColor: '#F0FDF4',
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#BBF7D0',
+  },
+  stockText: {
+    fontSize: 14,
+    fontFamily: 'Inter-SemiBold',
+    color: '#15803D',
+  },
   description: {
     fontSize: 15,
     fontFamily: 'Inter-Regular',
@@ -800,7 +703,7 @@ const styles = StyleSheet.create({
   bottomBar: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 16,
+    gap: 12,
     padding: 16,
     backgroundColor: '#FFFFFF',
     borderTopWidth: 1,
@@ -814,39 +717,35 @@ const styles = StyleSheet.create({
     shadowRadius: 4,
     elevation: 5,
   },
-  quantityControl: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 16,
-    backgroundColor: '#F8F9FA',
-    borderRadius: 8,
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-  },
-  quantityButton: {
-    padding: 4,
-  },
-  quantityText: {
-    fontSize: 18,
-    fontFamily: 'Inter-SemiBold',
-    color: '#000000',
-    minWidth: 30,
-    textAlign: 'center',
-  },
-  addToCartButton: {
+  contactButton: {
     flex: 1,
   },
-  addToCartGradient: {
+  contactButtonFull: {
+    flex: 1,
+  },
+  contactGradient: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     gap: 8,
-    paddingVertical: 16,
-    borderRadius: 8,
+    paddingVertical: 14,
+    borderRadius: 12,
   },
-  addToCartText: {
-    fontSize: 16,
+  contactText: {
+    fontSize: 15,
     fontFamily: 'Inter-SemiBold',
     color: '#FFFFFF',
+  },
+  headerTitle: {
+    fontSize: 18,
+    fontFamily: 'Inter-SemiBold',
+    color: '#000000',
+  },
+  errorText: {
+    fontSize: 16,
+    fontFamily: 'Inter-Regular',
+    color: '#666666',
+    textAlign: 'center',
+    marginTop: 100,
   },
 });

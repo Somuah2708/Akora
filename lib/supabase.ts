@@ -420,3 +420,23 @@ export type StreamReminder = {
   reminder_sent: boolean;
   created_at: string;
 };
+
+export type SecretariatShopProduct = {
+  id: string;
+  user_id: string;
+  name: string;
+  description: string;
+  category: 'Clothing' | 'Accessories' | 'Homeware' | 'Stationery' | 'Books' | 'Electronics' | 'Sports' | 'Other';
+  price_usd: number;
+  price_ghs: number;
+  sizes: string[];
+  colors: string[];
+  condition: 'New' | 'Like New' | 'Good' | 'Fair';
+  quantity: number;
+  in_stock: boolean;
+  images: string[];
+  contact_info?: string;
+  created_at: string;
+  updated_at: string;
+  user?: Profile;
+};

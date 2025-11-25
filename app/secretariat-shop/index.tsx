@@ -1,98 +1,16 @@
-import { View, Text, StyleSheet, ScrollView, Image, TouchableOpacity, TextInput, Dimensions, Alert, Modal } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, Image, TouchableOpacity, TextInput, Dimensions, Alert, RefreshControl, Linking, Modal } from 'react-native';
 import { useFonts, Inter_400Regular, Inter_600SemiBold } from '@expo-google-fonts/inter';
 import { useEffect, useState, useCallback } from 'react';
-import { SplashScreen, useRouter, useFocusEffect, Link } from 'expo-router';
-import { ArrowLeft, ShoppingBag, Search, Filter, DollarSign, Truck, Package, Heart, Plus, Minus, ShoppingCart, X, PlusCircle } from 'lucide-react-native';
-import { addToCart, getCartCount, hasCartBeenViewed, resetCartViewedStatus, getFavorites, toggleFavorite, markCartAsViewed } from '@/lib/secretariatCart';
+import { SplashScreen, useRouter, useFocusEffect } from 'expo-router';
+import { ArrowLeft, ShoppingBag, Search, Heart, Plus, Phone, MessageCircle, Trash2, Edit2, Package, Settings, X } from 'lucide-react-native';
+import { supabase, type SecretariatShopProduct, type Profile } from '@/lib/supabase';
+import { useAuth } from '@/hooks/useAuth';
 import { LinearGradient } from 'expo-linear-gradient';
-import AsyncStorage from '@react-native-async-storage/async-storage';
 
 SplashScreen.preventAutoHideAsync();
 
 const { width } = Dimensions.get('window');
 const CARD_WIDTH = (width - 48) / 2;
-
-const SOUVENIR_PRODUCTS = [
-  {
-    id: '1',
-    name: 'Alumni Branded Polo Shirt',
-    description: 'High-quality cotton polo with embroidered school logo',
-    priceUSD: 35.99,
-    priceGHS: 395.63, // Updated: 1 USD = 10.99 GHS (1 GHS = 0.091 USD)
-    image: 'https://images.unsplash.com/photo-1586363104862-3a5e2ab60d99?w=800&auto=format&fit=crop&q=60',
-    category: 'Clothing',
-    sizes: ['S', 'M', 'L', 'XL', 'XXL'],
-  },
-  {
-    id: '2',
-    name: 'Commemorative Mug',
-    description: 'Ceramic mug featuring the school crest and motto',
-    priceUSD: 15.99,
-    priceGHS: 175.73, // Updated: 1 USD = 10.99 GHS (1 GHS = 0.091 USD)
-    image: 'https://images.unsplash.com/photo-1514228742587-6b1558fcca3d?w=800&auto=format&fit=crop&q=60',
-    category: 'Homeware',
-    sizes: ['One Size'],
-  },
-  {
-    id: '3',
-    name: 'Leather Notebook',
-    description: 'Premium leather-bound notebook with embossed logo',
-    priceUSD: 24.99,
-    priceGHS: 274.63, // Updated: 1 USD = 10.99 GHS (1 GHS = 0.091 USD)
-    image: 'https://images.unsplash.com/photo-1544816155-12df9643f363?w=800&auto=format&fit=crop&q=60',
-    category: 'Stationery',
-    sizes: ['A5', 'A4'],
-  },
-  {
-    id: '4',
-    name: 'Anniversary Yearbook',
-    description: 'Special edition commemorating school milestones',
-    priceUSD: 49.99,
-    priceGHS: 549.39, // Updated: 1 USD = 10.99 GHS (1 GHS = 0.091 USD)
-    image: 'https://images.unsplash.com/photo-1532012197267-da84d127e765?w=800&auto=format&fit=crop&q=60',
-    category: 'Books',
-    sizes: ['Standard'],
-  },
-  {
-    id: '5',
-    name: 'School Crest Lapel Pin',
-    description: 'Elegant metal pin featuring the school crest',
-    priceUSD: 12.99,
-    priceGHS: 142.76, // Updated: 1 USD = 10.99 GHS (1 GHS = 0.091 USD)
-    image: 'https://images.unsplash.com/photo-1601591219083-d9d11b6a8852?w=800&auto=format&fit=crop&q=60',
-    category: 'Accessories',
-    sizes: ['One Size'],
-  },
-  {
-    id: '6',
-    name: 'Alumni Hoodie',
-    description: 'Comfortable hoodie with school colors and logo',
-    priceUSD: 45.99,
-    priceGHS: 505.43, // Updated: 1 USD = 10.99 GHS (1 GHS = 0.091 USD)
-    image: 'https://images.unsplash.com/photo-1620799140408-edc6dcb6d633?w=800&auto=format&fit=crop&q=60',
-    category: 'Clothing',
-    sizes: ['S', 'M', 'L', 'XL', 'XXL'],
-  },
-];
-
-const DELIVERY_OPTIONS = [
-  {
-    id: '1',
-    title: 'Home Delivery',
-    description: 'Get your items delivered to your doorstep',
-    icon: Truck,
-    estimatedTime: '3-5 business days',
-    fee: '$5.99',
-  },
-  {
-    id: '2',
-    title: 'Pickup at Secretariat',
-    description: 'Collect your items from the Alumni Secretariat',
-    icon: Package,
-    estimatedTime: 'Available next business day',
-    fee: 'Free',
-  },
-];
 
 const PRODUCT_CATEGORIES = [
   { id: 'all', name: 'All Items' },
@@ -101,58 +19,186 @@ const PRODUCT_CATEGORIES = [
   { id: 'homeware', name: 'Homeware' },
   { id: 'stationery', name: 'Stationery' },
   { id: 'books', name: 'Books' },
+  { id: 'electronics', name: 'Electronics' },
+  { id: 'sports', name: 'Sports' },
 ];
+
+const OAA_SECRETARIAT_PHONE = '+233302765432';
+const OAA_SECRETARIAT_WHATSAPP = '+233302765432';
+
+// Settings key for storing phone number
+const SETTINGS_TABLE = 'app_settings';
+const PHONE_SETTING_KEY = 'secretariat_phone';
 
 export default function SecretariatShopScreen() {
   const router = useRouter();
+  const { user } = useAuth();
   const [activeCategory, setActiveCategory] = useState('all');
-  const [cartCount, setCartCount] = useState(0);
   const [searchQuery, setSearchQuery] = useState('');
-  const [currency, setCurrency] = useState<'USD' | 'GHS'>('USD');
-  const [showCartBadge, setShowCartBadge] = useState(false);
-  const [filterModalVisible, setFilterModalVisible] = useState(false);
-  const [favorites, setFavorites] = useState<string[]>([]);
-  const [postedItems, setPostedItems] = useState<any[]>([]);
-  
-  // Filter states
-  const [selectedCategories, setSelectedCategories] = useState<string[]>([]);
-  const [selectedSizes, setSelectedSizes] = useState<string[]>([]);
-  const [priceRange, setPriceRange] = useState({ min: '', max: '' });
-  const [filterCurrency, setFilterCurrency] = useState<'USD' | 'GHS'>('USD');
+  const [currency, setCurrency] = useState<'USD' | 'GHS'>('GHS');
+  const [products, setProducts] = useState<SecretariatShopProduct[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+  const [userProfile, setUserProfile] = useState<Profile | null>(null);
+  const [showSettingsModal, setShowSettingsModal] = useState(false);
+  const [secretariatPhone, setSecretariatPhone] = useState(OAA_SECRETARIAT_PHONE);
+  const [editingPhone, setEditingPhone] = useState('');
   
   const [fontsLoaded] = useFonts({
     'Inter-Regular': Inter_400Regular,
     'Inter-SemiBold': Inter_600SemiBold,
   });
 
-  const loadCartCount = async () => {
-    const count = await getCartCount();
-    setCartCount(count);
+  // Fetch user profile to check admin status
+  const fetchUserProfile = useCallback(async () => {
+    if (!user) return;
     
-    // Check if cart has been viewed
-    const viewed = await hasCartBeenViewed();
-    setShowCartBadge(!viewed && count > 0);
-    
-    // Load favorites
-    const favoriteIds = await getFavorites();
-    setFavorites(favoriteIds);
-    
-    // Load posted items
-    const storedItems = await AsyncStorage.getItem('secretariat_posted_items');
-    if (storedItems) {
-      setPostedItems(JSON.parse(storedItems));
+    try {
+      const { data, error } = await supabase
+        .from('profiles')
+        .select('*')
+        .eq('id', user.id)
+        .maybeSingle();
+      
+      if (error) throw error;
+      setUserProfile(data);
+    } catch (error) {
+      console.error('Error fetching user profile:', error);
+    }
+  }, [user]);
+
+  // Fetch products from database
+  const fetchProducts = useCallback(async () => {
+    try {
+      setLoading(true);
+      
+      const { data, error } = await supabase
+        .from('secretariat_shop_products')
+        .select(`
+          *,
+          user:profiles(id, username, full_name, avatar_url)
+        `)
+        .eq('in_stock', true)
+        .order('created_at', { ascending: false });
+      
+      if (error) throw error;
+      setProducts(data || []);
+    } catch (error) {
+      console.error('Error fetching products:', error);
+      Alert.alert('Error', 'Failed to load products. Please try again.');
+    } finally {
+      setLoading(false);
+      setRefreshing(false);
+    }
+  }, []);
+
+  // Load secretariat phone number from settings
+  const loadSecretariatPhone = useCallback(async () => {
+    try {
+      const { data, error } = await supabase
+        .from('app_settings')
+        .select('value')
+        .eq('key', PHONE_SETTING_KEY)
+        .maybeSingle();
+      
+      if (!error && data?.value) {
+        setSecretariatPhone(data.value);
+      }
+    } catch (error) {
+      console.error('Error loading phone setting:', error);
+    }
+  }, []);
+
+  // Save secretariat phone number
+  const saveSecretariatPhone = async () => {
+    if (!userProfile?.is_admin) {
+      Alert.alert('Error', 'Only admins can update settings.');
+      return;
+    }
+
+    if (!editingPhone.trim()) {
+      Alert.alert('Error', 'Please enter a phone number.');
+      return;
+    }
+
+    try {
+      const { error } = await supabase
+        .from('app_settings')
+        .upsert({
+          key: PHONE_SETTING_KEY,
+          value: editingPhone.trim(),
+          updated_at: new Date().toISOString(),
+        }, {
+          onConflict: 'key'
+        });
+
+      if (error) throw error;
+
+      setSecretariatPhone(editingPhone.trim());
+      setShowSettingsModal(false);
+      Alert.alert('Success', 'Secretariat phone number updated successfully!');
+    } catch (error) {
+      console.error('Error saving phone setting:', error);
+      Alert.alert('Error', 'Failed to save phone number. Please try again.');
     }
   };
 
   useEffect(() => {
-    loadCartCount();
-  }, []);
+    if (fontsLoaded) {
+      SplashScreen.hideAsync();
+    }
+  }, [fontsLoaded]);
 
   useFocusEffect(
     useCallback(() => {
-      loadCartCount();
-    }, [])
+      fetchProducts();
+      fetchUserProfile();
+      loadSecretariatPhone();
+    }, [fetchProducts, fetchUserProfile, loadSecretariatPhone])
   );
+
+  const onRefresh = useCallback(() => {
+    setRefreshing(true);
+    fetchProducts();
+  }, [fetchProducts]);
+
+  const handleDeleteProduct = useCallback(async (productId: string, productName: string) => {
+    if (!userProfile?.is_admin) {
+      Alert.alert('Error', 'You do not have permission to delete products.');
+      return;
+    }
+
+    Alert.alert(
+      'Delete Product',
+      `Are you sure you want to delete "${productName}"? This action cannot be undone.`,
+      [
+        {
+          text: 'Cancel',
+          style: 'cancel',
+        },
+        {
+          text: 'Delete',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              const { error } = await supabase
+                .from('secretariat_shop_products')
+                .delete()
+                .eq('id', productId);
+
+              if (error) throw error;
+
+              Alert.alert('Success', 'Product deleted successfully.');
+              fetchProducts();
+            } catch (error: any) {
+              console.error('Error deleting product:', error);
+              Alert.alert('Error', error.message || 'Failed to delete product.');
+            }
+          },
+        },
+      ]
+    );
+  }, [userProfile, fetchProducts]);
 
   useEffect(() => {
     if (fontsLoaded) {
@@ -164,205 +210,90 @@ export default function SecretariatShopScreen() {
     return null;
   }
 
-  // Get all unique sizes from products
-  const allProducts = [...SOUVENIR_PRODUCTS, ...postedItems];
-  const allSizes = Array.from(new Set(allProducts.flatMap(p => p.sizes)));
-
-  const toggleCategory = (categoryId: string) => {
-    setSelectedCategories(prev => 
-      prev.includes(categoryId) 
-        ? prev.filter(c => c !== categoryId)
-        : [...prev, categoryId]
-    );
-  };
-
-  const toggleSize = (size: string) => {
-    setSelectedSizes(prev => 
-      prev.includes(size) 
-        ? prev.filter(s => s !== size)
-        : [...prev, size]
-    );
-  };
-
-  const applyFilters = () => {
-    setFilterModalVisible(false);
-  };
-
-  const clearFilters = () => {
-    setSelectedCategories([]);
-    setSelectedSizes([]);
-    setPriceRange({ min: '', max: '' });
-    setFilterCurrency('USD');
-  };
-
-  const filteredProducts = allProducts.filter(product => {
-    // Filter by search query
-    if (searchQuery) {
-      const query = searchQuery.toLowerCase();
-      const matchesSearch = (
-        product.name.toLowerCase().includes(query) ||
-        product.description.toLowerCase().includes(query) ||
-        product.category.toLowerCase().includes(query) ||
-        product.sizes.some((size: string) => size.toLowerCase().includes(query))
-      );
-      if (!matchesSearch) return false;
-    }
-
-    // Filter by category
-    if (activeCategory !== 'all' && product.category.toLowerCase() !== activeCategory) {
-      return false;
-    }
-
-    // Filter by selected categories from filter modal
-    if (selectedCategories.length > 0) {
-      if (!selectedCategories.includes(product.category)) {
-        return false;
-      }
-    }
-
-    // Filter by selected sizes
-    if (selectedSizes.length > 0) {
-      if (!product.sizes.some((size: string) => selectedSizes.includes(size))) {
-        return false;
-      }
-    }
-
-    // Filter by price range
-    if (priceRange.min || priceRange.max) {
-      const price = filterCurrency === 'USD' ? product.priceUSD : product.priceGHS;
-      const min = priceRange.min ? parseFloat(priceRange.min) : 0;
-      const max = priceRange.max ? parseFloat(priceRange.max) : Infinity;
-      
-      if (price < min || price > max) {
-        return false;
-      }
-    }
+  // Filter products
+  const filteredProducts = products.filter(product => {
+    const matchesCategory = activeCategory === 'all' || 
+      product.category.toLowerCase() === activeCategory;
     
-    return true;
+    const matchesSearch = searchQuery.trim() === '' ||
+      product.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      product.description.toLowerCase().includes(searchQuery.toLowerCase());
+    
+    return matchesCategory && matchesSearch;
   });
 
-  const handleAddToCart = async (product: any) => {
-    try {
-      const price = currency === 'USD' ? product.priceUSD : product.priceGHS;
-      
-      await addToCart({
-        id: `cart_${Date.now()}`,
-        productId: product.id,
-        name: product.name,
-        description: product.description,
-        price: price,
-        currency: currency,
-        image: product.images ? product.images[0] : product.image,
-        category: product.category,
-      });
-      
-      // Reset cart viewed status when adding new item
-      await resetCartViewedStatus();
-      
-      const count = await getCartCount();
-      setCartCount(count);
-      setShowCartBadge(true);
-      
-      Alert.alert(
-        'Added to Cart',
-        `${product.name} has been added to your cart.`,
-        [
-          { text: 'Continue Shopping', style: 'cancel' },
-          { 
-            text: 'View Cart', 
-            onPress: async () => {
-              await markCartAsViewed();
-              router.push('/cart');
-            }
-          },
-        ]
-      );
-    } catch (error) {
-      Alert.alert('Error', 'Failed to add item to cart');
+  const formatPrice = (priceUSD: number, priceGHS: number) => {
+    if (currency === 'USD') {
+      return `$${priceUSD.toFixed(2)}`;
+    } else {
+      return `₵${priceGHS.toFixed(2)}`;
     }
   };
 
-  const handleToggleFavorite = async (productId: string) => {
-    await toggleFavorite(productId);
-    const updatedFavorites = await getFavorites();
-    setFavorites(updatedFavorites);
+  const handleContactToOrder = () => {
+    Alert.alert(
+      'Contact OAA Secretariat',
+      'How would you like to place your order?',
+      [
+        {
+          text: 'Call',
+          onPress: () => Linking.openURL(`tel:${OAA_SECRETARIAT_PHONE}`),
+        },
+        {
+          text: 'WhatsApp',
+          onPress: () => Linking.openURL(`https://wa.me/${OAA_SECRETARIAT_WHATSAPP.replace(/\D/g, '')}`),
+        },
+        {
+          text: 'Cancel',
+          style: 'cancel',
+        },
+      ]
+    );
   };
 
   return (
     <View style={styles.container}>
+      {/* Header */}
       <View style={styles.header}>
         <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
           <ArrowLeft size={24} color="#000000" />
         </TouchableOpacity>
-        <Text style={styles.title}>Secretariat Shop</Text>
-        <View style={styles.headerIcons}>
-          <TouchableOpacity 
-            style={styles.favoritesButton}
-            onPress={() => router.push('/secretariat-shop/favorites')}
-          >
-            <Heart 
-              size={24} 
-              color="#FF3B30" 
-              fill={favorites.length > 0 ? "#FF3B30" : "transparent"}
-              strokeWidth={2}
-            />
-          </TouchableOpacity>
-          <TouchableOpacity 
-            style={styles.cartButton}
-            onPress={async () => {
-              await markCartAsViewed();
-              router.push('/cart');
-            }}
-          >
-            <ShoppingBag size={24} color="#000000" />
-            {showCartBadge && cartCount > 0 && (
-              <View style={styles.cartBadge}>
-                <Text style={styles.cartBadgeText}>{cartCount}</Text>
-              </View>
-            )}
-          </TouchableOpacity>
+        <View style={styles.headerTextContainer}>
+          <Text style={styles.title}>OAA Shop</Text>
+          <Text style={styles.subtitle}>Official Alumni Merchandise</Text>
         </View>
-
+        {userProfile?.is_admin ? (
+          <TouchableOpacity 
+            onPress={() => {
+              setEditingPhone(secretariatPhone);
+              setShowSettingsModal(true);
+            }} 
+            style={styles.settingsButton}
+          >
+            <Settings size={24} color="#000000" />
+          </TouchableOpacity>
+        ) : (
+          <View style={styles.placeholder} />
+        )}
       </View>
 
       {/* Search */}
       <View style={styles.searchContainer}>
         <View style={styles.searchInputContainer}>
-          <Search size={20} color="#666666" />
+          <Search size={20} color="#94A3B8" />
           <TextInput
             style={styles.searchInput}
-            placeholder="Search souvenirs..."
-            placeholderTextColor="#666666"
+            placeholder="Search merchandise..."
+            placeholderTextColor="#94A3B8"
             value={searchQuery}
             onChangeText={setSearchQuery}
           />
         </View>
-        <TouchableOpacity 
-          style={styles.filterIconButton}
-          onPress={() => setFilterModalVisible(true)}
-        >
-          <Filter size={20} color="#666666" />
-          {(selectedCategories.length > 0 || selectedSizes.length > 0 || priceRange.min || priceRange.max) && (
-            <View style={styles.filterBadge}>
-              <Text style={styles.filterBadgeText}>
-                {selectedCategories.length + selectedSizes.length + (priceRange.min || priceRange.max ? 1 : 0)}
-              </Text>
-            </View>
-          )}
-        </TouchableOpacity>
       </View>
 
       {/* Currency Toggle */}
       <View style={styles.currencyContainer}>
         <View style={styles.currencyToggle}>
-          <TouchableOpacity
-            style={[styles.currencyButton, currency === 'USD' && styles.activeCurrencyButton]}
-            onPress={() => setCurrency('USD')}
-          >
-            <Text style={[styles.currencyButtonText, currency === 'USD' && styles.activeCurrencyButtonText]}>
-              USD ($)
-            </Text>
-          </TouchableOpacity>
           <TouchableOpacity
             style={[styles.currencyButton, currency === 'GHS' && styles.activeCurrencyButton]}
             onPress={() => setCurrency('GHS')}
@@ -371,47 +302,53 @@ export default function SecretariatShopScreen() {
               GHS (₵)
             </Text>
           </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.currencyButton, currency === 'USD' && styles.activeCurrencyButton]}
+            onPress={() => setCurrency('USD')}
+          >
+            <Text style={[styles.currencyButtonText, currency === 'USD' && styles.activeCurrencyButtonText]}>
+              USD ($)
+            </Text>
+          </TouchableOpacity>
         </View>
       </View>
 
-      <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
-        {/* Post Item Button */}
-        <View style={styles.postItemContainer}>
-          <TouchableOpacity 
-            style={styles.postItemButton}
-            onPress={() => {
-              console.log('Navigating to post-item');
-              router.push('/secretariat-shop/post-item');
-            }}
-            activeOpacity={0.8}
-          >
-            <LinearGradient
-              colors={['#10B981', '#059669']}
-              start={{ x: 0, y: 0 }}
-              end={{ x: 1, y: 0 }}
-              style={styles.postItemGradient}
+      <ScrollView 
+        style={styles.content} 
+        showsVerticalScrollIndicator={false}
+        refreshControl={
+          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
+        }
+      >
+        {/* Admin Post Button */}
+        {userProfile?.is_admin && (
+          <View style={styles.adminActionsContainer}>
+            <TouchableOpacity 
+              style={styles.postButton}
+              onPress={() => router.push('/secretariat-shop/post-item')}
             >
-              <PlusCircle size={20} color="#FFFFFF" />
-              <Text style={styles.postItemText}>Post Item to Shop</Text>
-            </LinearGradient>
-          </TouchableOpacity>
-        </View>
+              <LinearGradient
+                colors={['#10B981', '#059669']}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 0 }}
+                style={styles.postButtonGradient}
+              >
+                <Plus size={20} color="#FFFFFF" />
+                <Text style={styles.postButtonText}>Post New Item</Text>
+              </LinearGradient>
+            </TouchableOpacity>
 
-        {/* My Items Button */}
-        <View style={styles.myItemsContainer}>
-          <TouchableOpacity 
-            style={styles.myItemsButton}
-            onPress={() => router.push('/secretariat-shop/my-posted-items')}
-            activeOpacity={0.8}
-          >
-            <View style={styles.myItemsContent}>
-              <Package size={20} color="#10B981" />
-              <Text style={styles.myItemsText}>My Items</Text>
-            </View>
-          </TouchableOpacity>
-        </View>
+            <TouchableOpacity 
+              style={styles.myItemsButton}
+              onPress={() => router.push('/secretariat-shop/my-posted-items')}
+            >
+              <Package size={18} color="#4169E1" />
+              <Text style={styles.myItemsText}>Manage Inventory</Text>
+            </TouchableOpacity>
+          </View>
+        )}
 
-        {/* Categories as first item in scrollable content */}
+        {/* Category Filter */}
         <ScrollView
           horizontal
           showsHorizontalScrollIndicator={false}
@@ -422,261 +359,186 @@ export default function SecretariatShopScreen() {
             <TouchableOpacity
               key={category.id}
               style={[
-                styles.categoryButton,
-                activeCategory === category.id && styles.activeCategoryButton,
+                styles.categoryChip,
+                activeCategory === category.id && styles.categoryChipActive
               ]}
               onPress={() => setActiveCategory(category.id)}
             >
-              <Text
-                style={[
-                  styles.categoryText,
-                  activeCategory === category.id && styles.activeCategoryText,
-                ]}
-              >
+              <Text style={[
+                styles.categoryChipText,
+                activeCategory === category.id && styles.categoryChipTextActive
+              ]}>
                 {category.name}
               </Text>
             </TouchableOpacity>
           ))}
         </ScrollView>
 
-        <View style={styles.productsGrid}>
-          {filteredProducts.length === 0 ? (
+        {/* Products Grid */}
+        <View style={styles.section}>
+          <View style={styles.sectionHeader}>
+            <Text style={styles.sectionTitle}>Available Items</Text>
+            <Text style={styles.itemCount}>{filteredProducts.length} items</Text>
+          </View>
+
+          {loading ? (
+            <View style={styles.loadingContainer}>
+              <Text style={styles.loadingText}>Loading products...</Text>
+            </View>
+          ) : filteredProducts.length === 0 ? (
             <View style={styles.emptyContainer}>
-              <Text style={styles.emptyText}>No products found</Text>
+              <ShoppingBag size={48} color="#CBD5E1" />
+              <Text style={styles.emptyTitle}>No items found</Text>
+              <Text style={styles.emptyText}>
+                {searchQuery ? 'Try a different search term' : 
+                 activeCategory !== 'all' ? 'No items in this category yet' :
+                 'Check back soon for new merchandise!'}
+              </Text>
             </View>
           ) : (
-            filteredProducts.map((product) => (
-              <TouchableOpacity 
-                key={product.id} 
-                style={styles.productCard}
-                onPress={() => router.push(`/secretariat-shop/${product.id}` as any)}
-              >
-                <Image 
-                  source={{ uri: product.images ? product.images[0] : product.image }} 
-                  style={styles.productImage} 
-                />
-                <TouchableOpacity 
-                  style={styles.productFavoriteButton}
-                  onPress={(e) => {
-                    e.stopPropagation();
-                    handleToggleFavorite(product.id);
-                  }}
+            <View style={styles.productsGrid}>
+              {filteredProducts.map((product) => (
+                <TouchableOpacity
+                  key={product.id}
+                  style={styles.productCard}
+                  onPress={() => router.push(`/secretariat-shop/${product.id}` as any)}
                 >
-                  <Heart 
-                    size={20} 
-                    color={favorites.includes(product.id) ? "#FF3B30" : "#FFFFFF"}
-                    fill={favorites.includes(product.id) ? "#FF3B30" : "transparent"}
-                    strokeWidth={2}
+                  <Image
+                    source={{ uri: product.images[0] || 'https://images.unsplash.com/photo-1523381210434-271e8be1f52b?w=800' }}
+                    style={styles.productImage}
                   />
-                </TouchableOpacity>
-                <View style={styles.productContent}>
-                  <Text style={styles.productName} numberOfLines={2}>{product.name}</Text>
-                  <Text style={styles.productDescription} numberOfLines={2}>{product.description}</Text>
-                  <View style={styles.productFooter}>
-                    <View style={styles.priceContainer}>
-                      <Text style={styles.currencySymbol}>
-                        {currency === 'USD' ? '$' : '₵'}
-                      </Text>
-                      <Text style={styles.priceText}>
-                        {(currency === 'USD' ? product.priceUSD : product.priceGHS).toFixed(2)}
-                      </Text>
+                  
+                  {/* Admin Actions */}
+                  {userProfile?.is_admin && (
+                    <View style={styles.adminActions}>
+                      <TouchableOpacity
+                        style={styles.editButton}
+                        onPress={(e) => {
+                          e.stopPropagation();
+                          router.push({
+                            pathname: '/secretariat-shop/edit-posted-item',
+                            params: { productId: product.id }
+                          });
+                        }}
+                      >
+                        <Edit2 size={14} color="#FFFFFF" />
+                      </TouchableOpacity>
+                      <TouchableOpacity
+                        style={styles.deleteButton}
+                        onPress={(e) => {
+                          e.stopPropagation();
+                          handleDeleteProduct(product.id, product.name);
+                        }}
+                      >
+                        <Trash2 size={14} color="#FFFFFF" />
+                      </TouchableOpacity>
                     </View>
-                    <TouchableOpacity 
-                      style={styles.addButton}
-                      onPress={() => handleAddToCart(product)}
-                    >
-                      <Plus size={16} color="#FFFFFF" />
-                    </TouchableOpacity>
+                  )}
+
+                  {/* Stock Badge */}
+                  {product.quantity <= 5 && product.quantity > 0 && (
+                    <View style={styles.lowStockBadge}>
+                      <Text style={styles.lowStockText}>Only {product.quantity} left</Text>
+                    </View>
+                  )}
+
+                  <View style={styles.productContent}>
+                    <Text style={styles.productName} numberOfLines={2}>{product.name}</Text>
+                    <Text style={styles.productCategory}>{product.category}</Text>
+                    <View style={styles.priceRow}>
+                      <Text style={styles.price}>
+                        {formatPrice(product.price_usd, product.price_ghs)}
+                      </Text>
+                      {product.condition !== 'New' && (
+                        <View style={styles.conditionBadge}>
+                          <Text style={styles.conditionText}>{product.condition}</Text>
+                        </View>
+                      )}
+                    </View>
                   </View>
-                </View>
-              </TouchableOpacity>
-            ))
+                </TouchableOpacity>
+              ))}
+            </View>
           )}
         </View>
 
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Delivery & Pickup Options</Text>
-          {DELIVERY_OPTIONS.map((option) => {
-            const IconComponent = option.icon;
-            return (
-              <TouchableOpacity 
-                key={option.id} 
-                style={styles.deliveryCard}
-                onPress={() => {
-                  if (option.id === '1') {
-                    router.push('/secretariat-shop/delivery');
-                  } else if (option.id === '2') {
-                    router.push('/secretariat-shop/pickup');
-                  }
-                }}
-              >
-                <View style={styles.deliveryIcon}>
-                  <IconComponent size={24} color="#4169E1" />
-                </View>
-                <View style={styles.deliveryContent}>
-                  <Text style={styles.deliveryTitle}>{option.title}</Text>
-                  <Text style={styles.deliveryDescription}>{option.description}</Text>
-                  <View style={styles.deliveryDetails}>
-                    <Text style={styles.deliveryTime}>{option.estimatedTime}</Text>
-                    <Text style={styles.deliveryFee}>{option.fee}</Text>
-                  </View>
-                </View>
-              </TouchableOpacity>
-            );
-          })}
-        </View>
+        {/* Contact to Order Section */}
+        <View style={styles.contactSection}>
+          <View style={styles.contactCard}>
+            <ShoppingBag size={32} color="#4169E1" />
+            <Text style={styles.contactTitle}>Ready to Order?</Text>
+            <Text style={styles.contactDescription}>
+              Contact the OAA Secretariat to place your order and arrange pickup or delivery
+            </Text>
+            <TouchableOpacity
+              style={styles.callButtonFull}
+              onPress={() => Linking.openURL(`tel:${secretariatPhone}`)}
+            >
+              <Phone size={18} color="#FFFFFF" />
+              <Text style={styles.callButtonText}>Call to Order</Text>
+            </TouchableOpacity>
+            <Text style={styles.contactInfo}>
+              {secretariatPhone}
+            </Text>
+          </View>
 
-        <View style={styles.section}>
           <View style={styles.infoCard}>
-            <ShoppingBag size={24} color="#4169E1" />
-            <Text style={styles.infoTitle}>About Our Products</Text>
             <Text style={styles.infoText}>
-              All items are officially licensed and a portion of each sale supports alumni initiatives and scholarship programs.
+              ✓ All items are official OAA merchandise{'\n'}
+              ✓ Proceeds support alumni initiatives{'\n'}
+              ✓ Available for pickup at school or delivery{'\n'}
+              ✓ Quality guaranteed
             </Text>
           </View>
         </View>
+
+        <View style={{ height: 40 }} />
       </ScrollView>
 
-      {/* Filter Modal */}
+      {/* Admin Settings Modal */}
       <Modal
-        visible={filterModalVisible}
-        animationType="slide"
+        visible={showSettingsModal}
         transparent={true}
-        onRequestClose={() => setFilterModalVisible(false)}
+        animationType="fade"
+        onRequestClose={() => setShowSettingsModal(false)}
       >
         <View style={styles.modalOverlay}>
           <View style={styles.modalContent}>
             <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>Filter Products</Text>
-              <TouchableOpacity onPress={() => setFilterModalVisible(false)}>
+              <Text style={styles.modalTitle}>Secretariat Settings</Text>
+              <TouchableOpacity onPress={() => setShowSettingsModal(false)}>
                 <X size={24} color="#000000" />
               </TouchableOpacity>
             </View>
 
-            <ScrollView style={styles.modalBody} showsVerticalScrollIndicator={false}>
-              {/* Category Filter */}
-              <View style={styles.filterSection}>
-                <Text style={styles.filterSectionTitle}>Category</Text>
-                <View style={styles.filterOptions}>
-                  {PRODUCT_CATEGORIES.filter(cat => cat.id !== 'all').map((category) => (
-                    <TouchableOpacity
-                      key={category.id}
-                      style={[
-                        styles.filterChip,
-                        selectedCategories.includes(category.name) && styles.filterChipActive
-                      ]}
-                      onPress={() => toggleCategory(category.name)}
-                    >
-                      <Text style={[
-                        styles.filterChipText,
-                        selectedCategories.includes(category.name) && styles.filterChipTextActive
-                      ]}>
-                        {category.name}
-                      </Text>
-                    </TouchableOpacity>
-                  ))}
-                </View>
-              </View>
-
-              {/* Size Filter */}
-              <View style={styles.filterSection}>
-                <Text style={styles.filterSectionTitle}>Size</Text>
-                <View style={styles.filterOptions}>
-                  {allSizes.map((size) => (
-                    <TouchableOpacity
-                      key={size}
-                      style={[
-                        styles.filterChip,
-                        selectedSizes.includes(size) && styles.filterChipActive
-                      ]}
-                      onPress={() => toggleSize(size)}
-                    >
-                      <Text style={[
-                        styles.filterChipText,
-                        selectedSizes.includes(size) && styles.filterChipTextActive
-                      ]}>
-                        {size}
-                      </Text>
-                    </TouchableOpacity>
-                  ))}
-                </View>
-              </View>
-
-              {/* Price Range Filter */}
-              <View style={styles.filterSection}>
-                <Text style={styles.filterSectionTitle}>Price Range</Text>
-                <View style={styles.currencySelector}>
-                  <TouchableOpacity
-                    style={[
-                      styles.currencySelectorButton,
-                      filterCurrency === 'USD' && styles.currencySelectorButtonActive
-                    ]}
-                    onPress={() => setFilterCurrency('USD')}
-                  >
-                    <Text style={[
-                      styles.currencySelectorText,
-                      filterCurrency === 'USD' && styles.currencySelectorTextActive
-                    ]}>
-                      USD ($)
-                    </Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity
-                    style={[
-                      styles.currencySelectorButton,
-                      filterCurrency === 'GHS' && styles.currencySelectorButtonActive
-                    ]}
-                    onPress={() => setFilterCurrency('GHS')}
-                  >
-                    <Text style={[
-                      styles.currencySelectorText,
-                      filterCurrency === 'GHS' && styles.currencySelectorTextActive
-                    ]}>
-                      GHS (₵)
-                    </Text>
-                  </TouchableOpacity>
-                </View>
-                <View style={styles.priceRangeInputs}>
-                  <View style={styles.priceInputContainer}>
-                    <Text style={styles.priceInputLabel}>Min</Text>
-                    <TextInput
-                      style={styles.priceInput}
-                      placeholder="0"
-                      placeholderTextColor="#999"
-                      keyboardType="numeric"
-                      value={priceRange.min}
-                      onChangeText={(text) => setPriceRange(prev => ({ ...prev, min: text }))}
-                    />
-                  </View>
-                  <Text style={styles.priceRangeSeparator}>-</Text>
-                  <View style={styles.priceInputContainer}>
-                    <Text style={styles.priceInputLabel}>Max</Text>
-                    <TextInput
-                      style={styles.priceInput}
-                      placeholder="999"
-                      placeholderTextColor="#999"
-                      keyboardType="numeric"
-                      value={priceRange.max}
-                      onChangeText={(text) => setPriceRange(prev => ({ ...prev, max: text }))}
-                    />
-                  </View>
-                </View>
-              </View>
-            </ScrollView>
-
-            <View style={styles.modalFooter}>
-              <TouchableOpacity 
-                style={styles.clearButton}
-                onPress={clearFilters}
-              >
-                <Text style={styles.clearButtonText}>Clear All</Text>
-              </TouchableOpacity>
-              <TouchableOpacity 
-                style={styles.applyButton}
-                onPress={applyFilters}
-              >
-                <Text style={styles.applyButtonText}>Apply Filters</Text>
-              </TouchableOpacity>
+            <View style={styles.settingSection}>
+              <Text style={styles.settingLabel}>Contact Phone Number</Text>
+              <TextInput
+                style={styles.settingInput}
+                placeholder="+233 XXX XXX XXX"
+                placeholderTextColor="#94A3B8"
+                value={editingPhone}
+                onChangeText={setEditingPhone}
+                keyboardType="phone-pad"
+              />
+              <Text style={styles.settingHint}>
+                This number will be displayed to users for placing orders
+              </Text>
             </View>
+
+            <TouchableOpacity
+              style={styles.saveButton}
+              onPress={saveSecretariatPhone}
+            >
+              <LinearGradient
+                colors={['#10B981', '#059669']}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 0 }}
+                style={styles.saveGradient}
+              >
+                <Text style={styles.saveButtonText}>Save Changes</Text>
+              </LinearGradient>
+            </TouchableOpacity>
           </View>
         </View>
       </Modal>
@@ -698,125 +560,41 @@ const styles = StyleSheet.create({
     paddingBottom: 16,
     backgroundColor: '#FFFFFF',
     borderBottomWidth: 1,
-    borderBottomColor: '#E2E8F0',
+    borderBottomColor: '#F1F5F9',
   },
   backButton: {
-    padding: 8,
+    width: 40,
+    height: 40,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  headerTextContainer: {
+    flex: 1,
+    alignItems: 'center',
   },
   title: {
-    fontSize: 24,
+    fontSize: 20,
     fontFamily: 'Inter-SemiBold',
-    color: '#000000',
+    color: '#0F172A',
   },
-  headerIcons: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 16,
-  },
-  favoritesButton: {
-    padding: 8,
-    position: 'relative',
-  },
-  favoritesBadge: {
-    position: 'absolute',
-    top: 0,
-    right: 0,
-    backgroundColor: '#FF3B30',
-    width: 20,
-    height: 20,
-    borderRadius: 10,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  favoritesBadgeText: {
-    color: '#FFFFFF',
+  subtitle: {
     fontSize: 12,
-    fontFamily: 'Inter-SemiBold',
+    fontFamily: 'Inter-Regular',
+    color: '#64748B',
+    marginTop: 2,
   },
-  cartButton: {
-    padding: 8,
-    position: 'relative',
-  },
-  cartBadge: {
-    position: 'absolute',
-    top: 0,
-    right: 0,
-    backgroundColor: '#FF4444',
-    width: 20,
-    height: 20,
-    borderRadius: 10,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  cartBadgeText: {
-    color: '#FFFFFF',
-    fontSize: 12,
-    fontFamily: 'Inter-SemiBold',
-  },
-  postItemContainer: {
-    paddingHorizontal: 16,
-    paddingTop: 8,
-    paddingBottom: 8,
-  },
-  postItemButton: {
-    borderRadius: 12,
-    overflow: 'hidden',
-    shadowColor: '#10B981',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 8,
-    elevation: 4,
-  },
-  postItemGradient: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: 14,
-    gap: 8,
-  },
-  postItemText: {
-    fontSize: 16,
-    fontFamily: 'Inter-SemiBold',
-    color: '#FFFFFF',
-  },
-  myItemsContainer: {
-    paddingHorizontal: 16,
-    paddingBottom: 8,
-  },
-  myItemsButton: {
-    borderRadius: 12,
-    backgroundColor: '#FFFFFF',
-    borderWidth: 2,
-    borderColor: '#10B981',
-    overflow: 'hidden',
-    shadowColor: '#000000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 2,
-  },
-  myItemsContent: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: 14,
-    gap: 8,
-  },
-  myItemsText: {
-    fontSize: 16,
-    fontFamily: 'Inter-SemiBold',
-    color: '#10B981',
+  placeholder: {
+    width: 40,
   },
   searchContainer: {
-    flexDirection: 'row',
-    padding: 16,
-    gap: 12,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    backgroundColor: '#FFFFFF',
   },
   searchInputContainer: {
-    flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#F8F9FA',
+    backgroundColor: '#F1F5F9',
     borderRadius: 12,
     paddingHorizontal: 16,
     height: 48,
@@ -826,139 +604,203 @@ const styles = StyleSheet.create({
     marginLeft: 12,
     fontSize: 16,
     fontFamily: 'Inter-Regular',
-    color: '#000000',
+    color: '#0F172A',
   },
   currencyContainer: {
     paddingHorizontal: 16,
     paddingBottom: 12,
-    alignItems: 'center',
   },
   currencyToggle: {
     flexDirection: 'row',
-    backgroundColor: '#F8F9FA',
-    borderRadius: 12,
-    padding: 2,
+    backgroundColor: '#F1F5F9',
+    borderRadius: 10,
+    padding: 4,
   },
   currencyButton: {
-    paddingHorizontal: 20,
+    flex: 1,
     paddingVertical: 10,
-    borderRadius: 10,
-    justifyContent: 'center',
     alignItems: 'center',
-    minWidth: 80,
+    borderRadius: 8,
   },
   activeCurrencyButton: {
-    backgroundColor: '#4169E1',
+    backgroundColor: '#FFFFFF',
   },
   currencyButtonText: {
     fontSize: 14,
-    fontFamily: 'Inter-SemiBold',
-    color: '#666666',
+    fontFamily: 'Inter-Regular',
+    color: '#64748B',
   },
   activeCurrencyButtonText: {
-    color: '#FFFFFF',
-  },
-  filterIconButton: {
-    width: 48,
-    height: 48,
-    backgroundColor: '#F8F9FA',
-    borderRadius: 12,
-    justifyContent: 'center',
-    alignItems: 'center',
-    position: 'relative',
-  },
-  filterBadge: {
-    position: 'absolute',
-    top: 8,
-    right: 8,
-    backgroundColor: '#4169E1',
-    width: 18,
-    height: 18,
-    borderRadius: 9,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  filterBadgeText: {
-    color: '#FFFFFF',
-    fontSize: 10,
     fontFamily: 'Inter-SemiBold',
+    color: '#0F172A',
   },
-  filterButton: {
-    width: 48,
-    height: 48,
-    backgroundColor: '#F8F9FA',
+  content: {
+    flex: 1,
+  },
+  adminActionsContainer: {
+    paddingHorizontal: 16,
+    paddingTop: 16,
+    gap: 12,
+  },
+  postButton: {
     borderRadius: 12,
-    justifyContent: 'center',
+    overflow: 'hidden',
+  },
+  postButtonGradient: {
+    flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 16,
+    gap: 8,
+  },
+  postButtonText: {
+    fontSize: 16,
+    fontFamily: 'Inter-SemiBold',
+    color: '#FFFFFF',
+  },
+  myItemsButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 14,
+    backgroundColor: '#EEF2FF',
+    borderRadius: 12,
+    gap: 8,
+  },
+  myItemsText: {
+    fontSize: 15,
+    fontFamily: 'Inter-SemiBold',
+    color: '#4169E1',
   },
   categoriesScroll: {
-    marginBottom: 16,
-    marginTop: 8,
-    maxHeight: 50,
+    marginTop: 16,
+    maxHeight: 44,
   },
   categoriesContent: {
     paddingHorizontal: 16,
     gap: 8,
   },
-  categoryButton: {
+  categoryChip: {
     paddingHorizontal: 16,
-    paddingVertical: 8,
+    paddingVertical: 10,
     borderRadius: 20,
-    backgroundColor: '#F8F9FA',
+    backgroundColor: '#F1F5F9',
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
   },
-  activeCategoryButton: {
+  categoryChipActive: {
     backgroundColor: '#4169E1',
+    borderColor: '#4169E1',
   },
-  categoryText: {
+  categoryChipText: {
     fontSize: 14,
     fontFamily: 'Inter-Regular',
-    color: '#666666',
+    color: '#64748B',
   },
-  activeCategoryText: {
-    color: '#FFFFFF',
+  categoryChipTextActive: {
     fontFamily: 'Inter-SemiBold',
+    color: '#FFFFFF',
   },
-  content: {
-    flex: 1,
+  section: {
+    marginTop: 24,
+    paddingHorizontal: 16,
+  },
+  sectionHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 16,
+  },
+  sectionTitle: {
+    fontSize: 18,
+    fontFamily: 'Inter-SemiBold',
+    color: '#0F172A',
+  },
+  itemCount: {
+    fontSize: 14,
+    fontFamily: 'Inter-Regular',
+    color: '#64748B',
+  },
+  loadingContainer: {
+    paddingVertical: 60,
+    alignItems: 'center',
+  },
+  loadingText: {
+    fontSize: 16,
+    fontFamily: 'Inter-Regular',
+    color: '#64748B',
+  },
+  emptyContainer: {
+    paddingVertical: 60,
+    alignItems: 'center',
+  },
+  emptyTitle: {
+    fontSize: 18,
+    fontFamily: 'Inter-SemiBold',
+    color: '#0F172A',
+    marginTop: 16,
+  },
+  emptyText: {
+    fontSize: 14,
+    fontFamily: 'Inter-Regular',
+    color: '#64748B',
+    marginTop: 8,
+    textAlign: 'center',
   },
   productsGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: 16,
-    marginBottom: 24,
-    paddingHorizontal: 16,
+    gap: 12,
   },
   productCard: {
     width: CARD_WIDTH,
     backgroundColor: '#FFFFFF',
     borderRadius: 12,
     overflow: 'hidden',
-    shadowColor: '#000000',
-    shadowOffset: {
-      width: 0,
-      height: 2,
-    },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
-    position: 'relative',
-  },
-  productFavoriteButton: {
-    position: 'absolute',
-    top: 8,
-    right: 8,
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    backgroundColor: 'rgba(0, 0, 0, 0.5)',
-    justifyContent: 'center',
-    alignItems: 'center',
-    zIndex: 10,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
   },
   productImage: {
     width: '100%',
-    height: 150,
-    resizeMode: 'cover',
+    height: 160,
+    backgroundColor: '#F8FAFC',
+  },
+  adminActions: {
+    position: 'absolute',
+    top: 8,
+    right: 8,
+    flexDirection: 'row',
+    gap: 6,
+  },
+  editButton: {
+    width: 32,
+    height: 32,
+    backgroundColor: '#4169E1',
+    borderRadius: 16,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  deleteButton: {
+    width: 32,
+    height: 32,
+    backgroundColor: '#EF4444',
+    borderRadius: 16,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  lowStockBadge: {
+    position: 'absolute',
+    top: 8,
+    left: 8,
+    backgroundColor: '#F59E0B',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 6,
+  },
+  lowStockText: {
+    fontSize: 11,
+    fontFamily: 'Inter-SemiBold',
+    color: '#FFFFFF',
   },
   productContent: {
     padding: 12,
@@ -966,287 +808,177 @@ const styles = StyleSheet.create({
   productName: {
     fontSize: 14,
     fontFamily: 'Inter-SemiBold',
-    color: '#000000',
+    color: '#0F172A',
     marginBottom: 4,
   },
-  productDescription: {
+  productCategory: {
     fontSize: 12,
     fontFamily: 'Inter-Regular',
-    color: '#666666',
+    color: '#64748B',
     marginBottom: 8,
   },
-  productFooter: {
+  priceRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
   },
-  priceContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-  },
-  currencySymbol: {
+  price: {
     fontSize: 16,
     fontFamily: 'Inter-SemiBold',
-    color: '#4169E1',
+    color: '#10B981',
   },
-  priceText: {
-    fontSize: 16,
+  conditionBadge: {
+    backgroundColor: '#FEF3C7',
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 4,
+  },
+  conditionText: {
+    fontSize: 10,
     fontFamily: 'Inter-SemiBold',
-    color: '#4169E1',
+    color: '#92400E',
   },
-  addButton: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    backgroundColor: '#4169E1',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  emptyContainer: {
-    width: '100%',
-    padding: 32,
-    alignItems: 'center',
-  },
-  emptyText: {
-    fontSize: 16,
-    fontFamily: 'Inter-Regular',
-    color: '#666666',
-  },
-  section: {
-    marginBottom: 24,
+  contactSection: {
+    marginTop: 32,
     paddingHorizontal: 16,
+    gap: 16,
   },
-  sectionTitle: {
-    fontSize: 18,
-    fontFamily: 'Inter-SemiBold',
-    color: '#000000',
-    marginBottom: 16,
-  },
-  deliveryCard: {
-    flexDirection: 'row',
-    backgroundColor: '#FFFFFF',
-    borderRadius: 12,
-    padding: 16,
-    marginBottom: 12,
-    shadowColor: '#000000',
-    shadowOffset: {
-      width: 0,
-      height: 2,
-    },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
-  },
-  deliveryIcon: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
-    backgroundColor: '#EBF0FF',
-    justifyContent: 'center',
+  contactCard: {
+    backgroundColor: '#F8FAFC',
+    borderRadius: 16,
+    padding: 24,
     alignItems: 'center',
-    marginRight: 16,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
   },
-  deliveryContent: {
-    flex: 1,
-  },
-  deliveryTitle: {
-    fontSize: 16,
+  contactTitle: {
+    fontSize: 20,
     fontFamily: 'Inter-SemiBold',
-    color: '#000000',
-    marginBottom: 4,
+    color: '#0F172A',
+    marginTop: 12,
   },
-  deliveryDescription: {
+  contactDescription: {
     fontSize: 14,
     fontFamily: 'Inter-Regular',
-    color: '#666666',
-    marginBottom: 8,
+    color: '#64748B',
+    textAlign: 'center',
+    marginTop: 8,
+    lineHeight: 20,
   },
-  deliveryDetails: {
+  contactButtons: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
+    gap: 12,
+    marginTop: 20,
   },
-  deliveryTime: {
-    fontSize: 12,
-    fontFamily: 'Inter-Regular',
-    color: '#666666',
-  },
-  deliveryFee: {
-    fontSize: 12,
-    fontFamily: 'Inter-SemiBold',
-    color: '#4169E1',
-  },
-  infoCard: {
-    backgroundColor: '#F8F9FA',
-    borderRadius: 12,
-    padding: 16,
+  callButton: {
+    flex: 1,
+    flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#4169E1',
+    paddingVertical: 14,
+    borderRadius: 12,
     gap: 8,
   },
-  infoTitle: {
-    fontSize: 16,
+  callButtonFull: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#10B981',
+    paddingVertical: 16,
+    paddingHorizontal: 24,
+    borderRadius: 12,
+    gap: 8,
+    marginTop: 16,
+  },
+  callButtonText: {
+    fontSize: 15,
     fontFamily: 'Inter-SemiBold',
-    color: '#000000',
+    color: '#FFFFFF',
+  },
+  contactInfo: {
+    fontSize: 12,
+    fontFamily: 'Inter-Regular',
+    color: '#64748B',
+    marginTop: 16,
     textAlign: 'center',
+  },
+  infoCard: {
+    backgroundColor: '#EEF2FF',
+    borderRadius: 12,
+    padding: 16,
   },
   infoText: {
     fontSize: 14,
     fontFamily: 'Inter-Regular',
-    color: '#666666',
-    textAlign: 'center',
+    color: '#4338CA',
+    lineHeight: 22,
+  },
+  settingsButton: {
+    width: 40,
+    height: 40,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   modalOverlay: {
     flex: 1,
     backgroundColor: 'rgba(0, 0, 0, 0.5)',
-    justifyContent: 'flex-end',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 16,
   },
   modalContent: {
     backgroundColor: '#FFFFFF',
-    borderTopLeftRadius: 24,
-    borderTopRightRadius: 24,
-    maxHeight: '80%',
-    paddingBottom: 20,
+    borderRadius: 16,
+    width: '100%',
+    maxWidth: 400,
+    padding: 24,
   },
   modalHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingHorizontal: 20,
-    paddingVertical: 16,
-    borderBottomWidth: 1,
-    borderBottomColor: '#E2E8F0',
+    marginBottom: 24,
   },
   modalTitle: {
     fontSize: 20,
     fontFamily: 'Inter-SemiBold',
-    color: '#000000',
+    color: '#0F172A',
   },
-  modalBody: {
-    flex: 1,
-    paddingHorizontal: 20,
+  settingSection: {
+    marginBottom: 24,
   },
-  filterSection: {
-    marginTop: 24,
-  },
-  filterSectionTitle: {
-    fontSize: 16,
-    fontFamily: 'Inter-SemiBold',
-    color: '#000000',
-    marginBottom: 12,
-  },
-  filterOptions: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 8,
-  },
-  filterChip: {
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    borderRadius: 20,
-    backgroundColor: '#F8F9FA',
-    borderWidth: 1,
-    borderColor: '#E2E8F0',
-  },
-  filterChipActive: {
-    backgroundColor: '#4169E1',
-    borderColor: '#4169E1',
-  },
-  filterChipText: {
+  settingLabel: {
     fontSize: 14,
-    fontFamily: 'Inter-Regular',
-    color: '#666666',
-  },
-  filterChipTextActive: {
-    color: '#FFFFFF',
     fontFamily: 'Inter-SemiBold',
-  },
-  currencySelector: {
-    flexDirection: 'row',
-    gap: 8,
-    marginBottom: 16,
-  },
-  currencySelectorButton: {
-    flex: 1,
-    paddingVertical: 12,
-    paddingHorizontal: 16,
-    borderRadius: 12,
-    backgroundColor: '#F8F9FA',
-    alignItems: 'center',
-    borderWidth: 1,
-    borderColor: '#E2E8F0',
-  },
-  currencySelectorButtonActive: {
-    backgroundColor: '#EBF0FF',
-    borderColor: '#4169E1',
-  },
-  currencySelectorText: {
-    fontSize: 14,
-    fontFamily: 'Inter-Regular',
-    color: '#666666',
-  },
-  currencySelectorTextActive: {
-    color: '#4169E1',
-    fontFamily: 'Inter-SemiBold',
-  },
-  priceRangeInputs: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-  },
-  priceInputContainer: {
-    flex: 1,
-  },
-  priceInputLabel: {
-    fontSize: 12,
-    fontFamily: 'Inter-Regular',
-    color: '#666666',
+    color: '#0F172A',
     marginBottom: 8,
   },
-  priceInput: {
-    backgroundColor: '#F8F9FA',
-    borderRadius: 12,
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    fontSize: 16,
-    fontFamily: 'Inter-Regular',
-    color: '#000000',
+  settingInput: {
     borderWidth: 1,
     borderColor: '#E2E8F0',
-  },
-  priceRangeSeparator: {
-    fontSize: 18,
-    fontFamily: 'Inter-Regular',
-    color: '#666666',
-    marginTop: 20,
-  },
-  modalFooter: {
-    flexDirection: 'row',
-    paddingHorizontal: 20,
-    paddingTop: 16,
-    gap: 12,
-    borderTopWidth: 1,
-    borderTopColor: '#E2E8F0',
-  },
-  clearButton: {
-    flex: 1,
-    paddingVertical: 14,
-    borderRadius: 12,
-    backgroundColor: '#F8F9FA',
-    alignItems: 'center',
-  },
-  clearButtonText: {
+    borderRadius: 8,
+    padding: 12,
     fontSize: 16,
-    fontFamily: 'Inter-SemiBold',
-    color: '#666666',
+    fontFamily: 'Inter-Regular',
+    color: '#0F172A',
   },
-  applyButton: {
-    flex: 1,
-    paddingVertical: 14,
+  settingHint: {
+    fontSize: 12,
+    fontFamily: 'Inter-Regular',
+    color: '#64748B',
+    marginTop: 6,
+  },
+  saveButton: {
     borderRadius: 12,
-    backgroundColor: '#4169E1',
-    alignItems: 'center',
+    overflow: 'hidden',
   },
-  applyButtonText: {
+  saveGradient: {
+    paddingVertical: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  saveButtonText: {
     fontSize: 16,
     fontFamily: 'Inter-SemiBold',
     color: '#FFFFFF',

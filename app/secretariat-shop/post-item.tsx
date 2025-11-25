@@ -1,11 +1,12 @@
-import { View, Text, StyleSheet, ScrollView, TextInput, TouchableOpacity, Image, Alert } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TextInput, TouchableOpacity, Image, Alert, ActivityIndicator } from 'react-native';
 import { useFonts, Inter_400Regular, Inter_600SemiBold, Inter_700Bold } from '@expo-google-fonts/inter';
 import { useEffect, useState } from 'react';
 import { SplashScreen, useRouter } from 'expo-router';
-import { ArrowLeft, Upload, DollarSign, Tag, Package, FileText, Image as ImageIcon, X, Palette } from 'lucide-react-native';
+import { ArrowLeft, Upload, DollarSign, Plus, X } from 'lucide-react-native';
 import { LinearGradient } from 'expo-linear-gradient';
+import { supabase } from '@/lib/supabase';
+import { useAuth } from '@/hooks/useAuth';
 import * as ImagePicker from 'expo-image-picker';
-import AsyncStorage from '@react-native-async-storage/async-storage';
 
 SplashScreen.preventAutoHideAsync();
 
@@ -20,49 +21,27 @@ const CATEGORIES = [
   'Other',
 ];
 
-const SIZES = ['XS', 'S', 'M', 'L', 'XL', 'XXL', 'One Size', 'A4', 'A5', 'Standard'];
+const OAA_SECRETARIAT_CONTACT = '+233 302 765 432';
 
-const COLORS = [
-  { name: 'Black', hex: '#000000' },
-  { name: 'White', hex: '#FFFFFF' },
-  { name: 'Red', hex: '#EF4444' },
-  { name: 'Blue', hex: '#3B82F6' },
-  { name: 'Green', hex: '#10B981' },
-  { name: 'Yellow', hex: '#FBBF24' },
-  { name: 'Purple', hex: '#A855F7' },
-  { name: 'Pink', hex: '#EC4899' },
-  { name: 'Orange', hex: '#F97316' },
-  { name: 'Brown', hex: '#92400E' },
-  { name: 'Gray', hex: '#6B7280' },
-  { name: 'Navy', hex: '#1E3A8A' },
-  { name: 'Maroon', hex: '#7F1D1D' },
-  { name: 'Teal', hex: '#0D9488' },
-  { name: 'Gold', hex: '#CA8A04' },
-  { name: 'Silver', hex: '#9CA3AF' },
-];
-
-const OAA_SECRETARIAT_CONTACT = '+233 XX XXX XXXX | secretariat@oaa.com';
+// Currency conversion rate
+const USD_TO_GHS = 10.99;
+const GHS_TO_USD = 0.091;
 
 const MAX_IMAGES = 20;
 
-// Currency conversion rate: 1 GHS = 0.091 USD (inverse: 1 USD = 10.99 GHS)
-const GHS_TO_USD = 0.091;
-const USD_TO_GHS = 10.99;
-
 export default function PostItemScreen() {
   const router = useRouter();
+  const { user } = useAuth();
   
   const [itemName, setItemName] = useState('');
   const [description, setDescription] = useState('');
-  const [priceUSD, setPriceUSD] = useState('');
   const [priceGHS, setPriceGHS] = useState('');
+  const [priceUSD, setPriceUSD] = useState('');
   const [category, setCategory] = useState('');
-  const [selectedSizes, setSelectedSizes] = useState<string[]>([]);
   const [imageUris, setImageUris] = useState<string[]>([]);
-  const [selectedColors, setSelectedColors] = useState<string[]>([]);
-  const [condition, setCondition] = useState<'New' | 'Like New' | 'Good' | 'Fair'>('New');
   const [quantity, setQuantity] = useState('1');
   const [contactInfo, setContactInfo] = useState(OAA_SECRETARIAT_CONTACT);
+  const [uploading, setUploading] = useState(false);
 
   const [fontsLoaded] = useFonts({
     'Inter-Regular': Inter_400Regular,
@@ -80,21 +59,25 @@ export default function PostItemScreen() {
     return null;
   }
 
-  const handlePriceUSDChange = (value: string) => {
-    setPriceUSD(value);
-    // Auto-calculate GHS price
-    if (value && !isNaN(parseFloat(value))) {
-      const ghsPrice = (parseFloat(value) * USD_TO_GHS).toFixed(2);
-      setPriceGHS(ghsPrice);
-    }
-  };
-
   const handlePriceGHSChange = (value: string) => {
     setPriceGHS(value);
     // Auto-calculate USD price
     if (value && !isNaN(parseFloat(value))) {
       const usdPrice = (parseFloat(value) * GHS_TO_USD).toFixed(2);
       setPriceUSD(usdPrice);
+    } else {
+      setPriceUSD('');
+    }
+  };
+
+  const handlePriceUSDChange = (value: string) => {
+    setPriceUSD(value);
+    // Auto-calculate GHS price
+    if (value && !isNaN(parseFloat(value))) {
+      const ghsPrice = (parseFloat(value) * USD_TO_GHS).toFixed(2);
+      setPriceGHS(ghsPrice);
+    } else {
+      setPriceGHS('');
     }
   };
 
@@ -104,29 +87,34 @@ export default function PostItemScreen() {
       return;
     }
 
-    const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
-    
-    if (status !== 'granted') {
-      Alert.alert('Permission Required', 'Please grant permission to access your photos');
-      return;
-    }
-
-    const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ['images'],
-      allowsMultipleSelection: true,
-      quality: 0.8,
-    });
-
-    if (!result.canceled) {
-      const newImages = result.assets.map(asset => asset.uri);
-      const totalImages = [...imageUris, ...newImages];
+    try {
+      const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
       
-      if (totalImages.length > MAX_IMAGES) {
-        Alert.alert('Too Many Images', `You can only upload up to ${MAX_IMAGES} images. Only the first ${MAX_IMAGES - imageUris.length} will be added.`);
-        setImageUris([...imageUris, ...newImages.slice(0, MAX_IMAGES - imageUris.length)]);
-      } else {
-        setImageUris(totalImages);
+      if (status !== 'granted') {
+        Alert.alert('Permission Required', 'Please grant permission to access your photos');
+        return;
       }
+
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        allowsMultipleSelection: true,
+        quality: 0.8,
+      });
+
+      if (!result.canceled && result.assets) {
+        const newImages = result.assets.map(asset => asset.uri);
+        const totalImages = [...imageUris, ...newImages];
+        
+        if (totalImages.length > MAX_IMAGES) {
+          Alert.alert('Too Many Images', `You can only upload up to ${MAX_IMAGES} images. Only the first ${MAX_IMAGES - imageUris.length} will be added.`);
+          setImageUris([...imageUris, ...newImages.slice(0, MAX_IMAGES - imageUris.length)]);
+        } else {
+          setImageUris(totalImages);
+        }
+      }
+    } catch (error) {
+      console.error('Error picking images:', error);
+      Alert.alert('Error', 'Failed to pick images');
     }
   };
 
@@ -134,121 +122,135 @@ export default function PostItemScreen() {
     setImageUris(prev => prev.filter((_, i) => i !== index));
   };
 
-  const toggleColor = (colorName: string) => {
-    setSelectedColors(prev => 
-      prev.includes(colorName) 
-        ? prev.filter(c => c !== colorName)
-        : [...prev, colorName]
-    );
-  };
-
-  const toggleSize = (size: string) => {
-    setSelectedSizes(prev => 
-      prev.includes(size) 
-        ? prev.filter(s => s !== size)
-        : [...prev, size]
-    );
-  };
-
   const handleSubmit = async () => {
-    console.log('Submit button clicked!');
-    console.log('Form data:', { 
-      itemName, 
-      description, 
-      priceUSD, 
-      priceGHS, 
-      category, 
-      selectedSizes, 
-      imageUris: imageUris.length, 
-      selectedColors 
-    });
-    
     // Validation
     if (!itemName.trim()) {
-      console.log('Validation failed: itemName');
       Alert.alert('Error', 'Please enter item name');
       return;
     }
     if (!description.trim()) {
-      console.log('Validation failed: description');
       Alert.alert('Error', 'Please enter item description');
       return;
     }
     if (!priceUSD || !priceGHS) {
-      console.log('Validation failed: prices', { priceUSD, priceGHS });
-      Alert.alert('Error', 'Please enter prices in both currencies');
+      Alert.alert('Error', 'Please enter price');
       return;
     }
     if (!category) {
-      console.log('Validation failed: category');
       Alert.alert('Error', 'Please select a category');
       return;
     }
-    if (selectedSizes.length === 0) {
-      console.log('Validation failed: selectedSizes');
-      Alert.alert('Error', 'Please select at least one size option');
-      return;
-    }
     if (imageUris.length === 0) {
-      console.log('Validation failed: imageUris');
       Alert.alert('Error', 'Please upload at least one image');
       return;
     }
-    if (selectedColors.length === 0) {
-      console.log('Validation failed: selectedColors');
-      Alert.alert('Error', 'Please select at least one color');
+    if (!user) {
+      Alert.alert('Error', 'You must be logged in to post items');
       return;
     }
-    
-    console.log('All validations passed! Creating product...');
+
+    setUploading(true);
 
     try {
-      // Create new product object
-      const newProduct = {
-        id: Date.now().toString(),
-        name: itemName,
-        description: description,
-        priceUSD: parseFloat(priceUSD),
-        priceGHS: parseFloat(priceGHS),
-        category: category,
-        sizes: selectedSizes,
-        colors: selectedColors,
-        images: imageUris,
-        condition: condition,
-        quantity: parseInt(quantity),
-        contactInfo: contactInfo,
-        datePosted: new Date().toISOString(),
-        isUserPosted: true,
-      };
+      // Upload images to Supabase Storage
+      const uploadedImageUrls: string[] = [];
+      
+      for (const uri of imageUris) {
+        try {
+          const fileExt = uri.split('.').pop() || 'jpg';
+          const fileName = `${Date.now()}-${Math.random().toString(36).slice(2)}.${fileExt}`;
+          const path = `products/${user.id}/${fileName}`;
 
-      // Get existing posted items
-      const existingItems = await AsyncStorage.getItem('secretariat_posted_items');
-      const postedItems = existingItems ? JSON.parse(existingItems) : [];
-      
-      // Add new item
-      postedItems.push(newProduct);
-      
-      // Save back to storage
-      await AsyncStorage.setItem('secretariat_posted_items', JSON.stringify(postedItems));
+          // Convert URI to blob and upload
+          const response = await fetch(uri);
+          const fileBlob = await response.blob();
+          
+          const arrayBuffer = await new Promise<ArrayBuffer>((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onloadend = () => {
+              if (reader.result instanceof ArrayBuffer) {
+                resolve(reader.result);
+              } else {
+                reject(new Error('Failed to read file'));
+              }
+            };
+            reader.onerror = reject;
+            reader.readAsArrayBuffer(fileBlob);
+          });
 
-      console.log('Item saved successfully!');
+          const { error: uploadError } = await supabase.storage
+            .from('product-images')
+            .upload(path, arrayBuffer, {
+              contentType: 'image/jpeg',
+            });
 
-      // Navigate immediately
-      router.replace('/secretariat-shop');
-      
-      // Show success message after navigation
-      setTimeout(() => {
-        Alert.alert('✓ Success!', 'Your item has been posted to the OAA Secretariat Shop!');
-      }, 500);
-      
-    } catch (error) {
+          if (uploadError) {
+            console.error('Error uploading image:', uploadError);
+            continue;
+          }
+
+          const { data: publicUrlData } = supabase.storage
+            .from('product-images')
+            .getPublicUrl(path);
+
+          if (publicUrlData?.publicUrl) {
+            uploadedImageUrls.push(publicUrlData.publicUrl);
+          }
+        } catch (imgError) {
+          console.error('Error processing image:', imgError);
+        }
+      }
+
+      if (uploadedImageUrls.length === 0) {
+        throw new Error('Failed to upload images');
+      }
+
+      // Insert product into database
+      const { data, error } = await supabase
+        .from('secretariat_shop_products')
+        .insert([
+          {
+            user_id: user.id,
+            name: itemName.trim(),
+            description: description.trim(),
+            price_usd: parseFloat(priceUSD),
+            price_ghs: parseFloat(priceGHS),
+            category: category,
+            sizes: [],
+            colors: [],
+            images: uploadedImageUrls,
+            condition: 'New',
+            quantity: parseInt(quantity) || 1,
+            in_stock: true,
+            contact_info: contactInfo.trim(),
+          }
+        ])
+        .select()
+        .single();
+
+      if (error) throw error;
+
+      Alert.alert(
+        'Success!',
+        'Your item has been posted to the OAA Shop!',
+        [
+          {
+            text: 'OK',
+            onPress: () => router.replace('/secretariat-shop'),
+          }
+        ]
+      );
+    } catch (error: any) {
       console.error('Error posting item:', error);
-      Alert.alert('Error', 'Failed to post item. Please try again.');
+      Alert.alert('Error', error.message || 'Failed to post item. Please try again.');
+    } finally {
+      setUploading(false);
     }
   };
 
   return (
     <View style={styles.container}>
+      {/* Header */}
       <LinearGradient
         colors={['#10B981', '#059669']}
         start={{ x: 0, y: 0 }}
@@ -259,139 +261,80 @@ export default function PostItemScreen() {
           <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
             <ArrowLeft size={24} color="#FFFFFF" />
           </TouchableOpacity>
-          <View style={styles.headerCenter}>
-            <Text style={styles.title}>Post Your Item</Text>
-            <Text style={styles.subtitle}>Share with the community</Text>
-          </View>
+          <Text style={styles.title}>Post New Item</Text>
           <View style={styles.placeholder} />
         </View>
       </LinearGradient>
 
-      <ScrollView style={styles.content} contentContainerStyle={styles.scrollContent}>
-        {/* Image Upload Section */}
+      <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
+        {/* Item Name */}
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Product Images * (Up to {MAX_IMAGES})</Text>
-          <Text style={styles.sectionHint}>Upload {imageUris.length}/{MAX_IMAGES} images</Text>
-          
-          <View style={styles.imageGrid}>
-            {imageUris.map((uri, index) => {
-              const isHttpImage = uri?.startsWith('http');
-              return (
-                <View key={index} style={styles.imageItem}>
-                  {isHttpImage ? (
-                    <Image source={{ uri }} style={styles.uploadedImage} />
-                  ) : (
-                    <View style={[styles.uploadedImage, styles.imagePlaceholder]}>
-                      <Package size={32} color="#10B981" />
-                      <Text style={styles.placeholderText}>Image {index + 1}</Text>
-                    </View>
-                  )}
-                  <TouchableOpacity 
-                    style={styles.removeImageButton}
-                    onPress={() => removeImage(index)}
-                  >
-                    <X size={16} color="#FFFFFF" />
-                  </TouchableOpacity>
-                </View>
-              );
-            })}
-            
-            {imageUris.length < MAX_IMAGES && (
-              <TouchableOpacity style={styles.addImageButton} onPress={pickImages}>
-                <View style={styles.uploadPlaceholder}>
-                  <ImageIcon size={32} color="#10B981" />
-                  <Text style={styles.uploadText}>Add Image</Text>
-                </View>
-              </TouchableOpacity>
-            )}
-          </View>
+          <Text style={styles.sectionTitle}>Item Name *</Text>
+          <TextInput
+            style={styles.input}
+            placeholder="e.g., OAA Alumni Polo Shirt"
+            placeholderTextColor="#94A3B8"
+            value={itemName}
+            onChangeText={setItemName}
+          />
         </View>
 
-        {/* Basic Information */}
+        {/* Description */}
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Basic Information</Text>
-          
-          <View style={styles.inputGroup}>
-            <Text style={styles.label}>Item Name *</Text>
-            <TextInput
-              style={styles.input}
-              placeholder="e.g., Alumni Branded T-Shirt"
-              placeholderTextColor="#999"
-              value={itemName}
-              onChangeText={setItemName}
-            />
-          </View>
-
-          <View style={styles.inputGroup}>
-            <Text style={styles.label}>Description *</Text>
-            <TextInput
-              style={[styles.input, styles.textArea]}
-              placeholder="Describe your item in detail..."
-              placeholderTextColor="#999"
-              value={description}
-              onChangeText={setDescription}
-              multiline
-              numberOfLines={4}
-              textAlignVertical="top"
-            />
-          </View>
+          <Text style={styles.sectionTitle}>Description *</Text>
+          <TextInput
+            style={[styles.input, styles.textArea]}
+            placeholder="Describe the item in detail..."
+            placeholderTextColor="#94A3B8"
+            value={description}
+            onChangeText={setDescription}
+            multiline
+            numberOfLines={4}
+            textAlignVertical="top"
+          />
         </View>
 
         {/* Pricing */}
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Pricing *</Text>
-          
           <View style={styles.priceRow}>
-            <View style={styles.priceInput}>
-              <Text style={styles.label}>Price (USD)</Text>
-              <View style={styles.currencyInputContainer}>
-                <DollarSign size={20} color="#666" />
-                <TextInput
-                  style={styles.currencyInput}
-                  placeholder="0.00"
-                  placeholderTextColor="#999"
-                  value={priceUSD}
-                  onChangeText={handlePriceUSDChange}
-                  keyboardType="decimal-pad"
-                />
-              </View>
+            <View style={styles.priceField}>
+              <Text style={styles.priceLabel}>GHS (₵)</Text>
+              <TextInput
+                style={styles.priceInput}
+                placeholder="0.00"
+                placeholderTextColor="#94A3B8"
+                keyboardType="decimal-pad"
+                value={priceGHS}
+                onChangeText={handlePriceGHSChange}
+              />
             </View>
-
-            <View style={styles.priceInput}>
-              <Text style={styles.label}>Price (GHS)</Text>
-              <View style={styles.currencyInputContainer}>
-                <Text style={styles.cedisSymbol}>₵</Text>
-                <TextInput
-                  style={styles.currencyInput}
-                  placeholder="0.00"
-                  placeholderTextColor="#999"
-                  value={priceGHS}
-                  onChangeText={handlePriceGHSChange}
-                  keyboardType="decimal-pad"
-                />
-              </View>
+            <View style={styles.priceField}>
+              <Text style={styles.priceLabel}>USD ($)</Text>
+              <TextInput
+                style={styles.priceInput}
+                placeholder="0.00"
+                placeholderTextColor="#94A3B8"
+                keyboardType="decimal-pad"
+                value={priceUSD}
+                onChangeText={handlePriceUSDChange}
+              />
             </View>
           </View>
+          <Text style={styles.hint}>Auto-calculated at 1 USD = {USD_TO_GHS} GHS</Text>
         </View>
 
         {/* Category */}
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Category *</Text>
-          <View style={styles.categoryGrid}>
+          <View style={styles.optionsGrid}>
             {CATEGORIES.map((cat) => (
               <TouchableOpacity
                 key={cat}
-                style={[
-                  styles.categoryChip,
-                  category === cat && styles.categoryChipActive
-                ]}
+                style={[styles.optionChip, category === cat && styles.optionChipActive]}
                 onPress={() => setCategory(cat)}
               >
-                <Tag size={16} color={category === cat ? "#FFFFFF" : "#666"} />
-                <Text style={[
-                  styles.categoryChipText,
-                  category === cat && styles.categoryChipTextActive
-                ]}>
+                <Text style={[styles.optionChipText, category === cat && styles.optionChipTextActive]}>
                   {cat}
                 </Text>
               </TouchableOpacity>
@@ -399,130 +342,74 @@ export default function PostItemScreen() {
           </View>
         </View>
 
-        {/* Sizes */}
+        {/* Quantity */}
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Available Sizes *</Text>
-          <View style={styles.sizeGrid}>
-            {SIZES.map((size) => (
-              <TouchableOpacity
-                key={size}
-                style={[
-                  styles.sizeChip,
-                  selectedSizes.includes(size) && styles.sizeChipActive
-                ]}
-                onPress={() => toggleSize(size)}
-              >
-                <Text style={[
-                  styles.sizeChipText,
-                  selectedSizes.includes(size) && styles.sizeChipTextActive
-                ]}>
-                  {size}
-                </Text>
-              </TouchableOpacity>
-            ))}
-          </View>
+          <Text style={styles.sectionTitle}>Stock Quantity</Text>
+          <TextInput
+            style={styles.input}
+            placeholder="e.g., 50"
+            placeholderTextColor="#94A3B8"
+            keyboardType="number-pad"
+            value={quantity}
+            onChangeText={setQuantity}
+          />
         </View>
 
-        {/* Colors */}
+        {/* Images */}
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Available Colors *</Text>
-          <View style={styles.colorGrid}>
-            {COLORS.map((color) => (
-              <TouchableOpacity
-                key={color.name}
-                style={[
-                  styles.colorChip,
-                  selectedColors.includes(color.name) && styles.colorChipActive
-                ]}
-                onPress={() => toggleColor(color.name)}
-              >
-                <View style={[
-                  styles.colorCircle, 
-                  { backgroundColor: color.hex },
-                  color.name === 'White' && styles.whiteColorBorder
-                ]} />
-                <Text style={[
-                  styles.colorChipText,
-                  selectedColors.includes(color.name) && styles.colorChipTextActive
-                ]}>
-                  {color.name}
-                </Text>
-              </TouchableOpacity>
+          <Text style={styles.sectionTitle}>Product Images * ({imageUris.length}/{MAX_IMAGES})</Text>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.imagesScroll}>
+            <TouchableOpacity style={styles.uploadButton} onPress={pickImages}>
+              <Upload size={24} color="#64748B" />
+              <Text style={styles.uploadText}>Add Photo</Text>
+            </TouchableOpacity>
+            {imageUris.map((uri, index) => (
+              <View key={index} style={styles.imagePreview}>
+                <Image source={{ uri }} style={styles.previewImage} />
+                <TouchableOpacity style={styles.removeImage} onPress={() => removeImage(index)}>
+                  <X size={16} color="#FFFFFF" />
+                </TouchableOpacity>
+              </View>
             ))}
-          </View>
+          </ScrollView>
         </View>
 
-        {/* Condition */}
+        {/* Contact Info */}
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Condition *</Text>
-          <View style={styles.conditionRow}>
-            {(['New', 'Like New', 'Good', 'Fair'] as const).map((cond) => (
-              <TouchableOpacity
-                key={cond}
-                style={[
-                  styles.conditionButton,
-                  condition === cond && styles.conditionButtonActive
-                ]}
-                onPress={() => setCondition(cond)}
-              >
-                <Text style={[
-                  styles.conditionText,
-                  condition === cond && styles.conditionTextActive
-                ]}>
-                  {cond}
-                </Text>
-              </TouchableOpacity>
-            ))}
-          </View>
-        </View>
-
-        {/* Additional Details */}
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Additional Details</Text>
-          
-          <View style={styles.inputGroup}>
-            <Text style={styles.label}>Quantity Available</Text>
-            <TextInput
-              style={styles.input}
-              placeholder="1"
-              placeholderTextColor="#999"
-              value={quantity}
-              onChangeText={setQuantity}
-              keyboardType="number-pad"
-            />
-          </View>
-
-          <View style={styles.inputGroup}>
-            <Text style={styles.label}>Contact Information</Text>
-            <Text style={styles.contactHint}>OAA Secretariat contact (default)</Text>
-            <TextInput
-              style={styles.input}
-              placeholder="Phone or email"
-              placeholderTextColor="#999"
-              value={contactInfo}
-              onChangeText={setContactInfo}
-            />
-          </View>
+          <Text style={styles.sectionTitle}>Contact Information</Text>
+          <TextInput
+            style={styles.input}
+            placeholder="Phone number"
+            placeholderTextColor="#94A3B8"
+            value={contactInfo}
+            onChangeText={setContactInfo}
+          />
         </View>
 
         {/* Submit Button */}
-        <TouchableOpacity 
-          style={styles.submitButton} 
+        <TouchableOpacity
+          style={[styles.submitButton, uploading && styles.submitButtonDisabled]}
           onPress={handleSubmit}
-          activeOpacity={0.8}
+          disabled={uploading}
         >
           <LinearGradient
-            colors={['#10B981', '#059669']}
+            colors={uploading ? ['#94A3B8', '#64748B'] : ['#10B981', '#059669']}
             start={{ x: 0, y: 0 }}
             end={{ x: 1, y: 0 }}
             style={styles.submitGradient}
           >
-            <Upload size={20} color="#FFFFFF" />
-            <Text style={styles.submitText}>Post Item to Shop</Text>
+            {uploading ? (
+              <>
+                <ActivityIndicator color="#FFFFFF" />
+                <Text style={styles.submitText}>Posting...</Text>
+              </>
+            ) : (
+              <Text style={styles.submitText}>Post Item to Shop</Text>
+            )}
           </LinearGradient>
         </TouchableOpacity>
 
-        <View style={styles.bottomPadding} />
+        <View style={{ height: 40 }} />
       </ScrollView>
     </View>
   );
@@ -531,7 +418,7 @@ export default function PostItemScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#F8F9FC',
+    backgroundColor: '#FFFFFF',
   },
   headerGradient: {
     paddingTop: 50,
@@ -541,26 +428,18 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: 16,
-    paddingBottom: 16,
+    paddingVertical: 16,
   },
   backButton: {
-    padding: 8,
-  },
-  headerCenter: {
-    flex: 1,
+    width: 40,
+    height: 40,
+    justifyContent: 'center',
     alignItems: 'center',
   },
   title: {
     fontSize: 20,
-    fontFamily: 'Inter-Bold',
+    fontFamily: 'Inter-SemiBold',
     color: '#FFFFFF',
-  },
-  subtitle: {
-    fontSize: 14,
-    fontFamily: 'Inter-Regular',
-    color: '#FFFFFF',
-    opacity: 0.9,
-    marginTop: 2,
   },
   placeholder: {
     width: 40,
@@ -568,104 +447,26 @@ const styles = StyleSheet.create({
   content: {
     flex: 1,
   },
-  scrollContent: {
-    padding: 16,
-    paddingBottom: 40,
-  },
   section: {
-    marginBottom: 24,
+    paddingHorizontal: 16,
+    paddingTop: 24,
   },
   sectionTitle: {
-    fontSize: 18,
-    fontFamily: 'Inter-Bold',
-    color: '#1A1A1A',
+    fontSize: 16,
+    fontFamily: 'Inter-SemiBold',
+    color: '#0F172A',
     marginBottom: 12,
-  },
-  sectionHint: {
-    fontSize: 14,
-    fontFamily: 'Inter-Regular',
-    color: '#666',
-    marginBottom: 12,
-  },
-  imageGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 12,
-  },
-  imageItem: {
-    width: 100,
-    height: 100,
-    borderRadius: 12,
-    overflow: 'hidden',
-    position: 'relative',
-  },
-  uploadedImage: {
-    width: '100%',
-    height: '100%',
-    resizeMode: 'cover',
-  },
-  imagePlaceholder: {
-    backgroundColor: '#F3F4F6',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  placeholderText: {
-    fontSize: 10,
-    fontFamily: 'Inter-SemiBold',
-    color: '#10B981',
-    marginTop: 4,
-  },
-  removeImageButton: {
-    position: 'absolute',
-    top: 4,
-    right: 4,
-    backgroundColor: '#EF4444',
-    borderRadius: 12,
-    width: 24,
-    height: 24,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  addImageButton: {
-    width: 100,
-    height: 100,
-    borderRadius: 12,
-    overflow: 'hidden',
-    backgroundColor: '#FFFFFF',
-    borderWidth: 2,
-    borderColor: '#10B981',
-    borderStyle: 'dashed',
-  },
-  uploadPlaceholder: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  uploadText: {
-    fontSize: 12,
-    fontFamily: 'Inter-SemiBold',
-    color: '#10B981',
-    marginTop: 4,
-  },
-  inputGroup: {
-    marginBottom: 16,
-  },
-  label: {
-    fontSize: 14,
-    fontFamily: 'Inter-SemiBold',
-    color: '#333',
-    marginBottom: 8,
   },
   input: {
-    backgroundColor: '#FFFFFF',
+    backgroundColor: '#F8FAFC',
     borderRadius: 12,
     paddingHorizontal: 16,
     paddingVertical: 14,
     fontSize: 16,
     fontFamily: 'Inter-Regular',
-    color: '#1A1A1A',
+    color: '#0F172A',
     borderWidth: 1,
-    borderColor: '#E0E0E0',
+    borderColor: '#E2E8F0',
   },
   textArea: {
     height: 100,
@@ -675,162 +476,139 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     gap: 12,
   },
-  priceInput: {
+  priceField: {
     flex: 1,
   },
-  currencyInputContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#FFFFFF',
+  priceLabel: {
+    fontSize: 14,
+    fontFamily: 'Inter-SemiBold',
+    color: '#64748B',
+    marginBottom: 8,
+  },
+  priceInput: {
+    backgroundColor: '#F8FAFC',
     borderRadius: 12,
     paddingHorizontal: 16,
     paddingVertical: 14,
-    borderWidth: 1,
-    borderColor: '#E0E0E0',
-  },
-  cedisSymbol: {
-    fontSize: 20,
-    fontFamily: 'Inter-SemiBold',
-    color: '#666',
-    marginRight: 8,
-  },
-  currencyInput: {
-    flex: 1,
     fontSize: 16,
     fontFamily: 'Inter-Regular',
-    color: '#1A1A1A',
-    marginLeft: 8,
-  },
-  categoryGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 8,
-  },
-  categoryChip: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 16,
-    paddingVertical: 10,
-    borderRadius: 20,
-    backgroundColor: '#FFFFFF',
-    borderWidth: 2,
-    borderColor: '#E0E0E0',
-    gap: 6,
-  },
-  categoryChipActive: {
-    backgroundColor: '#10B981',
-    borderColor: '#10B981',
-  },
-  categoryChipText: {
-    fontSize: 14,
-    fontFamily: 'Inter-SemiBold',
-    color: '#666',
-  },
-  categoryChipTextActive: {
-    color: '#FFFFFF',
-  },
-  sizeGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 8,
-  },
-  sizeChip: {
-    paddingHorizontal: 16,
-    paddingVertical: 10,
-    borderRadius: 20,
-    backgroundColor: '#FFFFFF',
-    borderWidth: 2,
-    borderColor: '#E0E0E0',
-  },
-  sizeChipActive: {
-    backgroundColor: '#10B981',
-    borderColor: '#10B981',
-  },
-  sizeChipText: {
-    fontSize: 14,
-    fontFamily: 'Inter-SemiBold',
-    color: '#666',
-  },
-  sizeChipTextActive: {
-    color: '#FFFFFF',
-  },
-  colorGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 8,
-  },
-  colorChip: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 20,
-    backgroundColor: '#FFFFFF',
-    borderWidth: 2,
-    borderColor: '#E0E0E0',
-    gap: 6,
-  },
-  colorChipActive: {
-    backgroundColor: '#10B981',
-    borderColor: '#10B981',
-  },
-  colorCircle: {
-    width: 20,
-    height: 20,
-    borderRadius: 10,
-  },
-  whiteColorBorder: {
+    color: '#0F172A',
     borderWidth: 1,
-    borderColor: '#CCCCCC',
+    borderColor: '#E2E8F0',
   },
-  colorChipText: {
-    fontSize: 13,
-    fontFamily: 'Inter-SemiBold',
-    color: '#666',
-  },
-  colorChipTextActive: {
-    color: '#FFFFFF',
-  },
-  contactHint: {
+  hint: {
     fontSize: 12,
     fontFamily: 'Inter-Regular',
-    color: '#10B981',
-    marginBottom: 8,
+    color: '#64748B',
+    marginTop: 8,
   },
-  conditionRow: {
+  optionsGrid: {
     flexDirection: 'row',
+    flexWrap: 'wrap',
     gap: 8,
   },
-  conditionButton: {
-    flex: 1,
-    paddingVertical: 12,
-    borderRadius: 12,
-    backgroundColor: '#FFFFFF',
-    borderWidth: 2,
-    borderColor: '#E0E0E0',
-    alignItems: 'center',
+  optionChip: {
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderRadius: 20,
+    backgroundColor: '#F8FAFC',
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
   },
-  conditionButtonActive: {
+  optionChipActive: {
     backgroundColor: '#10B981',
     borderColor: '#10B981',
   },
-  conditionText: {
+  optionChipText: {
     fontSize: 14,
-    fontFamily: 'Inter-SemiBold',
-    color: '#666',
+    fontFamily: 'Inter-Regular',
+    color: '#64748B',
   },
-  conditionTextActive: {
+  optionChipTextActive: {
+    fontFamily: 'Inter-SemiBold',
     color: '#FFFFFF',
   },
-  submitButton: {
+  colorsGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 12,
+  },
+  colorOption: {
+    alignItems: 'center',
+    gap: 6,
+    padding: 8,
+    borderRadius: 8,
+    borderWidth: 2,
+    borderColor: 'transparent',
+  },
+  colorOptionActive: {
+    borderColor: '#10B981',
+    backgroundColor: '#F0FDF4',
+  },
+  colorCircle: {
+    width: 32,
+    height: 32,
     borderRadius: 16,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+  },
+  colorName: {
+    fontSize: 12,
+    fontFamily: 'Inter-Regular',
+    color: '#64748B',
+  },
+  imagesScroll: {
+    marginHorizontal: -16,
+    paddingHorizontal: 16,
+  },
+  uploadButton: {
+    width: 100,
+    height: 100,
+    borderRadius: 12,
+    backgroundColor: '#F8FAFC',
+    borderWidth: 2,
+    borderColor: '#E2E8F0',
+    borderStyle: 'dashed',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 12,
+  },
+  uploadText: {
+    fontSize: 12,
+    fontFamily: 'Inter-SemiBold',
+    color: '#64748B',
+    marginTop: 4,
+  },
+  imagePreview: {
+    width: 100,
+    height: 100,
+    marginRight: 12,
+    borderRadius: 12,
     overflow: 'hidden',
-    marginTop: 8,
-    shadowColor: '#10B981',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 12,
-    elevation: 6,
+  },
+  previewImage: {
+    width: '100%',
+    height: '100%',
+  },
+  removeImage: {
+    position: 'absolute',
+    top: 6,
+    right: 6,
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    backgroundColor: '#EF4444',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  submitButton: {
+    marginHorizontal: 16,
+    marginTop: 32,
+    borderRadius: 12,
+    overflow: 'hidden',
+  },
+  submitButtonDisabled: {
+    opacity: 0.6,
   },
   submitGradient: {
     flexDirection: 'row',
@@ -840,11 +618,8 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   submitText: {
-    fontSize: 18,
-    fontFamily: 'Inter-Bold',
+    fontSize: 16,
+    fontFamily: 'Inter-SemiBold',
     color: '#FFFFFF',
-  },
-  bottomPadding: {
-    height: 40,
   },
 });

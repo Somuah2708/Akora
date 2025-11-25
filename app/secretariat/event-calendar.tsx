@@ -57,6 +57,7 @@ export default function EventCalendarScreen() {
   const [loading, setLoading] = useState(true);
   const [selectedYear, setSelectedYear] = useState(new Date().getFullYear());
   const [selectedMonth, setSelectedMonth] = useState<number | null>(null);
+  const scrollRef = React.useRef<ScrollView | null>(null);
 
   const isAdmin = profile?.is_admin || profile?.role === 'admin';
 
@@ -170,7 +171,13 @@ export default function EventCalendarScreen() {
       <TouchableOpacity
         key={month}
         style={[styles.monthCard, !hasEvents && styles.monthCardEmpty]}
-        onPress={() => setSelectedMonth(selectedMonth === month ? null : month)}
+        onPress={() => {
+          const next = selectedMonth === month ? null : month;
+          setSelectedMonth(next);
+          if (next !== null && scrollRef.current) {
+            scrollRef.current.scrollTo({ y: 0, animated: true });
+          }
+        }}
         activeOpacity={0.7}
       >
         <View style={styles.monthCardHeader}>
@@ -310,6 +317,7 @@ export default function EventCalendarScreen() {
   return (
     <View style={styles.container}>
       <ScrollView
+        ref={scrollRef}
         style={styles.scrollContainer}
         showsVerticalScrollIndicator={false}
         contentContainerStyle={styles.scrollContentContainer}

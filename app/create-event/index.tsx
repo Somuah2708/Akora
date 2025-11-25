@@ -1,44 +1,11 @@
 import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, ScrollView, TextInput, TouchableOpacity, Alert, Image, ActivityIndicator, Modal } from 'react-native';
 import { useRouter } from 'expo-router';
-import { ArrowLeft, Plus, XCircle, Upload, Calendar, ChevronDown, Check } from 'lucide-react-native';
+import { ArrowLeft, Plus, XCircle, Upload, Calendar } from 'lucide-react-native';
 import { Video } from 'expo-av';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/hooks/useAuth';
 import { pickMedia, uploadMedia } from '@/lib/media';
-
-// Predefined categories for events
-const EVENT_CATEGORIES = [
-  'Gala',
-  'Workshop',
-  'Sports',
-  'Networking',
-  'Fundraiser',
-  'Alumni Reunion',
-  'Career Fair',
-  'Conference',
-  'Social',
-  'Cultural',
-  'Academic',
-  'Other',
-];
-
-// Predefined tags for events
-const EVENT_TAGS = [
-  'networking',
-  'alumni',
-  'fundraiser',
-  'education',
-  'sports',
-  'career',
-  'social',
-  'cultural',
-  'professional',
-  'mentorship',
-  'community',
-  'charity',
-  'celebration',
-];
 
 export default function CreateEventScreen() {
   const router = useRouter();
@@ -49,7 +16,7 @@ export default function CreateEventScreen() {
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
   const [location, setLocation] = useState('');
-  const [date, setDate] = useState(''); // Added date field
+  const [date, setDate] = useState(''); // Event date (or empty when TBA)
   const [startTime, setStartTime] = useState(''); // e.g., 2025-12-20 18:00
   const [endTime, setEndTime] = useState('');
   const [bannerUrl, setBannerUrl] = useState<string | null>(null);
@@ -62,15 +29,10 @@ export default function CreateEventScreen() {
   const [organizerPhone, setOrganizerPhone] = useState('');
   
   // Event Details
-  const [category, setCategory] = useState('');
-  const [selectedTags, setSelectedTags] = useState<string[]>([]);
   const [capacity, setCapacity] = useState('');
   const [registrationUrl, setRegistrationUrl] = useState('');
   const [visibility, setVisibility] = useState<'public' | 'alumni_only'>('public');
-  
-  // Modal states
-  const [showCategoryModal, setShowCategoryModal] = useState(false);
-  const [showTagsModal, setShowTagsModal] = useState(false);
+  const [isDateTBA, setIsDateTBA] = useState(false);
   
   // Media picker handlers
   const onPickBanner = async () => {
@@ -112,14 +74,6 @@ export default function CreateEventScreen() {
     setGalleryUrls(galleryUrls.filter((_, i) => i !== index));
   };
 
-  const toggleTag = (tag: string) => {
-    if (selectedTags.includes(tag)) {
-      setSelectedTags(selectedTags.filter(t => t !== tag));
-    } else {
-      setSelectedTags([...selectedTags, tag]);
-    }
-  };
-
   const handleSubmit = async () => {
     // Validation
     if (!title?.trim()) {
@@ -134,11 +88,11 @@ export default function CreateEventScreen() {
       Alert.alert('Missing Information', 'Please enter a venue location');
       return;
     }
-    if (!date?.trim()) {
-      Alert.alert('Missing Information', 'Please enter the event date');
+    if (!isDateTBA && !date?.trim()) {
+      Alert.alert('Missing Information', 'Please enter the event date or mark it as To Be Announced');
       return;
     }
-    if (!startTime?.trim()) {
+    if (!startTime?.trim() && !isDateTBA) {
       Alert.alert('Missing Information', 'Please enter the start time');
       return;
     }
@@ -156,10 +110,10 @@ export default function CreateEventScreen() {
           title: title.trim(),
           description: description.trim(),
           location: location.trim(),
-          date: date.trim(),
-          time: startTime.trim() + (endTime ? ` - ${endTime.trim()}` : ''),
+          date: isDateTBA ? 'TBA' : date.trim(),
+          time: isDateTBA ? 'TBA' : startTime.trim() + (endTime ? ` - ${endTime.trim()}` : ''),
           organizer: organizerName.trim() || profile?.full_name || 'OAA',
-          category: category || 'General',
+          category: 'General',
           is_free: true,
           is_approved: isAdmin, // Auto-approve if admin
           view_count: 0,
@@ -170,7 +124,6 @@ export default function CreateEventScreen() {
           organizer_phone: organizerPhone.trim() || undefined,
           registration_url: registrationUrl.trim() || undefined,
           capacity: capacity ? parseInt(capacity) : undefined,
-          tags: selectedTags.length > 0 ? selectedTags : null,
           visibility: visibility,
           contact_email: organizerEmail.trim() || profile?.email || 'info@akora.com',
           contact_phone: organizerPhone.trim() || '0000000000',
@@ -244,25 +197,53 @@ export default function CreateEventScreen() {
             style={styles.input} 
           />
           
-          {/* Date Field */}
-          <View style={styles.dateInputContainer}>
-            <Calendar size={20} color="#4169E1" style={styles.dateIcon} />
-            <TextInput 
-              value={date} 
-              onChangeText={setDate} 
-              placeholder="Event date (e.g., 2025-12-20) *" 
-              placeholderTextColor="#9CA3AF" 
-              style={styles.dateInput} 
-            />
+          {/* Date Field / TBA Toggle */}
+          <Text style={styles.sectionLabel}>Date & Time</Text>
+          <View style={styles.tbaRow}>
+            <View style={{ flex: 1 }}>
+              <View style={[styles.dateInputContainer, isDateTBA && { opacity: 0.4 }]}> 
+                <Calendar size={20} color="#4169E1" style={styles.dateIcon} />
+                <TextInput 
+                  value={date} 
+                  onChangeText={setDate} 
+                  placeholder="YYYY-MM-DD (e.g., 2025-12-20)" 
+                  placeholderTextColor="#9CA3AF" 
+                  style={styles.dateInput} 
+                  editable={!isDateTBA}
+                />
+              </View>
+            </View>
+            <TouchableOpacity 
+              style={[styles.tbaToggle, isDateTBA && styles.tbaToggleActive]} 
+              onPress={() => {
+                const next = !isDateTBA;
+                setIsDateTBA(next);
+                if (next) {
+                  setDate('');
+                  setStartTime('');
+                  setEndTime('');
+                }
+              }}
+            >
+              <View style={[styles.tbaCircle, isDateTBA && styles.tbaCircleActive]} />
+              <Text style={[styles.tbaLabel, isDateTBA && styles.tbaLabelActive]}>Date TBA</Text>
+            </TouchableOpacity>
           </View>
+
+          {!isDateTBA && (
+            <Text style={styles.formatHint}>
+              Format: YYYY-MM-DD — for example, 2025-12-20
+            </Text>
+          )}
           
-          <TextInput 
+           <TextInput 
             value={startTime} 
             onChangeText={setStartTime} 
-            placeholder="Start time (e.g., 18:00 or 6:00 PM) *" 
+            placeholder="Start time (e.g., 18:00 or 6:00 PM)" 
             placeholderTextColor="#9CA3AF" 
             style={styles.input} 
-          />
+            editable={!isDateTBA}
+            />
           <TextInput 
             value={endTime} 
             onChangeText={setEndTime} 
@@ -300,42 +281,6 @@ export default function CreateEventScreen() {
           
           {/* Event Details */}
           <Text style={styles.sectionLabel}>Event Details</Text>
-          
-          {/* Category Selector */}
-          <TouchableOpacity 
-            style={styles.selectorButton} 
-            onPress={() => setShowCategoryModal(true)}
-          >
-            <Text style={category ? styles.selectorButtonTextFilled : styles.selectorButtonText}>
-              {category || 'Select Category'}
-            </Text>
-            <ChevronDown size={20} color="#6B7280" />
-          </TouchableOpacity>
-          
-          {/* Tags Selector */}
-          <TouchableOpacity 
-            style={styles.selectorButton} 
-            onPress={() => setShowTagsModal(true)}
-          >
-            <Text style={selectedTags.length > 0 ? styles.selectorButtonTextFilled : styles.selectorButtonText}>
-              {selectedTags.length > 0 ? `${selectedTags.length} tags selected` : 'Select Tags'}
-            </Text>
-            <ChevronDown size={20} color="#6B7280" />
-          </TouchableOpacity>
-          
-          {/* Display selected tags */}
-          {selectedTags.length > 0 && (
-            <View style={styles.tagsContainer}>
-              {selectedTags.map((tag, index) => (
-                <View key={index} style={styles.tagChip}>
-                  <Text style={styles.tagChipText}>{tag}</Text>
-                  <TouchableOpacity onPress={() => toggleTag(tag)}>
-                    <XCircle size={14} color="#6B7280" />
-                  </TouchableOpacity>
-                </View>
-              ))}
-            </View>
-          )}
           
           <TextInput 
             value={capacity} 
@@ -486,77 +431,6 @@ export default function CreateEventScreen() {
         </View>
       </ScrollView>
 
-      {/* Category Selection Modal */}
-      <Modal
-        visible={showCategoryModal}
-        transparent
-        animationType="slide"
-        onRequestClose={() => setShowCategoryModal(false)}
-      >
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalContent}>
-            <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>Select Category</Text>
-              <TouchableOpacity onPress={() => setShowCategoryModal(false)}>
-                <XCircle size={24} color="#6B7280" />
-              </TouchableOpacity>
-            </View>
-            <ScrollView style={styles.modalScroll}>
-              {EVENT_CATEGORIES.map((cat) => (
-                <TouchableOpacity
-                  key={cat}
-                  style={styles.modalOption}
-                  onPress={() => {
-                    setCategory(cat);
-                    setShowCategoryModal(false);
-                  }}
-                >
-                  <Text style={styles.modalOptionText}>{cat}</Text>
-                  {category === cat && <Check size={20} color="#4169E1" />}
-                </TouchableOpacity>
-              ))}
-            </ScrollView>
-          </View>
-        </View>
-      </Modal>
-
-      {/* Tags Selection Modal */}
-      <Modal
-        visible={showTagsModal}
-        transparent
-        animationType="slide"
-        onRequestClose={() => setShowTagsModal(false)}
-      >
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalContent}>
-            <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>Select Tags</Text>
-              <TouchableOpacity onPress={() => setShowTagsModal(false)}>
-                <XCircle size={24} color="#6B7280" />
-              </TouchableOpacity>
-            </View>
-            <Text style={styles.modalSubtitle}>Select multiple tags for your event</Text>
-            <ScrollView style={styles.modalScroll}>
-              {EVENT_TAGS.map((tag) => (
-                <TouchableOpacity
-                  key={tag}
-                  style={styles.modalOption}
-                  onPress={() => toggleTag(tag)}
-                >
-                  <Text style={styles.modalOptionText}>{tag}</Text>
-                  {selectedTags.includes(tag) && <Check size={20} color="#4169E1" />}
-                </TouchableOpacity>
-              ))}
-            </ScrollView>
-            <TouchableOpacity
-              style={styles.modalDoneButton}
-              onPress={() => setShowTagsModal(false)}
-            >
-              <Text style={styles.modalDoneButtonText}>Done</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-      </Modal>
     </View>
   );
 }
@@ -637,6 +511,12 @@ const styles = StyleSheet.create({
     color: '#6B7280',
     fontStyle: 'italic',
     marginTop: -8,
+  },
+  formatHint: {
+    fontSize: 12,
+    color: '#6B7280',
+    marginTop: 4,
+    marginBottom: 4,
   },
   uploadBtn: {
     flexDirection: 'row',
@@ -771,107 +651,44 @@ const styles = StyleSheet.create({
     fontStyle: 'italic',
     marginTop: 8,
   },
-  selectorButton: {
+  tbaRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
-    backgroundColor: '#F9FAFB',
+    gap: 12,
+    marginBottom: 4,
+  },
+  tbaToggle: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    borderRadius: 999,
     borderWidth: 1,
     borderColor: '#E5E7EB',
-    borderRadius: 12,
-    paddingHorizontal: 16,
-    paddingVertical: 12,
+    backgroundColor: '#F9FAFB',
   },
-  selectorButtonText: {
-    fontSize: 15,
-    color: '#9CA3AF',
+  tbaToggleActive: {
+    borderColor: '#F59E0B',
+    backgroundColor: '#FFFBEB',
   },
-  selectorButtonTextFilled: {
-    fontSize: 15,
-    color: '#111827',
-    fontWeight: '500',
+  tbaCircle: {
+    width: 14,
+    height: 14,
+    borderRadius: 7,
+    borderWidth: 1.5,
+    borderColor: '#9CA3AF',
+    marginRight: 6,
   },
-  tagsContainer: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 8,
-    marginTop: -8,
+  tbaCircleActive: {
+    borderColor: '#F59E0B',
+    backgroundColor: '#F59E0B',
   },
-  tagChip: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    backgroundColor: '#EFF6FF',
-    borderWidth: 1,
-    borderColor: '#BFDBFE',
-    borderRadius: 20,
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-  },
-  tagChipText: {
+  tbaLabel: {
     fontSize: 13,
-    color: '#4169E1',
+    color: '#6B7280',
     fontWeight: '500',
   },
-  modalOverlay: {
-    flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.5)',
-    justifyContent: 'flex-end',
-  },
-  modalContent: {
-    backgroundColor: '#FFFFFF',
-    borderTopLeftRadius: 20,
-    borderTopRightRadius: 20,
-    paddingBottom: 40,
-    maxHeight: '70%',
-  },
-  modalHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 20,
-    paddingVertical: 16,
-    borderBottomWidth: 1,
-    borderBottomColor: '#E5E7EB',
-  },
-  modalTitle: {
-    fontSize: 18,
-    fontWeight: '600',
-    color: '#111827',
-  },
-  modalSubtitle: {
-    fontSize: 14,
-    color: '#6B7280',
-    paddingHorizontal: 20,
-    paddingTop: 12,
-  },
-  modalScroll: {
-    paddingHorizontal: 20,
-    paddingTop: 8,
-  },
-  modalOption: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingVertical: 14,
-    borderBottomWidth: 1,
-    borderBottomColor: '#F3F4F6',
-  },
-  modalOptionText: {
-    fontSize: 16,
-    color: '#111827',
-  },
-  modalDoneButton: {
-    marginHorizontal: 20,
-    marginTop: 16,
-    backgroundColor: '#4169E1',
-    borderRadius: 12,
-    paddingVertical: 14,
-    alignItems: 'center',
-  },
-  modalDoneButtonText: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#FFFFFF',
+  tbaLabelActive: {
+    color: '#92400E',
   },
 });

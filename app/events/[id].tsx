@@ -75,6 +75,7 @@ export default function EventDetailScreen() {
   const [rsvpId, setRsvpId] = useState<string | null>(null);
   const [rsvpCount, setRsvpCount] = useState(0);
   const [viewTracked, setViewTracked] = useState(false);
+  const isSecretariatEvent = !!supaEvent && supaEvent?.table === 'secretariat_events';
 
   // All events data
   const allEventsData: Event[] = [
@@ -487,7 +488,7 @@ export default function EventDetailScreen() {
         }
       } catch (e) {
         console.log('load event detail', e);
-        if (active) Alert.alert('Error', 'Failed to load event');
+        // Don't show error alert, just log it
       } finally {
         if (active) setLoading(false);
       }
@@ -558,6 +559,14 @@ export default function EventDetailScreen() {
 
       if (!secretariatError && secretariatData) {
         // Load from new secretariat_events table
+        // Prefer new media fields (banner_url, gallery_urls) but fall back gracefully
+        const primaryImage =
+          secretariatData.banner_url ||
+          (secretariatData.gallery_urls && secretariatData.gallery_urls[0]) ||
+          secretariatData.image_url ||
+          (secretariatData.image_urls && secretariatData.image_urls[0]) ||
+          'https://images.unsplash.com/photo-1511795409834-ef04bbd61622?w=800&auto=format&fit=crop&q=60';
+
         const loadedEvent: Event = {
           id: secretariatData.id,
           title: secretariatData.title,
@@ -566,7 +575,7 @@ export default function EventDetailScreen() {
           location: secretariatData.location || 'TBA',
           description: secretariatData.description || '',
           organizer: secretariatData.organizer || 'OAA Secretariat',
-          imageUrl: secretariatData.image_url || secretariatData.image_urls?.[0] || 'https://images.unsplash.com/photo-1511795409834-ef04bbd61622?w=800&auto=format&fit=crop&q=60',
+          imageUrl: primaryImage,
           isFeatured: false, // Can add this field to secretariat_events table later
           category: secretariatData.category || 'General',
           capacity: secretariatData.capacity || undefined,
@@ -578,6 +587,7 @@ export default function EventDetailScreen() {
           speakers: secretariatData.speakers || [],
         };
         setEvent(loadedEvent);
+        setSupaEvent(secretariatData);
         return;
       }
 
@@ -916,28 +926,13 @@ export default function EventDetailScreen() {
           </View>
           <View style={styles.detailBody}>
             <Text style={styles.detailTitle}>{titleLabel}</Text>
+            <View style={styles.detailRow}><MapPin size={16} color="#1F2937" /><Text style={styles.detailMeta}>{locationLabel}</Text></View>
+            {supaEvent.time && supaEvent.time !== 'TBA' ? (
+              <View style={styles.detailRow}><Clock size={16} color="#1F2937" /><Text style={styles.detailMeta}>{supaEvent.time}</Text></View>
+            ) : null}
             {startLabel ? (
               <View style={styles.detailRow}><Calendar size={16} color="#1F2937" /><Text style={styles.detailMeta}>{startLabel}</Text></View>
             ) : null}
-            <View style={styles.detailRow}><MapPin size={16} color="#1F2937" /><Text style={styles.detailMeta}>{locationLabel}</Text></View>
-            
-            {/* Attendance Count - Prominent Display */}
-            <View style={styles.analyticsRow}>
-              <View style={[styles.analyticsBadge, { backgroundColor: '#D1FAE5', borderColor: '#10B981' }]}>
-                <Users size={16} color="#10B981" />
-                <Text style={[styles.analyticsText, { color: '#047857' }]}>
-                  {rsvpCount} {rsvpCount === 1 ? 'person' : 'people'} attending
-                </Text>
-              </View>
-              {supaEvent.capacity && (
-                <View style={styles.analyticsBadge}>
-                  <Users size={16} color="#6B7280" />
-                  <Text style={[styles.analyticsText, { color: '#6B7280' }]}>
-                    Max: {supaEvent.capacity}
-                  </Text>
-                </View>
-              )}
-            </View>
 
             {/* Capacity Warning */}
             {(() => {
@@ -956,166 +951,9 @@ export default function EventDetailScreen() {
 
             {!!desc && <Text style={styles.detailDesc}>{desc}</Text>}
 
-            {/* RSVP Section - Redesigned */}
-            {(() => {
-              const warning = getCapacityWarning();
-              const canRsvp = !warning || warning.canRsvp;
-              return (
-                <View style={styles.rsvpSection}>
-                  {/* Header with icon */}
-                  <View style={styles.rsvpHeader}>
-                    <Users size={22} color="#111827" />
-                    <Text style={styles.rsvpTitle}>Will you be attending this event?</Text>
-                  </View>
-                  
-                  {/* Description */}
-                  <Text style={styles.rsvpDescription}>
-                    Let the organizer know if you plan to attend
-                  </Text>
 
-                  {/* RSVP Options */}
-                  <View style={styles.rsvpOptions}>
-                    <TouchableOpacity
-                      style={[
-                        styles.rsvpOption,
-                        rsvpStatus === 'attending' && styles.rsvpOptionAttending,
-                      ]}
-                      onPress={() => handleRsvp('attending')}
-                      disabled={!canRsvp}
-                      activeOpacity={0.8}
-                    >
-                      <View style={[
-                        styles.rsvpIconCircle,
-                        rsvpStatus === 'attending' && styles.rsvpIconCircleAttending,
-                      ]}>
-                        <CheckCircle2 
-                          size={24} 
-                          color={rsvpStatus === 'attending' ? '#FFFFFF' : '#10B981'} 
-                          fill={rsvpStatus === 'attending' ? '#10B981' : 'transparent'}
-                        />
-                      </View>
-                      <View style={styles.rsvpOptionContent}>
-                        <Text style={[
-                          styles.rsvpOptionTitle,
-                          rsvpStatus === 'attending' && styles.rsvpOptionTitleActive,
-                        ]}>
-                          Yes, I'm Going
-                        </Text>
-                        <Text style={[
-                          styles.rsvpOptionSubtitle,
-                          rsvpStatus === 'attending' && styles.rsvpOptionSubtitleActive,
-                        ]}>
-                          Confirm your attendance
-                        </Text>
-                      </View>
-                      {rsvpStatus === 'attending' && (
-                        <View style={styles.activeBadge}>
-                          <Text style={styles.activeBadgeText}>✓</Text>
-                        </View>
-                      )}
-                    </TouchableOpacity>
-
-                    <TouchableOpacity
-                      style={[
-                        styles.rsvpOption,
-                        rsvpStatus === 'maybe' && styles.rsvpOptionMaybe,
-                      ]}
-                      onPress={() => handleRsvp('maybe')}
-                      activeOpacity={0.8}
-                    >
-                      <View style={[
-                        styles.rsvpIconCircle,
-                        rsvpStatus === 'maybe' && styles.rsvpIconCircleMaybe,
-                      ]}>
-                        <Text style={[
-                          styles.rsvpQuestionIcon,
-                          rsvpStatus === 'maybe' && styles.rsvpQuestionIconActive,
-                        ]}>
-                          ?
-                        </Text>
-                      </View>
-                      <View style={styles.rsvpOptionContent}>
-                        <Text style={[
-                          styles.rsvpOptionTitle,
-                          rsvpStatus === 'maybe' && styles.rsvpOptionTitleActive,
-                        ]}>
-                          Maybe
-                        </Text>
-                        <Text style={[
-                          styles.rsvpOptionSubtitle,
-                          rsvpStatus === 'maybe' && styles.rsvpOptionSubtitleActive,
-                        ]}>
-                          Still deciding
-                        </Text>
-                      </View>
-                      {rsvpStatus === 'maybe' && (
-                        <View style={styles.activeBadge}>
-                          <Text style={styles.activeBadgeText}>✓</Text>
-                        </View>
-                      )}
-                    </TouchableOpacity>
-
-                    <TouchableOpacity
-                      style={[
-                        styles.rsvpOption,
-                        rsvpStatus === 'not_attending' && styles.rsvpOptionNotAttending,
-                      ]}
-                      onPress={() => handleRsvp('not_attending')}
-                      activeOpacity={0.8}
-                    >
-                      <View style={[
-                        styles.rsvpIconCircle,
-                        rsvpStatus === 'not_attending' && styles.rsvpIconCircleNotAttending,
-                      ]}>
-                        <XCircle 
-                          size={24} 
-                          color={rsvpStatus === 'not_attending' ? '#FFFFFF' : '#EF4444'} 
-                          fill={rsvpStatus === 'not_attending' ? '#EF4444' : 'transparent'}
-                        />
-                      </View>
-                      <View style={styles.rsvpOptionContent}>
-                        <Text style={[
-                          styles.rsvpOptionTitle,
-                          rsvpStatus === 'not_attending' && styles.rsvpOptionTitleActive,
-                        ]}>
-                          Can't Attend
-                        </Text>
-                        <Text style={[
-                          styles.rsvpOptionSubtitle,
-                          rsvpStatus === 'not_attending' && styles.rsvpOptionSubtitleActive,
-                        ]}>
-                          Won't be able to make it
-                        </Text>
-                      </View>
-                      {rsvpStatus === 'not_attending' && (
-                        <View style={styles.activeBadge}>
-                          <Text style={styles.activeBadgeText}>✓</Text>
-                        </View>
-                      )}
-                    </TouchableOpacity>
-                  </View>
-                </View>
-              );
-            })()}
-
-            {/* Share Button */}
-            <TouchableOpacity style={styles.shareButton} onPress={handleShare}>
-              <Share2 size={18} color="#4169E1" />
-              <Text style={styles.shareButtonText}>Share Event</Text>
-            </TouchableOpacity>
-
-            {/* Add to Calendar Button */}
-            <TouchableOpacity style={styles.calendarButton} onPress={handleAddToCalendar}>
-              <Calendar size={18} color="#4169E1" />
-              <Text style={styles.calendarButtonText}>Add to Calendar</Text>
-            </TouchableOpacity>
 
             {/* Actions */}
-            {supaEvent.registration_url ? (
-              <TouchableOpacity style={styles.registerCta} onPress={() => Linking.openURL(supaEvent.registration_url)}>
-                <Text style={styles.registerCtaText}>Register</Text>
-              </TouchableOpacity>
-            ) : null}
             {(supaEvent.organizer_email || supaEvent.organizer_phone) && (
               <View style={{ flexDirection: 'row', gap: 12, marginTop: 8 }}>
                 {supaEvent.organizer_email ? (
