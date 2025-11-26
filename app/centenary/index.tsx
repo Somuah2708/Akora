@@ -24,6 +24,7 @@ const COMMITTEES = [
   { id: 'achimotaspeaks', name: 'Achimota Speaks', desc: 'Lectures, seminars, and discussions', icon: Users, color: '#EFF6FF' },
   { id: 'yeargroup', name: 'Celebrating Year Group Rep', desc: 'Year group celebrations and reunions', icon: Star, color: '#FFF7ED' },
   { id: 'operadrama', name: 'Opera and Drama', desc: 'Theatrical performances and cultural shows', icon: HeartHandshake, color: '#ECFDF5' },
+  { id: 'centenaryplanning', name: 'Centenary Planning Committee', desc: 'Overall coordination and planning', icon: Calendar, color: '#EDE9FE' },
 ];
 
 const ACTIVITIES = [
