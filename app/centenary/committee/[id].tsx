@@ -1,8 +1,8 @@
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Image, Dimensions, TextInput, FlatList } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Image, Dimensions, TextInput, FlatList, Alert, Share, Linking } from 'react-native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { useFonts, Inter_400Regular, Inter_600SemiBold } from '@expo-google-fonts/inter';
-import { ArrowLeft, MessageCircle, Lightbulb, Image as ImageIcon, Link2, FileText, Target, Heart, Users } from 'lucide-react-native';
+import { ArrowLeft, Lightbulb, Image as ImageIcon, Link2, FileText, Heart, Users, Send } from 'lucide-react-native';
 import { SplashScreen } from 'expo-router';
 
 SplashScreen.preventAutoHideAsync();
@@ -118,9 +118,9 @@ const COMMITTEE_DATA = {
 };
 
 const MOCK_CHATS = [
-  { id: '1', author: 'John Doe', message: 'Great work on the last meeting!', time: '2 hours ago' },
-  { id: '2', author: 'Jane Smith', message: 'When is our next gathering?', time: '1 hour ago' },
-  { id: '3', author: 'Alex Brown', message: 'Looking forward to the centenary!', time: '30 min ago' },
+  { id: '1', author: 'John Doe', message: 'Great work on the last meeting!', time: '2 hours ago', isOwn: false },
+  { id: '2', author: 'Jane Smith', message: 'When is our next gathering?', time: '1 hour ago', isOwn: false },
+  { id: '3', author: 'Alex Brown', message: 'Looking forward to the centenary!', time: '30 min ago', isOwn: false },
 ];
 
 const MOCK_SUGGESTIONS = [
@@ -138,6 +138,9 @@ export default function CommitteeDetailScreen() {
   });
   const [chatMessage, setChatMessage] = useState('');
   const [chats, setChats] = useState(MOCK_CHATS);
+  const [isJoined, setIsJoined] = useState(false);
+  const [suggestions, setSuggestions] = useState(MOCK_SUGGESTIONS);
+  const [newSuggestion, setNewSuggestion] = useState('');
 
   React.useEffect(() => {
     if (fontsLoaded) SplashScreen.hideAsync();
@@ -147,9 +150,61 @@ export default function CommitteeDetailScreen() {
 
   const handleSendMessage = () => {
     if (chatMessage.trim()) {
-      setChats([...chats, { id: String(chats.length + 1), author: 'You', message: chatMessage, time: 'now' }]);
+      setChats([...chats, { 
+        id: String(chats.length + 1), 
+        author: 'You', 
+        message: chatMessage, 
+        time: 'now',
+        isOwn: true 
+      }]);
       setChatMessage('');
+      Alert.alert('Success', 'Message sent to committee members!');
     }
+  };
+
+  const handleJoinCommittee = () => {
+    setIsJoined(!isJoined);
+    Alert.alert(
+      isJoined ? 'Left Committee' : 'Joined Committee',
+      isJoined 
+        ? 'You have left the committee.' 
+        : `You have successfully joined the ${committee.name} committee!`
+    );
+  };
+
+  const handleShare = async () => {
+    try {
+      await Share.share({
+        message: `Join the ${committee.name} committee for Achimota's Centenary! ${committee.desc}`,
+        title: committee.name,
+      });
+    } catch (error) {
+      Alert.alert('Error', 'Unable to share at this time');
+    }
+  };
+
+  const handleOpenLink = (url: string) => {
+    Linking.openURL(url).catch(() => 
+      Alert.alert('Error', 'Unable to open link')
+    );
+  };
+
+  const handleAddSuggestion = () => {
+    if (newSuggestion.trim()) {
+      setSuggestions([...suggestions, {
+        id: String(suggestions.length + 1),
+        title: newSuggestion,
+        votes: 0,
+      }]);
+      setNewSuggestion('');
+      Alert.alert('Success', 'Your suggestion has been added!');
+    }
+  };
+
+  const handleVoteSuggestion = (suggestionId: string) => {
+    setSuggestions(suggestions.map(s => 
+      s.id === suggestionId ? { ...s, votes: s.votes + 1 } : s
+    ));
   };
 
   if (!fontsLoaded) return null;
@@ -200,10 +255,10 @@ export default function CommitteeDetailScreen() {
         <Text style={styles.sectionTitle}>Photos</Text>
         <View style={styles.photosGrid}>
           {[1, 2, 3, 4].map((i) => (
-            <View key={i} style={styles.photoPlaceholder}>
+            <TouchableOpacity key={i} style={styles.photoPlaceholder} onPress={() => Alert.alert('Photos', `Opening photo gallery for ${committee.name}`)}>
               <ImageIcon size={32} color="#9CA3AF" />
               <Text style={styles.photoText}>Photo {i}</Text>
-            </View>
+            </TouchableOpacity>
           ))}
         </View>
       </View>
@@ -211,15 +266,24 @@ export default function CommitteeDetailScreen() {
       {/* Links Section */}
       <View style={styles.section}>
         <Text style={styles.sectionTitle}>Resources & Links</Text>
-        <TouchableOpacity style={styles.linkButton}>
+        <TouchableOpacity 
+          style={styles.linkButton}
+          onPress={() => handleOpenLink('https://example.com/guidelines')}
+        >
           <Link2 size={18} color="#FFFFFF" />
           <Text style={styles.linkButtonText}>Committee Guidelines</Text>
         </TouchableOpacity>
-        <TouchableOpacity style={styles.linkButton}>
+        <TouchableOpacity 
+          style={styles.linkButton}
+          onPress={() => handleOpenLink('https://example.com/schedule')}
+        >
           <Link2 size={18} color="#FFFFFF" />
           <Text style={styles.linkButtonText}>Centenary Schedule</Text>
         </TouchableOpacity>
-        <TouchableOpacity style={styles.linkButton}>
+        <TouchableOpacity 
+          style={styles.linkButton}
+          onPress={() => handleOpenLink('https://example.com/documents')}
+        >
           <Link2 size={18} color="#FFFFFF" />
           <Text style={styles.linkButtonText}>Shared Documents</Text>
         </TouchableOpacity>
@@ -247,22 +311,35 @@ export default function CommitteeDetailScreen() {
       {/* Suggestions Section */}
       <View style={styles.section}>
         <Text style={styles.sectionTitle}>Suggestions & Ideas</Text>
-        {MOCK_SUGGESTIONS.map((suggestion) => (
-          <View key={suggestion.id} style={styles.suggestionCard}>
+        {suggestions.map((suggestion) => (
+          <TouchableOpacity 
+            key={suggestion.id} 
+            style={styles.suggestionCard}
+            onPress={() => handleVoteSuggestion(suggestion.id)}
+          >
             <View style={styles.suggestionLeft}>
               <Lightbulb size={20} color="#111827" />
               <Text style={styles.suggestionText}>{suggestion.title}</Text>
             </View>
             <View style={styles.suggestionVotes}>
               <Text style={styles.votesText}>{suggestion.votes}</Text>
-              <Heart size={14} color="#EF4444" />
+              <Heart size={14} color="#EF4444" fill="#EF4444" />
             </View>
-          </View>
+          </TouchableOpacity>
         ))}
-        <TouchableOpacity style={styles.suggestButton}>
-          <Lightbulb size={18} color="#FFFFFF" />
-          <Text style={styles.suggestButtonText}>Add Suggestion</Text>
-        </TouchableOpacity>
+        <View style={styles.addSuggestionContainer}>
+          <TextInput
+            style={styles.suggestionInput}
+            placeholder="Add your suggestion..."
+            placeholderTextColor="#9CA3AF"
+            value={newSuggestion}
+            onChangeText={setNewSuggestion}
+          />
+          <TouchableOpacity style={styles.suggestButton} onPress={handleAddSuggestion}>
+            <Lightbulb size={18} color="#FFFFFF" />
+            <Text style={styles.suggestButtonText}>Add</Text>
+          </TouchableOpacity>
+        </View>
       </View>
 
       {/* Chat Section */}
@@ -274,9 +351,11 @@ export default function CommitteeDetailScreen() {
             keyExtractor={(item) => item.id}
             scrollEnabled={false}
             renderItem={({ item }) => (
-              <View style={styles.chatMessage}>
+              <View style={[styles.chatMessage, item.isOwn && styles.ownMessage]}>
                 <Text style={styles.chatAuthor}>{item.author}</Text>
-                <Text style={styles.chatText}>{item.message}</Text>
+                <View style={[styles.chatBubble, item.isOwn && styles.ownBubble]}>
+                  <Text style={[styles.chatText, item.isOwn && styles.ownText]}>{item.message}</Text>
+                </View>
                 <Text style={styles.chatTime}>{item.time}</Text>
               </View>
             )}
@@ -291,18 +370,21 @@ export default function CommitteeDetailScreen() {
             onChangeText={setChatMessage}
           />
           <TouchableOpacity style={styles.sendButton} onPress={handleSendMessage}>
-            <MessageCircle size={20} color="#FFFFFF" />
+            <Send size={20} color="#FFFFFF" />
           </TouchableOpacity>
         </View>
       </View>
 
       {/* Action Buttons */}
       <View style={styles.actionButtons}>
-        <TouchableOpacity style={styles.joinButton}>
+        <TouchableOpacity 
+          style={[styles.joinButton, isJoined && styles.joinedButton]}
+          onPress={handleJoinCommittee}
+        >
           <Users size={20} color="#FFFFFF" />
-          <Text style={styles.joinButtonText}>Join Committee</Text>
+          <Text style={styles.joinButtonText}>{isJoined ? 'Leave Committee' : 'Join Committee'}</Text>
         </TouchableOpacity>
-        <TouchableOpacity style={styles.shareButton}>
+        <TouchableOpacity style={styles.shareButton} onPress={handleShare}>
           <Text style={styles.shareButtonText}>Share</Text>
         </TouchableOpacity>
       </View>
@@ -343,18 +425,25 @@ const styles = StyleSheet.create({
   suggestionText: { fontSize: 14, color: '#111827', flex: 1 },
   suggestionVotes: { flexDirection: 'row', alignItems: 'center', gap: 4 },
   votesText: { fontSize: 12, color: '#6B7280', fontFamily: 'Inter-SemiBold' },
-  suggestButton: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#111827', borderRadius: 10, padding: 14, gap: 10, justifyContent: 'center' },
-  suggestButtonText: { color: '#FFFFFF', fontFamily: 'Inter-SemiBold', fontSize: 14 },
+  addSuggestionContainer: { flexDirection: 'row', gap: 10, alignItems: 'center' },
+  suggestionInput: { flex: 1, backgroundColor: '#F3F4F6', borderRadius: 10, paddingHorizontal: 12, paddingVertical: 10, fontSize: 14, color: '#111827' },
+  suggestButton: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#111827', borderRadius: 10, padding: 10, gap: 6, justifyContent: 'center' },
+  suggestButtonText: { color: '#FFFFFF', fontFamily: 'Inter-SemiBold', fontSize: 12 },
   chatBox: { backgroundColor: '#F8FAFC', borderRadius: 12, padding: 12, maxHeight: 300, marginBottom: 12 },
   chatMessage: { marginBottom: 12, paddingBottom: 12, borderBottomWidth: 1, borderBottomColor: '#E5E7EB' },
+  ownMessage: { alignItems: 'flex-end' },
   chatAuthor: { fontSize: 12, color: '#111827', fontFamily: 'Inter-SemiBold', marginBottom: 4 },
-  chatText: { fontSize: 13, color: '#4B5563', marginBottom: 4 },
-  chatTime: { fontSize: 11, color: '#9CA3AF' },
-  inputContainer: { flexDirection: 'row', gap: 10, alignItems: 'center' },
-  chatInput: { flex: 1, backgroundColor: '#F3F4F6', borderRadius: 10, paddingHorizontal: 14, paddingVertical: 10, fontSize: 14, color: '#111827' },
+  chatBubble: { backgroundColor: '#E5E7EB', borderRadius: 12, paddingHorizontal: 12, paddingVertical: 8, maxWidth: '85%' },
+  ownBubble: { backgroundColor: '#111827' },
+  chatText: { fontSize: 13, color: '#4B5563' },
+  ownText: { color: '#FFFFFF' },
+  chatTime: { fontSize: 11, color: '#9CA3AF', marginTop: 4 },
+  inputContainer: { flexDirection: 'row', gap: 10, alignItems: 'flex-end' },
+  chatInput: { flex: 1, backgroundColor: '#F3F4F6', borderRadius: 10, paddingHorizontal: 14, paddingVertical: 10, fontSize: 14, color: '#111827', maxHeight: 100 },
   sendButton: { width: 44, height: 44, borderRadius: 10, backgroundColor: '#111827', alignItems: 'center', justifyContent: 'center' },
   actionButtons: { flexDirection: 'row', gap: 12, paddingHorizontal: 16, marginBottom: 16 },
   joinButton: { flex: 1, flexDirection: 'row', backgroundColor: '#111827', borderRadius: 10, paddingVertical: 14, alignItems: 'center', justifyContent: 'center', gap: 8 },
+  joinedButton: { backgroundColor: '#059669' },
   joinButtonText: { color: '#FFFFFF', fontFamily: 'Inter-SemiBold', fontSize: 14 },
   shareButton: { flex: 1, flexDirection: 'row', backgroundColor: '#F3F4F6', borderRadius: 10, paddingVertical: 14, alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: '#E5E7EB' },
   shareButtonText: { color: '#111827', fontFamily: 'Inter-SemiBold', fontSize: 14 },
