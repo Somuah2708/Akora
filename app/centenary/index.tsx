@@ -18,6 +18,7 @@ const COMMITTEES = [
   { id: 'healthwalks2', name: 'Health Walks', desc: 'Wellness activities and campus tours', icon: Star, color: '#FFF7ED' },
   { id: 'achimotasubjugates', name: 'Achimota Subjugates', desc: 'Sports, games, and competitions', icon: Map, color: '#F0FDF4' },
   { id: 'sports', name: 'Sports', desc: 'Athletic events and tournaments', icon: Award, color: '#FAF5FF' },
+  { id: 'homecoming', name: 'Homecoming', desc: 'Alumni reunions and networking', icon: Users, color: '#EFF6FF' },
 ];
 
 const ACTIVITIES = [
