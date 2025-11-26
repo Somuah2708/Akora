@@ -8,13 +8,13 @@ SplashScreen.preventAutoHideAsync();
 
 const { width } = Dimensions.get('window');
 
-const CENTENARY_DATE = new Date('2027-01-01T00:00:00Z');
+const CENTENARY_DATE = new Date('2027-01-27T00:00:00Z');
 
 const COMMITTEES = [
-  { id: 'planning', name: 'Planning & Logistics', desc: 'Master schedule, venues, and operations', icon: Calendar, color: '#EDE9FE' },
-  { id: 'fundraising', name: 'Fundraising & Sponsorships', desc: 'Partners, donors, and grants', icon: HeartHandshake, color: '#ECFDF5' },
-  { id: 'program', name: 'Program & Activities', desc: 'Agenda, speakers, and performances', icon: Star, color: '#FFF7ED' },
-  { id: 'communications', name: 'Communications & Media', desc: 'PR, content, and media relations', icon: Users, color: '#EFF6FF' },
+  { id: 'memorabilia', name: 'Memorabilia', desc: 'Master schedule, venues, and operations', icon: Calendar, color: '#EDE9FE' },
+  { id: 'publicity', name: 'Publicity', desc: 'Partners, donors, and grants', icon: HeartHandshake, color: '#ECFDF5' },
+  { id: 'healthwalks', name: 'Health Walks', desc: 'Wellness activities and campus tours', icon: Star, color: '#FFF7ED' },
+  { id: 'historicaldoc', name: 'Historical Documentation', desc: 'Archive preservation and records', icon: Users, color: '#EFF6FF' },
   { id: 'heritage', name: 'Heritage & Legacy', desc: 'Archives, exhibitions, and history', icon: Award, color: '#FAF5FF' },
   { id: 'hospitality', name: 'Hospitality', desc: 'Guest experience and protocol', icon: Map, color: '#F0FDF4' },
 ];
@@ -38,13 +38,23 @@ export default function CentenaryScreen() {
     if (fontsLoaded) SplashScreen.hideAsync();
   }, [fontsLoaded]);
 
-  const countdown = useMemo(() => {
-    const now = new Date().getTime();
-    const diff = Math.max(0, CENTENARY_DATE.getTime() - now);
+  const [timeLeft, setTimeLeft] = useState(() => {
+    const diff = Math.max(0, CENTENARY_DATE.getTime() - Date.now());
     const days = Math.floor(diff / (1000 * 60 * 60 * 24));
-    const months = Math.floor(days / 30);
-    const years = Math.floor(months / 12);
-    return { years, months: months % 12, days: days % 30 };
+    const hours = Math.floor((diff / (1000 * 60 * 60)) % 24);
+    const seconds = Math.floor((diff / 1000) % 60);
+    return { days, hours, seconds };
+  });
+
+  useEffect(() => {
+    const timer = setInterval(() => {
+      const diff = Math.max(0, CENTENARY_DATE.getTime() - Date.now());
+      const days = Math.floor(diff / (1000 * 60 * 60 * 24));
+      const hours = Math.floor((diff / (1000 * 60 * 60)) % 24);
+      const seconds = Math.floor((diff / 1000) % 60);
+      setTimeLeft({ days, hours, seconds });
+    }, 1000);
+    return () => clearInterval(timer);
   }, []);
 
   if (!fontsLoaded) return null;
@@ -60,22 +70,32 @@ export default function CentenaryScreen() {
         <View style={{ width: 44 }} />
       </View>
 
-      {/* Hero */}
-      <View style={styles.hero}>
-        <Image
-          source={{ uri: 'https://images.unsplash.com/photo-1543002588-bfa74002ed7e?w=1200&auto=format&fit=crop&q=60' }}
-          style={styles.heroImg}
-        />
-        <View style={styles.heroOverlay}>
-          <Text style={styles.heroTitle}>100 Years of Excellence</Text>
-          <Text style={styles.heroSubtitle}>A historic celebration of legacy, unity, and impact</Text>
-          <View style={styles.countdown}>
-            <Clock size={18} color="#FFFFFF" />
-            <Text style={styles.countdownText}>
-              {countdown.years}y {countdown.months}m {countdown.days}d to 2027
-            </Text>
+      {/* Hero - Bold black & white countdown */}
+      <View style={styles.heroBW}>
+        <Text style={styles.bigTitle}>Achimota @ 100</Text>
+        <View style={styles.timerContainer}>
+          <View style={styles.timerRow}>
+            <View style={styles.timerBlock}>
+              <Text style={styles.timerNumber}>{timeLeft.days}</Text>
+              <Text style={styles.timerLabel}>Days</Text>
+            </View>
+            <Text style={styles.timerColon}>:</Text>
+            <View style={styles.timerBlock}>
+              <Text style={styles.timerNumber}>{String(timeLeft.hours).padStart(2, '0')}</Text>
+              <Text style={styles.timerLabel}>Hours</Text>
+            </View>
+            <Text style={styles.timerColon}>:</Text>
+            <View style={styles.timerBlock}>
+              <Text style={styles.timerNumber}>{String(timeLeft.seconds).padStart(2, '0')}</Text>
+              <Text style={styles.timerLabel}>Seconds</Text>
+            </View>
           </View>
+          <Text style={styles.countdownDate}>27th January, 2027</Text>
         </View>
+
+        <Text style={styles.motto}>
+          Achimota @ 100 celebrating the vision, honouring the legacy, inspiring the future
+        </Text>
       </View>
 
       {/* Committees */}
@@ -172,6 +192,17 @@ const styles = StyleSheet.create({
   heroSubtitle: { color: '#F3F4F6', marginTop: 4 },
   countdown: { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 8 },
   countdownText: { color: '#FFFFFF', fontFamily: 'Inter-SemiBold' },
+  /* New black & white hero styles */
+  heroBW: { margin: 16, borderRadius: 16, paddingVertical: 26, paddingHorizontal: 16, backgroundColor: '#111827', alignItems: 'center' },
+  bigTitle: { color: '#FFFFFF', fontSize: 26, fontFamily: 'Inter-SemiBold', letterSpacing: 0.6, marginBottom: 16 },
+  timerContainer: { alignItems: 'center', justifyContent: 'center', width: '100%' },
+  timerRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 12 },
+  timerBlock: { width: 88, height: 88, borderRadius: 10, backgroundColor: '#FFFFFF', alignItems: 'center', justifyContent: 'center' },
+  timerNumber: { color: '#111827', fontSize: 28, fontFamily: 'Inter-SemiBold' },
+  timerLabel: { color: '#6B7280', marginTop: 3, fontFamily: 'Inter-Regular', fontSize: 10 },
+  timerColon: { color: '#FFFFFF', fontSize: 26, fontFamily: 'Inter-SemiBold', marginBottom: 16 },
+  countdownDate: { color: '#FFFFFF', marginTop: 14, fontSize: 13, fontFamily: 'Inter-SemiBold', letterSpacing: 0.4 },
+  motto: { color: '#F3F4F6', marginTop: 12, fontStyle: 'italic', textAlign: 'center', paddingHorizontal: 8, fontSize: 11 },
   section: { marginTop: 8, marginBottom: 24 },
   sectionHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, marginBottom: 12 },
   sectionTitle: { fontSize: 18, color: '#111827', fontFamily: 'Inter-SemiBold' },
