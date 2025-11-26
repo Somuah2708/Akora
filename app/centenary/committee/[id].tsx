@@ -392,6 +392,20 @@ export default function CommitteeDetailScreen() {
             </View>
           )}
         />
+        <View style={styles.inputContainer}>
+          <TextInput
+            style={styles.chatInput}
+            placeholder="Type a message..."
+            placeholderTextColor="#9CA3AF"
+            value={chatMessage}
+            onChangeText={setChatMessage}
+            multiline
+            maxLength={500}
+          />
+          <TouchableOpacity style={styles.sendButton} onPress={handleSendMessage}>
+            <Send size={20} color="#FFFFFF" />
+          </TouchableOpacity>
+        </View>
       </View>
 
       {/* Action Buttons */}
@@ -465,7 +479,7 @@ const styles = StyleSheet.create({
   chatTime: { fontSize: 11, color: '#9CA3AF', fontFamily: 'Inter-Regular' },
   ownChatTime: { color: 'rgba(255,255,255,0.7)' },
   readReceipt: { marginLeft: 2 },
-  inputContainer: { flexDirection: 'row', gap: 12, paddingHorizontal: 16, paddingVertical: 12, backgroundColor: '#FFFFFF', borderTopWidth: 1, borderTopColor: '#E5E7EB' },
+  inputContainer: { flexDirection: 'row', gap: 12, paddingVertical: 12, paddingHorizontal: 0, backgroundColor: '#FFFFFF', borderTopWidth: 1, borderTopColor: '#E5E7EB', marginTop: 12 },
   chatInput: { flex: 1, backgroundColor: '#F3F4F6', borderRadius: 24, paddingHorizontal: 16, paddingVertical: 12, fontSize: 14, color: '#111827', maxHeight: 100 },
   sendButton: { width: 44, height: 44, borderRadius: 22, backgroundColor: '#111827', alignItems: 'center', justifyContent: 'center' },
   actionButtons: { flexDirection: 'row', gap: 12, paddingHorizontal: 16, marginBottom: 16 },
