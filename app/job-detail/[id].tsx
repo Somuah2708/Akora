@@ -1,8 +1,8 @@
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Image, ActivityIndicator, Dimensions, Share, Animated } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Image, ActivityIndicator, Dimensions, Share, Animated, Linking, Alert } from 'react-native';
 import { useFonts, Inter_400Regular, Inter_500Medium, Inter_600SemiBold, Inter_700Bold } from '@expo-google-fonts/inter';
 import { useEffect, useState, useRef } from 'react';
 import { SplashScreen, useRouter, useLocalSearchParams } from 'expo-router';
-import { ArrowLeft, Briefcase, MapPin, Building2, Wallet, Clock, Calendar, Edit, Share2, Bookmark, ChevronRight, TrendingUp, Users, CheckCircle, AlertCircle, ExternalLink } from 'lucide-react-native';
+import { ArrowLeft, Briefcase, MapPin, Building2, Wallet, Clock, Calendar, Edit, Share2, Bookmark, ChevronRight, TrendingUp, Users, CheckCircle, AlertCircle, Mail, Trash2 } from 'lucide-react-native';
 import { supabase, Job } from '@/lib/supabase';
 import { useAuth } from '@/hooks/useAuth';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -19,6 +19,8 @@ export default function JobDetailScreen() {
   const [job, setJob] = useState<Job | null>(null);
   const [loading, setLoading] = useState(true);
   const [isSaved, setIsSaved] = useState(false);
+  const [isAdmin, setIsAdmin] = useState(false);
+  const [deleting, setDeleting] = useState(false);
   const scrollY = useRef(new Animated.Value(0)).current;
   
   const [fontsLoaded] = useFonts({
@@ -38,7 +40,27 @@ export default function JobDetailScreen() {
     if (id) {
       fetchJobDetails();
     }
-  }, [id]);
+    if (user) {
+      checkAdminStatus();
+    }
+  }, [id, user]);
+
+  const checkAdminStatus = async () => {
+    if (!user) return;
+    try {
+      const { data, error } = await supabase
+        .from('profiles')
+        .select('is_admin')
+        .eq('id', user.id)
+        .single();
+      
+      if (!error && data) {
+        setIsAdmin(data.is_admin || false);
+      }
+    } catch (error) {
+      console.error('Error checking admin status:', error);
+    }
+  };
 
   const fetchJobDetails = async () => {
     try {
@@ -64,15 +86,19 @@ export default function JobDetailScreen() {
         else if (diffDays < 30) postedAgo = `${Math.floor(diffDays / 7)} weeks ago`;
         else postedAgo = `${Math.floor(diffDays / 30)} months ago`;
 
-        // Calculate application deadline (30 days from posting)
-        const deadline = new Date(data.created_at);
-        deadline.setDate(deadline.getDate() + 30);
-        const daysUntilDeadline = Math.ceil((deadline.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
+        // Calculate application deadline (only if custom deadline is set)
+        let deadline: Date | null = null;
+        let daysUntilDeadline: number | null = null;
+        
+        if (data.application_deadline) {
+          deadline = new Date(data.application_deadline);
+          daysUntilDeadline = Math.ceil((deadline.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
+        }
 
         setJob({
           ...data,
           postedAgo,
-          deadline: deadline.toLocaleDateString(),
+          deadline: deadline ? deadline.toLocaleDateString() : null,
           daysUntilDeadline,
           isOwner: user && user.id === data.user_id,
         } as any);
@@ -98,6 +124,46 @@ export default function JobDetailScreen() {
 
   const toggleSave = () => {
     setIsSaved(!isSaved);
+  };
+
+  const handleDeleteJob = async () => {
+    if (!isAdmin && job?.user_id !== user?.id) {
+      Alert.alert('Permission Denied', 'You do not have permission to delete this job.');
+      return;
+    }
+
+    Alert.alert(
+      'Delete Job Listing',
+      'Are you sure you want to delete this job listing? This action cannot be undone.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              setDeleting(true);
+              
+              const { error } = await supabase
+                .from('jobs')
+                .delete()
+                .eq('id', id);
+
+              if (error) throw error;
+
+              Alert.alert('Success', 'Job listing deleted successfully', [
+                { text: 'OK', onPress: () => router.replace('/workplace') }
+              ]);
+            } catch (error: any) {
+              console.error('Error deleting job:', error);
+              Alert.alert('Error', error.message || 'Failed to delete job listing');
+            } finally {
+              setDeleting(false);
+            }
+          },
+        },
+      ]
+    );
   };
 
   const getJobTypeColor = (jobType: string) => {
@@ -136,8 +202,9 @@ export default function JobDetailScreen() {
   const jobColor = getJobTypeColor(job.job_type);
   const isOwner = (job as any).isOwner;
   const daysLeft = (job as any).daysUntilDeadline;
-  const isUrgent = daysLeft < 7;
-  const isClosed = daysLeft <= 0;
+  const hasDeadline = daysLeft !== null;
+  const isUrgent = hasDeadline && daysLeft < 7 && daysLeft > 0;
+  const isClosed = hasDeadline && daysLeft <= 0;
 
   return (
     <View style={styles.container}>
@@ -159,6 +226,16 @@ export default function JobDetailScreen() {
               fill={isSaved ? '#4169E1' : 'none'}
             />
           </TouchableOpacity>
+          
+          {(isOwner || isAdmin) && (
+            <TouchableOpacity
+              style={[styles.headerButton, deleting && styles.headerButtonDisabled]}
+              onPress={handleDeleteJob}
+              disabled={deleting}
+            >
+              <Trash2 size={20} color="#EF4444" />
+            </TouchableOpacity>
+          )}
           
           {isOwner && (
             <TouchableOpacity
@@ -186,9 +263,19 @@ export default function JobDetailScreen() {
           style={styles.heroSection}
         >
           <View style={styles.companyLogoContainer}>
-            <View style={[styles.companyLogo, { backgroundColor: jobColor + '20' }]}>
-              <Building2 size={40} color={jobColor} />
-            </View>
+            {job.image_url ? (
+              <Image
+                source={{ uri: typeof job.image_url === 'string' && job.image_url.startsWith('[') 
+                  ? JSON.parse(job.image_url)[0] 
+                  : job.image_url 
+                }}
+                style={styles.companyLogoImage}
+              />
+            ) : (
+              <View style={[styles.companyLogo, { backgroundColor: jobColor + '20' }]}>
+                <Building2 size={40} color={jobColor} />
+              </View>
+            )}
           </View>
 
           <Text style={styles.jobTitle}>{job.title}</Text>
@@ -224,15 +311,17 @@ export default function JobDetailScreen() {
             </View>
           )}
 
-          <View style={styles.statCard}>
-            <View style={styles.statIconContainer}>
-              <Calendar size={20} color={isUrgent ? '#EF4444' : '#4169E1'} />
+          {(job as any).daysUntilDeadline !== null && (
+            <View style={styles.statCard}>
+              <View style={styles.statIconContainer}>
+                <Calendar size={20} color={isUrgent ? '#EF4444' : '#4169E1'} />
+              </View>
+              <Text style={styles.statLabel}>Deadline</Text>
+              <Text style={[styles.statValue, isUrgent && styles.statValueUrgent]}>
+                {daysLeft > 0 ? `${daysLeft} days left` : 'Closed'}
+              </Text>
             </View>
-            <Text style={styles.statLabel}>Deadline</Text>
-            <Text style={[styles.statValue, isUrgent && styles.statValueUrgent]}>
-              {daysLeft > 0 ? `${daysLeft} days left` : 'Closed'}
-            </Text>
-          </View>
+          )}
 
           {isOwner && (
             <View style={styles.statCard}>
@@ -272,6 +361,11 @@ export default function JobDetailScreen() {
             <TrendingUp size={20} color="#F59E0B" />
             <Text style={styles.urgentBannerText}>Closing Soon - Apply Now!</Text>
           </View>
+        ) : !hasDeadline ? (
+          <View style={styles.openBanner}>
+            <CheckCircle size={20} color="#10B981" />
+            <Text style={styles.openBannerText}>Applications Open - No Deadline</Text>
+          </View>
         ) : null}
 
         {/* Job Description */}
@@ -298,28 +392,28 @@ export default function JobDetailScreen() {
           </View>
         )}
 
-        {/* How to Apply */}
-        <View style={styles.section}>
-          <View style={styles.sectionHeader}>
-            <View style={styles.sectionIconContainer}>
-              <ExternalLink size={20} color="#8B5CF6" />
-            </View>
-            <Text style={styles.sectionTitle}>How to Apply</Text>
-          </View>
-          
-          <TouchableOpacity style={styles.applicationLinkCard}>
-            <View style={styles.applicationLinkContent}>
-              <ExternalLink size={18} color="#4169E1" />
-              <View style={styles.applicationLinkInfo}>
-                <Text style={styles.applicationLinkLabel}>Application Link</Text>
-                <Text style={styles.applicationLinkValue} numberOfLines={1}>
-                  {job.application_link}
-                </Text>
+        {/* Contact Information */}
+        {job.contact_email && (
+          <View style={styles.section}>
+            <View style={styles.sectionHeader}>
+              <View style={styles.sectionIconContainer}>
+                <Mail size={20} color="#4169E1" />
               </View>
+              <Text style={styles.sectionTitle}>Contact Information</Text>
             </View>
-            <ChevronRight size={20} color="#9CA3AF" />
-          </TouchableOpacity>
-        </View>
+            <TouchableOpacity 
+              style={styles.contactEmailCard}
+              onPress={() => {
+                const emailUrl = `mailto:${job.contact_email}`;
+                Linking.openURL(emailUrl).catch(err => console.error('Error opening email:', err));
+              }}
+            >
+              <Mail size={18} color="#4169E1" />
+              <Text style={styles.contactEmailText}>{job.contact_email}</Text>
+              <ChevronRight size={18} color="#9CA3AF" />
+            </TouchableOpacity>
+          </View>
+        )}
 
         {/* Bottom Spacing */}
         <View style={{ height: 120 }} />
@@ -421,6 +515,9 @@ const styles = StyleSheet.create({
     padding: 8,
     borderRadius: 8,
   },
+  headerButtonDisabled: {
+    opacity: 0.5,
+  },
   headerActions: {
     flexDirection: 'row',
     gap: 4,
@@ -447,6 +544,18 @@ const styles = StyleSheet.create({
     borderRadius: 20,
     justifyContent: 'center',
     alignItems: 'center',
+    borderWidth: 2,
+    borderColor: '#FFFFFF',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
+    elevation: 4,
+  },
+  companyLogoImage: {
+    width: 80,
+    height: 80,
+    borderRadius: 20,
     borderWidth: 2,
     borderColor: '#FFFFFF',
     shadowColor: '#000',
@@ -594,6 +703,24 @@ const styles = StyleSheet.create({
     fontFamily: 'Inter-SemiBold',
     color: '#EF4444',
   },
+  openBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    backgroundColor: '#D1FAE5',
+    marginHorizontal: 16,
+    marginBottom: 16,
+    paddingVertical: 14,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#6EE7B7',
+  },
+  openBannerText: {
+    fontSize: 14,
+    fontFamily: 'Inter-SemiBold',
+    color: '#10B981',
+  },
 
   // Sections
   section: {
@@ -630,35 +757,19 @@ const styles = StyleSheet.create({
     color: '#6B7280',
     lineHeight: 24,
   },
-
-  // Application Link Card
-  applicationLinkCard: {
+  contactEmailCard: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
-    padding: 14,
     backgroundColor: '#F9FAFB',
+    padding: 14,
     borderRadius: 12,
     borderWidth: 1,
     borderColor: '#E5E7EB',
-  },
-  applicationLinkContent: {
-    flexDirection: 'row',
-    alignItems: 'center',
     gap: 12,
+  },
+  contactEmailText: {
     flex: 1,
-  },
-  applicationLinkInfo: {
-    flex: 1,
-  },
-  applicationLinkLabel: {
-    fontSize: 12,
-    fontFamily: 'Inter-Regular',
-    color: '#9CA3AF',
-    marginBottom: 2,
-  },
-  applicationLinkValue: {
-    fontSize: 14,
+    fontSize: 15,
     fontFamily: 'Inter-SemiBold',
     color: '#4169E1',
   },

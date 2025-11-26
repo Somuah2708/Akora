@@ -4,7 +4,7 @@ import * as ImagePicker from 'expo-image-picker';
 import { useFonts, Inter_400Regular, Inter_600SemiBold } from '@expo-google-fonts/inter';
 import { useEffect, useState } from 'react';
 import { SplashScreen, useRouter } from 'expo-router';
-import { ArrowLeft, Image as ImageIcon, Send, DollarSign, Tag, Info, Briefcase, Mail, Trash2, Upload } from 'lucide-react-native';
+import { ArrowLeft, Image as ImageIcon, Send, DollarSign, Tag, Info, Briefcase, Mail, Trash2, Upload, Calendar } from 'lucide-react-native';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/hooks/useAuth';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -27,10 +27,12 @@ export default function CreateJobListingScreen() {
   const [description, setDescription] = useState('');
   const [company, setCompany] = useState('');
   const [location, setLocation] = useState('');
-  const [salary, setSalary] = useState('');
+  const [salaryMin, setSalaryMin] = useState('');
+  const [salaryMax, setSalaryMax] = useState('');
   const [currency, setCurrency] = useState('USD'); // USD or GHS (Ghana Cedis)
+  const [salaryPeriod, setSalaryPeriod] = useState('monthly'); // hourly, daily, weekly, monthly, yearly
   const [email, setEmail] = useState('');
-  const [applicationLink, setApplicationLink] = useState('');
+  const [deadline, setDeadline] = useState('');
   const [requirements, setRequirements] = useState('');
   const [imageUrl, setImageUrl] = useState('');
   const [uploadedImages, setUploadedImages] = useState<string[]>([]);
@@ -81,10 +83,12 @@ export default function CreateJobListingScreen() {
       setDescription('');
       setCompany('');
       setLocation('');
-      setSalary('');
+      setSalaryMin('');
+      setSalaryMax('');
       setCurrency('USD');
+      setSalaryPeriod('monthly');
       setEmail('');
-      setApplicationLink('');
+      setDeadline('');
       setRequirements('');
       setImageUrl('');
       setUploadedImages([]);
@@ -119,11 +123,6 @@ export default function CreateJobListingScreen() {
       return;
     }
 
-    if (!applicationLink.trim()) {
-      alert('Please provide an application link or email');
-      return;
-    }
-
     try {
       setIsSubmitting(true);
       
@@ -135,8 +134,18 @@ export default function CreateJobListingScreen() {
         finalImageUrls = imageUrl.split(',').map(url => url.trim()).slice(0, 20);
       }
       
-      // Format salary with currency
-      const formattedSalary = salary.trim() ? `${currency} ${salary}` : null;
+      // Format salary with currency and period
+      let formattedSalary = null;
+      const minSalary = salaryMin.trim() ? parseFloat(salaryMin) : null;
+      const maxSalary = salaryMax.trim() ? parseFloat(salaryMax) : null;
+      
+      if (minSalary && maxSalary) {
+        formattedSalary = `${currency} ${minSalary.toLocaleString()} - ${maxSalary.toLocaleString()}/${salaryPeriod}`;
+      } else if (minSalary) {
+        formattedSalary = `${currency} ${minSalary.toLocaleString()}+/${salaryPeriod}`;
+      } else if (maxSalary) {
+        formattedSalary = `${currency} Up to ${maxSalary.toLocaleString()}/${salaryPeriod}`;
+      }
       
       // Insert the job listing
       const { data: newListing, error: listingError } = await supabase
@@ -148,9 +157,14 @@ export default function CreateJobListingScreen() {
           location: location.trim(),
           job_type: category,
           salary: formattedSalary,
+          salary_min: minSalary,
+          salary_max: maxSalary,
+          salary_currency: currency,
+          salary_period: salaryPeriod,
           description: description.trim(),
           requirements: requirements.trim() || null,
-          application_link: applicationLink.trim(),
+          contact_email: email.trim() || null,
+          application_deadline: deadline.trim() || null,
           image_url: finalImageUrls.length > 0 ? JSON.stringify(finalImageUrls) : null,
           is_featured: false,
           is_approved: true,
@@ -241,7 +255,7 @@ export default function CreateJobListingScreen() {
             multiline
             value={description}
             onChangeText={setDescription}
-            maxLength={1000}
+            maxLength={5000}
             textAlignVertical="top"
           />
         </View>
@@ -255,27 +269,11 @@ export default function CreateJobListingScreen() {
             multiline
             value={requirements}
             onChangeText={setRequirements}
-            maxLength={1000}
+            maxLength={5000}
             textAlignVertical="top"
           />
         </View>
         
-        <View style={styles.formGroup}>
-          <Text style={styles.label}>Application Link *</Text>
-          <View style={styles.emailContainer}>
-            <Mail size={20} color="#666666" />
-            <TextInput
-              style={styles.emailInput}
-              placeholder="Enter application URL or email"
-              placeholderTextColor="#666666"
-              keyboardType="email-address"
-              autoCapitalize="none"
-              value={applicationLink}
-              onChangeText={setApplicationLink}
-            />
-          </View>
-        </View>
-
         <View style={styles.formGroup}>
           <Text style={styles.label}>Contact Email (Optional)</Text>
           <View style={styles.emailContainer}>
@@ -293,7 +291,26 @@ export default function CreateJobListingScreen() {
         </View>
 
         <View style={styles.formGroup}>
-          <Text style={styles.label}>Salary/Stipend (Optional)</Text>
+          <Text style={styles.label}>Application Deadline (Optional)</Text>
+          <View style={styles.emailContainer}>
+            <Calendar size={20} color="#666666" />
+            <TextInput
+              style={styles.emailInput}
+              placeholder="e.g., December 31, 2025 or 30 days"
+              placeholderTextColor="#666666"
+              value={deadline}
+              onChangeText={setDeadline}
+            />
+          </View>
+          <Text style={styles.helperText}>
+            Optional: Set a custom deadline for applications
+          </Text>
+        </View>
+
+        <View style={styles.formGroup}>
+          <Text style={styles.label}>Salary/Stipend Range (Optional)</Text>
+          
+          {/* Currency Selection */}
           <View style={styles.currencyRow}>
             <TouchableOpacity
               style={[styles.currencyButton, currency === 'USD' && styles.currencyButtonActive]}
@@ -312,17 +329,87 @@ export default function CreateJobListingScreen() {
               </Text>
             </TouchableOpacity>
           </View>
-          <View style={styles.priceInputContainer}>
-            <Text style={styles.currencySymbol}>{currency === 'USD' ? '$' : '₵'}</Text>
-            <TextInput
-              style={styles.priceInput}
-              placeholder="0.00 (leave blank if not applicable)"
-              placeholderTextColor="#666666"
-              keyboardType="numeric"
-              value={salary}
-              onChangeText={setSalary}
-            />
+          
+          {/* Salary Range Inputs */}
+          <View style={styles.salaryRangeContainer}>
+            <View style={styles.salaryInputWrapper}>
+              <Text style={styles.salaryInputLabel}>Min</Text>
+              <View style={styles.priceInputContainer}>
+                <Text style={styles.currencySymbol}>{currency === 'USD' ? '$' : '₵'}</Text>
+                <TextInput
+                  style={styles.priceInput}
+                  placeholder="0"
+                  placeholderTextColor="#666666"
+                  keyboardType="numeric"
+                  value={salaryMin}
+                  onChangeText={setSalaryMin}
+                />
+              </View>
+            </View>
+            
+            <View style={styles.rangeSeparator}>
+              <Text style={styles.rangeSeparatorText}>to</Text>
+            </View>
+            
+            <View style={styles.salaryInputWrapper}>
+              <Text style={styles.salaryInputLabel}>Max</Text>
+              <View style={styles.priceInputContainer}>
+                <Text style={styles.currencySymbol}>{currency === 'USD' ? '$' : '₵'}</Text>
+                <TextInput
+                  style={styles.priceInput}
+                  placeholder="0"
+                  placeholderTextColor="#666666"
+                  keyboardType="numeric"
+                  value={salaryMax}
+                  onChangeText={setSalaryMax}
+                />
+              </View>
+            </View>
           </View>
+          
+          {/* Payment Period Selection */}
+          <Text style={[styles.label, { marginTop: 12, marginBottom: 8 }]}>Payment Period</Text>
+          <ScrollView 
+            horizontal 
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.periodContainer}
+          >
+            {['hourly', 'daily', 'weekly', 'monthly', 'yearly'].map((period) => (
+              <TouchableOpacity
+                key={period}
+                style={[
+                  styles.periodChip,
+                  salaryPeriod === period && styles.selectedPeriodChip
+                ]}
+                onPress={() => setSalaryPeriod(period)}
+              >
+                <Text 
+                  style={[
+                    styles.periodChipText,
+                    salaryPeriod === period && styles.selectedPeriodChipText
+                  ]}
+                >
+                  {period.charAt(0).toUpperCase() + period.slice(1)}
+                </Text>
+              </TouchableOpacity>
+            ))}
+          </ScrollView>
+          
+          {/* Preview */}
+          {(salaryMin || salaryMax) && (
+            <View style={styles.salaryPreview}>
+              <Text style={styles.salaryPreviewLabel}>Preview:</Text>
+              <Text style={styles.salaryPreviewText}>
+                {currency} {salaryMin && salaryMax 
+                  ? `${parseFloat(salaryMin).toLocaleString()} - ${parseFloat(salaryMax).toLocaleString()}`
+                  : salaryMin 
+                    ? `${parseFloat(salaryMin).toLocaleString()}+`
+                    : `Up to ${parseFloat(salaryMax).toLocaleString()}`
+                }
+                <Text style={styles.salaryPreviewPeriod}>/{salaryPeriod}</Text>
+              </Text>
+            </View>
+          )}
         </View>
         
         <View style={styles.formGroup}>
@@ -444,33 +531,23 @@ export default function CreateJobListingScreen() {
         </View>
 
         {/* Action Buttons */}
-        <View style={styles.actionButtons}>
-          <TouchableOpacity 
-            style={styles.deleteButton}
-            onPress={handleClearForm}
-          >
-            <Trash2 size={20} color="#EF4444" />
-            <Text style={styles.deleteButtonText}>Clear Form</Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity 
-            style={[
-              styles.postButton,
-              (!title.trim() || !description.trim() || !company.trim() || !location.trim() || !category || isSubmitting) && styles.postButtonDisabled
-            ]}
-            onPress={handleSubmit}
-            disabled={!title.trim() || !description.trim() || !company.trim() || !location.trim() || !category || isSubmitting}
-          >
-            {isSubmitting ? (
-              <ActivityIndicator color="#FFFFFF" size="small" />
-            ) : (
-              <>
-                <Send size={20} color="#FFFFFF" />
-                <Text style={styles.postButtonText}>Post Job</Text>
-              </>
-            )}
-          </TouchableOpacity>
-        </View>
+        <TouchableOpacity 
+          style={[
+            styles.postButton,
+            (!title.trim() || !description.trim() || !company.trim() || !location.trim() || !category || isSubmitting) && styles.postButtonDisabled
+          ]}
+          onPress={handleSubmit}
+          disabled={!title.trim() || !description.trim() || !company.trim() || !location.trim() || !category || isSubmitting}
+        >
+          {isSubmitting ? (
+            <ActivityIndicator color="#FFFFFF" size="small" />
+          ) : (
+            <>
+              <Send size={20} color="#FFFFFF" />
+              <Text style={styles.postButtonText}>Post Job</Text>
+            </>
+          )}
+        </TouchableOpacity>
       </ScrollView>
     </View>
   );
@@ -561,6 +638,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#F8F9FA',
     borderRadius: 12,
     paddingHorizontal: 16,
+    flex: 1,
   },
   priceInput: {
     flex: 1,
@@ -568,6 +646,76 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontFamily: 'Inter-Regular',
     color: '#000000',
+  },
+  salaryRangeContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    marginTop: 12,
+  },
+  salaryInputWrapper: {
+    flex: 1,
+  },
+  salaryInputLabel: {
+    fontSize: 12,
+    fontFamily: 'Inter-SemiBold',
+    color: '#666666',
+    marginBottom: 8,
+  },
+  rangeSeparator: {
+    paddingBottom: 20,
+  },
+  rangeSeparatorText: {
+    fontSize: 14,
+    fontFamily: 'Inter-Regular',
+    color: '#666666',
+  },
+  periodContainer: {
+    flexDirection: 'row',
+    paddingVertical: 8,
+    gap: 8,
+  },
+  periodChip: {
+    backgroundColor: '#F8F9FA',
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 20,
+  },
+  selectedPeriodChip: {
+    backgroundColor: '#4169E1',
+  },
+  periodChipText: {
+    fontSize: 14,
+    fontFamily: 'Inter-Regular',
+    color: '#000000',
+  },
+  selectedPeriodChipText: {
+    color: '#FFFFFF',
+    fontFamily: 'Inter-SemiBold',
+  },
+  salaryPreview: {
+    backgroundColor: '#F0F9FF',
+    padding: 12,
+    borderRadius: 8,
+    marginTop: 12,
+    borderWidth: 1,
+    borderColor: '#BAE6FD',
+  },
+  salaryPreviewLabel: {
+    fontSize: 12,
+    fontFamily: 'Inter-Regular',
+    color: '#0369A1',
+    marginBottom: 4,
+  },
+  salaryPreviewText: {
+    fontSize: 16,
+    fontFamily: 'Inter-SemiBold',
+    color: '#0C4A6E',
+  },
+  salaryPreviewPeriod: {
+    fontSize: 14,
+    fontFamily: 'Inter-Regular',
+    color: '#0369A1',
   },
   categoriesContainer: {
     flexDirection: 'row',
@@ -669,6 +817,13 @@ const styles = StyleSheet.create({
     fontFamily: 'Inter-Regular',
     color: '#000000',
   },
+  helperText: {
+    fontSize: 12,
+    fontFamily: 'Inter-Regular',
+    color: '#666666',
+    marginTop: 6,
+    fontStyle: 'italic',
+  },
   currencyRow: {
     flexDirection: 'row',
     gap: 12,
@@ -744,28 +899,7 @@ const styles = StyleSheet.create({
     fontFamily: 'Inter-SemiBold',
     color: '#4169E1',
   },
-  actionButtons: {
-    flexDirection: 'row',
-    gap: 12,
-    marginBottom: 32,
-  },
-  deleteButton: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: '#FEE2E2',
-    paddingVertical: 16,
-    borderRadius: 12,
-    gap: 8,
-  },
-  deleteButtonText: {
-    fontSize: 16,
-    fontFamily: 'Inter-SemiBold',
-    color: '#EF4444',
-  },
   postButton: {
-    flex: 2,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
@@ -773,6 +907,8 @@ const styles = StyleSheet.create({
     paddingVertical: 16,
     borderRadius: 12,
     gap: 8,
+    marginBottom: 32,
+    marginHorizontal: 16,
   },
   postButtonDisabled: {
     backgroundColor: '#CBD5E1',

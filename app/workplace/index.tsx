@@ -1,4 +1,4 @@
-import { View, Text, StyleSheet, ScrollView, Image, TouchableOpacity, TextInput, Dimensions, ActivityIndicator, RefreshControl, FlatList, Modal, Animated } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, Image, TouchableOpacity, TextInput, Dimensions, ActivityIndicator, RefreshControl, FlatList, Modal, Animated, Alert } from 'react-native';
 import { useFonts, Inter_400Regular, Inter_500Medium, Inter_600SemiBold, Inter_700Bold } from '@expo-google-fonts/inter';
 import { useEffect, useState, useCallback, useRef } from 'react';
 import { SplashScreen, useRouter, useFocusEffect } from 'expo-router';
@@ -121,6 +121,7 @@ export default function WorkplaceScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [savedJobs, setSavedJobs] = useState<string[]>([]);
   const [myJobs, setMyJobs] = useState<Job[]>([]);
+  const [isAdmin, setIsAdmin] = useState(false);
   
   const [fontsLoaded] = useFonts({
     'Inter-Regular': Inter_400Regular,
@@ -270,7 +271,27 @@ export default function WorkplaceScreen() {
 
   useEffect(() => {
     fetchJobListings();
+    if (user) {
+      checkAdminStatus();
+    }
   }, [user]);
+
+  const checkAdminStatus = async () => {
+    if (!user) return;
+    try {
+      const { data, error } = await supabase
+        .from('profiles')
+        .select('is_admin')
+        .eq('id', user.id)
+        .single();
+      
+      if (!error && data) {
+        setIsAdmin(data.is_admin || false);
+      }
+    } catch (error) {
+      console.error('Error checking admin status:', error);
+    }
+  };
 
   useEffect(() => {
     applyFilters(jobListings, searchQuery, selectedJobType, selectedSalaryRange, selectedPostedFilter);
@@ -451,12 +472,23 @@ export default function WorkplaceScreen() {
               <TouchableOpacity
                 style={styles.jobCard}
                 onPress={() => handleJobPress(job.id)}
+                onLongPress={() => handleJobLongPress(job)}
                 activeOpacity={0.7}
               >
                 {/* Job Header */}
                 <View style={styles.jobCardHeader}>
                   <View style={styles.companyLogoContainer}>
-                    <Building2 size={24} color={jobColor} />
+                    {job.image_url ? (
+                      <Image
+                        source={{ uri: typeof job.image_url === 'string' && job.image_url.startsWith('[') 
+                          ? JSON.parse(job.image_url)[0] 
+                          : job.image_url 
+                        }}
+                        style={styles.companyLogoImage}
+                      />
+                    ) : (
+                      <Building2 size={24} color={jobColor} />
+                    )}
                   </View>
                   
                   <View style={styles.jobCardHeaderInfo}>
@@ -820,6 +852,12 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     borderWidth: 1,
     borderColor: '#E5E7EB',
+    overflow: 'hidden',
+  },
+  companyLogoImage: {
+    width: 48,
+    height: 48,
+    borderRadius: 12,
   },
   jobCardHeaderInfo: {
     flex: 1,

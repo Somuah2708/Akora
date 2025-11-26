@@ -297,10 +297,16 @@ export type Job = {
   company: string;
   location: string;
   job_type: string;
-  salary: number | null;
+  salary: string | null;
+  salary_min?: number | null;
+  salary_max?: number | null;
+  salary_currency?: string;
+  salary_period?: string;
   description: string;
   requirements?: string;
-  application_link: string;
+  contact_email?: string;
+  application_deadline?: string;
+  application_link?: string; // DEPRECATED: Made optional for backward compatibility
   image_url?: string;
   is_featured: boolean;
   is_approved: boolean;

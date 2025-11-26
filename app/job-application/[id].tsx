@@ -275,7 +275,13 @@ export default function JobApplicationScreen() {
         {/* Job Details Section */}
         <View style={styles.jobDetailsCard}>
           {job.image_url && (
-            <Image source={{ uri: job.image_url }} style={styles.companyLogo} />
+            <Image 
+              source={{ uri: typeof job.image_url === 'string' && job.image_url.startsWith('[') 
+                ? JSON.parse(job.image_url)[0] 
+                : job.image_url 
+              }} 
+              style={styles.companyLogo} 
+            />
           )}
           
           <Text style={styles.jobTitle}>{job.title}</Text>
