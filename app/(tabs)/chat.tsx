@@ -27,14 +27,18 @@ interface Conversation {
 }
 
 export default function ChatScreen() {
+  console.log('🎬 ChatScreen component rendering');
   const router = useRouter();
   const { user } = useAuth();
+  console.log('👤 ChatScreen user:', user?.id || 'no user');
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [loading, setLoading] = useState(true);
   // Groups state
   type GroupItem = { group: { id: string; name: string; avatar_url?: string | null }, lastMessage: any | null, unreadCount: number };
   const [groups, setGroups] = useState<GroupItem[]>([]);
   const [groupsLoading, setGroupsLoading] = useState(true);
+  const [supportConversations, setSupportConversations] = useState<any[]>([]);
+  const [isAdmin, setIsAdmin] = useState(false);
   const [searchModalVisible, setSearchModalVisible] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [searchResults, setSearchResults] = useState<Profile[]>([]);
@@ -77,7 +81,27 @@ export default function ChatScreen() {
   }, [fontsLoaded]);
 
   useEffect(() => {
+    const checkAdminStatus = async () => {
+      if (!user) return;
+      try {
+        console.log('🔍 Checking admin status for user:', user.id);
+        const { data: profile } = await supabase
+          .from('profiles')
+          .select('role, is_admin')
+          .eq('id', user.id)
+          .single();
+        
+        const adminStatus = profile?.role === 'admin' || profile?.is_admin === true;
+        console.log('👤 Profile:', profile);
+        console.log('🛡️ Is Admin:', adminStatus);
+        setIsAdmin(adminStatus);
+      } catch (error) {
+        console.error('❌ Error checking admin status:', error);
+      }
+    };
+
     if (user) {
+      checkAdminStatus();
       // Initial fetch shows loading once
       fetchConversations(true);
       fetchGroups(true);
@@ -217,6 +241,28 @@ export default function ChatScreen() {
         )
         .subscribe();
 
+      // Subscribe to real-time updates for admin support messages (admins only)
+      let supportMessageSub: any = null;
+      if (isAdmin) {
+        console.log('🔔 Setting up support messages subscription');
+        supportMessageSub = supabase
+          .channel('admin_conversations_changes')
+          .on(
+            'postgres_changes',
+            { event: '*', schema: 'public', table: 'admin_conversations' },
+            async (payload) => {
+              console.log('📩 Support conversation update:', payload);
+              // Refresh support conversations
+              await fetchSupportConversations();
+            }
+          )
+          .subscribe((status) => {
+            console.log('📡 Support subscription status:', status);
+          });
+      } else {
+        console.log('⏭️ Not admin, skipping support subscription');
+      }
+
       // Subscribe to real-time updates for group messages
       const groupMessageSub = supabase
         .channel('group_messages_changes')
@@ -247,11 +293,20 @@ export default function ChatScreen() {
         messageSubscription.unsubscribe();
         profileSubscription.unsubscribe();
         groupMessageSub.unsubscribe();
+        if (supportMessageSub) supportMessageSub.unsubscribe();
         // Cleanup typing channels
         try { typingChannelsRef.forEach((ch) => supabase.removeChannel(ch)); } catch {}
       };
     }
   }, [user]);
+
+  // Fetch support conversations when admin status is confirmed
+  useEffect(() => {
+    if (isAdmin && user) {
+      console.log('🔄 isAdmin changed to true, fetching support conversations');
+      fetchSupportConversations();
+    }
+  }, [isAdmin, user]);
 
   // Subscribe to typing presence for top 5 most recent direct chats
   useEffect(() => {
@@ -286,6 +341,73 @@ export default function ChatScreen() {
       typingChannelsRef.length = 0;
     };
   }, [user, conversations.length]);
+
+  const fetchSupportConversations = async () => {
+    if (!user || !isAdmin) {
+      console.log('⏭️ Skipping support conversations fetch - user:', !!user, 'isAdmin:', isAdmin);
+      return;
+    }
+    try {
+      console.log('📞 Fetching support conversations for admin:', user.id);
+      
+      // Fetch all admin conversations
+      const { data: conversations, error: convError } = await supabase
+        .from('admin_conversations')
+        .select('*')
+        .order('last_message_at', { ascending: false });
+
+      if (convError) {
+        console.error('❌ Error fetching support conversations:', convError);
+        throw convError;
+      }
+
+      console.log('✅ Support conversations fetched:', conversations?.length || 0);
+
+      // Fetch user profiles for all conversations
+      const userIds = conversations?.map(c => c.user_id) || [];
+      const { data: profiles, error: profileError } = await supabase
+        .from('profiles')
+        .select('id, email, full_name, avatar_url, role, is_admin')
+        .in('id', userIds);
+
+      if (profileError) {
+        console.error('❌ Error fetching user profiles:', profileError);
+        throw profileError;
+      }
+
+      console.log('📋 User profiles fetched:', profiles?.length || 0);
+
+      // Create a map of user profiles for quick lookup
+      const profileMap = new Map(profiles?.map(p => [p.id, p]) || []);
+
+      // Transform to match Conversation interface
+      const supportConvos = (conversations || [])
+        .map((conv: any) => {
+          const userProfile = profileMap.get(conv.user_id);
+          if (!userProfile) return null;
+
+          return {
+            friend: userProfile,
+            latestMessage: {
+              id: conv.id,
+              content: conv.last_message || '',
+              created_at: conv.last_message_at,
+              sender_id: conv.user_id,
+              receiver_id: user.id,
+              is_read: conv.unread_admin_count === 0,
+            },
+            unreadCount: conv.unread_admin_count || 0,
+            isSupportChat: true,
+          };
+        })
+        .filter(Boolean);
+
+      console.log('✅ Support conversations prepared:', supportConvos.length);
+      setSupportConversations(supportConvos);
+    } catch (error) {
+      console.error('Error fetching support conversations:', error);
+    }
+  };
 
   const fetchConversations = async (showLoading = false) => {
     if (!user) return;
@@ -404,7 +526,11 @@ export default function ChatScreen() {
     if (!user) return;
     try {
       setRefreshing(true);
-      await Promise.all([fetchConversations(false), fetchGroups(false)]);
+      const promises = [fetchConversations(false), fetchGroups(false)];
+      if (isAdmin) {
+        promises.push(fetchSupportConversations());
+      }
+      await Promise.all(promises);
     } finally {
       setRefreshing(false);
     }
@@ -571,7 +697,7 @@ export default function ChatScreen() {
           showsVerticalScrollIndicator={false}
           refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#64748B" />}
         >
-          {conversations.length === 0 && groups.length === 0 ? (
+          {conversations.length === 0 && groups.length === 0 && supportConversations.length === 0 ? (
             <View style={styles.emptyState}>
               <View style={styles.emptyIconContainer}>
                 <MessageCircle size={56} color="#CBD5E1" strokeWidth={1.5} />
@@ -590,6 +716,70 @@ export default function ChatScreen() {
             </View>
           ) : (
             <>
+              {/* Support Messages Section (Admin Only) */}
+              {isAdmin && supportConversations.length > 0 && (
+                <View style={styles.section}>
+                  <Text style={styles.sectionTitle}>CUSTOMER SUPPORT</Text>
+                  {supportConversations.map((conversation) => {
+                    const friend = Array.isArray(conversation.friend) 
+                      ? conversation.friend[0] 
+                      : conversation.friend;
+                    return (
+                      <TouchableOpacity 
+                        key={`support-${friend?.id}`} 
+                        style={[styles.chatItem, { backgroundColor: '#FEF3C7' }]}
+                        onPress={() => router.push(`/admin/messages/${friend?.id}`)}
+                        activeOpacity={0.7}
+                      >
+                        <View style={styles.avatarContainer}>
+                          <View style={[styles.avatar, { backgroundColor: '#FCD34D', justifyContent: 'center', alignItems: 'center' }]}>
+                            <Text style={{ fontSize: 24, fontFamily: 'Inter-Bold', color: '#92400E' }}>
+                              {(friend?.full_name || 'U')[0].toUpperCase()}
+                            </Text>
+                          </View>
+                          <View style={[styles.onlineIndicator, { backgroundColor: '#F59E0B' }]} />
+                        </View>
+                        <View style={styles.chatInfo}>
+                          <View style={styles.chatHeader}>
+                            <View style={{ flexDirection: 'row', alignItems: 'center', flex: 1 }}>
+                              <Text style={styles.chatName} numberOfLines={1}>
+                                {friend?.full_name || 'Unknown User'}
+                              </Text>
+                              <View style={[styles.adminBadge, { backgroundColor: '#F59E0B', marginLeft: 8 }]}>
+                                <Text style={styles.adminBadgeText}>Support</Text>
+                              </View>
+                            </View>
+                            {conversation.latestMessage && (
+                              <Text style={styles.chatTime}>
+                                {formatTime(conversation.latestMessage.created_at)}
+                              </Text>
+                            )}
+                          </View>
+                          <View style={styles.chatFooter}>
+                            <Text 
+                              style={[
+                                styles.lastMessage,
+                                conversation.unreadCount > 0 && styles.unreadMessage
+                              ]} 
+                              numberOfLines={1}
+                            >
+                              {conversation.latestMessage?.content || 'New support request'}
+                            </Text>
+                            {conversation.unreadCount > 0 && (
+                              <View style={[styles.unreadBadge, { backgroundColor: '#F59E0B' }]}>
+                                <Text style={styles.unreadCount}>
+                                  {conversation.unreadCount > 99 ? '99+' : conversation.unreadCount}
+                                </Text>
+                              </View>
+                            )}
+                          </View>
+                        </View>
+                      </TouchableOpacity>
+                    );
+                  })}
+                </View>
+              )}
+
               {/* Direct Messages Section with Pinned */}
               {conversations.length > 0 && (
                 <View style={styles.section}>

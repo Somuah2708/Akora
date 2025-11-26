@@ -1,8 +1,10 @@
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Dimensions } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Dimensions, Linking, Alert, Platform, ActivityIndicator } from 'react-native';
 import { useFonts, Inter_400Regular, Inter_600SemiBold, Inter_700Bold } from '@expo-google-fonts/inter';
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { SplashScreen, useRouter } from 'expo-router';
-import { ArrowLeft, Building2, ShoppingBag, Calendar, FileText, Mail, Phone, Globe, MessageCircle, ChevronRight, History, Award, Heart } from 'lucide-react-native';
+import { ArrowLeft, Building2, ShoppingBag, Calendar, FileText, Mail, Phone, Globe, MessageCircle, ChevronRight, History, Award, HeadphonesIcon, Clock, MapPin, Settings } from 'lucide-react-native';
+import { supabase } from '../../lib/supabase';
+import { useAuth } from '../../hooks/useAuth';
 
 SplashScreen.preventAutoHideAsync();
 
@@ -33,21 +35,15 @@ const QUICK_ACTIONS = [
     gradient: ['#4facfe', '#00f2fe'],
     route: '/secretariat/documents',
   },
-  {
-    id: '4',
-    title: 'Alumni Support',
-    description: 'Assistance & resources',
-    icon: Heart,
-    gradient: ['#43e97b', '#38f9d7'],
-    route: '/alumni-center',
-  },
 ];
 
 const CONTACT_INFO = {
-  address: 'Main Campus, University Avenue',
+  address: 'Main Campus, University Avenue, Accra',
   email: 'secretariat@oaa.edu',
   phone: '+233 20 123 4567',
-  website: 'www.oaa.edu/secretariat',
+  latitude: 5.6037,
+  longitude: -0.1870,
+  hours: 'Mon - Fri: 8:00 AM - 5:00 PM',
 };
 
 const HERITAGE_ITEMS = [
@@ -67,6 +63,16 @@ const HERITAGE_ITEMS = [
 
 export default function SecretariatScreen() {
   const router = useRouter();
+  const { profile } = useAuth();
+  const [contactInfo, setContactInfo] = useState({
+    address: 'Main Campus, University Avenue, Accra',
+    email: 'secretariat@oaa.edu',
+    phone: '+233 20 123 4567',
+    latitude: 5.6037,
+    longitude: -0.1870,
+    hours: 'Mon - Fri: 8:00 AM - 5:00 PM',
+  });
+  const [loadingContact, setLoadingContact] = useState(true);
   
   const [fontsLoaded] = useFonts({
     'Inter-Regular': Inter_400Regular,
@@ -80,9 +86,71 @@ export default function SecretariatScreen() {
     }
   }, [fontsLoaded]);
 
+  useEffect(() => {
+    fetchContactSettings();
+  }, []);
+
+  const fetchContactSettings = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('app_contact_settings')
+        .select('*')
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .single();
+
+      if (error) throw error;
+
+      if (data) {
+        setContactInfo({
+          address: data.address,
+          email: data.email,
+          phone: data.phone,
+          latitude: data.latitude || 5.6037,
+          longitude: data.longitude || -0.1870,
+          hours: data.office_hours?.weekdays + (data.office_hours?.weekends ? '\n' + data.office_hours.weekends : ''),
+        });
+      }
+    } catch (error) {
+      console.error('Error fetching contact settings:', error);
+    } finally {
+      setLoadingContact(false);
+    }
+  };
+
   if (!fontsLoaded) {
     return null;
   }
+
+  const handleEmail = () => {
+    Linking.openURL(`mailto:${contactInfo.email}`).catch(() => {
+      Alert.alert('Error', 'Unable to open email app');
+    });
+  };
+
+  const handlePhone = () => {
+    Linking.openURL(`tel:${contactInfo.phone}`).catch(() => {
+      Alert.alert('Error', 'Unable to make call');
+    });
+  };
+
+  const handleMapLocation = () => {
+    const { latitude, longitude } = contactInfo;
+    const scheme = Platform.select({
+      ios: `maps:0,0?q=${latitude},${longitude}`,
+      android: `geo:0,0?q=${latitude},${longitude}`,
+    });
+    const url = scheme || `https://www.google.com/maps/search/?api=1&query=${latitude},${longitude}`;
+    
+    Linking.openURL(url).catch(() => {
+      Alert.alert('Error', 'Unable to open maps app');
+    });
+  };
+
+  const handleMessage = () => {
+    console.log('📨 Navigating to admin chat...');
+    router.push('/admin-chat' as any);
+  };
 
   return (
     <ScrollView style={styles.container} showsVerticalScrollIndicator={false}>
@@ -135,43 +203,98 @@ export default function SecretariatScreen() {
         </View>
       </View>
 
-      {/* Contact Information */}
+      {/* Customer Care Center */}
       <View style={styles.section}>
-        <Text style={styles.sectionTitle}>Contact</Text>
-        <View style={styles.contactCard}>
-          <TouchableOpacity style={styles.contactItem} activeOpacity={0.7}>
-            <View style={styles.contactIconCircle}>
-              <Globe size={18} color="#1a1a1a" strokeWidth={2} />
-            </View>
-            <Text style={styles.contactText}>{CONTACT_INFO.website}</Text>
-          </TouchableOpacity>
-          
-          <View style={styles.contactDivider} />
-          
-          <TouchableOpacity style={styles.contactItem} activeOpacity={0.7}>
-            <View style={styles.contactIconCircle}>
-              <Mail size={18} color="#1a1a1a" strokeWidth={2} />
-            </View>
-            <Text style={styles.contactText}>{CONTACT_INFO.email}</Text>
-          </TouchableOpacity>
-          
-          <View style={styles.contactDivider} />
-          
-          <TouchableOpacity style={styles.contactItem} activeOpacity={0.7}>
-            <View style={styles.contactIconCircle}>
-              <Phone size={18} color="#1a1a1a" strokeWidth={2} />
-            </View>
-            <Text style={styles.contactText}>{CONTACT_INFO.phone}</Text>
-          </TouchableOpacity>
-          
+        <View style={styles.careSectionHeader}>
+          <View style={styles.careIconLarge}>
+            <HeadphonesIcon size={28} color="#4169E1" strokeWidth={2} />
+          </View>
+          <View style={styles.careSectionTitleContainer}>
+            <Text style={styles.careSectionTitle}>Customer Care Center</Text>
+            <Text style={styles.careSectionSubtitle}>We're here to help you</Text>
+          </View>
+          {profile?.role === 'admin' && (
+            <TouchableOpacity 
+              onPress={() => router.push('/admin/contact-settings')}
+              style={styles.adminSettingsButton}
+              activeOpacity={0.7}
+            >
+              <Settings size={20} color="#4169E1" strokeWidth={2} />
+            </TouchableOpacity>
+          )}
+        </View>
+
+        {/* Contact Methods Grid */}
+        <View style={styles.contactMethodsGrid}>
+          {/* Call Us */}
           <TouchableOpacity 
-            style={styles.messageButton}
-            onPress={() => router.push('/chat')}
-            activeOpacity={0.9}
+            style={styles.contactMethodCard}
+            onPress={handlePhone}
+            activeOpacity={0.8}
           >
-            <MessageCircle size={20} color="#FFFFFF" strokeWidth={2} />
-            <Text style={styles.messageButtonText}>Send Message</Text>
+            <View style={[styles.contactMethodIcon, { backgroundColor: '#DBEAFE' }]}>
+              <Phone size={24} color="#1E40AF" strokeWidth={2} />
+            </View>
+            <Text style={styles.contactMethodLabel}>Call Us</Text>
+            <Text style={styles.contactMethodValue}>{contactInfo.phone}</Text>
           </TouchableOpacity>
+
+          {/* Email Us */}
+          <TouchableOpacity 
+            style={styles.contactMethodCard}
+            onPress={handleEmail}
+            activeOpacity={0.8}
+          >
+            <View style={[styles.contactMethodIcon, { backgroundColor: '#DCFCE7' }]}>
+              <Mail size={24} color="#166534" strokeWidth={2} />
+            </View>
+            <Text style={styles.contactMethodLabel}>Email Us</Text>
+            <Text style={styles.contactMethodValue} numberOfLines={1}>{contactInfo.email}</Text>
+          </TouchableOpacity>
+        </View>
+
+        {/* Visit Us - Full Width */}
+        <TouchableOpacity 
+          style={[styles.contactMethodCard, styles.fullWidthCard]}
+          onPress={handleMapLocation}
+          activeOpacity={0.8}
+        >
+          <View style={[styles.contactMethodIcon, { backgroundColor: '#FEF3C7' }]}>
+            <MapPin size={24} color="#92400E" strokeWidth={2} />
+          </View>
+          <Text style={styles.contactMethodLabel}>Visit Us - Tap to Open Maps</Text>
+          <Text style={styles.contactMethodValue} numberOfLines={2}>{contactInfo.address}</Text>
+        </TouchableOpacity>
+
+        {/* Office Hours */}
+        <View style={styles.officeHoursCard}>
+          <View style={styles.officeHoursIcon}>
+            <Clock size={20} color="#4169E1" strokeWidth={2} />
+          </View>
+          <View style={styles.officeHoursContent}>
+            <Text style={styles.officeHoursLabel}>Office Hours</Text>
+            <Text style={styles.officeHoursValue}>{contactInfo.hours}</Text>
+          </View>
+        </View>
+
+        {/* Send Message Button */}
+        <TouchableOpacity 
+          style={styles.primaryCareButton}
+          onPress={handleMessage}
+          activeOpacity={0.9}
+        >
+          <MessageCircle size={22} color="#FFFFFF" strokeWidth={2} />
+          <Text style={styles.primaryCareButtonText}>Send us a Message</Text>
+          <View style={styles.primaryCareButtonArrow}>
+            <ChevronRight size={20} color="#FFFFFF" strokeWidth={2.5} />
+          </View>
+        </TouchableOpacity>
+
+        {/* Quick Help Text */}
+        <View style={styles.quickHelpContainer}>
+          <Text style={styles.quickHelpText}>
+            💬 For immediate assistance, send us a message and our team will respond promptly
+          </Text>
         </View>
       </View>
 
@@ -371,6 +494,171 @@ const styles = StyleSheet.create({
     height: 1,
     backgroundColor: '#f0f0f0',
     marginVertical: 4,
+  },
+  careSectionHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 24,
+    marginHorizontal: 20,
+  },
+  careIconLarge: {
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    backgroundColor: '#EFF6FF',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 14,
+  },
+  careSectionTitleContainer: {
+    flex: 1,
+  },
+  adminSettingsButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: '#EFF6FF',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginLeft: 8,
+  },
+  careSectionTitle: {
+    fontSize: 22,
+    fontWeight: '700',
+    color: '#1a1a1a',
+    fontFamily: 'Inter-Bold',
+    marginBottom: 2,
+  },
+  careSectionSubtitle: {
+    fontSize: 14,
+    fontWeight: '400',
+    color: '#6b7280',
+    fontFamily: 'Inter-Regular',
+  },
+  contactMethodsGrid: {
+    flexDirection: 'row',
+    gap: 12,
+    marginHorizontal: 20,
+    marginBottom: 12,
+  },
+  contactMethodCard: {
+    flex: 1,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 16,
+    padding: 18,
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 2,
+    elevation: 1,
+  },
+  fullWidthCard: {
+    marginHorizontal: 20,
+    marginBottom: 12,
+  },
+  contactMethodIcon: {
+    width: 52,
+    height: 52,
+    borderRadius: 26,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 12,
+  },
+  contactMethodLabel: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#6b7280',
+    fontFamily: 'Inter-SemiBold',
+    marginBottom: 4,
+  },
+  contactMethodValue: {
+    fontSize: 12,
+    fontWeight: '500',
+    color: '#1a1a1a',
+    fontFamily: 'Inter-Medium',
+    textAlign: 'center',
+  },
+  officeHoursCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#F8FAFC',
+    borderRadius: 14,
+    padding: 16,
+    marginHorizontal: 20,
+    marginBottom: 16,
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+  },
+  officeHoursIcon: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: '#EFF6FF',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 12,
+  },
+  officeHoursContent: {
+    flex: 1,
+  },
+  officeHoursLabel: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#6b7280',
+    fontFamily: 'Inter-SemiBold',
+    marginBottom: 2,
+  },
+  officeHoursValue: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: '#1a1a1a',
+    fontFamily: 'Inter-SemiBold',
+  },
+  primaryCareButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#4169E1',
+    paddingVertical: 16,
+    paddingHorizontal: 24,
+    borderRadius: 14,
+    marginHorizontal: 20,
+    marginBottom: 12,
+    shadowColor: '#4169E1',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 4,
+  },
+  primaryCareButtonText: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#FFFFFF',
+    fontFamily: 'Inter-Bold',
+    marginLeft: 10,
+    marginRight: 8,
+  },
+  primaryCareButtonArrow: {
+    marginLeft: 4,
+  },
+  quickHelpContainer: {
+    backgroundColor: '#F0F9FF',
+    borderRadius: 12,
+    padding: 14,
+    marginHorizontal: 20,
+    borderWidth: 1,
+    borderColor: '#BAE6FD',
+  },
+  quickHelpText: {
+    fontSize: 13,
+    fontWeight: '500',
+    color: '#0C4A6E',
+    fontFamily: 'Inter-Medium',
+    lineHeight: 18,
+    textAlign: 'center',
   },
   messageButton: {
     flexDirection: 'row',
