@@ -20,6 +20,7 @@ const COMMITTEES = [
   { id: 'sports', name: 'Sports', desc: 'Athletic events and tournaments', icon: Award, color: '#FAF5FF' },
   { id: 'homecoming', name: 'Homecoming', desc: 'Alumni reunions and networking', icon: Users, color: '#EFF6FF' },
   { id: 'finance', name: 'Finance', desc: 'Budgeting, accounting, and fundraising', icon: Calendar, color: '#EDE9FE' },
+  { id: 'gambagatoaccra', name: 'Gambaga to Accra', desc: 'Heritage tour and historical journey', icon: Map, color: '#F0FDF4' },
 ];
 
 const ACTIVITIES = [
