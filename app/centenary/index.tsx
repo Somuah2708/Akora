@@ -14,7 +14,7 @@ const COMMITTEES = [
   { id: 'memorabilia', name: 'Memorabilia', desc: 'Master schedule, venues, and operations', icon: Calendar, color: '#EDE9FE' },
   { id: 'publicity', name: 'Publicity', desc: 'Partners, donors, and grants', icon: HeartHandshake, color: '#ECFDF5' },
   { id: 'healthwalks', name: 'Health Walks', desc: 'Wellness activities and campus tours', icon: Star, color: '#FFF7ED' },
-  { id: 'fundraising', name: 'Fundraising & Sponsorship', desc: 'Partners, donors, and grants', icon: HeartHandshake, color: '#ECFDF5' },
+  { id: 'historicaldoc', name: 'Historical Documentation', desc: 'Archive preservation and records', icon: Users, color: '#EFF6FF' },
   { id: 'heritage', name: 'Heritage & Legacy', desc: 'Archives, exhibitions, and history', icon: Award, color: '#FAF5FF' },
   { id: 'hospitality', name: 'Hospitality', desc: 'Guest experience and protocol', icon: Map, color: '#F0FDF4' },
 ];
