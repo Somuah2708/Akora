@@ -19,6 +19,7 @@ const COMMITTEES = [
   { id: 'achimotasubjugates', name: 'Achimota Subjugates', desc: 'Sports, games, and competitions', icon: Map, color: '#F0FDF4' },
   { id: 'sports', name: 'Sports', desc: 'Athletic events and tournaments', icon: Award, color: '#FAF5FF' },
   { id: 'homecoming', name: 'Homecoming', desc: 'Alumni reunions and networking', icon: Users, color: '#EFF6FF' },
+  { id: 'finance', name: 'Finance', desc: 'Budgeting, accounting, and fundraising', icon: Calendar, color: '#EDE9FE' },
 ];
 
 const ACTIVITIES = [
