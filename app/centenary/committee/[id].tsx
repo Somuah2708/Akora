@@ -1,8 +1,8 @@
-import React, { useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Image, Dimensions, TextInput, FlatList, Alert, Share, Linking } from 'react-native';
+import React, { useState, useRef, useEffect } from 'react';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Image, Dimensions, TextInput, FlatList, Alert, Share, Linking, KeyboardAvoidingView, Platform } from 'react-native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { useFonts, Inter_400Regular, Inter_600SemiBold } from '@expo-google-fonts/inter';
-import { ArrowLeft, Lightbulb, Image as ImageIcon, Link2, FileText, Heart, Users, Send } from 'lucide-react-native';
+import { ArrowLeft, Lightbulb, Image as ImageIcon, Link2, FileText, Heart, Users, Send, Check, CheckCheck } from 'lucide-react-native';
 import { SplashScreen } from 'expo-router';
 
 SplashScreen.preventAutoHideAsync();
@@ -118,9 +118,12 @@ const COMMITTEE_DATA = {
 };
 
 const MOCK_CHATS = [
-  { id: '1', author: 'John Doe', message: 'Great work on the last meeting!', time: '2 hours ago', isOwn: false },
-  { id: '2', author: 'Jane Smith', message: 'When is our next gathering?', time: '1 hour ago', isOwn: false },
-  { id: '3', author: 'Alex Brown', message: 'Looking forward to the centenary!', time: '30 min ago', isOwn: false },
+  { id: '1', author: 'John Doe', message: 'Great work on the last meeting!', time: '09:30 AM', isOwn: false, read: true },
+  { id: '2', author: 'Jane Smith', message: 'When is our next gathering?', time: '09:45 AM', isOwn: false, read: true },
+  { id: '3', author: 'Alex Brown', message: 'Looking forward to the centenary! 🎉', time: '10:15 AM', isOwn: false, read: true },
+  { id: '4', author: 'You', message: 'Thanks everyone! Let\'s keep the momentum going.', time: '10:20 AM', isOwn: true, read: true },
+  { id: '5', author: 'John Doe', message: 'Absolutely! I\'ve prepared the first draft', time: '10:22 AM', isOwn: false, read: true },
+  { id: '6', author: 'Jane Smith', message: 'That sounds great! Can\'t wait to see it.', time: '10:25 AM', isOwn: false, read: true },
 ];
 
 const MOCK_SUGGESTIONS = [
@@ -147,18 +150,29 @@ export default function CommitteeDetailScreen() {
   }, [fontsLoaded]);
 
   const committee = COMMITTEE_DATA[id as keyof typeof COMMITTEE_DATA] || COMMITTEE_DATA.memorabilia;
+  const chatListRef = useRef<FlatList>(null);
+
+  const getCurrentTime = () => {
+    const now = new Date();
+    return now.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
+  };
 
   const handleSendMessage = () => {
     if (chatMessage.trim()) {
-      setChats([...chats, { 
+      const newMessage = { 
         id: String(chats.length + 1), 
         author: 'You', 
         message: chatMessage, 
-        time: 'now',
-        isOwn: true 
-      }]);
+        time: getCurrentTime(),
+        isOwn: true,
+        read: true
+      };
+      setChats([...chats, newMessage]);
       setChatMessage('');
-      Alert.alert('Success', 'Message sent to committee members!');
+      // Auto scroll to latest message
+      setTimeout(() => {
+        chatListRef.current?.scrollToEnd({ animated: true });
+      }, 100);
     }
   };
 
@@ -210,7 +224,12 @@ export default function CommitteeDetailScreen() {
   if (!fontsLoaded) return null;
 
   return (
-    <ScrollView style={styles.container} showsVerticalScrollIndicator={false}>
+    <KeyboardAvoidingView 
+      style={styles.container}
+      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+      keyboardVerticalOffset={Platform.OS === 'ios' ? 90 : 0}
+    >
+      <ScrollView style={styles.scrollView} showsVerticalScrollIndicator={false}>
       {/* Header */}
       <View style={styles.header}>
         <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
@@ -343,36 +362,36 @@ export default function CommitteeDetailScreen() {
       </View>
 
       {/* Chat Section */}
-      <View style={styles.section}>
+      <View style={styles.chatSection}>
         <Text style={styles.sectionTitle}>Committee Chat</Text>
-        <View style={styles.chatBox}>
-          <FlatList
-            data={chats}
-            keyExtractor={(item) => item.id}
-            scrollEnabled={false}
-            renderItem={({ item }) => (
-              <View style={[styles.chatMessage, item.isOwn && styles.ownMessage]}>
-                <Text style={styles.chatAuthor}>{item.author}</Text>
-                <View style={[styles.chatBubble, item.isOwn && styles.ownBubble]}>
-                  <Text style={[styles.chatText, item.isOwn && styles.ownText]}>{item.message}</Text>
+        <FlatList
+          ref={chatListRef}
+          data={chats}
+          keyExtractor={(item) => item.id}
+          scrollEnabled={true}
+          style={styles.chatListContainer}
+          contentContainerStyle={styles.chatListContent}
+          renderItem={({ item }) => (
+            <View style={[styles.chatMessageWrapper, item.isOwn && styles.ownMessageWrapper]}>
+              {!item.isOwn && <Text style={styles.chatSenderName}>{item.author}</Text>}
+              <View style={[styles.chatBubble, item.isOwn && styles.ownBubble]}>
+                <Text style={[styles.chatText, item.isOwn && styles.ownText]}>{item.message}</Text>
+                <View style={styles.chatFooter}>
+                  <Text style={[styles.chatTime, item.isOwn && styles.ownChatTime]}>{item.time}</Text>
+                  {item.isOwn && (
+                    <View style={styles.readReceipt}>
+                      {item.read ? (
+                        <CheckCheck size={12} color="#FFFFFF" />
+                      ) : (
+                        <Check size={12} color="#FFFFFF" />
+                      )}
+                    </View>
+                  )}
                 </View>
-                <Text style={styles.chatTime}>{item.time}</Text>
               </View>
-            )}
-          />
-        </View>
-        <View style={styles.inputContainer}>
-          <TextInput
-            style={styles.chatInput}
-            placeholder="Type a message..."
-            placeholderTextColor="#9CA3AF"
-            value={chatMessage}
-            onChangeText={setChatMessage}
-          />
-          <TouchableOpacity style={styles.sendButton} onPress={handleSendMessage}>
-            <Send size={20} color="#FFFFFF" />
-          </TouchableOpacity>
-        </View>
+            </View>
+          )}
+        />
       </View>
 
       {/* Action Buttons */}
@@ -391,11 +410,13 @@ export default function CommitteeDetailScreen() {
 
       <View style={{ height: 40 }} />
     </ScrollView>
+    </KeyboardAvoidingView>
   );
 }
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#FFFFFF' },
+  scrollView: { flex: 1, backgroundColor: '#FFFFFF' },
   header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, paddingTop: 60, paddingBottom: 12, backgroundColor: '#111827' },
   backBtn: { width: 44, height: 44, borderRadius: 22, alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(255,255,255,0.1)' },
   headerTitle: { fontSize: 18, color: '#FFFFFF', fontFamily: 'Inter-SemiBold' },
@@ -429,18 +450,24 @@ const styles = StyleSheet.create({
   suggestionInput: { flex: 1, backgroundColor: '#F3F4F6', borderRadius: 10, paddingHorizontal: 12, paddingVertical: 10, fontSize: 14, color: '#111827' },
   suggestButton: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#111827', borderRadius: 10, padding: 10, gap: 6, justifyContent: 'center' },
   suggestButtonText: { color: '#FFFFFF', fontFamily: 'Inter-SemiBold', fontSize: 12 },
-  chatBox: { backgroundColor: '#F8FAFC', borderRadius: 12, padding: 12, maxHeight: 300, marginBottom: 12 },
-  chatMessage: { marginBottom: 12, paddingBottom: 12, borderBottomWidth: 1, borderBottomColor: '#E5E7EB' },
-  ownMessage: { alignItems: 'flex-end' },
-  chatAuthor: { fontSize: 12, color: '#111827', fontFamily: 'Inter-SemiBold', marginBottom: 4 },
-  chatBubble: { backgroundColor: '#E5E7EB', borderRadius: 12, paddingHorizontal: 12, paddingVertical: 8, maxWidth: '85%' },
-  ownBubble: { backgroundColor: '#111827' },
-  chatText: { fontSize: 13, color: '#4B5563' },
+  // Chat Styles - WhatsApp/Telegram style
+  chatSection: { paddingHorizontal: 16, marginBottom: 12 },
+  chatListContainer: { height: 350, backgroundColor: '#F8FAFC', borderRadius: 12, marginVertical: 12 },
+  chatListContent: { paddingHorizontal: 12, paddingVertical: 12 },
+  chatMessageWrapper: { flexDirection: 'row', marginVertical: 6, justifyContent: 'flex-start', alignItems: 'flex-end', gap: 8 },
+  ownMessageWrapper: { justifyContent: 'flex-end' },
+  chatSenderName: { fontSize: 11, color: '#6B7280', fontFamily: 'Inter-SemiBold', marginBottom: 4, marginLeft: 8 },
+  chatBubble: { backgroundColor: '#E5E7EB', borderRadius: 16, borderBottomLeftRadius: 4, paddingHorizontal: 14, paddingVertical: 10, maxWidth: '75%' },
+  ownBubble: { backgroundColor: '#111827', borderBottomLeftRadius: 16, borderBottomRightRadius: 4 },
+  chatText: { fontSize: 14, color: '#111827', lineHeight: 18 },
   ownText: { color: '#FFFFFF' },
-  chatTime: { fontSize: 11, color: '#9CA3AF', marginTop: 4 },
-  inputContainer: { flexDirection: 'row', gap: 10, alignItems: 'flex-end' },
-  chatInput: { flex: 1, backgroundColor: '#F3F4F6', borderRadius: 10, paddingHorizontal: 14, paddingVertical: 10, fontSize: 14, color: '#111827', maxHeight: 100 },
-  sendButton: { width: 44, height: 44, borderRadius: 10, backgroundColor: '#111827', alignItems: 'center', justifyContent: 'center' },
+  chatFooter: { flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 4 },
+  chatTime: { fontSize: 11, color: '#9CA3AF', fontFamily: 'Inter-Regular' },
+  ownChatTime: { color: 'rgba(255,255,255,0.7)' },
+  readReceipt: { marginLeft: 2 },
+  inputContainer: { flexDirection: 'row', gap: 12, paddingHorizontal: 16, paddingVertical: 12, backgroundColor: '#FFFFFF', borderTopWidth: 1, borderTopColor: '#E5E7EB' },
+  chatInput: { flex: 1, backgroundColor: '#F3F4F6', borderRadius: 24, paddingHorizontal: 16, paddingVertical: 12, fontSize: 14, color: '#111827', maxHeight: 100 },
+  sendButton: { width: 44, height: 44, borderRadius: 22, backgroundColor: '#111827', alignItems: 'center', justifyContent: 'center' },
   actionButtons: { flexDirection: 'row', gap: 12, paddingHorizontal: 16, marginBottom: 16 },
   joinButton: { flex: 1, flexDirection: 'row', backgroundColor: '#111827', borderRadius: 10, paddingVertical: 14, alignItems: 'center', justifyContent: 'center', gap: 8 },
   joinedButton: { backgroundColor: '#059669' },
