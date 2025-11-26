@@ -119,11 +119,11 @@ export default function CentenaryScreen() {
           {COMMITTEES.map((c) => {
             const Icon = c.icon;
             return (
-              <View key={c.id} style={[styles.committeeCard, { backgroundColor: c.color }]}> 
+              <TouchableOpacity key={c.id} onPress={() => router.push(`/centenary/committee/${c.id}`)} style={[styles.committeeCard, { backgroundColor: c.color }]}> 
                 <Icon size={20} color="#111827" />
                 <Text style={styles.committeeName}>{c.name}</Text>
                 <Text style={styles.committeeDesc}>{c.desc}</Text>
-              </View>
+              </TouchableOpacity>
             );
           })}
         </View>
