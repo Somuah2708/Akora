@@ -16,7 +16,7 @@ const COMMITTEES = [
   { id: 'healthwalks', name: 'Health Walks', desc: 'Wellness activities and campus tours', icon: Star, color: '#FFF7ED' },
   { id: 'historicaldoc', name: 'Historical Documentation', desc: 'Archive preservation and records', icon: Users, color: '#EFF6FF' },
   { id: 'healthwalks2', name: 'Health Walks', desc: 'Wellness activities and campus tours', icon: Star, color: '#FFF7ED' },
-  { id: 'hospitality', name: 'Hospitality', desc: 'Guest experience and protocol', icon: Map, color: '#F0FDF4' },
+  { id: 'achimotasubjugates', name: 'Achimota Subjugates', desc: 'Sports, games, and competitions', icon: Map, color: '#F0FDF4' },
 ];
 
 const ACTIVITIES = [
