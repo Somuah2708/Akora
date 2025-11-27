@@ -1,14 +1,15 @@
 import React, { useCallback, useEffect, useMemo, useState, useRef } from 'react';
-import { View, Text, StyleSheet, ScrollView, Image, TouchableOpacity, Dimensions, ActivityIndicator, RefreshControl, Modal, TextInput } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Dimensions, ActivityIndicator, RefreshControl, Modal, TextInput } from 'react-native';
 import { useFonts, Inter_400Regular, Inter_600SemiBold } from '@expo-google-fonts/inter';
 import { useRouter, useLocalSearchParams, useFocusEffect } from 'expo-router';
-import { Sparkles, Heart, MessageCircle, Bookmark, Lightbulb, SlidersHorizontal, Check, X, ChevronDown, Users, Camera, Send } from 'lucide-react-native';
-import { LinearGradient } from 'expo-linear-gradient';
+import { Compass, Heart, MessageCircle, Bookmark, Lightbulb, SlidersHorizontal, Check, X, ChevronDown, Users, Camera, Send, Star } from 'lucide-react-native';
 import type { LucideIcon } from 'lucide-react-native';
 import { useAuth } from '@/hooks/useAuth';
 import { supabase } from '@/lib/supabase';
 import { fetchDiscoverFeed, type DiscoverItem } from '@/lib/discover';
+import { useDiscoverFeed, useUserInterests, useFriendIds } from '@/lib/queries';
 import { INTEREST_LIBRARY, type InterestCategoryDefinition, type InterestOptionId } from '@/lib/interest-data';
+import CachedImage from '@/components/CachedImage';
 import { Video, ResizeMode, Audio, InterruptionModeIOS, InterruptionModeAndroid } from 'expo-av';
 import YouTubePlayer from '@/components/YouTubePlayer';
 import ExpandableText from '@/components/ExpandableText';
@@ -141,14 +142,14 @@ export default function DiscoverScreen() {
         return {
           id,
           label: meta ? meta.label : formatInterestLabel(id),
-          icon: meta ? meta.icon : Sparkles,
+          icon: meta ? meta.icon : Star,
           sortKey: sortKey === -1 ? Number.MAX_SAFE_INTEGER : sortKey,
         };
       })
       .sort((a, b) => (a.sortKey === b.sortKey ? a.label.localeCompare(b.label) : a.sortKey - b.sortKey));
 
     return [
-      { id: 'all', label: 'For You', icon: Sparkles },
+      { id: 'all', label: 'For You', icon: Compass },
       { id: 'friends', label: 'Friends', icon: Users },
       ...rankedFilters.map(({ sortKey, ...rest }) => rest),
     ];
@@ -1201,7 +1202,7 @@ export default function DiscoverScreen() {
                       >
                         <View style={styles.shareFriendLeft}>
                           {friend.avatar_url ? (
-                            <Image source={{ uri: friend.avatar_url }} style={styles.shareFriendAvatar} />
+                            <CachedImage uri={friend.avatar_url} style={styles.shareFriendAvatar} />
                           ) : (
                             <View style={[styles.shareFriendAvatar, styles.shareFriendAvatarPlaceholder]}>
                               <Text style={styles.shareFriendAvatarText}>
@@ -1241,12 +1242,7 @@ export default function DiscoverScreen() {
       >
         {/* Header */}
         <View style={styles.headerWrapper}>
-          <LinearGradient
-            colors={["#0EA5E9", "#6366F1"]}
-            start={{ x: 0, y: 0 }}
-            end={{ x: 1, y: 1 }}
-            style={styles.headerGradient}
-          >
+          <View style={styles.headerGradient}>
             <View style={styles.headerRow}>
               <View style={styles.headerTextCol}>
                 <Text style={styles.headerTitle}>Discover</Text>
@@ -1273,7 +1269,7 @@ export default function DiscoverScreen() {
                 </TouchableOpacity>
               </View>
             </View>
-          </LinearGradient>
+          </View>
         </View>
 
         {/* Filter Tabs */}
@@ -1307,7 +1303,7 @@ export default function DiscoverScreen() {
           </View>
         ) : discoverFeed.length === 0 ? (
           <View style={styles.emptyContainer}>
-            <Sparkles size={48} color="#9CA3AF" />
+            <Compass size={48} color="#9CA3AF" />
             <Text style={styles.emptyTitle}>No content yet</Text>
             <Text style={styles.emptyText}>Check back soon for personalized recommendations</Text>
           </View>
@@ -1341,10 +1337,8 @@ export default function DiscoverScreen() {
                   onPress={() => item.author?.id && router.push(`/user-profile/${item.author.id}` as any)}
                   activeOpacity={0.7}
                 >
-                  <Image 
-                    source={{ 
-                      uri: item.author?.avatar_url || 'https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?w=400&auto=format&fit=crop&q=60'
-                    }} 
+                  <CachedImage 
+                    uri={item.author?.avatar_url || 'https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?w=400&auto=format&fit=crop&q=60'}
                     style={styles.postUserAvatar} 
                   />
                   <View>
@@ -1427,15 +1421,10 @@ export default function DiscoverScreen() {
                               activeOpacity={0.95}
                               onPress={() => item.sourceId && router.push(`/post/${item.sourceId}`)}
                             >
-                              <Image
-                                source={{ uri: mediaItem.url }}
+                              <CachedImage
+                                uri={mediaItem.url}
                                 style={styles.postImage}
-                                resizeMode="cover"
-                                onLoad={() => console.log(`✅ [Discover] Image ${index} loaded successfully`)}
-                                onError={(err) => {
-                                  console.error(`❌ [Discover] Image ${index} failed to load:`, err.nativeEvent);
-                                  console.error('Image URL:', mediaItem.url);
-                                }}
+                                contentFit="cover"
                               />
                             </TouchableOpacity>
                           )}
@@ -1543,11 +1532,10 @@ export default function DiscoverScreen() {
                         activeOpacity={0.95}
                         onPress={() => item.sourceId && router.push(`/post/${item.sourceId}`)}
                       >
-                        <Image
-                          source={{ uri: imageUrl }}
+                        <CachedImage
+                          uri={imageUrl}
                           style={styles.postImage}
-                          resizeMode="cover"
-                          onError={(e) => console.warn('Image load error', imageUrl, e.nativeEvent?.error)}
+                          contentFit="cover"
                         />
                       </TouchableOpacity>
                     ))}
@@ -1580,11 +1568,10 @@ export default function DiscoverScreen() {
               ) : item.image ? (
                 <TouchableOpacity activeOpacity={0.85} onPress={() => item.sourceId && router.push(`/post/${item.sourceId}`)}>
                   <View style={styles.mediaPage}>
-                    <Image 
-                      source={{ uri: item.image }} 
+                    <CachedImage 
+                      uri={item.image} 
                       style={styles.postImage}
-                      resizeMode="cover"
-                      onError={(e) => console.warn('Image load error', item.image, e.nativeEvent.error)}
+                      contentFit="cover"
                     />
                   </View>
                 </TouchableOpacity>
@@ -1692,6 +1679,7 @@ const styles = StyleSheet.create({
     paddingBottom: 16,
     borderBottomLeftRadius: 20,
     borderBottomRightRadius: 20,
+    backgroundColor: '#1a1a1a',
   },
   headerRow: {
     flexDirection: 'row',
@@ -1999,8 +1987,8 @@ const styles = StyleSheet.create({
     borderColor: '#E5E7EB',
   },
   filterChipActive: {
-    backgroundColor: '#0095F6',
-    borderColor: '#0095F6',
+    backgroundColor: '#1a1a1a',
+    borderColor: '#1a1a1a',
   },
   filterText: {
     fontSize: 13,

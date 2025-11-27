@@ -35,6 +35,7 @@ import {
   Utensils,
   Wheat,
   Puzzle,
+  Compass,
 } from 'lucide-react-native';
 
 export type InterestSubcategoryDefinition = {
@@ -56,7 +57,7 @@ export const INTEREST_LIBRARY: readonly InterestCategoryDefinition[] = [
     id: 'general',
     label: 'Community Highlights',
     description: 'A little bit of everything happening across Akora.',
-    icon: Sparkles,
+    icon: Star,
   },
   {
     id: 'education',
