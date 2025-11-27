@@ -3,6 +3,7 @@ import { useFonts, Inter_400Regular, Inter_600SemiBold } from '@expo-google-font
 import { useEffect } from 'react';
 import { SplashScreen, useRouter } from 'expo-router';
 import { Search, Plus, MoveVertical as MoreVertical, Bell, Moon, Lock, CircleHelp as HelpCircle, LogOut, Shield, Languages, MessageSquare, Bookmark, ShoppingBag, GraduationCap, Briefcase, MessageCircle, Building2, Calendar, Heart, FileText, Users, Newspaper, Globe, Video } from 'lucide-react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 SplashScreen.preventAutoHideAsync();
 
@@ -16,7 +17,7 @@ const GRID_ITEM_WIDTH = (width - 48 - GRID_SPACING) / 2;
 const HERITAGE_ITEMS = [
   {
     id: '1',
-    title: 'Akora Products and Services',
+    title: 'Products and Services',
     description: 'Discover exclusive products and services from fellow Akoras',
     icon: ShoppingBag,
     image: 'https://images.unsplash.com/photo-1472851294608-062f824d29cc?w=800&auto=format&fit=crop&q=60',
@@ -48,7 +49,7 @@ const HERITAGE_ITEMS = [
   },
   {
     id: '5',
-    title: 'OAA Secretariat',
+    title: 'Secretariat',
     description: 'Official communications and updates',
     icon: Building2,
     image: 'https://images.unsplash.com/photo-1497366216548-37526070297c?w=800&auto=format&fit=crop&q=60',
@@ -56,7 +57,7 @@ const HERITAGE_ITEMS = [
   },
   {
     id: '6',
-    title: 'Akora Events',
+    title: 'Events',
     description: 'Upcoming events and gatherings',
     icon: Calendar,
     image: 'https://images.unsplash.com/photo-1511795409834-ef04bbd61622?w=800&auto=format&fit=crop&q=60',
@@ -72,7 +73,7 @@ const HERITAGE_ITEMS = [
   },
   {
     id: '8',
-    title: 'Transcripts',
+    title: 'Academic Requests',
     description: 'Access and request academic records',
     icon: FileText,
     image: 'https://images.unsplash.com/photo-1506784983877-45594efa4cbe?w=800&auto=format&fit=crop&q=60',
@@ -96,7 +97,7 @@ const HERITAGE_ITEMS = [
   },
   {
     id: '11',
-    title: 'OAA Chapters',
+    title: 'Chapters',
     description: 'Connect with regional alumni chapters',
     icon: Globe,
     image: 'https://images.unsplash.com/photo-1528605248644-14dd04022da1?w=800&auto=format&fit=crop&q=60',
@@ -114,6 +115,7 @@ const HERITAGE_ITEMS = [
 
 export default function HubScreen() {
   const router = useRouter();
+  const insets = useSafeAreaInsets();
   const [fontsLoaded] = useFonts({
     'Inter-Regular': Inter_400Regular,
     'Inter-SemiBold': Inter_600SemiBold,
@@ -134,9 +136,12 @@ export default function HubScreen() {
   const rightColumnItems = HERITAGE_ITEMS.filter((_, index) => index % 2 === 1);
 
   return (
-    <ScrollView style={styles.container} showsVerticalScrollIndicator={false}>
-      <View style={styles.header}>
-        <Text style={styles.title}>Akora Hub</Text>
+    <ScrollView 
+      style={styles.container} 
+      showsVerticalScrollIndicator={false}
+    >
+      <View style={[styles.header, { paddingTop: insets.top + 16, marginTop: -200, paddingTop: insets.top + 216 }]}>
+        <Text style={styles.title}>Hub</Text>
         <Text style={styles.subtitle}>Connect, grow, and engage with the community</Text>
       </View>
 
@@ -202,20 +207,23 @@ const styles = StyleSheet.create({
     backgroundColor: '#FFFFFF',
   },
   header: {
-    padding: 24,
-    paddingTop: 60,
-    backgroundColor: '#FFFFFF',
+    paddingHorizontal: 20,
+    paddingTop: 16,
+    paddingBottom: 20,
+    backgroundColor: '#0F172A',
   },
   title: {
-    fontSize: 28,
+    fontSize: 32,
     fontFamily: 'Inter-SemiBold',
-    color: '#000000',
+    color: '#FFFFFF',
+    letterSpacing: -0.5,
     marginBottom: 8,
   },
   subtitle: {
-    fontSize: 16,
+    fontSize: 14,
     fontFamily: 'Inter-Regular',
-    color: '#666666',
+    color: 'rgba(255,255,255,0.7)',
+    lineHeight: 20,
   },
   columnsContainer: {
     flexDirection: 'row',

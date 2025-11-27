@@ -2,7 +2,7 @@ import { View, Text, StyleSheet, TextInput, TouchableOpacity, ScrollView, Keyboa
 import { useFonts, Inter_400Regular, Inter_600SemiBold } from '@expo-google-fonts/inter';
 import { useEffect, useState, useCallback } from 'react';
 import { SplashScreen, useRouter, useLocalSearchParams } from 'expo-router';
-import { ArrowLeft, Send, Heart, MoreVertical } from 'lucide-react-native';
+import { ArrowLeft, Share2, ThumbsUp, MoreVertical } from 'lucide-react-native';
 import { supabase, type PostComment, type Profile } from '@/lib/supabase';
 import { useAuth } from '@/hooks/useAuth';
 import { Image } from 'react-native';
@@ -440,10 +440,10 @@ export default function PostCommentsScreen() {
                       style={styles.commentAction}
                       onPress={() => handleLikeComment(comment.id)}
                     >
-                      <Heart 
+                      <ThumbsUp 
                         size={14} 
-                        color={comment.isLikedByUser ? "#EF4444" : "#64748B"}
-                        fill={comment.isLikedByUser ? "#EF4444" : "none"}
+                        color={comment.isLikedByUser ? "#14B8A6" : "#64748B"}
+                        fill={comment.isLikedByUser ? "#14B8A6" : "none"}
                         strokeWidth={2} 
                       />
                       <Text style={[
@@ -512,10 +512,10 @@ export default function PostCommentsScreen() {
                             style={styles.commentAction}
                             onPress={() => handleLikeComment(reply.id)}
                           >
-                            <Heart 
+                            <ThumbsUp 
                               size={14} 
-                              color={reply.isLikedByUser ? "#EF4444" : "#64748B"}
-                              fill={reply.isLikedByUser ? "#EF4444" : "none"}
+                              color={reply.isLikedByUser ? "#14B8A6" : "#64748B"}
+                              fill={reply.isLikedByUser ? "#14B8A6" : "none"}
                               strokeWidth={2} 
                             />
                             <Text style={[
@@ -591,7 +591,7 @@ export default function PostCommentsScreen() {
               {isSubmitting ? (
                 <ActivityIndicator size="small" color="#FFFFFF" />
               ) : (
-                <Send size={18} color="#FFFFFF" />
+                <Share2 size={18} color="#FFFFFF" />
               )}
             </TouchableOpacity>
           </View>
@@ -791,11 +791,11 @@ const styles = StyleSheet.create({
     backgroundColor: '#CBD5E1',
   },
   commentActionTextLiked: {
-    color: '#EF4444',
+    color: '#14B8A6',
     fontWeight: '600',
   },
   verifiedBadge: {
-    backgroundColor: '#0EA5E9',
+    backgroundColor: '#000000',
     borderRadius: 10,
     width: 16,
     height: 16,

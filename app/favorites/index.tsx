@@ -164,7 +164,7 @@ export default function FavoritesScreen() {
           <Text style={styles.headerSubtitle}>Save your favorite items</Text>
         </LinearGradient>
         <View style={styles.centered}>
-          <Heart size={64} color="#E5E7EB" />
+          <ThumbsUp size={64} color="#E5E7EB" />
           <Text style={styles.emptyTitle}>Sign in to view favorites</Text>
           <Text style={styles.emptyText}>Create an account to save your favorite marketplace items</Text>
           <TouchableOpacity 
@@ -237,7 +237,7 @@ export default function FavoritesScreen() {
         </Text>
         {favorites.length > 0 && (
           <View style={styles.favoritesBadgeSmall}>
-            <Heart size={16} color="#4169E1" fill="#4169E1" />
+            <ThumbsUp size={16} color="#14B8A6" fill="#14B8A6" />
             <Text style={styles.favoritesCountText}>{favorites.length}</Text>
           </View>
         )}
@@ -253,7 +253,7 @@ export default function FavoritesScreen() {
       >
         {favorites.length === 0 ? (
           <View style={styles.emptyState}>
-            <Heart size={80} color="#E5E7EB" strokeWidth={1.5} />
+            <ThumbsUp size={80} color="#E5E7EB" strokeWidth={1.5} />
             <Text style={styles.emptyTitle}>No favorites yet</Text>
             <Text style={styles.emptyText}>
               Browse the marketplace and tap the heart icon to save items you love
@@ -316,7 +316,7 @@ export default function FavoritesScreen() {
                           handleRemoveFavorite(favorite.id, product.title);
                         }}
                       >
-                        <Heart size={20} color="#EF4444" fill="#EF4444" />
+                        <ThumbsUp size={20} color="#14B8A6" fill="#14B8A6" />
                       </TouchableOpacity>
 
                       {/* Verified badge if applicable */}

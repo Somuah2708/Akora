@@ -202,9 +202,9 @@ export default function NotificationsScreen() {
     const iconProps = { size: 20, strokeWidth: 2 };
     switch (type) {
       case 'like':
-        return <Heart {...iconProps} color="#FF3B30" fill="#FF3B30" />;
+        return <ThumbsUp {...iconProps} color="#14B8A6" fill="#14B8A6" />;
       case 'comment':
-        return <MessageCircle {...iconProps} color="#007AFF" />;
+        return <MessagesSquare {...iconProps} color="#007AFF" />;
       case 'follow':
         return <UserPlus {...iconProps} color="#34C759" />;
       case 'mention':
@@ -216,7 +216,7 @@ export default function NotificationsScreen() {
       case 'friend_accept':
         return <UserCheck {...iconProps} color="#34C759" />;
       default:
-        return <Heart {...iconProps} color="#8E8E93" />;
+        return <ThumbsUp {...iconProps} color="#8E8E93" />;
     }
   };
 

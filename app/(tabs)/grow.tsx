@@ -27,6 +27,7 @@ import { supabase } from '@/lib/supabase';
 import { INTEREST_LIBRARY, type InterestOptionId } from '@/lib/interest-data';
 import VisitorActions from '@/components/VisitorActions';
 import { Video, ResizeMode } from 'expo-av';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 const { width, height } = Dimensions.get('window');
 const GRID_ITEM_SIZE = (width - 6) / 3;
@@ -70,6 +71,7 @@ const USER_STATS = {
 export default function ProfileScreen() {
   const router = useRouter();
   const { user, profile: authProfile, signOut } = useAuth();
+  const insets = useSafeAreaInsets();
   const viewingUserId = user?.id || '';
   const isOwner = true; // Always viewing own profile in this tab
   const toast = useToast();
@@ -418,7 +420,7 @@ export default function ProfileScreen() {
   if (!fontsLoaded || loading) {
     return (
       <View style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color="#4169E1" />
+        <ActivityIndicator size="large" color="#228B22" />
       </View>
     );
   }
@@ -461,7 +463,11 @@ export default function ProfileScreen() {
   })();
 
   return (
-    <ScrollView style={styles.container} showsVerticalScrollIndicator={false}>
+    <ScrollView 
+      style={styles.container} 
+      contentContainerStyle={{ paddingTop: insets.top }}
+      showsVerticalScrollIndicator={false}
+    >
       {/* Avatar Preview Modal */}
       <Modal
         transparent
@@ -532,6 +538,9 @@ export default function ProfileScreen() {
           />
         </TouchableOpacity>
       </Modal>
+      {/* Status Bar Background */}
+      <View style={[styles.statusBarBg, { height: insets.top + 200, marginTop: -200 }]} />
+      
       <View style={styles.header}>
         <View style={styles.headerTop}>
           <View style={styles.nameRow}>
@@ -619,7 +628,7 @@ export default function ProfileScreen() {
             <View style={styles.cardHeaderRow}>
               <Text style={styles.cardTitle}>Bio</Text>
               <TouchableOpacity onPress={() => toggleCollapse('bio')}>
-                {expandBio ? <ChevronUp size={18} color="#0A84FF" /> : <ChevronDown size={18} color="#0A84FF" />}
+                {expandBio ? <ChevronUp size={18} color="#228B22" /> : <ChevronDown size={18} color="#228B22" />}
               </TouchableOpacity>
             </View>
             {expandBio && (
@@ -632,7 +641,7 @@ export default function ProfileScreen() {
             <View style={styles.cardHeaderRow}>
               <Text style={styles.cardTitle}>About</Text>
               <TouchableOpacity onPress={() => toggleCollapse('about')}>
-                {expandAbout ? <ChevronUp size={18} color="#0A84FF" /> : <ChevronDown size={18} color="#0A84FF" />}
+                {expandAbout ? <ChevronUp size={18} color="#228B22" /> : <ChevronDown size={18} color="#228B22" />}
               </TouchableOpacity>
             </View>
             {expandAbout && (
@@ -715,7 +724,7 @@ export default function ProfileScreen() {
               <View style={styles.cardHeaderRow}>
                 <Text style={styles.cardTitle}>Interests</Text>
                 <TouchableOpacity onPress={() => toggleCollapse('interests')}>
-                  {expandInterests ? <ChevronUp size={18} color="#0A84FF" /> : <ChevronDown size={18} color="#0A84FF" />}
+                  {expandInterests ? <ChevronUp size={18} color="#228B22" /> : <ChevronDown size={18} color="#228B22" />}
                 </TouchableOpacity>
               </View>
               {expandInterests && (
@@ -726,7 +735,7 @@ export default function ProfileScreen() {
                     const Icon = meta.icon;
                     return (
                       <View key={id} style={styles.interestChip}>
-                        <Icon size={14} color="#0A84FF" strokeWidth={2} />
+                        <Icon size={14} color="#228B22" strokeWidth={2} />
                         <Text style={styles.interestChipText}>{meta.label}</Text>
                       </View>
                     );
@@ -741,7 +750,7 @@ export default function ProfileScreen() {
               <View style={styles.cardHeaderRow}>
                 <Text style={styles.cardTitle}>Interests</Text>
                 <TouchableOpacity onPress={() => toggleCollapse('interests')}>
-                  {expandInterests ? <ChevronUp size={18} color="#0A84FF" /> : <ChevronDown size={18} color="#0A84FF" />}
+                  {expandInterests ? <ChevronUp size={18} color="#228B22" /> : <ChevronDown size={18} color="#228B22" />}
                 </TouchableOpacity>
               </View>
               {expandInterests && (
@@ -841,7 +850,7 @@ export default function ProfileScreen() {
                       <Image source={{ uri: g.coverThumb as string }} style={styles.highlightImage} />
                     ) : (
                       <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#F3F4F6' }}>
-                        <Star size={18} color="#0A84FF" />
+                        <Star size={18} color="#228B22" />
                       </View>
                     )}
                   </View>
@@ -883,7 +892,7 @@ export default function ProfileScreen() {
             style={[styles.tab, activeTab === 'saved' && styles.activeTab]}
             onPress={() => setActiveTab('saved')}
           >
-            <Bookmark size={24} color={activeTab === 'saved' ? '#000000' : '#8E8E8E'} />
+            <Star size={24} color={activeTab === 'saved' ? '#000000' : '#8E8E8E'} />
           </TouchableOpacity>
         )}
       </View>
@@ -1127,21 +1136,27 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: '#FFFFFF',
   },
+  statusBarBg: {
+    backgroundColor: '#0F172A',
+    width: '100%',
+  },
   header: {
-    paddingTop: 60,
+    paddingTop: 16,
+    paddingBottom: 20,
     backgroundColor: '#FFFFFF',
   },
   headerTop: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingHorizontal: 16,
-    paddingBottom: 16,
+    paddingHorizontal: 20,
+    paddingBottom: 12,
   },
   username: {
-    fontSize: 22,
+    fontSize: 28,
     fontFamily: 'Inter-SemiBold',
     color: '#000000',
+    letterSpacing: -0.5,
   },
   headerIcons: {
     flexDirection: 'row',
@@ -1151,7 +1166,7 @@ const styles = StyleSheet.create({
     padding: 4,
   },
   profileSection: {
-    paddingHorizontal: 16,
+    paddingHorizontal: 20,
     marginBottom: 12,
   },
   avatar: {
@@ -1391,7 +1406,7 @@ const styles = StyleSheet.create({
     color: '#6B7280',
   },
   avatarPlaceholder: {
-    backgroundColor: '#4169E1',
+    backgroundColor: '#228B22',
     justifyContent: 'center',
     alignItems: 'center',
   },
@@ -1582,7 +1597,7 @@ const styles = StyleSheet.create({
   linkText: {
     fontSize: 14,
     fontFamily: 'Inter-SemiBold',
-    color: '#0A84FF',
+    color: '#228B22',
   },
   cardBodyText: {
     fontSize: 13,
@@ -1630,7 +1645,7 @@ const styles = StyleSheet.create({
   },
   adminBadgeText: {
     fontSize: 12,
-    color: '#0A84FF',
+    color: '#228B22',
     fontFamily: 'Inter-SemiBold',
   },
   progressBarBg: {
@@ -1644,12 +1659,12 @@ const styles = StyleSheet.create({
   },
   progressBarFill: {
     height: '100%',
-    backgroundColor: '#0A84FF',
+    backgroundColor: '#228B22',
   },
   pickButton: {
     alignSelf: 'flex-start',
     marginTop: 8,
-    backgroundColor: '#0A84FF',
+    backgroundColor: '#228B22',
     paddingHorizontal: 12,
     paddingVertical: 8,
     borderRadius: 10,

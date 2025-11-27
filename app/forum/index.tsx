@@ -2,7 +2,7 @@ import { View, Text, StyleSheet, ScrollView, Image, TouchableOpacity, TextInput,
 import { useFonts, Inter_400Regular, Inter_600SemiBold } from '@expo-google-fonts/inter';
 import { useEffect, useState, useCallback } from 'react';
 import { SplashScreen, useRouter, useFocusEffect } from 'expo-router';
-import { ArrowLeft, Search, Filter, MessageCircle, Users, ThumbsUp, Share2, Bookmark, Clock, Hash, Briefcase, Code, ChartLine as LineChart, Brain, Microscope, Palette, Building2, Globe, ChevronRight, Plus, Bell, TrendingUp, Activity } from 'lucide-react-native';
+import { ArrowLeft, Search, Filter, MessageCircle, Users, ThumbsUp, Share2, Bookmark, Clock, Hash, Briefcase, Code, ChartLine as LineChart, Brain, Microscope, Palette, Building2, Globe, ChevronRight, Plus, Bell, TrendingUp, Activity, Star } from 'lucide-react-native';
 import { on } from '@/lib/eventBus';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/hooks/useAuth';
@@ -377,7 +377,7 @@ export default function ForumScreen() {
             <Bell size={20} color="#111827" />
           </TouchableOpacity>
           <TouchableOpacity style={styles.iconButton} onPress={() => router.push('/forum/saved')} accessibilityLabel="View saved discussions">
-            <Bookmark size={20} color="#111827" />
+            <Star size={20} color="#111827" />
           </TouchableOpacity>
           <TouchableOpacity style={styles.iconButton} onPress={() => router.push('/forum/new')} accessibilityLabel="Create discussion">
             <Plus size={20} color="#111827" />
@@ -511,7 +511,7 @@ export default function ForumScreen() {
                   <Text style={styles.engagementCount}>{discussion.likes_count}</Text>
                 </View>
                 <View style={styles.engagementItem}>
-                  <MessageCircle size={14} color="#666666" />
+                  <MessagesSquare size={14} color="#666666" />
                   <Text style={styles.engagementCount}>{discussion.comments_count}</Text>
                 </View>
               </View>
@@ -523,7 +523,7 @@ export default function ForumScreen() {
                   <Share2 size={20} color="#666666" />
                 </TouchableOpacity>
                 <TouchableOpacity style={styles.actionButton} onPress={() => handleToggleSave(discussion)}>
-                  <Bookmark size={20} color={savedMap[discussion.id] ? '#4169E1' : '#666666'} fill={savedMap[discussion.id] ? '#4169E1' : 'none'} />
+                  <Star size={20} color={savedMap[discussion.id] ? '#14B8A6' : '#666666'} fill={savedMap[discussion.id] ? '#14B8A6' : 'none'} />
                 </TouchableOpacity>
               </View>
             </View>

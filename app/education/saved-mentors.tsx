@@ -223,7 +223,7 @@ export default function SavedMentorsScreen() {
       >
         {/* Stats Banner */}
         <View style={styles.statsBanner}>
-          <Heart size={20} color="#EF4444" fill="#EF4444" />
+          <ThumbsUp size={20} color="#14B8A6" fill="#14B8A6" />
           <Text style={styles.statsText}>
             {favorites.length} saved {favorites.length === 1 ? 'mentor' : 'mentors'}
           </Text>
@@ -286,7 +286,7 @@ export default function SavedMentorsScreen() {
           ))
         ) : (
           <View style={styles.emptyState}>
-            <Bookmark size={64} color="#D1D5DB" />
+            <Star size={64} color="#D1D5DB" />
             <Text style={styles.emptyTitle}>No Saved Mentors</Text>
             <Text style={styles.emptySubtitle}>
               Tap the bookmark icon on any mentor's profile to save them here

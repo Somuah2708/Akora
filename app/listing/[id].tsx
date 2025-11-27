@@ -492,7 +492,7 @@ export default function ListingDetailScreen() {
         <Text style={styles.title}>Listing Details</Text>
         {!isOwner && !isEditing && (
           <TouchableOpacity onPress={toggleSave} style={styles.saveButton}>
-            <Bookmark size={24} color={isSaved ? "#4169E1" : "#666666"} fill={isSaved ? "#4169E1" : "none"} />
+            <Star size={24} color={isSaved ? "#14B8A6" : "#666666"} fill={isSaved ? "#14B8A6" : "none"} />
           </TouchableOpacity>
         )}
         {isOwner && !isEditing && (

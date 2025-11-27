@@ -10,6 +10,7 @@ import { formatProfileSubtitle } from '@/lib/display';
 import { supabase } from '@/lib/supabase';
 import { formatChatListTime } from '@/lib/timeUtils';
 import type { Profile } from '@/lib/supabase';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 SplashScreen.preventAutoHideAsync();
 
@@ -30,6 +31,7 @@ export default function ChatScreen() {
   console.log('🎬 ChatScreen component rendering');
   const router = useRouter();
   const { user } = useAuth();
+  const insets = useSafeAreaInsets();
   console.log('👤 ChatScreen user:', user?.id || 'no user');
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [loading, setLoading] = useState(true);
@@ -637,48 +639,6 @@ export default function ChatScreen() {
 
   return (
     <View style={styles.container}>
-      {/* Modern Header with Gradient Effect */}
-      <View style={styles.header}>
-        <View style={styles.headerTop}>
-          <TouchableOpacity 
-            style={styles.backButton}
-            onPress={() => router.push('/hub')}
-          >
-            <ArrowLeft size={24} color="#1E293B" strokeWidth={2.5} />
-          </TouchableOpacity>
-          <Text style={styles.title}>Akora Chats</Text>
-          <View style={styles.headerActions}>
-            <TouchableOpacity 
-              style={styles.iconButton}
-              onPress={() => router.push('/friends')}
-            >
-              <UserPlus size={20} color="#1E293B" strokeWidth={2.5} />
-            </TouchableOpacity>
-            <TouchableOpacity 
-              style={styles.iconButton} 
-              onPress={() => router.push('/create-group' as any)}
-            >
-              <Users size={20} color="#1E293B" strokeWidth={2.5} />
-            </TouchableOpacity>
-          </View>
-        </View>
-
-        {/* Search Bar */}
-        <View style={styles.searchContainer}>
-          <TouchableOpacity
-            activeOpacity={0.8}
-            style={styles.searchInputContainer}
-            onPress={() => {
-              setSearchModalVisible(true);
-              // focus happens inside modal
-            }}
-          >
-            <Search size={18} color="#64748B" strokeWidth={2.5} />
-            <Text style={[styles.searchInput, { paddingVertical: 12, color: '#64748B' }]}>Search chats…</Text>
-          </TouchableOpacity>
-        </View>
-      </View>
-
       {loading ? (
         <ScrollView style={styles.chatList} contentContainerStyle={{ paddingTop: 12 }}>
           {[...Array(6)].map((_, i) => (
@@ -697,6 +657,42 @@ export default function ChatScreen() {
           showsVerticalScrollIndicator={false}
           refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#64748B" />}
         >
+          {/* Header inside ScrollView */}
+          <View style={[styles.header, { paddingTop: insets.top + 16, marginTop: -200, paddingTop: insets.top + 216 }]}>
+            <View style={styles.headerTop}>
+              <Text style={styles.title}>Chats</Text>
+              <View style={styles.headerActions}>
+                <TouchableOpacity 
+                  style={styles.iconButton}
+                  onPress={() => router.push('/friends')}
+                >
+                  <UserPlus size={22} color="#FFFFFF" strokeWidth={2.5} />
+                </TouchableOpacity>
+                <TouchableOpacity 
+                  style={styles.iconButton} 
+                  onPress={() => router.push('/create-group' as any)}
+                >
+                  <Users size={22} color="#FFFFFF" strokeWidth={2.5} />
+                </TouchableOpacity>
+              </View>
+            </View>
+
+            {/* Search Bar */}
+            <View style={styles.searchContainer}>
+              <TouchableOpacity
+                activeOpacity={0.8}
+                style={styles.searchInputContainer}
+                onPress={() => {
+                  setSearchModalVisible(true);
+                  // focus happens inside modal
+                }}
+              >
+                <Search size={18} color="rgba(255,255,255,0.6)" strokeWidth={2.5} />
+                <Text style={[styles.searchInput, { paddingVertical: 12, color: 'rgba(255,255,255,0.6)' }]}>Search chats…</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+
           {conversations.length === 0 && groups.length === 0 && supportConversations.length === 0 ? (
             <View style={styles.emptyState}>
               <View style={styles.emptyIconContainer}>
@@ -1105,66 +1101,37 @@ const styles = StyleSheet.create({
     backgroundColor: '#F8FAFC',
   },
   header: {
-    backgroundColor: '#E2E8F0',
-    paddingTop: 60,
+    backgroundColor: '#0F172A',
+    paddingTop: 16,
     paddingBottom: 20,
     paddingHorizontal: 20,
-    borderBottomLeftRadius: 24,
-    borderBottomRightRadius: 24,
-    shadowColor: '#000000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.08,
-    shadowRadius: 12,
-    elevation: 8,
   },
   headerTop: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 20,
-  },
-  backButton: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: '#FFFFFF',
-    justifyContent: 'center',
-    alignItems: 'center',
-    borderWidth: 1,
-    borderColor: '#CBD5E1',
-    shadowColor: '#000000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.05,
-    shadowRadius: 4,
-    elevation: 2,
+    marginBottom: 16,
   },
   title: {
     fontSize: 32,
     fontFamily: 'Inter-SemiBold',
-    color: '#1E293B',
-    fontWeight: '700',
-    letterSpacing: 0.5,
+    color: '#FFFFFF',
+    letterSpacing: -0.5,
     flex: 1,
-    marginLeft: 12,
   },
   headerActions: {
     flexDirection: 'row',
-    gap: 10,
+    gap: 12,
   },
   iconButton: {
     width: 40,
     height: 40,
     borderRadius: 20,
-    backgroundColor: '#FFFFFF',
+    backgroundColor: 'rgba(255,255,255,0.15)',
     justifyContent: 'center',
     alignItems: 'center',
-    borderWidth: 1,
-    borderColor: '#CBD5E1',
-    shadowColor: '#000000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.05,
-    shadowRadius: 4,
-    elevation: 2,
+    borderWidth: 1.5,
+    borderColor: 'rgba(255,255,255,0.3)',
   },
   searchContainer: {
     marginTop: 4,
@@ -1172,19 +1139,19 @@ const styles = StyleSheet.create({
   searchInputContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#FFFFFF',
+    backgroundColor: 'rgba(255,255,255,0.1)',
     borderRadius: 16,
     paddingHorizontal: 16,
     height: 48,
     borderWidth: 1,
-    borderColor: '#CBD5E1',
+    borderColor: 'rgba(255,255,255,0.2)',
   },
   searchInput: {
     flex: 1,
     marginLeft: 10,
     fontSize: 15,
     fontFamily: 'Inter-Regular',
-    color: '#1E293B',
+    color: '#FFFFFF',
   },
   loadingContainer: {
     flex: 1,

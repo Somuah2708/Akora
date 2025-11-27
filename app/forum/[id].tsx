@@ -37,9 +37,9 @@ import {
   MoreVertical,
   Hash,
   ThumbsUp,
-  MessageCircle,
+  MessagesSquare,
   Share2,
-  Bookmark,
+  Star,
   FileText,
   Image as ImageIcon,
   Paperclip,
@@ -1213,7 +1213,7 @@ export default function DiscussionDetailScreen() {
             <Share2 size={20} color="#111827" />
           </TouchableOpacity>
           <TouchableOpacity onPress={queueBookmarkToggle} style={styles.iconButton} accessibilityLabel={isBookmarked ? 'Remove bookmark' : 'Bookmark discussion'}>
-            <Bookmark size={20} color={isBookmarked ? '#4169E1' : '#111827'} />
+            <Star size={20} color={isBookmarked ? '#14B8A6' : '#111827'} fill={isBookmarked ? '#14B8A6' : 'none'} />
           </TouchableOpacity>
         </View>
       </View>
@@ -1315,7 +1315,7 @@ export default function DiscussionDetailScreen() {
               accessible
               hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
             >
-              <MessageCircle size={20} color="#666666" />
+              <MessagesSquare size={20} color="#666666" />
               <Text style={styles.actionText}>{discussion.comments_count || 0}</Text>
             </TouchableOpacity>
 
@@ -1336,10 +1336,10 @@ export default function DiscussionDetailScreen() {
               accessible
               hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
             >
-              <Bookmark
+              <Star
                 size={20}
-                color={isBookmarked ? '#4169E1' : '#666666'}
-                fill={isBookmarked ? '#4169E1' : 'none'}
+                color={isBookmarked ? '#14B8A6' : '#666666'}
+                fill={isBookmarked ? '#14B8A6' : 'none'}
               />
             </TouchableOpacity>
           </View>

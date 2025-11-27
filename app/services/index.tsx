@@ -2,7 +2,7 @@ import { View, Text, StyleSheet, ScrollView, Image, TouchableOpacity, TextInput,
 import { useFonts, Inter_400Regular, Inter_600SemiBold } from '@expo-google-fonts/inter';
 import { useEffect, useState, useCallback, useRef } from 'react';
 import { SplashScreen, useRouter } from 'expo-router';
-import { Search, Filter, ArrowDownWideNarrow as SortDesc, MapPin, SearchSlash, ArrowLeft, Briefcase, GraduationCap, Wrench, Palette, Coffee, Stethoscope, Book, Camera, Plus, ShoppingBag, X, Bookmark, Trash2 } from 'lucide-react-native';
+import { Search, Filter, ArrowDownWideNarrow as SortDesc, MapPin, SearchSlash, ArrowLeft, Briefcase, GraduationCap, Wrench, Palette, Coffee, Stethoscope, Book, Camera, Plus, ShoppingBag, X, Bookmark, Trash2, Star } from 'lucide-react-native';
 import { supabase, type ProductService, type Profile, type Region, type City, type LocationWithCount } from '@/lib/supabase';
 import { SAMPLE_PRODUCTS } from '@/lib/marketplace';
 import { useAuth } from '@/hooks/useAuth';
@@ -816,14 +816,14 @@ const fetchLocations = useCallback(async () => {
             <ArrowLeft size={24} color="#020617" />
           </TouchableOpacity>
           <View style={styles.headerTextContainer}>
-            <Text style={styles.title}>Akora Marketplace</Text>
+            <Text style={styles.title}>Products and Services</Text>
             <Text style={styles.subtitle}>Buy & sell within the Akora community</Text>
           </View>
           <TouchableOpacity 
             onPress={() => router.push('/services/saved')} 
             style={styles.bookmarkButton}
           >
-            <Bookmark size={24} color="#020617" />
+            <Star size={24} color="#020617" />
           </TouchableOpacity>
         </View>
 

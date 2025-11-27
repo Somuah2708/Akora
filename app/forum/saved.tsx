@@ -155,7 +155,7 @@ export default function SavedDiscussionsScreen() {
       >
         {items.length === 0 ? (
           <View style={styles.emptyState}>
-            <Bookmark size={48} color="#9CA3AF" />
+            <Star size={48} color="#9CA3AF" />
             <Text style={styles.emptyTitle}>No saved discussions</Text>
             <Text style={styles.emptySubtitle}>Tap the bookmark icon on any discussion to save it for later.</Text>
           </View>
@@ -169,7 +169,7 @@ export default function SavedDiscussionsScreen() {
                   <Text style={styles.meta}>@{d.profiles?.username || 'user'} · {getTimeAgo(d.created_at)}</Text>
                 </View>
                 <TouchableOpacity onPress={() => unsave(d.id)} style={styles.unsaveButton} accessibilityLabel="Unsave discussion">
-                  <Bookmark size={20} color="#4169E1" />
+                  <Star size={20} color="#14B8A6" fill="#14B8A6" />
                 </TouchableOpacity>
               </View>
               <Text style={styles.title}>{d.title}</Text>
@@ -180,7 +180,7 @@ export default function SavedDiscussionsScreen() {
                   <Text style={styles.count}>{d.likes_count || 0}</Text>
                 </View>
                 <View style={styles.row}>
-                  <MessageCircle size={16} color="#666" />
+                  <MessagesSquare size={16} color="#666" />
                   <Text style={styles.count}>{d.comments_count || 0}</Text>
                 </View>
               </View>

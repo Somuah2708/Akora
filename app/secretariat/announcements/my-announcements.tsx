@@ -270,11 +270,11 @@ export default function MyAnnouncementsScreen() {
                         <Text style={styles.statText}>{announcement.view_count || 0}</Text>
                       </View>
                       <View style={styles.statItem}>
-                        <Heart size={14} color="#999" />
+                        <ThumbsUp size={14} color="#999" />
                         <Text style={styles.statText}>{announcement.like_count || 0}</Text>
                       </View>
                       <View style={styles.statItem}>
-                        <MessageCircle size={14} color="#999" />
+                        <MessagesSquare size={14} color="#999" />
                         <Text style={styles.statText}>{announcement.comment_count || 0}</Text>
                       </View>
                     </View>

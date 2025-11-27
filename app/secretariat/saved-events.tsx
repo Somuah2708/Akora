@@ -202,7 +202,7 @@ export default function SavedEventsScreen() {
             <ArrowLeft size={24} color="#FFFFFF" />
           </TouchableOpacity>
           <View style={styles.headerCenter}>
-            <Bookmark size={24} color="#FFFFFF" />
+            <Star size={24} color="#FFFFFF" />
             <View style={styles.headerTextContainer}>
               <Text style={styles.title}>Saved Events</Text>
             </View>
@@ -214,7 +214,7 @@ export default function SavedEventsScreen() {
       <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
         {savedEvents.length === 0 ? (
           <View style={styles.emptyContainer}>
-            <Bookmark size={64} color="#CCCCCC" />
+            <Star size={64} color="#CCCCCC" />
             <Text style={styles.emptyTitle}>No Saved Events</Text>
             <Text style={styles.emptyText}>
               Save events you're interested in to easily find them later!
@@ -257,7 +257,7 @@ export default function SavedEventsScreen() {
 
                   {/* Bookmark Badge */}
                   <View style={styles.bookmarkBadge}>
-                    <Bookmark size={16} color="#FFFFFF" fill="#FFFFFF" />
+                    <Star size={16} color="#FFFFFF" fill="#FFFFFF" />
                   </View>
 
                   {/* Event Content */}

@@ -2,7 +2,7 @@ import { View, Text, StyleSheet, ScrollView, Image, TouchableOpacity, TextInput,
 import { useFonts, Inter_400Regular, Inter_600SemiBold } from '@expo-google-fonts/inter';
 import { useEffect, useState, useCallback } from 'react';
 import { SplashScreen, useRouter, Link, useLocalSearchParams } from 'expo-router';
-import { Search, Filter, ArrowLeft, GraduationCap, MapPin, Globe, ChevronRight, Clock, Award, Wallet, BookOpen, Building2, Users, Plus, FileText, Bookmark, Settings } from 'lucide-react-native';
+import { Search, Filter, ArrowLeft, GraduationCap, MapPin, Globe, ChevronRight, Clock, Award, Wallet, BookOpen, Building2, Users, Plus, FileText, Bookmark, Settings, Star } from 'lucide-react-native';
 import { useAuth } from '@/hooks/useAuth';
 import { supabase } from '@/lib/supabase';
 import UnifiedMentorFilterModal, { FilterCriteria } from '@/components/UnifiedMentorFilterModal';
@@ -630,7 +630,7 @@ export default function EducationScreen() {
             style={styles.bookmarkIconButton}
             onPress={() => setBookmarkMenuVisible(!bookmarkMenuVisible)}
           >
-            <Bookmark size={22} color="#4169E1" fill={bookmarkMenuVisible ? "#4169E1" : "none"} />
+            <Star size={22} color="#4169E1" fill={bookmarkMenuVisible ? "#4169E1" : "none"} />
           </TouchableOpacity>
         </View>
 

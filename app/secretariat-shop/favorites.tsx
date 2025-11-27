@@ -195,7 +195,7 @@ export default function FavoritesScreen() {
       <ScrollView style={styles.content} contentContainerStyle={styles.scrollContent}>
         {favoriteProducts.length === 0 ? (
           <View style={styles.emptyState}>
-            <Heart size={64} color="#CCCCCC" />
+            <ThumbsUp size={64} color="#CCCCCC" />
             <Text style={styles.emptyTitle}>No Favorites Yet</Text>
             <Text style={styles.emptyDescription}>
               Start adding items to your favorites by tapping the heart icon on products
@@ -247,7 +247,7 @@ export default function FavoritesScreen() {
                   style={styles.favoriteButton}
                   onPress={() => handleToggleFavorite(product.id)}
                 >
-                  <Heart size={20} color="#FF3B30" fill="#FF3B30" />
+                  <ThumbsUp size={20} color="#14B8A6" fill="#14B8A6" />
                 </TouchableOpacity>
                 <TouchableOpacity
                   style={styles.addToCartButton}

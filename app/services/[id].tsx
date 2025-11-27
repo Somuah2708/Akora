@@ -2,7 +2,7 @@ import { View, Text, StyleSheet, ScrollView, Image, TouchableOpacity, Dimensions
 import { useFonts, Inter_400Regular, Inter_600SemiBold, Inter_700Bold } from '@expo-google-fonts/inter';
 import { useEffect, useState, useCallback } from 'react';
 import { SplashScreen, useRouter, useLocalSearchParams, useFocusEffect } from 'expo-router';
-import { ArrowLeft, Heart, MapPin, Clock, ShieldAlert, Share2, MessageCircle, Phone, MessageSquareMore } from 'lucide-react-native';
+import { ArrowLeft, ThumbsUp, MapPin, Clock, ShieldAlert, Share2, MessagesSquare, Phone, MessageSquareMore } from 'lucide-react-native';
 import { supabase, type ProductService, type Profile } from '@/lib/supabase';
 import { SAMPLE_PRODUCTS } from '@/lib/marketplace';
 import { useAuth } from '@/hooks/useAuth';
@@ -291,10 +291,10 @@ export default function ProductDetailScreen() {
             <Share2 size={20} color="#0F172A" />
           </TouchableOpacity>
           <TouchableOpacity onPress={toggleBookmark} style={styles.headerButton}>
-            <Heart 
+            <ThumbsUp 
               size={20} 
-              color={isBookmarked ? '#EF4444' : '#0F172A'}
-              fill={isBookmarked ? '#EF4444' : 'none'}
+              color={isBookmarked ? '#14B8A6' : '#0F172A'}
+              fill={isBookmarked ? '#14B8A6' : 'none'}
             />
           </TouchableOpacity>
         </View>
@@ -375,7 +375,7 @@ export default function ProductDetailScreen() {
                 <Text style={styles.primaryContactText}>Call</Text>
               </TouchableOpacity>
               <TouchableOpacity style={styles.secondaryContactButton} onPress={handleWhatsAppSeller}>
-                <MessageCircle size={18} color="#16A34A" />
+                <MessagesSquare size={18} color="#16A34A" />
                 <Text style={styles.secondaryContactText}>WhatsApp</Text>
               </TouchableOpacity>
             </View>

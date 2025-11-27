@@ -430,7 +430,7 @@ export default function UserProfileScreen() {
               <View style={styles.card}>
                 <TouchableOpacity style={styles.cardHeader} onPress={() => setExpandBio(!expandBio)}>
                   <View style={styles.cardTitleRow}>
-                    <Heart size={16} color="#4169E1" fill="#4169E1" />
+                    <ThumbsUp size={16} color="#14B8A6" fill="#14B8A6" />
                     <Text style={styles.cardTitle}>Bio</Text>
                   </View>
                   {expandBio ? <ChevronUp size={18} color="#666" /> : <ChevronDown size={18} color="#666" />}

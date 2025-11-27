@@ -2,7 +2,7 @@ import React, { useCallback, useEffect, useMemo, useState, useRef } from 'react'
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Dimensions, ActivityIndicator, RefreshControl, Modal, TextInput } from 'react-native';
 import { useFonts, Inter_400Regular, Inter_600SemiBold } from '@expo-google-fonts/inter';
 import { useRouter, useLocalSearchParams, useFocusEffect } from 'expo-router';
-import { Compass, Heart, MessageCircle, Bookmark, Lightbulb, SlidersHorizontal, Check, X, ChevronDown, Users, Camera, Send, Star } from 'lucide-react-native';
+import { Compass, ThumbsUp, MessagesSquare, Lightbulb, SlidersHorizontal, Check, X, ChevronDown, Users, Camera, Share2, Star } from 'lucide-react-native';
 import type { LucideIcon } from 'lucide-react-native';
 import { useAuth } from '@/hooks/useAuth';
 import { supabase } from '@/lib/supabase';
@@ -14,6 +14,7 @@ import { Video, ResizeMode, Audio, InterruptionModeIOS, InterruptionModeAndroid 
 import YouTubePlayer from '@/components/YouTubePlayer';
 import ExpandableText from '@/components/ExpandableText';
 import { useVideoSettings } from '@/contexts/VideoSettingsContext';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 // Using the same simple horizontal ScrollView pattern as the Post detail screen
 
 const { width, height } = Dimensions.get('window');
@@ -80,6 +81,61 @@ const formatInterestLabel = (value: string) =>
 
 const getInterestMeta = (id: string) => INTEREST_LOOKUP[id];
 
+// Mapping between interest categories and post categories
+const INTEREST_TO_POST_CATEGORY_MAP: Record<string, string[]> = {
+  // Interest categories map to multiple post categories
+  'general': ['general', 'social'],
+  'education': ['academic', 'education'],
+  'career': ['professional', 'career'],
+  'health': ['mental_wellbeing', 'physical_fitness', 'health'],
+  'finance': ['financial_planning', 'finance'],
+  'productivity': ['time_management', 'productivity'],
+  'personal': ['personal_reflection', 'personal'],
+  'community': ['community_service', 'community'],
+  'events': ['events'],
+  'news': ['news'],
+  'announcements': ['announcements'],
+  'technology': ['technology', 'tech'],
+  'business': ['business', 'professional'],
+  'social': ['social', 'general'],
+  'entertainment': ['entertainment', 'social'],
+  'sports': ['sports', 'physical_fitness'],
+  'arts': ['arts', 'creative'],
+  'culture': ['culture', 'social'],
+  'environment': ['environment', 'community'],
+  'politics': ['politics', 'news'],
+  'science': ['science', 'academic'],
+  // Subcategories can also map
+  'education_scholarships': ['academic', 'education'],
+  'career_planning_exploration': ['professional', 'career'],
+  'technology_ai_ml': ['technology', 'tech'],
+  'health_mental': ['mental_wellbeing', 'health'],
+  'health_physical': ['physical_fitness', 'health'],
+};
+
+// Get all post categories that match an interest filter
+const getPostCategoriesForInterest = (interestId: string): string[] => {
+  // Direct mapping
+  if (INTEREST_TO_POST_CATEGORY_MAP[interestId]) {
+    return INTEREST_TO_POST_CATEGORY_MAP[interestId];
+  }
+  
+  // Check if it's a subcategory - use parent mapping
+  const meta = getInterestMeta(interestId);
+  if (meta?.parentId && INTEREST_TO_POST_CATEGORY_MAP[meta.parentId]) {
+    return INTEREST_TO_POST_CATEGORY_MAP[meta.parentId];
+  }
+  
+  // Fallback: try to match by the first part of the ID
+  const baseCategory = interestId.split('_')[0];
+  if (INTEREST_TO_POST_CATEGORY_MAP[baseCategory]) {
+    return INTEREST_TO_POST_CATEGORY_MAP[baseCategory];
+  }
+  
+  // No mapping found - return the interest ID itself as fallback
+  return [interestId];
+};
+
 interface CarouselIndices {
   [key: string]: number;
 }
@@ -95,6 +151,7 @@ export default function DiscoverScreen() {
   const params = useLocalSearchParams();
   const { user } = useAuth();
   const { isMuted, setIsMuted } = useVideoSettings();
+  const insets = useSafeAreaInsets();
   const [activeFilter, setActiveFilter] = useState<'all' | 'friends' | string>('all');
   const [discoverFeed, setDiscoverFeed] = useState<DiscoverItem[]>([]);
   const [userInterests, setUserInterests] = useState<Set<string>>(new Set());
@@ -479,15 +536,33 @@ export default function DiscoverScreen() {
   useEffect(() => {
     const loadFriends = async () => {
       if (!user?.id) return;
-      const { data, error } = await supabase
-        .from('friends')
-        .select('friend_id')
-        .eq('user_id', user.id);
-      if (error) {
-        console.error('Failed to load friends', error);
-        return;
+      
+      // Load friends in both directions (bidirectional friendship)
+      const [sentRequests, receivedRequests] = await Promise.all([
+        supabase
+          .from('friends')
+          .select('friend_id')
+          .eq('user_id', user.id),
+        supabase
+          .from('friends')
+          .select('user_id')
+          .eq('friend_id', user.id)
+      ]);
+      
+      if (sentRequests.error) {
+        console.error('Failed to load sent friend requests', sentRequests.error);
       }
-      setFriendIds(new Set((data || []).map((r: any) => r.friend_id)));
+      if (receivedRequests.error) {
+        console.error('Failed to load received friend requests', receivedRequests.error);
+      }
+      
+      // Combine both directions
+      const allFriendIds = new Set<string>();
+      (sentRequests.data || []).forEach((r: any) => allFriendIds.add(r.friend_id));
+      (receivedRequests.data || []).forEach((r: any) => allFriendIds.add(r.user_id));
+      
+      console.log('👥 [DISCOVER] Loaded friends:', allFriendIds.size, 'friends');
+      setFriendIds(allFriendIds);
     };
     loadFriends();
   }, [user?.id]);
@@ -932,24 +1007,51 @@ export default function DiscoverScreen() {
     }
   };
 
-  const filteredSections = useMemo(() => {
-    const friendsPosts = discoverFeed.filter((i) => i.type === 'post' && i.author && friendIds.has(i.author.id));
-    const otherItems = discoverFeed.filter((i) => {
-      if (i.type !== 'post') return true;
-      if (!i.author) return true;
-      return !friendIds.has(i.author.id);
-    });
-
-    const applyFilter = (arr: DiscoverItem[]) => {
-      if (activeFilter === 'all') return arr;
-      if (activeFilter === 'friends') return friendsPosts;
-      return arr.filter((i) => i.category === activeFilter);
-    };
-
-    return {
-      friends: applyFilter(friendsPosts),
-      others: applyFilter(otherItems),
-    };
+  const filteredFeed = useMemo(() => {
+    console.log('🔍 [DISCOVER] Filtering feed. Active filter:', activeFilter, 'Total items:', discoverFeed.length, 'Friend IDs:', friendIds.size);
+    
+    let filtered = discoverFeed;
+    
+    // Apply category filter first (for all non-special filters)
+    if (activeFilter !== 'all' && activeFilter !== 'friends') {
+      // Get the post categories that match this interest filter
+      const matchingPostCategories = getPostCategoriesForInterest(activeFilter);
+      console.log('📂 [DISCOVER] Interest filter:', activeFilter, '→ Post categories:', matchingPostCategories);
+      
+      filtered = filtered.filter((item) => {
+        const itemCategory = (item.category || 'general').toLowerCase();
+        const matches = matchingPostCategories.some(cat => 
+          itemCategory === cat.toLowerCase() || 
+          itemCategory.includes(cat.toLowerCase())
+        );
+        
+        if (!matches) {
+          console.log('❌ [DISCOVER] Filtered out:', item.description?.substring(0, 30), 'category:', itemCategory);
+        }
+        
+        return matches;
+      });
+      console.log('📂 [DISCOVER] Category filter applied:', activeFilter, 'Remaining:', filtered.length);
+    }
+    
+    // Apply friends filter
+    if (activeFilter === 'friends') {
+      filtered = filtered.filter((item) => {
+        // Only show posts from friends
+        if (item.type === 'post' && item.author) {
+          const isFriend = friendIds.has(item.author.id);
+          if (!isFriend) {
+            console.log('❌ [DISCOVER] Filtering out post from non-friend:', item.author.full_name);
+          }
+          return isFriend;
+        }
+        return false; // Filter out non-post items in friends view
+      });
+      console.log('👥 [DISCOVER] Friends filter applied. Remaining:', filtered.length);
+    }
+    
+    console.log('✅ [DISCOVER] Final filtered feed:', filtered.length, 'items');
+    return filtered;
   }, [discoverFeed, activeFilter, friendIds]);
 
   if (!fontsLoaded) {
@@ -1218,7 +1320,7 @@ export default function DiscoverScreen() {
                           </View>
                         </View>
                         <View style={styles.shareSendButton}>
-                          <Send size={20} color="#0EA5E9" strokeWidth={2} />
+                          <Share2 size={20} color="#0EA5E9" strokeWidth={2} />
                         </View>
                       </TouchableOpacity>
                     ));
@@ -1241,7 +1343,7 @@ export default function DiscoverScreen() {
         scrollEventThrottle={16}
       >
         {/* Header */}
-        <View style={styles.headerWrapper}>
+        <View style={[styles.headerWrapper, { paddingTop: insets.top, marginTop: -200, paddingTop: insets.top + 200 }]}>
           <View style={styles.headerGradient}>
             <View style={styles.headerRow}>
               <View style={styles.headerTextCol}>
@@ -1301,14 +1403,20 @@ export default function DiscoverScreen() {
             <ActivityIndicator size="large" color="#0095F6" />
             <Text style={styles.loadingText}>Loading personalized content...</Text>
           </View>
-        ) : discoverFeed.length === 0 ? (
+        ) : filteredFeed.length === 0 ? (
           <View style={styles.emptyContainer}>
             <Compass size={48} color="#9CA3AF" />
-            <Text style={styles.emptyTitle}>No content yet</Text>
-            <Text style={styles.emptyText}>Check back soon for personalized recommendations</Text>
+            <Text style={styles.emptyTitle}>
+              {activeFilter === 'friends' ? 'No posts from friends yet' : 'No content yet'}
+            </Text>
+            <Text style={styles.emptyText}>
+              {activeFilter === 'friends' 
+                ? 'Posts from your friends will appear here' 
+                : 'Check back soon for personalized recommendations'}
+            </Text>
           </View>
         ) : (
-          discoverFeed
+          filteredFeed
             .filter((item) => item.type === 'post') // Only show posts
             .map((item) => {
               // Debug log for each item
@@ -1584,10 +1692,10 @@ export default function DiscoverScreen() {
                     style={styles.actionButtonWithCount}
                     onPress={() => handleLikeToggle(item.id)}
                   >
-                    <Heart 
-                      size={26} 
-                      color={item.isLiked ? "#FF3B30" : "#000000"}
-                      fill={item.isLiked ? "#FF3B30" : "none"}
+                    <ThumbsUp 
+                      size={24} 
+                      color={item.isLiked ? "#14B8A6" : "#000000"}
+                      fill={item.isLiked ? "#14B8A6" : "none"}
                       strokeWidth={2}
                     />
                     {(item.likes || 0) > 0 && (
@@ -1598,7 +1706,7 @@ export default function DiscoverScreen() {
                     style={styles.actionButtonWithCount}
                     onPress={() => item.sourceId && router.push(`/post-comments/${item.sourceId}`)}
                   >
-                    <MessageCircle size={26} color="#000000" strokeWidth={2} />
+                    <MessagesSquare size={24} color="#000000" strokeWidth={2} />
                     {item.comments !== undefined && item.comments > 0 && (
                       <Text style={styles.actionCount}>{item.comments}</Text>
                     )}
@@ -1607,11 +1715,11 @@ export default function DiscoverScreen() {
                     style={styles.actionButton}
                     onPress={() => handleSharePress(item)}
                   >
-                    <Send size={26} color="#000000" strokeWidth={2} />
+                    <Share2 size={24} color="#000000" strokeWidth={2} />
                   </TouchableOpacity>
                 </View>
                 <TouchableOpacity style={styles.actionButton} onPress={() => handleBookmarkToggle(item.id)}>
-                  <Bookmark size={26} color={(item as any).isBookmarked ? '#111827' : '#000000'} fill={(item as any).isBookmarked ? '#111827' : 'none'} strokeWidth={2} />
+                  <Star size={24} color={(item as any).isBookmarked ? '#14B8A6' : '#000000'} fill={(item as any).isBookmarked ? '#14B8A6' : 'none'} strokeWidth={2} />
                 </TouchableOpacity>
               </View>
 
@@ -1671,15 +1779,13 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   headerWrapper: {
-    backgroundColor: '#FFFFFF',
+    backgroundColor: '#0F172A',
   },
   headerGradient: {
-    paddingHorizontal: 16,
-    paddingTop: 56,
-    paddingBottom: 16,
-    borderBottomLeftRadius: 20,
-    borderBottomRightRadius: 20,
-    backgroundColor: '#1a1a1a',
+    paddingHorizontal: 20,
+    paddingTop: 16,
+    paddingBottom: 20,
+    backgroundColor: '#0F172A',
   },
   headerRow: {
     flexDirection: 'row',
@@ -1692,15 +1798,17 @@ const styles = StyleSheet.create({
     paddingRight: 12,
   },
   headerTitle: {
-    fontSize: 28,
+    fontSize: 32,
     fontFamily: 'Inter-SemiBold',
     color: '#FFFFFF',
+    letterSpacing: -0.5,
   },
   headerSubtitleAlt: {
-    marginTop: 6,
-    fontSize: 13,
+    marginTop: 8,
+    fontSize: 14,
     fontFamily: 'Inter-Regular',
-    color: 'rgba(255,255,255,0.85)',
+    color: 'rgba(255,255,255,0.7)',
+    lineHeight: 20,
   },
   headerActions: {
     flexDirection: 'row',
@@ -1709,30 +1817,31 @@ const styles = StyleSheet.create({
     flexShrink: 0,
   },
   headerIconButton: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
+    width: 40,
+    height: 40,
+    borderRadius: 20,
     backgroundColor: '#FFFFFF',
     alignItems: 'center',
     justifyContent: 'center',
     shadowColor: '#000000',
-    shadowOpacity: 0.08,
-    shadowRadius: 6,
-    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.15,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 4 },
+    elevation: 4,
   },
   headerGhostButton: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
-    paddingHorizontal: 12,
-    height: 36,
-    borderRadius: 18,
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.6)',
-    backgroundColor: 'rgba(255,255,255,0.08)',
+    paddingHorizontal: 14,
+    height: 40,
+    borderRadius: 20,
+    borderWidth: 1.5,
+    borderColor: 'rgba(255,255,255,0.3)',
+    backgroundColor: 'rgba(255,255,255,0.15)',
   },
   headerGhostText: {
-    fontSize: 12,
+    fontSize: 13,
     fontFamily: 'Inter-SemiBold',
     color: '#FFFFFF',
   },
@@ -2325,7 +2434,7 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
   verifiedBadge: {
-    backgroundColor: '#0EA5E9',
+    backgroundColor: '#000000',
     borderRadius: 10,
     width: 18,
     height: 18,

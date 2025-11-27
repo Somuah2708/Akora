@@ -78,7 +78,7 @@ export default function NotificationBellIcon() {
 
   return (
     <TouchableOpacity style={styles.container} onPress={handlePress}>
-      <Bell size={24} color="#000000" />
+      <Bell size={24} color="#FFFFFF" />
       {loading ? (
         <View style={styles.loadingBadge}>
           <ActivityIndicator size="small" color="#FFFFFF" />

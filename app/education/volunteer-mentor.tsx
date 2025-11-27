@@ -268,7 +268,7 @@ export default function VolunteerMentorScreen() {
       <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
         {/* Info Banner */}
         <View style={styles.infoBanner}>
-          <Heart size={20} color="#10B981" />
+          <ThumbsUp size={20} color="#10B981" />
           <Text style={styles.infoText}>
             Thank you for offering free mentorship to the community! Fill out this form and our team will review your application.
           </Text>
@@ -604,7 +604,7 @@ export default function VolunteerMentorScreen() {
         {/* Motivation Section */}
         <View style={styles.section}>
           <View style={styles.sectionHeader}>
-            <Heart size={18} color="#4169E1" />
+            <ThumbsUp size={18} color="#4169E1" />
             <Text style={styles.sectionTitle}>Mentorship Motivation</Text>
           </View>
 

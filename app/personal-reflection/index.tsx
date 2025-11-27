@@ -471,7 +471,7 @@ export default function PersonalReflectionScreen() {
                 
                 <View style={styles.entryFooter}>
                   <View style={styles.moodTag}>
-                    <Heart size={14} color="#4169E1" />
+                    <ThumbsUp size={14} color="#4169E1" />
                     <Text style={styles.moodText}>{entry.mood}</Text>
                   </View>
                   

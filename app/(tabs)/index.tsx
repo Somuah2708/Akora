@@ -2,7 +2,7 @@ import { View, Text, StyleSheet, ScrollView, Image, TouchableOpacity, FlatList, 
 import { useFonts, Inter_400Regular, Inter_600SemiBold } from '@expo-google-fonts/inter';
 import { useEffect, useState, useCallback, useRef } from 'react';
 import { SplashScreen, useRouter, useFocusEffect } from 'expo-router';
-import { Bell, Heart, MessageCircle, Send, Bookmark, MoreHorizontal, Plus, BookOpen, PartyPopper, Calendar, TrendingUp, Users, Newspaper, Search, User, Edit3, Trash2, Play, X } from 'lucide-react-native';
+import { Bell, ThumbsUp, MessagesSquare, Share2, Star, MoreHorizontal, Plus, BookOpen, PartyPopper, Calendar, TrendingUp, Users, Newspaper, Search, User, Edit3, Trash2, Play, X } from 'lucide-react-native';
 import { supabase, type Post, type Profile, type HomeFeaturedItem, type HomeCategoryTab, type TrendingArticle } from '@/lib/supabase';
 import { useAuth } from '@/hooks/useAuth';
 import { Video, ResizeMode, Audio, InterruptionModeIOS, InterruptionModeAndroid } from 'expo-av';
@@ -12,6 +12,7 @@ import ExpandableText from '@/components/ExpandableText';
 import { useVideoSettings } from '@/contexts/VideoSettingsContext';
 import { useNotifications } from '@/contexts/NotificationContext';
 import NotificationBellIcon from '@/components/NotificationBellIcon';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 SplashScreen.preventAutoHideAsync();
 
@@ -173,6 +174,7 @@ export default function HomeScreen() {
   const router = useRouter();
   const { user, profile } = useAuth();
   const { isMuted, setIsMuted } = useVideoSettings();
+  const insets = useSafeAreaInsets();
   const [posts, setPosts] = useState<PostWithUser[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -1162,7 +1164,7 @@ export default function HomeScreen() {
                           </View>
                         </View>
                         <View style={styles.shareSendButton}>
-                          <Send size={20} color="#0EA5E9" strokeWidth={2} />
+                          <Share2 size={20} color="#0EA5E9" strokeWidth={2} />
                         </View>
                       </TouchableOpacity>
                     ));
@@ -1402,7 +1404,7 @@ export default function HomeScreen() {
         scrollEventThrottle={16}
       >
         {/* Header */}
-        <View style={styles.header}>
+        <View style={[styles.header, { paddingTop: insets.top + 16, marginTop: -200, paddingTop: insets.top + 216 }]}>
         <Text style={styles.logoText}>Akora</Text>
         <View style={styles.headerIcons}>
           <NotificationBellIcon />
@@ -1879,10 +1881,10 @@ export default function HomeScreen() {
                     style={styles.actionButtonWithCount}
                     onPress={() => handleLikeToggle(post.id)}
                   >
-                    <Heart 
-                      size={26} 
-                      color={post.isLiked ? "#FF3B30" : "#000000"}
-                      fill={post.isLiked ? "#FF3B30" : "none"}
+                    <ThumbsUp 
+                      size={24} 
+                      color={post.isLiked ? "#14B8A6" : "#000000"}
+                      fill={post.isLiked ? "#14B8A6" : "none"}
                       strokeWidth={2}
                     />
                     {(post.likes || 0) > 0 && (
@@ -1893,7 +1895,7 @@ export default function HomeScreen() {
                     style={styles.actionButtonWithCount}
                     onPress={() => router.push(`/post-comments/${post.id}`)}
                   >
-                    <MessageCircle size={26} color="#000000" strokeWidth={2} />
+                    <MessagesSquare size={24} color="#000000" strokeWidth={2} />
                     {post.comments_count !== undefined && post.comments_count > 0 && (
                       <Text style={styles.actionCount}>{post.comments_count}</Text>
                     )}
@@ -1902,11 +1904,11 @@ export default function HomeScreen() {
                     style={styles.actionButton}
                     onPress={() => handleSharePress(post)}
                   >
-                    <Send size={26} color="#000000" strokeWidth={2} />
+                    <Share2 size={24} color="#000000" strokeWidth={2} />
                   </TouchableOpacity>
                 </View>
                 <TouchableOpacity style={styles.actionButton} onPress={() => handleBookmarkToggle(post.id)}>
-                  <Bookmark size={26} color={post.isBookmarked ? '#111827' : '#000000'} fill={post.isBookmarked ? '#111827' : 'none'} strokeWidth={2} />
+                  <Star size={24} color={post.isBookmarked ? '#14B8A6' : '#000000'} fill={post.isBookmarked ? '#14B8A6' : 'none'} strokeWidth={2} />
                 </TouchableOpacity>
               </View>
 
@@ -1973,18 +1975,17 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingHorizontal: 16,
-    paddingTop: 60,
-    paddingBottom: 10,
-    backgroundColor: '#FFFFFF',
-    borderBottomWidth: 0.5,
-    borderBottomColor: '#DBDBDB',
+    paddingHorizontal: 20,
+    paddingTop: 16,
+    paddingBottom: 20,
+    backgroundColor: '#0F172A',
     width: '100%',
   },
   logoText: {
-    fontSize: 28,
+    fontSize: 32,
     fontFamily: 'Inter-SemiBold',
-    color: '#000000',
+    color: '#FFFFFF',
+    letterSpacing: -0.5,
   },
   headerIcons: {
     flexDirection: 'row',
@@ -2543,7 +2544,7 @@ const styles = StyleSheet.create({
     color: '#9CA3AF',
   },
   verifiedBadge: {
-    backgroundColor: '#0EA5E9',
+    backgroundColor: '#000000',
     borderRadius: 10,
     width: 18,
     height: 18,

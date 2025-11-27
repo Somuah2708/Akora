@@ -9,6 +9,7 @@ if (typeof window !== 'undefined') {
 
 import { useEffect, useRef } from 'react';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
+import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { Stack, useRouter, useSegments } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { QueryClientProvider } from '@tanstack/react-query';
@@ -18,6 +19,10 @@ import { useAuth } from '@/hooks/useAuth';
 import { ToastProvider } from '@/components/Toast';
 import { VideoSettingsProvider } from '@/contexts/VideoSettingsContext';
 import { NotificationProvider } from '@/contexts/NotificationContext';
+import { registerForPushNotificationsAsync } from '@/lib/pushNotifications';
+import { supabase } from '@/lib/supabase';
+import { Platform } from 'react-native';
+import * as Notifications from 'expo-notifications';
 
 export default function RootLayout() {
   useFrameworkReady();
@@ -26,6 +31,90 @@ export default function RootLayout() {
   const router = useRouter();
   const navigationTimeoutRef = useRef<any>();
   const previousUserRef = useRef(user);
+
+  // Register push notifications when user logs in
+  useEffect(() => {
+    console.log('🔐 Push token registration effect triggered. User:', user?.id, 'Loading:', loading);
+    
+    // Wait for auth to finish loading AND user to exist
+    if (loading) {
+      console.log('⏳ Auth still loading, waiting...');
+      return;
+    }
+    
+    if (!user) {
+      console.log('⚠️ No user found, skipping push token registration');
+      return;
+    }
+
+    console.log('👤 User found, attempting to register push token...');
+
+    const registerPushToken = async () => {
+      try {
+        console.log('📲 Calling registerForPushNotificationsAsync...');
+        const token = await registerForPushNotificationsAsync();
+        
+        if (!token) {
+          console.warn('⚠️ No push token received from registerForPushNotificationsAsync');
+          return;
+        }
+        
+        console.log('📱 Got push token:', token);
+        
+        // Insert directly into the table (RLS policies allow this)
+        const { data, error } = await supabase
+          .from('push_notification_tokens')
+          .upsert({
+            user_id: user.id,
+            token: token,
+            device_type: Platform.OS === 'ios' ? 'ios' : 'android',
+            is_active: true,
+            updated_at: new Date().toISOString(),
+            last_used_at: new Date().toISOString()
+          }, {
+            onConflict: 'user_id,token'
+          })
+          .select();
+
+        console.log('💾 Database upsert result:', { data, error });
+
+        if (error) {
+          console.error('❌ Error saving push token:', error);
+        } else {
+          console.log('✅ Push token registered successfully in database');
+          console.log('📊 Inserted/Updated data:', data);
+        }
+      } catch (error) {
+        console.error('❌ Error registering push notifications:', error);
+      }
+    };
+
+    registerPushToken();
+  }, [user, loading]);
+
+  // Handle notification taps
+  useEffect(() => {
+    const subscription = Notifications.addNotificationResponseReceivedListener((response) => {
+      console.log('📱 Notification tapped:', response);
+      
+      const data = response.notification.request.content.data;
+      console.log('📱 Notification data:', data);
+      
+      // Navigate based on notification type
+      if (data?.type === 'new_message' && data?.chatId) {
+        console.log('📱 Navigating to chat:', data.chatId);
+        router.push(`/chat/direct/${data.chatId}`);
+      } else if (data?.type === 'new_group_message' && data?.chatId) {
+        console.log('📱 Navigating to group chat:', data.chatId);
+        router.push(`/chat/group/${data.chatId}`);
+      } else if (data?.type === 'friend_request') {
+        console.log('📱 Navigating to friends screen');
+        router.push('/(tabs)/friends');
+      }
+    });
+
+    return () => subscription.remove();
+  }, [router]);
 
   useEffect(() => {
     // Only log when user state actually changes
@@ -100,22 +189,24 @@ export default function RootLayout() {
   
   return (
     <QueryClientProvider client={queryClient}>
-      <GestureHandlerRootView style={{ flex: 1 }}>
-        <ToastProvider>
-          <VideoSettingsProvider>
-            <NotificationProvider>
-              <Stack screenOptions={{ headerShown: false }}>
-                <Stack.Screen name="(tabs)" />
-                <Stack.Screen name="auth" />
-                {/* Ensure non-tab stacks (e.g., chat, user-profile, etc.) also have no header */}
-                <Stack.Screen name="chat" />
-                <Stack.Screen name="+not-found" options={{ headerShown: true }} />
-              </Stack>
-              <StatusBar style="auto" />
-            </NotificationProvider>
-          </VideoSettingsProvider>
-        </ToastProvider>
-      </GestureHandlerRootView>
+      <SafeAreaProvider>
+        <GestureHandlerRootView style={{ flex: 1 }}>
+          <ToastProvider>
+            <VideoSettingsProvider>
+              <NotificationProvider>
+                <Stack screenOptions={{ headerShown: false }}>
+                  <Stack.Screen name="(tabs)" />
+                  <Stack.Screen name="auth" />
+                  {/* Ensure non-tab stacks (e.g., chat, user-profile, etc.) also have no header */}
+                  <Stack.Screen name="chat" />
+                  <Stack.Screen name="+not-found" options={{ headerShown: true }} />
+                </Stack>
+                <StatusBar style="light" />
+              </NotificationProvider>
+            </VideoSettingsProvider>
+          </ToastProvider>
+        </GestureHandlerRootView>
+      </SafeAreaProvider>
     </QueryClientProvider>
   );
 }

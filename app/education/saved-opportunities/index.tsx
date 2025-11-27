@@ -105,7 +105,7 @@ export default function SavedOpportunitiesScreen() {
         </View>
       ) : savedOpportunities.length === 0 ? (
         <View style={styles.emptyContainer}>
-          <Bookmark size={64} color="#CCCCCC" />
+          <Star size={64} color="#CCCCCC" />
           <Text style={styles.emptyTitle}>No Saved Opportunities</Text>
           <Text style={styles.emptyText}>Bookmark opportunities to save them for later!</Text>
           <TouchableOpacity 

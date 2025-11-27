@@ -1125,7 +1125,7 @@ export default function EventDetailScreen() {
               style={styles.actionButton}
               onPress={toggleBookmark}
             >
-              <Bookmark size={20} color={isBookmarked ? '#007AFF' : '#333'} fill={isBookmarked ? '#007AFF' : 'none'} />
+              <Star size={20} color={isBookmarked ? '#14B8A6' : '#333'} fill={isBookmarked ? '#14B8A6' : 'none'} />
             </TouchableOpacity>
           </View>
 
@@ -1269,7 +1269,7 @@ export default function EventDetailScreen() {
             style={[styles.interestButton, isInterested && styles.interestedButton]}
             onPress={toggleInterest}
           >
-            <Heart size={20} color={isInterested ? '#fff' : '#007AFF'} fill={isInterested ? '#fff' : 'none'} />
+            <ThumbsUp size={20} color={isInterested ? '#fff' : '#007AFF'} fill={isInterested ? '#fff' : 'none'} />
             <Text style={[styles.interestText, isInterested && styles.interestedText]}>
               {isInterested ? 'Interested' : 'Mark as Interested'}
             </Text>

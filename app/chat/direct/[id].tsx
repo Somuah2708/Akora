@@ -7,7 +7,6 @@ import {
   TouchableOpacity,
   KeyboardAvoidingView,
   Platform,
-  Image,
   ActivityIndicator,
   Modal,
   Alert,
@@ -19,6 +18,7 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { ArrowLeft, Send, Smile, Image as ImageIcon, Mic, Camera, X, Play, Pause, Check, CheckCheck, FileText } from 'lucide-react-native';
 import { useAuth } from '@/hooks/useAuth';
+import CachedImage from '@/components/CachedImage';
 import {
   getDirectMessages,
   sendDirectMessage,
@@ -725,19 +725,6 @@ export default function DirectMessageScreen() {
             isMyMessage ? styles.myMessageContainer : styles.theirMessageContainer,
           ]}
         >
-          {!isMyMessage && (
-            <View style={styles.messageHeader}>
-              {item.sender?.avatar_url ? (
-                <Image source={{ uri: item.sender.avatar_url }} style={styles.messageAvatar} />
-              ) : (
-                <View style={[styles.messageAvatar, styles.avatarPlaceholder]}>
-                  <Text style={styles.avatarText}>
-                    {item.sender?.full_name?.[0]?.toUpperCase() || 'U'}
-                  </Text>
-                </View>
-              )}
-            </View>
-          )}
           <View
             style={[
               styles.messageBubble,
@@ -750,10 +737,10 @@ export default function DirectMessageScreen() {
                 activeOpacity={0.9}
                 onPress={() => openImageViewer(item.media_url!)}
               >
-                <Image 
-                  source={{ uri: item.media_url }} 
+                <CachedImage 
+                  uri={item.media_url} 
                   style={styles.messageImage}
-                  resizeMode="cover"
+                  contentFit="cover"
                 />
               </TouchableOpacity>
             )}
@@ -761,10 +748,10 @@ export default function DirectMessageScreen() {
             {/* Video Message */}
             {item.message_type === 'video' && item.media_url && (
               <TouchableOpacity style={styles.videoContainer} activeOpacity={0.9}>
-                <Image 
-                  source={{ uri: item.media_url }} 
+                <CachedImage 
+                  uri={item.media_url} 
                   style={styles.messageImage}
-                  resizeMode="cover"
+                  contentFit="cover"
                 />
                 <View style={styles.playOverlay}>
                   <Play size={28} color="#FFFFFF" fill="#FFFFFF" />
@@ -850,9 +837,10 @@ export default function DirectMessageScreen() {
               >
                 <View style={styles.sharedPostHeader}>
                   {(item as any).post.profiles?.avatar_url ? (
-                    <Image 
-                      source={{ uri: (item as any).post.profiles.avatar_url }} 
-                      style={styles.sharedPostAvatar} 
+                    <CachedImage 
+                      uri={(item as any).post.profiles.avatar_url} 
+                      style={styles.sharedPostAvatar}
+                      contentFit="cover"
                     />
                   ) : (
                     <View style={[styles.sharedPostAvatar, styles.avatarPlaceholder]}>
@@ -868,10 +856,10 @@ export default function DirectMessageScreen() {
                 
                 {/* Show first image from image_urls array or single image_url */}
                 {((item as any).post.image_urls?.[0] || (item as any).post.image_url) && (
-                  <Image 
-                    source={{ uri: (item as any).post.image_urls?.[0] || (item as any).post.image_url }} 
+                  <CachedImage 
+                    uri={(item as any).post.image_urls?.[0] || (item as any).post.image_url} 
                     style={styles.sharedPostImage}
-                    resizeMode="cover"
+                    contentFit="cover"
                   />
                 )}
                 
@@ -992,7 +980,7 @@ export default function DirectMessageScreen() {
         >
           <View style={styles.headerAvatarContainer}>
             {friendProfile?.avatar_url ? (
-              <Image source={{ uri: friendProfile.avatar_url }} style={styles.headerAvatar} />
+              <CachedImage uri={friendProfile.avatar_url} style={styles.headerAvatar} contentFit="cover" priority="high" />
             ) : (
               <View style={[styles.headerAvatar, styles.avatarPlaceholder]}>
                 <Text style={styles.avatarText}>
@@ -1049,14 +1037,14 @@ export default function DirectMessageScreen() {
           onPress={() => setShowEmojiPicker(!showEmojiPicker)}
           activeOpacity={0.7}
         >
-          <Smile size={22} color="#4169E1" />
+          <Smile size={22} color="#737373" />
         </TouchableOpacity>
 
         {/* Text Input */}
         <TextInput
           style={styles.input}
           placeholder="Type a message..."
-          placeholderTextColor="#94A3B8"
+          placeholderTextColor="#A3A3A3"
           value={messageText}
           onChangeText={(text) => {
             setMessageText(text);
@@ -1072,7 +1060,7 @@ export default function DirectMessageScreen() {
           onPress={() => setShowMediaOptions(true)}
           activeOpacity={0.7}
         >
-          <ImageIcon size={22} color="#4169E1" />
+          <ImageIcon size={22} color="#737373" />
         </TouchableOpacity>
 
         {/* Voice Recording Button */}
@@ -1085,7 +1073,7 @@ export default function DirectMessageScreen() {
             delayLongPress={100}
             activeOpacity={0.7}
           >
-            <Mic size={22} color={recording ? '#EF4444' : '#4169E1'} fill={recording ? '#EF4444' : 'none'} />
+            <Mic size={22} color={recording ? '#EF4444' : '#737373'} fill={recording ? '#EF4444' : 'none'} />
           </TouchableOpacity>
         )}
 
@@ -1203,10 +1191,11 @@ export default function DirectMessageScreen() {
           
           <View style={styles.imageViewerContent}>
             {selectedImageUrl && (
-              <Image
-                source={{ uri: selectedImageUrl }}
+              <CachedImage
+                uri={selectedImageUrl}
                 style={styles.fullScreenImage}
-                resizeMode="contain"
+                contentFit="contain"
+                priority="high"
               />
             )}
           </View>
@@ -1219,36 +1208,32 @@ export default function DirectMessageScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#F0F2F5',
+    backgroundColor: '#FAFAFA',
   },
   loadingContainer: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: '#F0F2F5',
+    backgroundColor: '#FAFAFA',
   },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 20,
-    paddingTop: 60,
-    paddingBottom: 16,
+    paddingHorizontal: 16,
+    paddingTop: 56,
+    paddingBottom: 14,
     backgroundColor: '#FFFFFF',
-    borderBottomWidth: 0,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.08,
-    shadowRadius: 12,
-    elevation: 4,
+    borderBottomWidth: 1,
+    borderBottomColor: '#F0F0F0',
   },
   backButton: {
-    width: 40,
-    height: 40,
+    width: 36,
+    height: 36,
     justifyContent: 'center',
     alignItems: 'center',
-    marginRight: 12,
-    borderRadius: 20,
-    backgroundColor: '#F3F4F6',
+    marginRight: 10,
+    borderRadius: 18,
+    backgroundColor: 'transparent',
   },
   headerInfo: {
     flex: 1,
@@ -1260,20 +1245,19 @@ const styles = StyleSheet.create({
     marginRight: 12,
   },
   headerAvatar: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    borderWidth: 2,
-    borderColor: '#4169E1',
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    borderWidth: 0,
   },
   onlineIndicator: {
     position: 'absolute',
-    bottom: 0,
-    right: 0,
-    width: 14,
-    height: 14,
-    borderRadius: 7,
-    backgroundColor: '#10B981',
+    bottom: -1,
+    right: -1,
+    width: 12,
+    height: 12,
+    borderRadius: 6,
+    backgroundColor: '#22C55E',
     borderWidth: 2,
     borderColor: '#FFFFFF',
   },
@@ -1281,15 +1265,16 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   headerName: {
-    fontSize: 17,
-    fontWeight: '700',
-    color: '#1F2937',
-    letterSpacing: -0.2,
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#1a1a1a',
+    letterSpacing: -0.3,
   },
   headerHandle: {
     fontSize: 12,
-    color: '#6B7280',
-    marginTop: 2,
+    color: '#737373',
+    marginTop: 1,
+    fontWeight: '400',
   },
   typingContainer: {
     flexDirection: 'row',
@@ -1298,7 +1283,7 @@ const styles = StyleSheet.create({
   },
   typingText: {
     fontSize: 12,
-    color: '#10B981',
+    color: '#22C55E',
     fontWeight: '500',
     marginRight: 6,
   },
@@ -1311,7 +1296,7 @@ const styles = StyleSheet.create({
     width: 4,
     height: 4,
     borderRadius: 2,
-    backgroundColor: '#10B981',
+    backgroundColor: '#22C55E',
   },
   typingDot1: {
     opacity: 0.4,
@@ -1323,13 +1308,13 @@ const styles = StyleSheet.create({
     opacity: 1,
   },
   messagesContent: {
-    paddingVertical: 20,
-    paddingHorizontal: 16,
+    paddingVertical: 16,
+    paddingHorizontal: 14,
   },
   dateDivider: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginVertical: 20,
+    marginVertical: 16,
     paddingHorizontal: 4,
   },
   newMessagesDivider: {
@@ -1355,19 +1340,18 @@ const styles = StyleSheet.create({
   dateDividerLine: {
     flex: 1,
     height: 1,
-    backgroundColor: '#E5E7EB',
+    backgroundColor: '#E8E8E8',
   },
   dateDividerText: {
-    paddingHorizontal: 16,
-    fontSize: 13,
-    fontWeight: '600',
-    color: '#9CA3AF',
-    textTransform: 'uppercase',
-    letterSpacing: 0.5,
+    paddingHorizontal: 14,
+    fontSize: 12,
+    fontWeight: '500',
+    color: '#A3A3A3',
+    letterSpacing: -0.1,
   },
   messageContainer: {
     flexDirection: 'row',
-    marginBottom: 12,
+    marginBottom: 10,
     paddingHorizontal: 4,
   },
   myMessageContainer: {
@@ -1384,11 +1368,10 @@ const styles = StyleSheet.create({
     width: 28,
     height: 28,
     borderRadius: 14,
-    borderWidth: 1.5,
-    borderColor: '#E5E7EB',
+    borderWidth: 0,
   },
   avatarPlaceholder: {
-    backgroundColor: '#6366F1',
+    backgroundColor: '#1a1a1a',
     justifyContent: 'center',
     alignItems: 'center',
   },
@@ -1398,34 +1381,36 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
   },
   messageBubble: {
-    maxWidth: '75%',
+    maxWidth: '80%',
     paddingHorizontal: 14,
-    paddingVertical: 10,
-    borderRadius: 20,
+    paddingVertical: 9,
+    borderRadius: 18,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.08,
-    shadowRadius: 4,
-    elevation: 2,
+    shadowOpacity: 0.05,
+    shadowRadius: 3,
+    elevation: 1,
   },
   myMessageBubble: {
-    backgroundColor: '#4169E1',
-    borderBottomRightRadius: 6,
+    backgroundColor: '#1a1a1a',
+    borderBottomRightRadius: 4,
   },
   theirMessageBubble: {
     backgroundColor: '#FFFFFF',
-    borderBottomLeftRadius: 6,
+    borderBottomLeftRadius: 4,
+    borderWidth: 1,
+    borderColor: '#F0F0F0',
   },
   messageText: {
-    fontSize: 15.5,
-    lineHeight: 21,
-    letterSpacing: -0.1,
+    fontSize: 15,
+    lineHeight: 20,
+    letterSpacing: -0.2,
   },
   myMessageText: {
     color: '#FFFFFF',
   },
   theirMessageText: {
-    color: '#1F2937',
+    color: '#1a1a1a',
   },
   messageFooter: {
     flexDirection: 'row',
@@ -1436,14 +1421,14 @@ const styles = StyleSheet.create({
   },
   messageTime: {
     fontSize: 11,
-    fontWeight: '500',
-    letterSpacing: 0.2,
+    fontWeight: '400',
+    letterSpacing: 0,
   },
   myMessageTime: {
-    color: 'rgba(255, 255, 255, 0.85)',
+    color: 'rgba(255, 255, 255, 0.7)',
   },
   theirMessageTime: {
-    color: '#6B7280',
+    color: '#A3A3A3',
   },
   messageStatus: {
     marginLeft: 4,
@@ -1464,53 +1449,43 @@ const styles = StyleSheet.create({
   inputContainer: {
     flexDirection: 'row',
     alignItems: 'flex-end',
-    paddingHorizontal: 16,
-    paddingVertical: 14,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
     backgroundColor: '#FFFFFF',
-    borderTopWidth: 0,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: -2 },
-    shadowOpacity: 0.06,
-    shadowRadius: 8,
-    elevation: 8,
-    gap: 10,
+    borderTopWidth: 1,
+    borderTopColor: '#F0F0F0',
+    gap: 8,
   },
   iconButton: {
-    width: 38,
-    height: 38,
-    borderRadius: 19,
+    width: 36,
+    height: 36,
+    borderRadius: 18,
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: '#F3F4F6',
+    backgroundColor: 'transparent',
   },
   recordingButton: {
     backgroundColor: '#FEE2E2',
   },
   input: {
     flex: 1,
-    minHeight: 38,
+    minHeight: 36,
     maxHeight: 100,
-    backgroundColor: '#F9FAFB',
+    backgroundColor: '#F5F5F5',
     borderRadius: 20,
     paddingHorizontal: 16,
-    paddingVertical: 10,
-    fontSize: 15.5,
-    color: '#1F2937',
-    borderWidth: 1,
-    borderColor: '#E5E7EB',
+    paddingVertical: 9,
+    fontSize: 15,
+    color: '#1a1a1a',
+    borderWidth: 0,
   },
   sendButton: {
-    width: 38,
-    height: 38,
-    borderRadius: 19,
-    backgroundColor: '#4169E1',
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: '#1a1a1a',
     justifyContent: 'center',
     alignItems: 'center',
-    shadowColor: '#4169E1',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.3,
-    shadowRadius: 4,
-    elevation: 3,
   },
   sendButtonDisabled: {
     opacity: 0.4,
@@ -1519,7 +1494,7 @@ const styles = StyleSheet.create({
   messageImage: {
     width: 220,
     height: 220,
-    borderRadius: 16,
+    borderRadius: 12,
     marginBottom: 6,
   },
   videoContainer: {

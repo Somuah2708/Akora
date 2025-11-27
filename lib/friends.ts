@@ -1,4 +1,5 @@
 import { supabase } from './supabase';
+import { sendChatMessageNotification, sendGroupMessageNotification, sendFriendRequestNotification } from './chatNotifications';
 
 // Types
 export type FriendRequest = {
@@ -144,6 +145,12 @@ export async function sendFriendRequest(receiverId: string, senderId: string) {
     .single();
 
   if (error) throw error;
+  
+  // Send push notification to receiver (don't await to not block request)
+  sendFriendRequestNotification(senderId, receiverId).catch(err => {
+    console.error('Failed to send friend request notification:', err);
+  });
+  
   return data;
 }
 
@@ -319,6 +326,12 @@ export async function sendDirectMessage(
   }
   
   console.log('Message sent successfully:', data?.id);
+  
+  // Send push notification to receiver (don't await to not block message sending)
+  sendChatMessageNotification(senderId, receiverId, message, messageType).catch(err => {
+    console.error('Failed to send push notification:', err);
+  });
+  
   return data as DirectMessage;
 }
 
@@ -517,6 +530,12 @@ export async function sendGroupMessage(groupId: string, senderId: string, messag
     .single();
 
   if (error) throw error;
+  
+  // Send push notification to group members (don't await)
+  sendGroupMessageNotification(senderId, groupId, message, 'text').catch(err => {
+    console.error('Failed to send group push notification:', err);
+  });
+  
   return data as GroupMessage;
 }
 

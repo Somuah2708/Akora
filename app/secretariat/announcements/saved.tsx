@@ -183,7 +183,7 @@ export default function SavedAnnouncementsScreen() {
       <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
         {savedAnnouncements.length === 0 ? (
           <View style={styles.emptyContainer}>
-            <Bookmark size={64} color="#CBD5E1" />
+            <Star size={64} color="#CBD5E1" />
             <Text style={styles.emptyTitle}>No Saved Announcements</Text>
             <Text style={styles.emptyText}>
               Save announcements to read them later
@@ -241,11 +241,11 @@ export default function SavedAnnouncementsScreen() {
                       <Text style={styles.statText}>{announcement.view_count || 0}</Text>
                     </View>
                     <View style={styles.statItem}>
-                      <Heart size={14} color="#999" />
+                      <ThumbsUp size={14} color="#999" />
                       <Text style={styles.statText}>{announcement.like_count || 0}</Text>
                     </View>
                     <View style={styles.statItem}>
-                      <MessageCircle size={14} color="#999" />
+                      <MessagesSquare size={14} color="#999" />
                       <Text style={styles.statText}>{announcement.comment_count || 0}</Text>
                     </View>
                   </View>

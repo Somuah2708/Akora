@@ -149,7 +149,7 @@ export default function MentalWellbeingScreen() {
 
         <View style={styles.welcomeCard}>
           <View style={styles.welcomeContent}>
-            <Heart size={32} color="#4169E1" />
+            <ThumbsUp size={32} color="#4169E1" />
             <Text style={styles.welcomeTitle}>How are you feeling today?</Text>
             <Text style={styles.welcomeText}>
               Take a moment to check in with yourself

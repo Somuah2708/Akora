@@ -641,11 +641,11 @@ export default function AnnouncementDetailScreen() {
             <Text style={styles.statText}>{announcement.view_count || 0} views</Text>
           </View>
           <View style={styles.statItem}>
-            <Heart size={18} color={isLiked ? '#EF4444' : '#666'} />
+            <ThumbsUp size={18} color={isLiked ? '#14B8A6' : '#666'} fill={isLiked ? '#14B8A6' : 'none'} />
             <Text style={styles.statText}>{announcement.like_count || 0} likes</Text>
           </View>
           <View style={styles.statItem}>
-            <MessageCircle size={18} color="#666" />
+            <MessagesSquare size={18} color="#666" />
             <Text style={styles.statText}>{announcement.comment_count || 0} comments</Text>
           </View>
         </View>
@@ -745,7 +745,7 @@ export default function AnnouncementDetailScreen() {
             {submittingComment ? (
               <ActivityIndicator size="small" color="#FFFFFF" />
             ) : (
-              <Send size={20} color="#FFFFFF" />
+              <Share2 size={20} color="#FFFFFF" />
             )}
           </TouchableOpacity>
         </View>
@@ -757,7 +757,7 @@ export default function AnnouncementDetailScreen() {
           style={[styles.actionButton, isLiked && styles.actionButtonActive]}
           onPress={toggleLike}
         >
-          <Heart size={24} color={isLiked ? '#FFFFFF' : '#4169E1'} fill={isLiked ? '#FFFFFF' : 'none'} />
+          <ThumbsUp size={24} color={isLiked ? '#FFFFFF' : '#4169E1'} fill={isLiked ? '#FFFFFF' : 'none'} />
           <Text style={[styles.actionButtonText, isLiked && styles.actionButtonTextActive]}>
             {isLiked ? 'Liked' : 'Like'}
           </Text>
@@ -767,7 +767,7 @@ export default function AnnouncementDetailScreen() {
           style={[styles.actionButton, isBookmarked && styles.actionButtonActive]}
           onPress={toggleBookmark}
         >
-          <Bookmark size={24} color={isBookmarked ? '#FFFFFF' : '#4169E1'} fill={isBookmarked ? '#FFFFFF' : 'none'} />
+          <Star size={24} color={isBookmarked ? '#FFFFFF' : '#4169E1'} fill={isBookmarked ? '#FFFFFF' : 'none'} />
           <Text style={[styles.actionButtonText, isBookmarked && styles.actionButtonTextActive]}>
             {isBookmarked ? 'Saved' : 'Save'}
           </Text>

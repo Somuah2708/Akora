@@ -236,7 +236,7 @@ export default function AllAnnouncementsScreen() {
               style={styles.bookmarkButton}
               onPress={() => router.push('/secretariat/announcements/saved')}
             >
-              <Bookmark size={22} color="#FFFFFF" />
+              <Star size={22} color="#FFFFFF" />
             </TouchableOpacity>
             <TouchableOpacity 
               style={styles.addButton}
@@ -443,11 +443,11 @@ export default function AllAnnouncementsScreen() {
                         <Text style={styles.statText}>{announcement.view_count}</Text>
                       </View>
                       <View style={styles.statBadge}>
-                        <Heart size={14} color="#666" />
+                        <ThumbsUp size={14} color="#666" />
                         <Text style={styles.statText}>{announcement.like_count}</Text>
                       </View>
                       <View style={styles.statBadge}>
-                        <MessageCircle size={14} color="#666" />
+                        <MessagesSquare size={14} color="#666" />
                         <Text style={styles.statText}>{announcement.comment_count}</Text>
                       </View>
                     </View>
