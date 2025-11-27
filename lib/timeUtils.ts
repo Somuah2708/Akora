@@ -10,25 +10,15 @@ dayjs.extend(isToday);
 dayjs.extend(isYesterday);
 
 /**
- * Format message timestamp for chat bubbles
- * Returns: "10:45 PM" for today, "Yesterday" or "Oct 25" for older
+ * Format message timestamp for chat bubbles (WhatsApp style)
+ * Always shows time for messages (e.g., "10:45 PM", "Yesterday 3:20 AM", "Oct 25, 2:15 PM")
  */
 export function formatMessageTime(timestamp: string): string {
   const date = dayjs(timestamp);
+  const time = date.format('h:mm A');
   
-  if (date.isToday()) {
-    return date.format('h:mm A');
-  }
-  
-  if (date.isYesterday()) {
-    return 'Yesterday';
-  }
-  
-  if (date.isAfter(dayjs().subtract(7, 'day'))) {
-    return date.format('ddd'); // Mon, Tue, etc.
-  }
-  
-  return date.format('MMM D');
+  // Always show just the time - clean and simple like WhatsApp
+  return time;
 }
 
 /**

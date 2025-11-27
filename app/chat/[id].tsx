@@ -123,7 +123,7 @@ export default function ChatDetailScreen() {
 
   const formatTime = (timestamp: string) => {
     const date = new Date(timestamp);
-    return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    return date.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit', hour12: true });
   };
 
   const formatDate = (timestamp: string) => {
@@ -173,12 +173,14 @@ export default function ChatDetailScreen() {
             ]}>
               {message.content}
             </Text>
-            <Text style={[
-              styles.messageTime,
-              isMyMessage ? styles.myMessageTime : styles.otherMessageTime
-            ]}>
-              {formatTime(message.created_at)}
-            </Text>
+            <View style={styles.messageFooter}>
+              <Text style={[
+                styles.messageTime,
+                isMyMessage ? styles.myMessageTime : styles.otherMessageTime
+              ]}>
+                {formatTime(message.created_at)}
+              </Text>
+            </View>
           </View>
         </View>
       </View>
@@ -381,13 +383,17 @@ const styles = StyleSheet.create({
   otherMessageText: {
     color: '#1A1A1A',
   },
+  messageFooter: {
+    marginTop: 4,
+    alignItems: 'flex-end',
+  },
   messageTime: {
     fontSize: 11,
     fontFamily: 'Inter-Regular',
-    marginTop: 4,
+    marginTop: 6,
   },
   myMessageTime: {
-    color: 'rgba(255, 255, 255, 0.7)',
+    color: 'rgba(255, 255, 255, 0.9)',
   },
   otherMessageTime: {
     color: '#64748B',

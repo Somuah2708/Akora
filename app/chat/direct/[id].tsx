@@ -52,6 +52,8 @@ export default function DirectMessageScreen() {
   const [uploadingMedia, setUploadingMedia] = useState(false);
   const [uploadingProgress, setUploadingProgress] = useState<number>(0);
   const [showMediaOptions, setShowMediaOptions] = useState(false);
+  const [imageViewerVisible, setImageViewerVisible] = useState(false);
+  const [selectedImageUrl, setSelectedImageUrl] = useState<string | null>(null);
   const [playingSound, setPlayingSound] = useState<{ [key: string]: boolean }>({});
   const [isTyping, setIsTyping] = useState(false);
   const [friendIsOnline, setFriendIsOnline] = useState(false);
@@ -648,6 +650,16 @@ export default function DirectMessageScreen() {
     setRecording(false);
   };
 
+  const openImageViewer = (imageUrl: string) => {
+    setSelectedImageUrl(imageUrl);
+    setImageViewerVisible(true);
+  };
+
+  const closeImageViewer = () => {
+    setImageViewerVisible(false);
+    setSelectedImageUrl(null);
+  };
+
   const toggleVoicePlayback = async (messageId: string, voiceUrl: string) => {
     try {
       if (playingSound[messageId]) {
@@ -734,7 +746,10 @@ export default function DirectMessageScreen() {
           >
             {/* Image Message */}
             {item.message_type === 'image' && item.media_url && (
-              <TouchableOpacity activeOpacity={0.9}>
+              <TouchableOpacity 
+                activeOpacity={0.9}
+                onPress={() => openImageViewer(item.media_url!)}
+              >
                 <Image 
                   source={{ uri: item.media_url }} 
                   style={styles.messageImage}
@@ -1169,6 +1184,34 @@ export default function DirectMessageScreen() {
           </View>
         </View>
       )}
+      
+      {/* Full-Screen Image Viewer Modal */}
+      <Modal
+        visible={imageViewerVisible}
+        transparent={true}
+        animationType="fade"
+        onRequestClose={closeImageViewer}
+      >
+        <View style={styles.imageViewerContainer}>
+          <TouchableOpacity 
+            style={styles.imageViewerCloseButton}
+            onPress={closeImageViewer}
+            activeOpacity={0.9}
+          >
+            <X size={28} color="#FFFFFF" strokeWidth={2} />
+          </TouchableOpacity>
+          
+          <View style={styles.imageViewerContent}>
+            {selectedImageUrl && (
+              <Image
+                source={{ uri: selectedImageUrl }}
+                style={styles.fullScreenImage}
+                resizeMode="contain"
+              />
+            )}
+          </View>
+        </View>
+      </Modal>
     </KeyboardAvoidingView>
   );
 }
@@ -1392,14 +1435,15 @@ const styles = StyleSheet.create({
     gap: 6,
   },
   messageTime: {
-    fontSize: 10.5,
+    fontSize: 11,
     fontWeight: '500',
+    letterSpacing: 0.2,
   },
   myMessageTime: {
-    color: 'rgba(255, 255, 255, 0.75)',
+    color: 'rgba(255, 255, 255, 0.85)',
   },
   theirMessageTime: {
-    color: '#9CA3AF',
+    color: '#6B7280',
   },
   messageStatus: {
     marginLeft: 4,
@@ -1638,6 +1682,35 @@ const styles = StyleSheet.create({
     color: '#1F2937',
     fontWeight: '600',
     letterSpacing: -0.2,
+  },
+  // Image Viewer Modal Styles
+  imageViewerContainer: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.95)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  imageViewerCloseButton: {
+    position: 'absolute',
+    top: 60,
+    right: 20,
+    zIndex: 10,
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: 'rgba(255, 255, 255, 0.2)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  imageViewerContent: {
+    width: '100%',
+    height: '100%',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  fullScreenImage: {
+    width: '100%',
+    height: '100%',
   },
   // Shared Post Card Styles (Instagram-style)
   sharedPostCard: {
