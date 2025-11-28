@@ -597,7 +597,7 @@ const styles = StyleSheet.create({
   username: {
     fontSize: 22,
     fontFamily: 'Inter-SemiBold',
-    color: '#000000',
+    color: '#0F172A',
   },
   backButton: {
     padding: 4,
@@ -629,12 +629,12 @@ const styles = StyleSheet.create({
   statNumber: {
     fontSize: 18,
     fontFamily: 'Inter-SemiBold',
-    color: '#000000',
+    color: '#0F172A',
   },
   statLabel: {
     fontSize: 14,
     fontFamily: 'Inter-Regular',
-    color: '#000000',
+    color: '#0F172A',
     marginTop: 2,
   },
   bioSection: {
@@ -644,7 +644,7 @@ const styles = StyleSheet.create({
   displayName: {
     fontSize: 14,
     fontFamily: 'Inter-SemiBold',
-    color: '#000000',
+    color: '#0F172A',
     marginBottom: 4,
   },
   tabsContainer: {
@@ -661,7 +661,7 @@ const styles = StyleSheet.create({
     borderBottomColor: 'transparent',
   },
   tabActive: {
-    borderBottomColor: '#000000',
+    borderBottomColor: '#0F172A',
   },
   grid: {
     flexDirection: 'row',
@@ -732,7 +732,7 @@ const styles = StyleSheet.create({
     color: '#6B7280',
   },
   avatarPlaceholder: {
-    backgroundColor: '#000000',
+    backgroundColor: '#0F172A',
     justifyContent: 'center',
     alignItems: 'center',
   },
@@ -743,13 +743,13 @@ const styles = StyleSheet.create({
   },
   imageFullOverlay: {
     flex: 1,
-    backgroundColor: 'black',
+    backgroundColor: '#0F172A',
     justifyContent: 'center',
     alignItems: 'center',
   },
   qrFullOverlay: {
     flex: 1,
-    backgroundColor: 'black',
+    backgroundColor: '#0F172A',
     justifyContent: 'center',
     alignItems: 'center',
   },
@@ -863,7 +863,7 @@ const styles = StyleSheet.create({
   },
   adminBadgeText: {
     fontSize: 12,
-    color: '#000000',
+    color: '#0F172A',
     fontFamily: 'Inter-SemiBold',
   },
   interestTags: {
@@ -914,7 +914,7 @@ const styles = StyleSheet.create({
   highlightTitle: {
     fontSize: 12,
     fontFamily: 'Inter-Regular',
-    color: '#000000',
+    color: '#0F172A',
     textAlign: 'center',
   },
   linksRow: {

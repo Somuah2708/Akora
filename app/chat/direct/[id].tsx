@@ -16,7 +16,8 @@ import {
 } from 'react-native';
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { ArrowLeft, Send, Smile, Image as ImageIcon, Mic, Camera, X, Play, Pause, Check, CheckCheck, FileText } from 'lucide-react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
+import { ArrowLeft, Send, Smile, Paperclip, Camera, X, Play, Pause, Check, CheckCheck, FileText } from 'lucide-react-native';
 import { useAuth } from '@/hooks/useAuth';
 import CachedImage from '@/components/CachedImage';
 import {
@@ -953,11 +954,12 @@ export default function DirectMessageScreen() {
   }
 
   return (
-    <KeyboardAvoidingView
-      style={styles.container}
-      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-      keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 0}
-    >
+    <SafeAreaView style={[styles.container, { backgroundColor: '#0F172A' }]} edges={['top']}>
+      <KeyboardAvoidingView
+        style={{ flex: 1 }}
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        keyboardVerticalOffset={0}
+      >
       {/* Header */}
       <View style={styles.header}>
         <TouchableOpacity 
@@ -970,7 +972,7 @@ export default function DirectMessageScreen() {
           }} 
           style={styles.backButton}
         >
-          <ArrowLeft size={24} color="#1F2937" />
+          <ArrowLeft size={24} color="#FFFFFF" />
         </TouchableOpacity>
 
         <TouchableOpacity 
@@ -1060,22 +1062,8 @@ export default function DirectMessageScreen() {
           onPress={() => setShowMediaOptions(true)}
           activeOpacity={0.7}
         >
-          <ImageIcon size={22} color="#737373" />
+          <Paperclip size={22} color="#737373" />
         </TouchableOpacity>
-
-        {/* Voice Recording Button */}
-        {!messageText.trim() && (
-          <TouchableOpacity
-            style={[styles.iconButton, recording && styles.recordingButton]}
-            onPressIn={handleStartRecording}
-            onPressOut={handleStopRecording}
-            onLongPress={handleStartRecording}
-            delayLongPress={100}
-            activeOpacity={0.7}
-          >
-            <Mic size={22} color={recording ? '#EF4444' : '#737373'} fill={recording ? '#EF4444' : 'none'} />
-          </TouchableOpacity>
-        )}
 
         {/* Send Button */}
         {messageText.trim() && (
@@ -1136,7 +1124,7 @@ export default function DirectMessageScreen() {
               style={styles.mediaOption}
               onPress={handleMediaPick}
             >
-              <ImageIcon size={28} color="#4169E1" />
+              <Paperclip size={28} color="#4169E1" />
               <Text style={styles.mediaOptionText}>Gallery</Text>
             </TouchableOpacity>
             <TouchableOpacity
@@ -1201,7 +1189,8 @@ export default function DirectMessageScreen() {
           </View>
         </View>
       </Modal>
-    </KeyboardAvoidingView>
+      </KeyboardAvoidingView>
+    </SafeAreaView>
   );
 }
 
@@ -1220,11 +1209,11 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     paddingHorizontal: 16,
-    paddingTop: 56,
+    paddingTop: 14,
     paddingBottom: 14,
-    backgroundColor: '#FFFFFF',
+    backgroundColor: '#0F172A',
     borderBottomWidth: 1,
-    borderBottomColor: '#F0F0F0',
+    borderBottomColor: '#1E293B',
   },
   backButton: {
     width: 36,
@@ -1267,12 +1256,12 @@ const styles = StyleSheet.create({
   headerName: {
     fontSize: 16,
     fontWeight: '600',
-    color: '#1a1a1a',
+    color: '#FFFFFF',
     letterSpacing: -0.3,
   },
   headerHandle: {
     fontSize: 12,
-    color: '#737373',
+    color: '#94A3B8',
     marginTop: 1,
     fontWeight: '400',
   },
@@ -1450,7 +1439,8 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'flex-end',
     paddingHorizontal: 14,
-    paddingVertical: 10,
+    paddingTop: 10,
+    paddingBottom: Platform.OS === 'ios' ? 28 : 10,
     backgroundColor: '#FFFFFF',
     borderTopWidth: 1,
     borderTopColor: '#F0F0F0',

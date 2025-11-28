@@ -1694,8 +1694,8 @@ export default function DiscoverScreen() {
                   >
                     <ThumbsUp 
                       size={24} 
-                      color={item.isLiked ? "#14B8A6" : "#000000"}
-                      fill={item.isLiked ? "#14B8A6" : "none"}
+                      color={item.isLiked ? "#ffc857" : "#000000"}
+                      fill={item.isLiked ? "#ffc857" : "none"}
                       strokeWidth={2}
                     />
                     {(item.likes || 0) > 0 && (
@@ -1719,7 +1719,7 @@ export default function DiscoverScreen() {
                   </TouchableOpacity>
                 </View>
                 <TouchableOpacity style={styles.actionButton} onPress={() => handleBookmarkToggle(item.id)}>
-                  <Star size={24} color={(item as any).isBookmarked ? '#14B8A6' : '#000000'} fill={(item as any).isBookmarked ? '#14B8A6' : 'none'} strokeWidth={2} />
+                  <Star size={24} color={(item as any).isBookmarked ? '#ffc857' : '#000000'} fill={(item as any).isBookmarked ? '#ffc857' : 'none'} strokeWidth={2} />
                 </TouchableOpacity>
               </View>
 

@@ -1,4 +1,4 @@
-import { View, Text, StyleSheet, TextInput, TouchableOpacity, ScrollView, Alert, ActivityIndicator, Image } from 'react-native';
+import { View, Text, StyleSheet, TextInput, TouchableOpacity, ScrollView, Alert, ActivityIndicator, Image, KeyboardAvoidingView, Platform } from 'react-native';
 import { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'expo-router';
 import { ArrowLeft, Image as ImageIcon, Send, X, Edit3, Video as VideoIcon } from 'lucide-react-native';
@@ -292,7 +292,11 @@ export default function HomeCreatePostScreen() {
   };
 
   return (
-    <View style={styles.container}>
+    <KeyboardAvoidingView 
+      style={styles.container}
+      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+      keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 20}
+    >
       <LinearGradient colors={['#FFFFFF', '#F8FAFC']} style={styles.header}>
         <TouchableOpacity onPress={() => router.back()} style={styles.backButton}> 
           <View style={styles.backButtonCircle}>
@@ -382,7 +386,7 @@ export default function HomeCreatePostScreen() {
           onDone={handleEditorDone}
         />
       )}
-    </View>
+    </KeyboardAvoidingView>
   );
 }
 

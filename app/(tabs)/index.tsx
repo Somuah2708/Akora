@@ -1652,7 +1652,7 @@ export default function HomeScreen() {
                   style={styles.moreButton}
                   activeOpacity={0.6}
                 >
-                  <MoreHorizontal size={24} color="#64748B" strokeWidth={2} />
+                  <MoreHorizontal size={24} color="#0F172A" strokeWidth={2} />
                 </TouchableOpacity>
               </View>
 
@@ -1885,8 +1885,8 @@ export default function HomeScreen() {
                   >
                     <ThumbsUp 
                       size={24} 
-                      color={post.isLiked ? "#14B8A6" : "#000000"}
-                      fill={post.isLiked ? "#14B8A6" : "none"}
+                      color={post.isLiked ? "#ffc857" : "#000000"}
+                      fill={post.isLiked ? "#ffc857" : "none"}
                       strokeWidth={2}
                     />
                     {(post.likes || 0) > 0 && (
@@ -1910,7 +1910,7 @@ export default function HomeScreen() {
                   </TouchableOpacity>
                 </View>
                 <TouchableOpacity style={styles.actionButton} onPress={() => handleBookmarkToggle(post.id)}>
-                  <Star size={24} color={post.isBookmarked ? '#14B8A6' : '#000000'} fill={post.isBookmarked ? '#14B8A6' : 'none'} strokeWidth={2} />
+                  <Star size={24} color={post.isBookmarked ? '#ffc857' : '#000000'} fill={post.isBookmarked ? '#ffc857' : 'none'} strokeWidth={2} />
                 </TouchableOpacity>
               </View>
 

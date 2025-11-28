@@ -56,6 +56,7 @@ export default function ChatScreen() {
     | { type: 'group'; groupId: string; unreadCount: number; pinned: boolean }
     | null
   >(null);
+  const [newMenuVisible, setNewMenuVisible] = useState(false);
 
   const [fontsLoaded] = useFonts({
     'Inter-Regular': Inter_400Regular,
@@ -664,15 +665,9 @@ export default function ChatScreen() {
               <View style={styles.headerActions}>
                 <TouchableOpacity 
                   style={styles.iconButton}
-                  onPress={() => router.push('/friends')}
+                  onPress={() => setNewMenuVisible(true)}
                 >
-                  <UserPlus size={22} color="#FFFFFF" strokeWidth={2.5} />
-                </TouchableOpacity>
-                <TouchableOpacity 
-                  style={styles.iconButton} 
-                  onPress={() => router.push('/create-group' as any)}
-                >
-                  <Users size={22} color="#FFFFFF" strokeWidth={2.5} />
+                  <Plus size={22} color="#FFFFFF" strokeWidth={2.5} />
                 </TouchableOpacity>
               </View>
             </View>
@@ -1091,6 +1086,57 @@ export default function ChatScreen() {
           </View>
         </View>
       </Modal>
+
+      {/* New Chat Menu Modal */}
+      <Modal
+        animationType="fade"
+        transparent
+        visible={newMenuVisible}
+        onRequestClose={() => setNewMenuVisible(false)}
+      >
+        <View style={styles.sheetOverlay}>
+          <TouchableOpacity style={{ flex: 1 }} activeOpacity={1} onPress={() => setNewMenuVisible(false)} />
+          <View style={styles.sheetContainer}>
+            <View style={styles.sheetHandle} />
+            <Text style={styles.sheetTitle}>New Chat</Text>
+            
+            <TouchableOpacity 
+              style={styles.sheetAction}
+              onPress={() => {
+                setNewMenuVisible(false);
+                router.push('/friends');
+              }}
+            >
+              <UserPlus size={20} color="#0F172A" strokeWidth={2} />
+              <View style={styles.sheetActionContent}>
+                <Text style={styles.sheetActionText}>New Direct Message</Text>
+                <Text style={styles.sheetActionSubtext}>Start a conversation with a friend</Text>
+              </View>
+            </TouchableOpacity>
+
+            <TouchableOpacity 
+              style={styles.sheetAction}
+              onPress={() => {
+                setNewMenuVisible(false);
+                router.push('/create-group' as any);
+              }}
+            >
+              <Users size={20} color="#0F172A" strokeWidth={2} />
+              <View style={styles.sheetActionContent}>
+                <Text style={styles.sheetActionText}>Create Group</Text>
+                <Text style={styles.sheetActionSubtext}>Start a group conversation</Text>
+              </View>
+            </TouchableOpacity>
+
+            <TouchableOpacity 
+              style={[styles.sheetAction, styles.sheetCancel]} 
+              onPress={() => setNewMenuVisible(false)}
+            >
+              <Text style={styles.sheetCancelText}>Cancel</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }
@@ -1412,17 +1458,31 @@ const styles = StyleSheet.create({
     marginBottom: 8,
   },
   sheetAction: {
-    paddingVertical: 14,
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 16,
+    paddingHorizontal: 20,
+    gap: 16,
     borderBottomWidth: 1,
-    borderBottomColor: '#F3F4F6',
+    borderBottomColor: '#F1F5F9',
+  },
+  sheetActionContent: {
+    flex: 1,
+  },
+  sheetActionText: {
+    fontSize: 16,
+    fontFamily: 'Inter-SemiBold',
+    color: '#0F172A',
+    marginBottom: 2,
+  },
+  sheetActionSubtext: {
+    fontSize: 13,
+    fontFamily: 'Inter-Regular',
+    color: '#64748B',
   },
   sheetCancel: {
     borderBottomWidth: 0,
-  },
-  sheetActionText: {
-    fontSize: 15,
-    color: '#1F2937',
-    fontFamily: 'Inter-Regular',
+    justifyContent: 'center',
   },
   modalContainer: {
     flex: 1,

@@ -202,9 +202,9 @@ export default function NotificationsScreen() {
     const iconProps = { size: 20, strokeWidth: 2 };
     switch (type) {
       case 'like':
-        return <ThumbsUp {...iconProps} color="#14B8A6" fill="#14B8A6" />;
+        return <ThumbsUp {...iconProps} color="#ffc857" fill="#ffc857" />;
       case 'comment':
-        return <MessagesSquare {...iconProps} color="#007AFF" />;
+        return <MessagesSquare {...iconProps} color="#0F172A" />;
       case 'follow':
         return <UserPlus {...iconProps} color="#34C759" />;
       case 'mention':
@@ -252,7 +252,7 @@ export default function NotificationsScreen() {
 
     const getIcon = () => {
       if (item.notification_type === 'new_application') {
-        return <FileText size={20} color="#4169E1" strokeWidth={2} />;
+        return <FileText size={20} color="#0F172A" strokeWidth={2} />;
       }
       return <CheckCircle size={20} color="#10B981" strokeWidth={2} />;
     };
@@ -265,7 +265,7 @@ export default function NotificationsScreen() {
       >
         <View style={styles.avatarContainer}>
           <View style={[styles.avatarPlaceholder, { backgroundColor: '#EBF0FF' }]}>
-            <Briefcase size={24} color="#4169E1" />
+            <Briefcase size={24} color="#0F172A" />
           </View>
           <View style={styles.iconBadge}>
             {getIcon()}
@@ -276,7 +276,7 @@ export default function NotificationsScreen() {
           <Text style={styles.notificationText}>{item.title}</Text>
           <Text style={[styles.timeText, { marginTop: 2 }]}>{item.message}</Text>
           {job && (
-            <Text style={[styles.timeText, { marginTop: 4, color: '#4169E1' }]}>
+            <Text style={[styles.timeText, { marginTop: 4, color: '#0F172A' }]}>
               {job.title} at {job.company}
             </Text>
           )}
@@ -451,7 +451,7 @@ const styles = StyleSheet.create({
   },
   markAllText: {
     fontSize: 14,
-    color: '#007AFF',
+    color: '#0F172A',
     fontWeight: '500',
   },
   tabs: {

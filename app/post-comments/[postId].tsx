@@ -442,8 +442,8 @@ export default function PostCommentsScreen() {
                     >
                       <ThumbsUp 
                         size={14} 
-                        color={comment.isLikedByUser ? "#14B8A6" : "#64748B"}
-                        fill={comment.isLikedByUser ? "#14B8A6" : "none"}
+                        color={comment.isLikedByUser ? "#ffc857" : "#64748B"}
+                        fill={comment.isLikedByUser ? "#ffc857" : "none"}
                         strokeWidth={2} 
                       />
                       <Text style={[
@@ -514,8 +514,8 @@ export default function PostCommentsScreen() {
                           >
                             <ThumbsUp 
                               size={14} 
-                              color={reply.isLikedByUser ? "#14B8A6" : "#64748B"}
-                              fill={reply.isLikedByUser ? "#14B8A6" : "none"}
+                              color={reply.isLikedByUser ? "#ffc857" : "#64748B"}
+                              fill={reply.isLikedByUser ? "#ffc857" : "none"}
                               strokeWidth={2} 
                             />
                             <Text style={[
@@ -791,7 +791,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#CBD5E1',
   },
   commentActionTextLiked: {
-    color: '#14B8A6',
+    color: '#ffc857',
     fontWeight: '600',
   },
   verifiedBadge: {

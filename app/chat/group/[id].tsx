@@ -1,12 +1,13 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { View, Text, FlatList, TextInput, TouchableOpacity, Image, Modal, Pressable, ActivityIndicator, StyleSheet, Linking, Alert } from "react-native";
+import { View, Text, FlatList, TextInput, TouchableOpacity, Image, Modal, Pressable, ActivityIndicator, StyleSheet, Linking, Alert, KeyboardAvoidingView, Platform } from "react-native";
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { supabase } from "../../../lib/supabase";
 import { useAuth } from "../../../hooks/useAuth";
 import dayjs from "dayjs";
 import { uploadMedia, pickMedia, startRecording, stopRecording, pickDocument, uploadDocument } from "../../../lib/media";
 import EmojiSelector from 'react-native-emoji-selector';
-import { ArrowLeft, Send, Smile, Image as ImageIcon, Mic, X, Play, Pause, FileText } from 'lucide-react-native';
+import { ArrowLeft, Send, Smile, Paperclip, X, Play, Pause, FileText } from 'lucide-react-native';
 import { Audio } from 'expo-av';
 
 type Profile = { id: string; full_name?: string | null; avatar_url?: string | null };
@@ -38,7 +39,6 @@ export default function GroupChatScreen() {
   const [mentionQuery, setMentionQuery] = useState<string | null>(null);
   const [mentionResults, setMentionResults] = useState<Profile[]>([]);
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
-  const [recording, setRecording] = useState(false);
   const [uploadingMedia, setUploadingMedia] = useState(false);
   const [playingSound, setPlayingSound] = useState<{ [key: string]: boolean }>({});
   const soundObjects = useRef<{ [key: string]: Audio.Sound }>({});
@@ -483,9 +483,14 @@ export default function GroupChatScreen() {
   }, [typingMembers, members, meId]);
 
   return (
-    <View style={{ flex: 1, backgroundColor: "#f5f5f5" }}>
-      {/* Header */}
-      <View style={{ paddingTop: 52, paddingHorizontal: 12, paddingBottom: 10, backgroundColor: "#fff", borderBottomWidth: 0.5, borderBottomColor: "#eee", flexDirection: "row", alignItems: "center" }}>
+    <SafeAreaView style={{ flex: 1, backgroundColor: "#0F172A" }} edges={['top']}>
+      <KeyboardAvoidingView 
+        style={{ flex: 1, backgroundColor: "#f5f5f5" }}
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        keyboardVerticalOffset={0}
+      >
+        {/* Header */}
+        <View style={{ paddingHorizontal: 12, paddingVertical: 10, backgroundColor: "#0F172A", borderBottomWidth: 0.5, borderBottomColor: "#1E293B", flexDirection: "row", alignItems: "center" }}>
         <TouchableOpacity 
           onPress={() => {
             if (router.canGoBack()) {
@@ -496,15 +501,15 @@ export default function GroupChatScreen() {
           }} 
           style={{ padding: 8, marginRight: 8 }}
         >
-          <Text style={{ fontSize: 16 }}>‹</Text>
+          <Text style={{ fontSize: 16, color: "#FFFFFF" }}>‹</Text>
         </TouchableOpacity>
         {group?.avatar_url ? <Image source={{ uri: group.avatar_url }} style={{ width: 36, height: 36, borderRadius: 18, marginRight: 8 }} /> : null}
         <View style={{ flex: 1 }}>
-          <Text style={{ fontWeight: "600", fontSize: 16 }}>{group?.name || "Group"}</Text>
+          <Text style={{ fontWeight: "600", fontSize: 16, color: "#FFFFFF" }}>{group?.name || "Group"}</Text>
           {!!typingText && <Text style={{ fontSize: 12, color: "#4CAF50" }}>{typingText}</Text>}
         </View>
         <TouchableOpacity onPress={() => router.push(`/chat/group-info/${groupId}` as any)} style={{ padding: 8 }}>
-          <Text style={{ color: "#64748B" }}>Info</Text>
+          <Text style={{ color: "#94A3B8" }}>Info</Text>
         </TouchableOpacity>
       </View>
 
@@ -550,7 +555,7 @@ export default function GroupChatScreen() {
           {uploadingMedia ? (
             <ActivityIndicator size="small" color="#4169E1" />
           ) : (
-            <ImageIcon size={22} color="#4169E1" />
+            <Paperclip size={22} color="#4169E1" />
           )}
         </TouchableOpacity>
 
@@ -563,20 +568,6 @@ export default function GroupChatScreen() {
         >
           <FileText size={22} color="#4169E1" />
         </TouchableOpacity>
-
-        {/* Voice Recording Button */}
-        {!input.trim() && (
-          <TouchableOpacity
-            style={[styles.iconButton, recording && styles.recordingButton]}
-            onPressIn={handleStartRecording}
-            onPressOut={handleStopRecording}
-            onLongPress={handleStartRecording}
-            delayLongPress={100}
-            activeOpacity={0.7}
-          >
-            <Mic size={22} color={recording ? '#EF4444' : '#4169E1'} fill={recording ? '#EF4444' : 'none'} />
-          </TouchableOpacity>
-        )}
 
         {/* Send Button */}
         {input.trim() && (
@@ -641,7 +632,8 @@ export default function GroupChatScreen() {
           ))}
         </View>
       )}
-    </View>
+      </KeyboardAvoidingView>
+    </SafeAreaView>
   );
 }
 
@@ -650,7 +642,8 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'flex-end',
     paddingHorizontal: 16,
-    paddingVertical: 14,
+    paddingTop: 14,
+    paddingBottom: Platform.OS === 'ios' ? 28 : 14,
     backgroundColor: '#FFFFFF',
     borderTopWidth: 0,
     shadowColor: '#000',
@@ -659,6 +652,9 @@ const styles = StyleSheet.create({
     shadowRadius: 8,
     elevation: 8,
     gap: 10,
+  },
+  safeBottom: {
+    paddingBottom: Platform.OS === 'ios' ? 34 : 14,
   },
   iconButton: {
     width: 38,

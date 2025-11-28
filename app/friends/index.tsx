@@ -209,13 +209,13 @@ export default function FriendsScreen() {
     const getButtonContent = () => {
       switch (item.friendshipStatus) {
         case 'friends':
-          return { text: 'Friends', color: '#10B981', disabled: true };
+          return { text: 'Friends', color: '#6B7280', disabled: true };
         case 'request_sent':
           return { text: 'Pending', color: '#94A3B8', disabled: true };
         case 'request_received':
-          return { text: 'Accept', color: '#4169E1', disabled: false };
+          return { text: 'Accept', color: '#0F172A', disabled: false };
         default:
-          return { text: 'Add Friend', color: '#4169E1', disabled: false };
+          return { text: 'Add Friend', color: '#0F172A', disabled: false };
       }
     };
 
@@ -491,7 +491,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   activeTab: {
-    backgroundColor: '#EEF2FF',
+    backgroundColor: '#E5E7EB',
   },
   tabText: {
     fontSize: 14,
@@ -499,7 +499,7 @@ const styles = StyleSheet.create({
     color: '#94A3B8',
   },
   activeTabText: {
-    color: '#4169E1',
+    color: '#0F172A',
   },
   badge: {
     backgroundColor: '#EF4444',
@@ -563,7 +563,7 @@ const styles = StyleSheet.create({
     marginRight: 12,
   },
   avatarPlaceholder: {
-    backgroundColor: '#4169E1',
+    backgroundColor: '#0F172A',
     justifyContent: 'center',
     alignItems: 'center',
   },
@@ -594,7 +594,7 @@ const styles = StyleSheet.create({
     borderColor: '#CDE3FF',
   },
   adminBadgeText: {
-    color: '#0A84FF',
+    color: '#0F172A',
     fontSize: 11,
     fontWeight: '700',
   },
@@ -602,7 +602,7 @@ const styles = StyleSheet.create({
     width: 40,
     height: 40,
     borderRadius: 20,
-    backgroundColor: '#EEF2FF',
+    backgroundColor: '#E5E7EB',
     justifyContent: 'center',
     alignItems: 'center',
   },
@@ -618,7 +618,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   acceptButton: {
-    backgroundColor: '#10B981',
+    backgroundColor: '#0F172A',
   },
   rejectButton: {
     backgroundColor: '#EF4444',

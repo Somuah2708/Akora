@@ -126,7 +126,7 @@ const styles = StyleSheet.create({
     alignSelf: 'flex-start',
   },
   toggleText: {
-    color: '#0A84FF',
+    color: '#ffc857',
     fontFamily: 'Inter-SemiBold',
     fontSize: 14,
   },

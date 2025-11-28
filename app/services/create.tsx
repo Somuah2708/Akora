@@ -10,6 +10,7 @@ import {
   Platform,
   Image,
   Modal,
+  KeyboardAvoidingView,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useAuth } from '@/hooks/useAuth';
@@ -897,7 +898,7 @@ export default function CreateListingScreen() {
           )}
         </TouchableOpacity>
       </View>
-    </View>
+    </KeyboardAvoidingView>
   );
 }
 

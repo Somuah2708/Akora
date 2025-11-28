@@ -244,8 +244,8 @@ export default function PostDetailScreen() {
             <TouchableOpacity onPress={toggleLike} style={styles.actionBtnWithCount}>
               <ThumbsUp 
                 size={24} 
-                color={isLiked ? "#14B8A6" : "#000000"} 
-                fill={isLiked ? "#14B8A6" : "none"}
+                color={isLiked ? "#ffc857" : "#000000"} 
+                fill={isLiked ? "#ffc857" : "none"}
                 strokeWidth={2}
               />
               {(post.likes_count ?? 0) > 0 && (
@@ -265,8 +265,8 @@ export default function PostDetailScreen() {
           <TouchableOpacity onPress={toggleBookmark} style={styles.actionBtn}>
             <Star 
               size={24} 
-              color={isBookmarked ? '#14B8A6' : '#000000'} 
-              fill={isBookmarked ? '#14B8A6' : 'none'} 
+              color={isBookmarked ? '#ffc857' : '#000000'} 
+              fill={isBookmarked ? '#ffc857' : 'none'} 
               strokeWidth={2}
             />
           </TouchableOpacity>

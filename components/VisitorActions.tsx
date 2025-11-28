@@ -88,28 +88,28 @@ export default function VisitorActions({ userId, onMessage, onFollow, following,
         return {
           icon: Check,
           text: 'Friends',
-          color: '#000000',
+          color: '#374151',
           disabled: true,
         };
       case 'request_sent':
         return {
           icon: Clock,
           text: 'Pending',
-          color: '#000000',
+          color: '#374151',
           disabled: true,
         };
       case 'request_received':
         return {
           icon: UserPlus,
           text: 'Accept',
-          color: '#000000',
+          color: '#374151',
           disabled: false,
         };
       default:
         return {
           icon: UserPlus,
           text: 'Add Friend',
-          color: '#000000',
+          color: '#374151',
           disabled: false,
         };
     }
@@ -168,7 +168,7 @@ const styles = StyleSheet.create({
     gap: 6,
   },
   primary: {
-    backgroundColor: '#000000',
+    backgroundColor: '#374151',
   },
   primaryText: {
     color: '#FFFFFF',

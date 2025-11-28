@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, TextInput, TouchableOpacity, ScrollView, Image, Alert, ActivityIndicator, Switch, Platform, Modal, Dimensions } from 'react-native';
+import { View, Text, StyleSheet, TextInput, TouchableOpacity, ScrollView, Image, Alert, ActivityIndicator, Switch, Platform, Modal, Dimensions, KeyboardAvoidingView } from 'react-native';
 import { useFonts, Inter_400Regular, Inter_600SemiBold } from '@expo-google-fonts/inter';
 import { SplashScreen, useRouter } from 'expo-router';
 import { ArrowLeft, Camera, Trash2, User, GraduationCap, Calendar, Chrome as Home, MapPin, Phone, Mail, Link as LinkIcon } from 'lucide-react-native';
@@ -911,7 +911,7 @@ export default function EditProfileScreen() {
           </View>
         </ScrollView>
       )}
-    </View>
+    </KeyboardAvoidingView>
   );
 }
 
