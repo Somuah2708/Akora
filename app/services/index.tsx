@@ -1,4 +1,4 @@
-import { View, Text, StyleSheet, ScrollView, Image, TouchableOpacity, TextInput, Dimensions, Animated, Modal } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, Image, TouchableOpacity, TextInput, Dimensions, Animated, Modal, RefreshControl } from 'react-native';
 import { useFonts, Inter_400Regular, Inter_600SemiBold } from '@expo-google-fonts/inter';
 import { useEffect, useState, useCallback, useRef } from 'react';
 import { SplashScreen, useRouter } from 'expo-router';
@@ -81,8 +81,18 @@ export default function ServicesScreen() {
   const [regions, setRegions] = useState<Region[]>([]);
   const [cities, setCities] = useState<City[]>([]);
   const [locationCounts, setLocationCounts] = useState<LocationWithCount[]>([]);
+  const [refreshing, setRefreshing] = useState(false);
 
 // Fetch regions and cities from database
+const onRefresh = async () => {
+  setRefreshing(true);
+  await Promise.all([
+    fetchProducts(),
+    fetchLocations()
+  ]);
+  setRefreshing(false);
+};
+
 const fetchLocations = useCallback(async () => {
   try {
     // Fetch regions
@@ -810,7 +820,17 @@ const fetchLocations = useCallback(async () => {
           </ScrollView>
         </View>
       </Modal>
-      <ScrollView style={styles.scrollView} showsVerticalScrollIndicator={false}>
+      <ScrollView 
+        style={styles.scrollView} 
+        showsVerticalScrollIndicator={false}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={onRefresh}
+            tintColor="#000000"
+          />
+        }
+      >
         <View style={styles.header}>
           <TouchableOpacity onPress={() => router.push('/(tabs)/hub')} style={styles.backButton}>
             <ArrowLeft size={24} color="#020617" />
@@ -1020,6 +1040,8 @@ const styles = StyleSheet.create({
     paddingTop: 56,
     paddingBottom: 16,
     backgroundColor: '#FFFFFF',
+    marginTop: -800,
+    paddingTop: 856,
   },
   backButton: {
     padding: 8,

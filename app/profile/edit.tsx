@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, TextInput, TouchableOpacity, ScrollView, Image, Alert, ActivityIndicator, Switch, Platform, Modal } from 'react-native';
+import { View, Text, StyleSheet, TextInput, TouchableOpacity, ScrollView, Image, Alert, ActivityIndicator, Switch, Platform, Modal, Dimensions } from 'react-native';
 import { useFonts, Inter_400Regular, Inter_600SemiBold } from '@expo-google-fonts/inter';
 import { SplashScreen, useRouter } from 'expo-router';
 import { ArrowLeft, Camera, Trash2, User, GraduationCap, Calendar, Chrome as Home, MapPin, Phone, Mail, Link as LinkIcon } from 'lucide-react-native';
@@ -8,6 +8,8 @@ import { supabase, AVATAR_BUCKET } from '@/lib/supabase';
 import { useAuth } from '@/hooks/useAuth';
 
 SplashScreen.preventAutoHideAsync();
+
+const { width, height } = Dimensions.get('window');
 
 export default function EditProfileScreen() {
   const router = useRouter();
@@ -50,15 +52,7 @@ export default function EditProfileScreen() {
   const [graduationYear, setGraduationYear] = useState('');
   
   // Visibility settings
-  const [isClassPublic, setIsClassPublic] = useState(false);
-  const [isYearGroupPublic, setIsYearGroupPublic] = useState(false);
-  const [isHousePublic, setIsHousePublic] = useState(false);
-  const [isContactPublic, setIsContactPublic] = useState(false);
-  const [isOccupationPublic, setIsOccupationPublic] = useState(false);
-  const [isEducationPublic, setIsEducationPublic] = useState(false);
-  const [isInterestsPublic, setIsInterestsPublic] = useState(true);
   const [receivesNotifications, setReceivesNotifications] = useState(true);
-  const [themePreference, setThemePreference] = useState('light');
   
   const [fontsLoaded] = useFonts({
     'Inter-Regular': Inter_400Regular,
@@ -118,16 +112,7 @@ export default function EditProfileScreen() {
         setGraduationYear(data.graduation_year?.toString() || '');
   setCurrentStudyYear((data as any).current_study_year?.toString?.() || '');
         
-        // Set visibility preferences
-        setIsClassPublic(data.is_class_public || false);
-        setIsYearGroupPublic(data.is_year_group_public || false);
-        setIsHousePublic(data.is_house_public || false);
-        setIsContactPublic(data.is_contact_public || false);
-        setIsOccupationPublic(data.is_occupation_public || false);
-        setIsEducationPublic(data.is_education_public || false);
-  setIsInterestsPublic((data as any).is_interests_public !== false);
         setReceivesNotifications(data.receives_notifications !== false); // Default to true
-        setThemePreference(data.theme_preference || 'light');
 
         // Capture initial snapshot for unsaved changes detection
         setInitialSnapshot({
@@ -152,15 +137,7 @@ export default function EditProfileScreen() {
           programOfStudy: data.program_of_study || '',
           graduationYear: data.graduation_year?.toString() || '',
           currentStudyYear: (data as any).current_study_year?.toString?.() || '',
-          isClassPublic: data.is_class_public || false,
-          isYearGroupPublic: data.is_year_group_public || false,
-          isHousePublic: data.is_house_public || false,
-          isContactPublic: data.is_contact_public || false,
-          isOccupationPublic: data.is_occupation_public || false,
-          isEducationPublic: data.is_education_public || false,
-          isInterestsPublic: (data as any).is_interests_public !== false,
           receivesNotifications: data.receives_notifications !== false,
-          themePreference: data.theme_preference || 'light',
         });
       }
     } catch (error) {
@@ -188,6 +165,9 @@ export default function EditProfileScreen() {
         allowsEditing: true,
         aspect: [1, 1],
         quality: 0.8,
+        ...(Platform.OS === 'android' && {
+          presentationStyle: ImagePicker.UIImagePickerPresentationStyle.AUTOMATIC,
+        }),
       });
       
       if (!result.canceled && result.assets && result.assets.length > 0) {
@@ -345,15 +325,7 @@ export default function EditProfileScreen() {
           graduation_year: graduationYear ? parseInt(graduationYear) : null,
           current_study_year: currentStudyYear ? parseInt(currentStudyYear) : null,
           // Visibility settings
-          is_class_public: isClassPublic,
-          is_year_group_public: isYearGroupPublic,
-          is_house_public: isHousePublic,
-          is_contact_public: isContactPublic,
-          is_occupation_public: isOccupationPublic,
-          is_education_public: isEducationPublic,
-          is_interests_public: isInterestsPublic,
           receives_notifications: receivesNotifications,
-          theme_preference: themePreference,
         })
         .eq('id', user.id);
       
@@ -381,15 +353,7 @@ export default function EditProfileScreen() {
         programOfStudy: programOfStudy.trim(),
         graduationYear,
         currentStudyYear,
-        isClassPublic,
-        isYearGroupPublic,
-        isHousePublic,
-        isContactPublic,
-        isOccupationPublic,
-        isEducationPublic,
-        isInterestsPublic,
         receivesNotifications,
-        themePreference,
       });
 
       Alert.alert('Success', 'Profile updated successfully', [{ text: 'OK', onPress: () => router.push('/grow') }]);
@@ -420,15 +384,7 @@ export default function EditProfileScreen() {
       programOfStudy,
       graduationYear,
       currentStudyYear,
-      isClassPublic,
-      isYearGroupPublic,
-      isHousePublic,
-      isContactPublic,
-      isOccupationPublic,
-      isEducationPublic,
-      isInterestsPublic,
       receivesNotifications,
-      themePreference,
       websiteUrl,
       linkedinUrl,
       twitterUrl,
@@ -483,17 +439,17 @@ export default function EditProfileScreen() {
         animationType="fade"
         onRequestClose={() => setAvatarPreviewVisible(false)}
       >
-        <View style={styles.modalOverlay}>
-          <TouchableOpacity style={styles.modalOverlay} activeOpacity={1} onPress={() => setAvatarPreviewVisible(false)}>
-            <View style={styles.imagePreviewCard}>
-              {avatarUrl ? (
-                <Image source={{ uri: avatarUrl }} style={styles.imagePreview} resizeMode="contain" />
-              ) : (
-                <View style={[styles.imagePreview, styles.avatarPlaceholder]} />
-              )}
-            </View>
-          </TouchableOpacity>
-        </View>
+        <TouchableOpacity style={styles.imageFullOverlay} activeOpacity={1} onPress={() => setAvatarPreviewVisible(false)}>
+          {avatarUrl ? (
+            <Image
+              source={{ uri: avatarUrl }}
+              style={{ width, height }}
+              resizeMode="contain"
+            />
+          ) : (
+            <View style={[{ width, height }, styles.avatarPlaceholder]} />
+          )}
+        </TouchableOpacity>
       </Modal>
 
       <View style={styles.header}>
@@ -519,7 +475,7 @@ export default function EditProfileScreen() {
 
       {loading ? (
         <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color="#4169E1" />
+          <ActivityIndicator size="large" color="#000000" />
           <Text style={styles.loadingText}>Loading profile...</Text>
         </View>
       ) : (
@@ -599,18 +555,7 @@ export default function EditProfileScreen() {
             </View>
 
             <View style={styles.formGroup}>
-              <View style={styles.labelRow}>
-                <Text style={styles.label}>Class</Text>
-                <View style={styles.visibilityToggle}>
-                  <Text style={styles.visibilityText}>Public</Text>
-                  <Switch
-                    value={isClassPublic}
-                    onValueChange={setIsClassPublic}
-                    trackColor={{ false: '#767577', true: '#4169E1' }}
-                    thumbColor="#FFFFFF"
-                  />
-                </View>
-              </View>
+              <Text style={styles.label}>Class</Text>
               <View style={styles.inputContainer}>
                 <GraduationCap size={20} color="#666666" />
                 <TextInput
@@ -624,18 +569,7 @@ export default function EditProfileScreen() {
             </View>
 
             <View style={styles.formGroup}>
-              <View style={styles.labelRow}>
-                <Text style={styles.label}>Year Group</Text>
-                <View style={styles.visibilityToggle}>
-                  <Text style={styles.visibilityText}>Public</Text>
-                  <Switch
-                    value={isYearGroupPublic}
-                    onValueChange={setIsYearGroupPublic}
-                    trackColor={{ false: '#767577', true: '#4169E1' }}
-                    thumbColor="#FFFFFF"
-                  />
-                </View>
-              </View>
+              <Text style={styles.label}>Year Group</Text>
               <View style={styles.inputContainer}>
                 <Calendar size={20} color="#666666" />
                 <TextInput
@@ -650,18 +584,7 @@ export default function EditProfileScreen() {
             </View>
 
             <View style={styles.formGroup}>
-              <View style={styles.labelRow}>
-                <Text style={styles.label}>House</Text>
-                <View style={styles.visibilityToggle}>
-                  <Text style={styles.visibilityText}>Public</Text>
-                  <Switch
-                    value={isHousePublic}
-                    onValueChange={setIsHousePublic}
-                    trackColor={{ false: '#767577', true: '#4169E1' }}
-                    thumbColor="#FFFFFF"
-                  />
-                </View>
-              </View>
+              <Text style={styles.label}>House</Text>
               <View style={styles.inputContainer}>
                 <Home size={20} color="#666666" />
                 <TextInput
@@ -678,18 +601,7 @@ export default function EditProfileScreen() {
 
           {/* Occupation Card */}
           <View style={styles.card}>
-            <View style={styles.cardHeaderRow}>
-              <Text style={styles.cardTitle}>Occupation</Text>
-              <View style={styles.visibilityToggle}>
-                <Text style={styles.visibilityText}>Public</Text>
-                <Switch
-                  value={isOccupationPublic}
-                  onValueChange={setIsOccupationPublic}
-                  trackColor={{ false: '#767577', true: '#4169E1' }}
-                  thumbColor="#FFFFFF"
-                />
-              </View>
-            </View>
+            <Text style={styles.cardTitle}>Occupation</Text>
 
             <View style={styles.formGroup}>
               <Text style={styles.label}>Status</Text>
@@ -747,18 +659,7 @@ export default function EditProfileScreen() {
             {/* Education Card (only when Student) */}
             {occupationStatus === 'student' && (
             <View style={styles.card}>
-              <View style={styles.cardHeaderRow}>
-                <Text style={styles.cardTitle}>Education</Text>
-                <View style={styles.visibilityToggle}>
-                  <Text style={styles.visibilityText}>Public</Text>
-                  <Switch
-                    value={isEducationPublic}
-                    onValueChange={setIsEducationPublic}
-                    trackColor={{ false: '#767577', true: '#4169E1' }}
-                    thumbColor="#FFFFFF"
-                  />
-                </View>
-              </View>
+              <Text style={styles.cardTitle}>Education</Text>
 
             <View style={styles.formGroup}>
               <Text style={styles.label}>Education Level</Text>
@@ -856,18 +757,7 @@ export default function EditProfileScreen() {
 
             {/* Contact Card */}
             <View style={styles.card}>
-              <View style={styles.cardHeaderRow}>
-                <Text style={styles.cardTitle}>Contact Information</Text>
-                <View style={styles.visibilityToggle}>
-                  <Text style={styles.visibilityText}>Public</Text>
-                  <Switch
-                    value={isContactPublic}
-                    onValueChange={setIsContactPublic}
-                    trackColor={{ false: '#767577', true: '#4169E1' }}
-                    thumbColor="#FFFFFF"
-                  />
-                </View>
-              </View>
+              <Text style={styles.cardTitle}>Contact Information</Text>
 
             <View style={styles.formGroup}>
               <Text style={styles.label}>Phone</Text>
@@ -917,15 +807,6 @@ export default function EditProfileScreen() {
           <View style={styles.card}>
             <Text style={styles.cardTitle}>Interests</Text>
             <Text style={styles.helperText}>Manage the topics that personalize your feed and profile chips.</Text>
-            <View style={[styles.preferenceItem, { borderBottomWidth: 0, paddingTop: 0 }]}> 
-              <Text style={styles.preferenceLabel}>Public</Text>
-              <Switch
-                value={isInterestsPublic}
-                onValueChange={setIsInterestsPublic}
-                trackColor={{ false: '#767577', true: '#4169E1' }}
-                thumbColor="#FFFFFF"
-              />
-            </View>
             <TouchableOpacity
               style={styles.primaryButton}
               onPress={() => router.push('/(tabs)/discover?openInterestModal=1')}
@@ -1023,16 +904,7 @@ export default function EditProfileScreen() {
               <Switch
                 value={receivesNotifications}
                 onValueChange={setReceivesNotifications}
-                trackColor={{ false: '#767577', true: '#4169E1' }}
-                thumbColor="#FFFFFF"
-              />
-            </View>
-            <View style={styles.preferenceItem}>
-              <Text style={styles.preferenceLabel}>Dark Mode</Text>
-              <Switch
-                value={themePreference === 'dark'}
-                onValueChange={(value) => setThemePreference(value ? 'dark' : 'light')}
-                trackColor={{ false: '#767577', true: '#4169E1' }}
+                trackColor={{ false: '#767577', true: '#000000' }}
                 thumbColor="#FFFFFF"
               />
             </View>
@@ -1068,7 +940,7 @@ const styles = StyleSheet.create({
     color: '#000000',
   },
   saveButton: {
-    backgroundColor: '#4169E1',
+    backgroundColor: '#000000',
     paddingHorizontal: 16,
     paddingVertical: 8,
     borderRadius: 8,
@@ -1117,7 +989,7 @@ const styles = StyleSheet.create({
     borderRadius: 60,
   },
   avatarPlaceholder: {
-    backgroundColor: '#4169E1',
+    backgroundColor: '#000000',
     justifyContent: 'center',
     alignItems: 'center',
   },
@@ -1224,8 +1096,8 @@ const styles = StyleSheet.create({
     backgroundColor: '#FFFFFF',
   },
   segmentedOptionSelected: {
-    backgroundColor: '#0A84FF',
-    borderColor: '#0A84FF',
+    backgroundColor: '#000000',
+    borderColor: '#000000',
   },
   segmentedLabel: {
     fontSize: 13,
@@ -1270,7 +1142,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     gap: 8,
     alignItems: 'center',
-    backgroundColor: '#4169E1',
+    backgroundColor: '#000000',
     paddingHorizontal: 14,
     paddingVertical: 12,
     borderRadius: 10,
@@ -1297,20 +1169,10 @@ const styles = StyleSheet.create({
     fontFamily: 'Inter-SemiBold',
   },
   // Modal preview styles
-  modalOverlay: {
+  imageFullOverlay: {
     flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.9)',
+    backgroundColor: 'black',
     justifyContent: 'center',
     alignItems: 'center',
-  },
-  imagePreviewCard: {
-    width: 320,
-    height: 320,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  imagePreview: {
-    width: 320,
-    height: 320,
   },
 });

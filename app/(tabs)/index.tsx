@@ -522,6 +522,8 @@ export default function HomeScreen() {
 
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
+    // Clear trending articles first to force re-render
+    setTrendingArticles([]);
     await Promise.all([
       fetchPosts(),
       loadHomeConfig(), // Also refresh trending articles!

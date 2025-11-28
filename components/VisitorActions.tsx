@@ -88,28 +88,28 @@ export default function VisitorActions({ userId, onMessage, onFollow, following,
         return {
           icon: Check,
           text: 'Friends',
-          color: '#10B981',
+          color: '#000000',
           disabled: true,
         };
       case 'request_sent':
         return {
           icon: Clock,
           text: 'Pending',
-          color: '#F59E0B',
+          color: '#000000',
           disabled: true,
         };
       case 'request_received':
         return {
           icon: UserPlus,
           text: 'Accept',
-          color: '#0A84FF',
+          color: '#000000',
           disabled: false,
         };
       default:
         return {
           icon: UserPlus,
           text: 'Add Friend',
-          color: '#0A84FF',
+          color: '#000000',
           disabled: false,
         };
     }
@@ -140,7 +140,7 @@ export default function VisitorActions({ userId, onMessage, onFollow, following,
         disabled={loading || actionLoading || buttonContent.disabled}
       >
         {actionLoading ? (
-          <ActivityIndicator size="small" color="#FFFFFF" />
+          <ActivityIndicator size="small" color="#000000" />
         ) : (
           <>
             <ButtonIcon size={18} color="#FFFFFF" />
@@ -168,7 +168,7 @@ const styles = StyleSheet.create({
     gap: 6,
   },
   primary: {
-    backgroundColor: '#0A84FF',
+    backgroundColor: '#000000',
   },
   primaryText: {
     color: '#FFFFFF',

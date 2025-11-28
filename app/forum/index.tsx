@@ -1,4 +1,4 @@
-import { View, Text, StyleSheet, ScrollView, Image, TouchableOpacity, TextInput, Dimensions, ActivityIndicator, Share, Alert } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, Image, TouchableOpacity, TextInput, Dimensions, ActivityIndicator, Share, Alert, RefreshControl } from 'react-native';
 import { useFonts, Inter_400Regular, Inter_600SemiBold } from '@expo-google-fonts/inter';
 import { useEffect, useState, useCallback } from 'react';
 import { SplashScreen, useRouter, useFocusEffect } from 'expo-router';
@@ -190,6 +190,18 @@ export default function ForumScreen() {
     }
   };
 
+  const onRefresh = async () => {
+    setRefreshing(true);
+    setPage(0);
+    setHasMore(true);
+    await Promise.all([
+      loadDiscussions(true),
+      refreshTrending(),
+      refreshActiveUsers()
+    ]);
+    setRefreshing(false);
+  };
+
   useFocusEffect(
     useCallback(() => {
       // Reset and load first page on focus
@@ -360,7 +372,17 @@ export default function ForumScreen() {
   }
 
   return (
-    <ScrollView style={styles.container} showsVerticalScrollIndicator={false}>
+    <ScrollView 
+      style={styles.container} 
+      showsVerticalScrollIndicator={false}
+      refreshControl={
+        <RefreshControl
+          refreshing={refreshing}
+          onRefresh={onRefresh}
+          tintColor="#000000"
+        />
+      }
+    >
       {/* Header */}
       <View style={styles.header}>
         <View style={styles.headerSideLeft}>
@@ -658,6 +680,8 @@ const styles = StyleSheet.create({
     backgroundColor: '#FFFFFF',
     borderBottomWidth: 1,
     borderBottomColor: '#E5E7EB',
+    marginTop: -800,
+    paddingTop: 860,
   },
   headerSideLeft: { width: 72, alignItems: 'flex-start' },
   headerSideRight: { width: 120, alignItems: 'flex-end' },

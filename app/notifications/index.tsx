@@ -13,7 +13,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router, useFocusEffect } from 'expo-router';
-import { Heart, MessageCircle, UserPlus, AtSign, Share2, UserCheck, ArrowLeft, Briefcase, FileText, CheckCircle } from 'lucide-react-native';
+import { ThumbsUp, MessagesSquare, UserPlus, AtSign, Share2, UserCheck, ArrowLeft, Briefcase, FileText, CheckCircle } from 'lucide-react-native';
 import {
   getNotifications,
   getNotificationsByType,

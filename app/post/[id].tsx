@@ -1,9 +1,9 @@
-import { View, Text, StyleSheet, ScrollView, Image, TouchableOpacity, ActivityIndicator, Alert, Dimensions } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, Image, TouchableOpacity, ActivityIndicator, Alert, Dimensions, Share } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useEffect, useState } from 'react';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/hooks/useAuth';
-import { ArrowLeft, Heart, MessageCircle, Bookmark as BookmarkIcon, Share2 } from 'lucide-react-native';
+import { ArrowLeft, ThumbsUp, MessagesSquare, Star, Share2 } from 'lucide-react-native';
 import { Video, ResizeMode } from 'expo-av';
 import ExpandableText from '@/components/ExpandableText';
 
@@ -49,13 +49,18 @@ export default function PostDetailScreen() {
           .from('posts')
           .select(`
             *,
-            user:profiles(*),
-            post_likes(count),
-            post_comments(count)
+            user:profiles(*)
           `)
           .eq('id', id)
           .single();
         if (error) throw error;
+        
+        // Get accurate counts
+        const [{ count: likesCount }, { count: commentsCount }] = await Promise.all([
+          supabase.from('post_likes').select('*', { count: 'exact', head: true }).eq('post_id', id),
+          supabase.from('post_comments').select('*', { count: 'exact', head: true }).eq('post_id', id),
+        ]);
+        
         const userRow = Array.isArray((data as any).user) ? (data as any).user[0] : (data as any).user;
         const pd: PostDetail = {
           id: data.id,
@@ -70,8 +75,8 @@ export default function PostDetailScreen() {
           media_items: data.media_items,
           created_at: data.created_at,
           user: userRow ? { id: userRow.id, full_name: userRow.full_name, avatar_url: userRow.avatar_url, is_admin: userRow.is_admin } : null,
-          likes_count: Array.isArray((data as any).post_likes) ? (data as any).post_likes.length : 0,
-          comments_count: Array.isArray((data as any).post_comments) ? (data as any).post_comments.length : 0,
+          likes_count: likesCount || 0,
+          comments_count: commentsCount || 0,
         };
         setPost(pd);
 
@@ -97,6 +102,7 @@ export default function PostDetailScreen() {
     if (!user?.id || !post) return;
     const next = !isLiked;
     setIsLiked(next);
+    setPost(prev => prev ? { ...prev, likes_count: (prev.likes_count || 0) + (next ? 1 : -1) } : prev);
     try {
       if (next) {
         const { error } = await supabase.from('post_likes').insert({ post_id: post.id, user_id: user.id });
@@ -107,6 +113,7 @@ export default function PostDetailScreen() {
       }
     } catch (e) {
       setIsLiked(!next);
+      setPost(prev => prev ? { ...prev, likes_count: (prev.likes_count || 0) + (next ? -1 : 1) } : prev);
       Alert.alert('Error', 'Failed to update like');
     }
   };
@@ -126,6 +133,17 @@ export default function PostDetailScreen() {
     } catch (e) {
       setIsBookmarked(!next);
       Alert.alert('Error', 'Failed to update saved');
+    }
+  };
+
+  const handleShare = async () => {
+    if (!post) return;
+    try {
+      await Share.share({
+        message: `${post.user?.full_name || 'Someone'} shared: ${post.content || 'Check out this post'}`,
+      });
+    } catch (error) {
+      console.error('Error sharing:', error);
     }
   };
 
@@ -224,20 +242,33 @@ export default function PostDetailScreen() {
         <View style={styles.actions}>
           <View style={styles.leftActions}>
             <TouchableOpacity onPress={toggleLike} style={styles.actionBtnWithCount}>
-              <Heart size={24} color={isLiked ? '#FF3B30' : '#111827'} fill={isLiked ? '#FF3B30' : 'none'} />
+              <ThumbsUp 
+                size={24} 
+                color={isLiked ? "#14B8A6" : "#000000"} 
+                fill={isLiked ? "#14B8A6" : "none"}
+                strokeWidth={2}
+              />
               {(post.likes_count ?? 0) > 0 && (
                 <Text style={styles.actionCount}>{post.likes_count}</Text>
               )}
             </TouchableOpacity>
             <TouchableOpacity onPress={() => router.push(`/post-comments/${post.id}`)} style={styles.actionBtnWithCount}>
-              <MessageCircle size={24} color="#111827" />
+              <MessagesSquare size={24} color="#000000" strokeWidth={2} />
               {(post.comments_count ?? 0) > 0 && (
                 <Text style={styles.actionCount}>{post.comments_count}</Text>
               )}
             </TouchableOpacity>
+            <TouchableOpacity onPress={handleShare} style={styles.actionBtn}>
+              <Share2 size={24} color="#000000" strokeWidth={2} />
+            </TouchableOpacity>
           </View>
           <TouchableOpacity onPress={toggleBookmark} style={styles.actionBtn}>
-            <BookmarkIcon size={24} color={isBookmarked ? '#111827' : '#111827'} fill={isBookmarked ? '#111827' : 'none'} />
+            <Star 
+              size={24} 
+              color={isBookmarked ? '#14B8A6' : '#000000'} 
+              fill={isBookmarked ? '#14B8A6' : 'none'} 
+              strokeWidth={2}
+            />
           </TouchableOpacity>
         </View>
 
@@ -250,6 +281,21 @@ export default function PostDetailScreen() {
             captionStyle={styles.caption}
           />
         </View>
+
+        {/* View Comments Link */}
+        {(post.comments_count ?? 0) > 0 ? (
+          <TouchableOpacity onPress={() => router.push(`/post-comments/${post.id}`)} style={styles.viewCommentsContainer}>
+            <Text style={styles.viewComments}>
+              View all {post.comments_count} {post.comments_count === 1 ? 'comment' : 'comments'}
+            </Text>
+          </TouchableOpacity>
+        ) : (
+          <TouchableOpacity onPress={() => router.push(`/post-comments/${post.id}`)} style={styles.viewCommentsContainer}>
+            <Text style={styles.viewComments}>
+              Be the first to comment
+            </Text>
+          </TouchableOpacity>
+        )}
       </ScrollView>
     </View>
   );
@@ -268,7 +314,9 @@ const styles = StyleSheet.create({
   actionBtn: { padding: 4 },
   actionBtnWithCount: { flexDirection: 'row', alignItems: 'center', gap: 6, padding: 4 },
   actionCount: { fontSize: 14, color: '#111827', fontWeight: '600' },
-  captionBox: { paddingHorizontal: 16, paddingBottom: 20 },
+  captionBox: { paddingHorizontal: 16, paddingBottom: 8 },
   caption: { fontSize: 14, color: '#111827' },
   author: { fontFamily: 'Inter-SemiBold' },
+  viewCommentsContainer: { paddingHorizontal: 16, paddingBottom: 20 },
+  viewComments: { fontSize: 14, color: '#666666', marginTop: 4 },
 });

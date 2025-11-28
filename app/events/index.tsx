@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState, useCallback, useRef } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, TextInput, Alert, Image, ActivityIndicator, ScrollView, Linking, Modal, Dimensions } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, TextInput, Alert, Image, ActivityIndicator, ScrollView, Linking, Modal, Dimensions, RefreshControl } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Video } from 'expo-av';
 import { useRouter } from 'expo-router';
@@ -96,6 +96,7 @@ export default function AkoraEventsScreen() {
   const [featured, setFeatured] = useState(false);
   const [moderationDrafts, setModerationDrafts] = useState<Record<string, string>>({});
   const [searchQuery, setSearchQuery] = useState('');
+  const [refreshing, setRefreshing] = useState(false);
   const videoRefs = useRef<Map<string, Video | null>>(new Map());
 
   // Debug: Log current state values
@@ -120,6 +121,16 @@ export default function AkoraEventsScreen() {
     if (n >= packagePricing.standard) return 'standard';
     return 'basic';
   }, [packagePricing]);
+
+  const onRefresh = async () => {
+    setRefreshing(true);
+    await Promise.all([
+      loadPackagePricing(),
+      loadRole(),
+      fetchData()
+    ]);
+    setRefreshing(false);
+  };
 
   const loadPackagePricing = useCallback(async () => {
     try {
@@ -798,7 +809,17 @@ export default function AkoraEventsScreen() {
       )}
 
       {/* Published list */}
-      <ScrollView style={{ flex: 1 }} contentContainerStyle={{ paddingBottom: 32 }}>
+      <ScrollView 
+        style={{ flex: 1 }} 
+        contentContainerStyle={{ paddingBottom: 32 }}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={onRefresh}
+            tintColor="#000000"
+          />
+        }
+      >
         <Text style={styles.sectionTitle}>{activeTab === 'oaa' ? 'School Events' : 'Alumni Events'}</Text>
         {loading ? (
           <View style={styles.center}><ActivityIndicator color="#4169E1" /></View>
@@ -856,7 +877,7 @@ export default function AkoraEventsScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#fff' },
-  header: { paddingHorizontal: 16, paddingVertical: 12, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', borderBottomWidth: 1, borderBottomColor: '#EEE' },
+  header: { paddingHorizontal: 16, paddingVertical: 12, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', borderBottomWidth: 1, borderBottomColor: '#EEE', marginTop: -800, paddingTop: 812 },
   backBtn: { padding: 6 },
   headerTitle: { fontSize: 18, fontWeight: '700' },
   tabs: { flexDirection: 'row', gap: 8, padding: 12 },

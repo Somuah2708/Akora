@@ -1,4 +1,4 @@
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Dimensions, Image, ActivityIndicator, Modal, Share, Alert, Platform } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Dimensions, Image, ActivityIndicator, Modal, Share, Alert, Platform, RefreshControl } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Linking from 'expo-linking';
 import * as Clipboard from 'expo-clipboard';
@@ -47,22 +47,6 @@ const USER_POSTS = [
   { id: '12', image: 'https://images.unsplash.com/photo-1522202176988-66273c2fd55f?w=400', likes: 512 },
 ];
 
-// Dynamic profile highlights loaded from Supabase
-type Highlight = {
-  id: string;
-  user_id: string;
-  title?: string | null;
-  subtitle?: string | null;
-  media_url?: string | null; // deprecated but tolerated
-  action_url?: string | null; // deprecated but tolerated
-  emoji?: string | null; // deprecated but tolerated
-  color?: string | null; // optional border accent
-  order_index?: number | null;
-  visible?: boolean | null;
-  pinned?: boolean | null;
-  post_id?: string | null;
-};
-
 const USER_STATS = {
   posts: 127,
   friends: 342,
@@ -92,37 +76,11 @@ export default function ProfileScreen() {
   const [expandBio, setExpandBio] = useState(true);
   const [expandAbout, setExpandAbout] = useState(true);
   const [expandInterests, setExpandInterests] = useState(true);
-  const [highlights, setHighlights] = useState<Highlight[]>([]);
-  const [postPreview, setPostPreview] = useState<Record<string, { thumb?: string | null }>>({});
-  const [coversByTitle, setCoversByTitle] = useState<Record<string, string | null>>({});
   const [viewProfile, setViewProfile] = useState<any | null>(null);
-  const grouped = useMemo(() => {
-    const map = new Map<string, Highlight[]>();
-    highlights.forEach(h => {
-      const key = (h.title || 'Highlight').trim();
-      if (!map.has(key)) map.set(key, []);
-      map.get(key)!.push(h);
-    });
-    const groups = Array.from(map.entries()).map(([title, items]) => {
-      const sorted = items.slice().sort((a, b) => {
-        const pa = (a.pinned ? 0 : 1);
-        const pb = (b.pinned ? 0 : 1);
-        if (pa !== pb) return pa - pb;
-        const oa = a.order_index ?? 0;
-        const ob = b.order_index ?? 0;
-        return oa - ob;
-      });
-      const cover = sorted[0];
-      const derivedThumb = cover?.post_id ? postPreview[cover.post_id]?.thumb : undefined;
-      const custom = coversByTitle[title] || undefined;
-      const coverThumb = custom ?? derivedThumb;
-      return { title, count: items.length, hid: cover?.id, coverThumb };
-    });
-    return groups.sort((a, b) => a.title.localeCompare(b.title));
-  }, [highlights, postPreview, coversByTitle]);
   const [postSheetOpen, setPostSheetOpen] = useState(false);
   const [selectedPostId, setSelectedPostId] = useState<string | null>(null);
   const [selectedFromTab, setSelectedFromTab] = useState<'grid' | 'saved' | null>(null);
+  const [refreshing, setRefreshing] = useState(false);
   // Use viewed profile (if provided) or authenticated profile for rendering
   const profile = viewProfile || authProfile;
   
@@ -161,57 +119,6 @@ export default function ProfileScreen() {
     if (viewingUserId) {
       fetchUserData();
     }
-  }, [viewingUserId]);
-
-  // Load profile highlights when user/profile is available
-  useEffect(() => {
-    (async () => {
-      try {
-        if (!viewingUserId) return;
-        const { data, error } = await supabase
-          .from('profile_highlights')
-          .select('id,user_id,title,order_index,visible,pinned,post_id')
-          .eq('user_id', viewingUserId)
-          .eq('visible', true)
-          .order('pinned', { ascending: false })
-          .order('order_index', { ascending: true });
-        if (error) throw error;
-        const rows = (data as Highlight[]) || [];
-        setHighlights(rows);
-        // fetch post thumbnails for post-based highlights
-        const postIds = rows.map(r => r.post_id).filter(Boolean) as string[];
-        if (postIds.length) {
-          const { data: posts } = await supabase
-            .from('posts')
-            .select('id,image_url,image_urls,video_urls')
-            .in('id', postIds);
-          const map: Record<string, { thumb?: string | null }> = {};
-          (posts || []).forEach((p: any) => {
-            const thumb = p.image_url || (Array.isArray(p.image_urls) && p.image_urls.length > 0 ? p.image_urls[0] : null);
-            map[p.id] = { thumb };
-          });
-          setPostPreview(map);
-        } else {
-          setPostPreview({});
-        }
-        // fetch custom covers for this user
-        try {
-          const { data: covers, error: cErr } = await supabase
-            .from('profile_highlight_covers')
-            .select('title,cover_url')
-            .eq('user_id', viewingUserId);
-          if (!cErr && Array.isArray(covers)) {
-            const map: Record<string, string | null> = {};
-            covers.forEach((c: any) => { if (c?.title) map[String(c.title)] = c.cover_url || null; });
-            setCoversByTitle(map);
-          } else {
-            setCoversByTitle({});
-          }
-        } catch {}
-      } catch (e) {
-        // silently ignore for now
-      }
-    })();
   }, [viewingUserId]);
 
   // Recompute completeness when profile or interests change
@@ -318,6 +225,12 @@ export default function ProfileScreen() {
     }
   };
 
+  const onRefresh = async () => {
+    setRefreshing(true);
+    await fetchUserData();
+    setRefreshing(false);
+  };
+
   const computeCompleteness = () => {
     if (!profile) return;
     const tasks: { label: string; done: boolean }[] = [
@@ -420,7 +333,7 @@ export default function ProfileScreen() {
   if (!fontsLoaded || loading) {
     return (
       <View style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color="#228B22" />
+        <ActivityIndicator size="large" color="#000000" />
       </View>
     );
   }
@@ -467,6 +380,13 @@ export default function ProfileScreen() {
       style={styles.container} 
       contentContainerStyle={{ paddingTop: insets.top }}
       showsVerticalScrollIndicator={false}
+      refreshControl={
+        <RefreshControl 
+          refreshing={refreshing} 
+          onRefresh={onRefresh}
+          tintColor="#000000"
+        />
+      }
     >
       {/* Avatar Preview Modal */}
       <Modal
@@ -539,7 +459,7 @@ export default function ProfileScreen() {
         </TouchableOpacity>
       </Modal>
       {/* Status Bar Background */}
-      <View style={[styles.statusBarBg, { height: insets.top + 200, marginTop: -200 }]} />
+      <View style={[styles.statusBarBg, { height: insets.top + 800, marginTop: -800 }]} />
       
       <View style={styles.header}>
         <View style={styles.headerTop}>
@@ -628,7 +548,7 @@ export default function ProfileScreen() {
             <View style={styles.cardHeaderRow}>
               <Text style={styles.cardTitle}>Bio</Text>
               <TouchableOpacity onPress={() => toggleCollapse('bio')}>
-                {expandBio ? <ChevronUp size={18} color="#228B22" /> : <ChevronDown size={18} color="#228B22" />}
+                {expandBio ? <ChevronUp size={18} color="#000000" /> : <ChevronDown size={18} color="#000000" />}
               </TouchableOpacity>
             </View>
             {expandBio && (
@@ -641,7 +561,7 @@ export default function ProfileScreen() {
             <View style={styles.cardHeaderRow}>
               <Text style={styles.cardTitle}>About</Text>
               <TouchableOpacity onPress={() => toggleCollapse('about')}>
-                {expandAbout ? <ChevronUp size={18} color="#228B22" /> : <ChevronDown size={18} color="#228B22" />}
+                {expandAbout ? <ChevronUp size={18} color="#000000" /> : <ChevronDown size={18} color="#000000" />}
               </TouchableOpacity>
             </View>
             {expandAbout && (
@@ -724,7 +644,7 @@ export default function ProfileScreen() {
               <View style={styles.cardHeaderRow}>
                 <Text style={styles.cardTitle}>Interests</Text>
                 <TouchableOpacity onPress={() => toggleCollapse('interests')}>
-                  {expandInterests ? <ChevronUp size={18} color="#228B22" /> : <ChevronDown size={18} color="#228B22" />}
+                  {expandInterests ? <ChevronUp size={18} color="#000000" /> : <ChevronDown size={18} color="#000000" />}
                 </TouchableOpacity>
               </View>
               {expandInterests && (
@@ -735,7 +655,7 @@ export default function ProfileScreen() {
                     const Icon = meta.icon;
                     return (
                       <View key={id} style={styles.interestChip}>
-                        <Icon size={14} color="#228B22" strokeWidth={2} />
+                        <Icon size={14} color="#000000" strokeWidth={2} />
                         <Text style={styles.interestChipText}>{meta.label}</Text>
                       </View>
                     );
@@ -750,7 +670,7 @@ export default function ProfileScreen() {
               <View style={styles.cardHeaderRow}>
                 <Text style={styles.cardTitle}>Interests</Text>
                 <TouchableOpacity onPress={() => toggleCollapse('interests')}>
-                  {expandInterests ? <ChevronUp size={18} color="#228B22" /> : <ChevronDown size={18} color="#228B22" />}
+                  {expandInterests ? <ChevronUp size={18} color="#000000" /> : <ChevronDown size={18} color="#000000" />}
                 </TouchableOpacity>
               </View>
               {expandInterests && (
@@ -817,66 +737,6 @@ export default function ProfileScreen() {
           <VisitorActions 
             onMessage={() => router.push(`/chat/${viewingUserId}` as any)}
           />
-        )}
-
-        {highlights.length > 0 && (
-          <>
-            <View style={{ paddingHorizontal: 16, paddingTop: 4, paddingBottom: 8, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
-              <Text style={styles.cardTitle}>Highlights</Text>
-              {isOwner && (
-                <TouchableOpacity onPress={() => router.push('/profile/manage-highlights-home' as any)}>
-                  <Text style={styles.linkText}>Manage</Text>
-                </TouchableOpacity>
-              )}
-            </View>
-            <ScrollView 
-              horizontal 
-              showsHorizontalScrollIndicator={false}
-              style={styles.highlightsContainer}
-              contentContainerStyle={styles.highlightsContent}
-            >
-              {grouped.map((g) => (
-                <TouchableOpacity 
-                  key={g.title} 
-                  style={styles.highlightItem}
-                  onPress={() => {
-                    const title = encodeURIComponent(g.title || 'Highlight');
-                    router.push(`/highlights/${viewingUserId}?t=${title}` as any);
-                  }}
-                  activeOpacity={0.8}
-                >
-                  <View style={[styles.highlightImageContainer]}>
-                    {g.coverThumb ? (
-                      <Image source={{ uri: g.coverThumb as string }} style={styles.highlightImage} />
-                    ) : (
-                      <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#F3F4F6' }}>
-                        <Star size={18} color="#228B22" />
-                      </View>
-                    )}
-                  </View>
-                  <Text style={styles.highlightTitle} numberOfLines={1}>{g.title || 'Highlight'}</Text>
-                </TouchableOpacity>
-              ))}
-            </ScrollView>
-          </>
-        )}
-        {highlights.length === 0 && (
-          <View style={styles.card}>
-            <View style={styles.cardHeaderRow}>
-              <Text style={styles.cardTitle}>Highlights</Text>
-              {isOwner && (
-                <TouchableOpacity onPress={() => router.push('/profile/manage-highlights-home' as any)}>
-                  <Text style={styles.linkText}>Manage</Text>
-                </TouchableOpacity>
-              )}
-            </View>
-            <Text style={styles.cardBodyText}>No highlights yet</Text>
-            {isOwner && (
-              <TouchableOpacity style={styles.pickButton} onPress={() => router.push('/profile/manage-highlights-home' as any)}>
-                <Text style={styles.pickButtonText}>Add highlight</Text>
-              </TouchableOpacity>
-            )}
-          </View>
         )}
       </View>
 
@@ -1056,18 +916,6 @@ export default function ProfileScreen() {
             >
               <Text style={styles.sheetActionText}>View post</Text>
             </TouchableOpacity>
-            {isOwner && (
-            <TouchableOpacity
-              style={styles.sheetAction}
-              onPress={() => {
-                if (!selectedPostId) return;
-                setPostSheetOpen(false);
-                router.push(`/profile/add-from-post-slides?postId=${encodeURIComponent(selectedPostId)}` as any);
-              }}
-            >
-              <Text style={styles.sheetActionText}>Add to highlights</Text>
-            </TouchableOpacity>
-            )}
             {isOwner && selectedFromTab === 'saved' && (
               <TouchableOpacity
                 style={styles.sheetAction}
@@ -1313,36 +1161,6 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
   },
-  highlightsContainer: {
-    marginBottom: 8,
-  },
-  highlightsContent: {
-    paddingHorizontal: 16,
-    gap: 16,
-  },
-  highlightItem: {
-    alignItems: 'center',
-    width: 70,
-  },
-  highlightImageContainer: {
-    width: 64,
-    height: 64,
-    borderRadius: 12,
-    overflow: 'hidden',
-    marginBottom: 6,
-    borderWidth: 1,
-    borderColor: '#DBDBDB',
-  },
-  highlightImage: {
-    width: '100%',
-    height: '100%',
-  },
-  highlightTitle: {
-    fontSize: 12,
-    fontFamily: 'Inter-Regular',
-    color: '#000000',
-    textAlign: 'center',
-  },
   tabs: {
     flexDirection: 'row',
     borderTopWidth: 1,
@@ -1363,6 +1181,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     flexWrap: 'wrap',
     gap: 2,
+    paddingBottom: 64,
   },
   gridItem: {
     width: GRID_ITEM_SIZE,
@@ -1406,7 +1225,7 @@ const styles = StyleSheet.create({
     color: '#6B7280',
   },
   avatarPlaceholder: {
-    backgroundColor: '#228B22',
+    backgroundColor: '#000000',
     justifyContent: 'center',
     alignItems: 'center',
   },
@@ -1597,7 +1416,7 @@ const styles = StyleSheet.create({
   linkText: {
     fontSize: 14,
     fontFamily: 'Inter-SemiBold',
-    color: '#228B22',
+    color: '#000000',
   },
   cardBodyText: {
     fontSize: 13,
@@ -1645,7 +1464,7 @@ const styles = StyleSheet.create({
   },
   adminBadgeText: {
     fontSize: 12,
-    color: '#228B22',
+    color: '#000000',
     fontFamily: 'Inter-SemiBold',
   },
   progressBarBg: {
@@ -1659,12 +1478,12 @@ const styles = StyleSheet.create({
   },
   progressBarFill: {
     height: '100%',
-    backgroundColor: '#228B22',
+    backgroundColor: '#000000',
   },
   pickButton: {
     alignSelf: 'flex-start',
     marginTop: 8,
-    backgroundColor: '#228B22',
+    backgroundColor: '#000000',
     paddingHorizontal: 12,
     paddingVertical: 8,
     borderRadius: 10,
