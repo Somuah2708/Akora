@@ -452,7 +452,12 @@ export default function EditProfileScreen() {
         </TouchableOpacity>
       </Modal>
 
-      <View style={styles.header}>
+      <KeyboardAvoidingView 
+        style={{ flex: 1 }}
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        keyboardVerticalOffset={Platform.OS === 'ios' ? 90 : 0}
+      >
+        <View style={styles.header}>
         <TouchableOpacity 
           style={styles.backButton}
           onPress={handleBack}
@@ -911,7 +916,8 @@ export default function EditProfileScreen() {
           </View>
         </ScrollView>
       )}
-    </KeyboardAvoidingView>
+      </KeyboardAvoidingView>
+    </View>
   );
 }
 

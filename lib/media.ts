@@ -8,6 +8,23 @@ const IMAGE_MAX_BYTES = 5 * 1024 * 1024; // 5MB
 const VIDEO_MAX_BYTES = 25 * 1024 * 1024; // 25MB
 const DOCUMENT_MAX_BYTES = 10 * 1024 * 1024; // 10MB
 
+// Global locks to prevent concurrent picker operations
+let isPickingMedia = false;
+let isPickingDocument = false;
+
+// Auto-reset locks on app start/hot reload
+if (__DEV__) {
+  // In development, reset on hot reload
+  isPickingMedia = false;
+  isPickingDocument = false;
+}
+
+// Export reset function for debugging
+export function resetPickerLocks() {
+  isPickingMedia = false;
+  isPickingDocument = false;
+}
+
 // Request permissions
 export async function requestMediaPermissions() {
   const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
@@ -38,18 +55,27 @@ export async function requestAudioPermissions() {
 
 // Pick image/video from gallery
 export async function pickMedia(): Promise<ImagePicker.ImagePickerAsset | null> {
+  if (isPickingMedia) {
+    return null;
+  }
+  
+  isPickingMedia = true;
+  
+  // Safety timeout to release lock after 60 seconds
+  const timeout = setTimeout(() => {
+    isPickingMedia = false;
+  }, 60000);
+  
   try {
-    const hasPermission = await requestMediaPermissions();
-    if (!hasPermission) return null;
-
+    // Expo will automatically request permissions when needed
     const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: (ImagePicker as any).MediaType?.all ?? (ImagePicker as any).MediaTypeOptions?.All ?? ImagePicker.MediaTypeOptions.All,
+      mediaTypes: ['images', 'videos'],
       allowsEditing: false,
       quality: 0.8,
       selectionLimit: 1,
       videoMaxDuration: 60, // 60 seconds max
     });
-
+    
     if (!result.canceled && result.assets[0]) {
       return result.assets[0];
     }
@@ -58,22 +84,34 @@ export async function pickMedia(): Promise<ImagePicker.ImagePickerAsset | null> 
     console.error('Error picking media:', error);
     Alert.alert('Error', 'Failed to pick media');
     return null;
+  } finally {
+    clearTimeout(timeout);
+    isPickingMedia = false;
   }
 }
 
 // Take photo/video with camera
 export async function takeMedia(): Promise<ImagePicker.ImagePickerAsset | null> {
+  if (isPickingMedia) {
+    return null;
+  }
+  
+  isPickingMedia = true;
+  
+  // Safety timeout to release lock after 60 seconds
+  const timeout = setTimeout(() => {
+    isPickingMedia = false;
+  }, 60000);
+  
   try {
-    const hasPermission = await requestCameraPermissions();
-    if (!hasPermission) return null;
-
+    // Expo will automatically request permissions when needed
     const result = await ImagePicker.launchCameraAsync({
-      mediaTypes: (ImagePicker as any).MediaType?.all ?? (ImagePicker as any).MediaTypeOptions?.All ?? ImagePicker.MediaTypeOptions.All,
+      mediaTypes: ['images', 'videos'],
       allowsEditing: false,
       quality: 0.8,
       videoMaxDuration: 60,
     });
-
+    
     if (!result.canceled && result.assets[0]) {
       return result.assets[0];
     }
@@ -82,6 +120,9 @@ export async function takeMedia(): Promise<ImagePicker.ImagePickerAsset | null> 
     console.error('Error taking media:', error);
     Alert.alert('Error', 'Failed to take media');
     return null;
+  } finally {
+    clearTimeout(timeout);
+    isPickingMedia = false;
   }
 }
 
@@ -92,12 +133,23 @@ export async function pickDocument(): Promise<{
   size: number;
   mimeType: string;
 } | null> {
+  if (isPickingDocument) {
+    return null;
+  }
+  
+  isPickingDocument = true;
+  
+  // Safety timeout to release lock after 60 seconds
+  const timeout = setTimeout(() => {
+    isPickingDocument = false;
+  }, 60000);
+  
   try {
     const result = await DocumentPicker.getDocumentAsync({
       type: '*/*',
       copyToCacheDirectory: true,
     });
-
+    
     if (result.canceled || !result.assets || result.assets.length === 0) {
       return null;
     }
@@ -120,6 +172,9 @@ export async function pickDocument(): Promise<{
     console.error('Error picking document:', error);
     Alert.alert('Error', 'Failed to pick document');
     return null;
+  } finally {
+    clearTimeout(timeout);
+    isPickingDocument = false;
   }
 }
 

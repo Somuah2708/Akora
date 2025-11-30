@@ -17,7 +17,7 @@ import {
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { ArrowLeft, Send, Smile, Paperclip, Camera, X, Play, Pause, Check, CheckCheck, FileText } from 'lucide-react-native';
+import { ArrowLeft, Send, Smile, X, Play, Pause, Check, CheckCheck, FileText, Paperclip, Camera, Image as ImageIcon, File } from 'lucide-react-native';
 import { useAuth } from '@/hooks/useAuth';
 import CachedImage from '@/components/CachedImage';
 import {
@@ -32,7 +32,7 @@ import {
   subscribeToUserPresence,
   type DirectMessage,
 } from '@/lib/friends';
-import { pickMedia, takeMedia, uploadMedia, startRecording, stopRecording, cancelRecording, pickDocument, uploadDocument } from '@/lib/media';
+import { startRecording, stopRecording, cancelRecording, pickMedia, takeMedia, pickDocument, uploadMedia, uploadDocument } from '@/lib/media';
 import { formatMessageTime, formatLastSeen, groupMessagesByDay } from '@/lib/timeUtils';
 import { supabase } from '@/lib/supabase';
 import EmojiSelector from 'react-native-emoji-selector';
@@ -50,9 +50,8 @@ export default function DirectMessageScreen() {
   const [friendProfile, setFriendProfile] = useState<any>(null);
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
   const [recording, setRecording] = useState(false);
+  const [showAttachMenu, setShowAttachMenu] = useState(false);
   const [uploadingMedia, setUploadingMedia] = useState(false);
-  const [uploadingProgress, setUploadingProgress] = useState<number>(0);
-  const [showMediaOptions, setShowMediaOptions] = useState(false);
   const [imageViewerVisible, setImageViewerVisible] = useState(false);
   const [selectedImageUrl, setSelectedImageUrl] = useState<string | null>(null);
   const [playingSound, setPlayingSound] = useState<{ [key: string]: boolean }>({});
@@ -415,196 +414,6 @@ export default function DirectMessageScreen() {
     }
   };
 
-  const handleMediaPick = async () => {
-    setShowMediaOptions(false);
-    const media = await pickMedia();
-    if (media && user && friendId) {
-      try {
-        setUploadingMedia(true);
-        setUploadingProgress(5);
-        // Simulate progress while uploading (no real progress API from Supabase)
-        let p = 5;
-        const timer = setInterval(() => {
-          p = Math.min(p + Math.floor(Math.random() * 8) + 3, 90);
-          setUploadingProgress(p);
-        }, 300);
-        const mediaType = media.type === 'video' ? 'video' : 'image';
-        const mediaUrl = await uploadMedia(
-          media.uri,
-          user.id,
-          mediaType,
-          (media as any).fileName ?? null,
-          (media as any).mimeType ?? null
-        );
-        
-        if (mediaUrl) {
-          const newMessage = await sendDirectMessage(
-            user.id,
-            friendId,
-            '',
-            mediaType,
-            mediaUrl
-          );
-          setMessages((prev) => {
-            const next = upsertMessage(prev, newMessage);
-            setCachedThread(user.id, friendId, next, friendProfile);
-            return next;
-          });
-          
-          setTimeout(() => {
-            flatListRef.current?.scrollToEnd({ animated: true });
-          }, 100);
-          setUploadingProgress(100);
-        }
-      } catch (error) {
-        console.error('Error sending media:', error);
-        Alert.alert('Error', 'Failed to send media');
-      } finally {
-        setUploadingMedia(false);
-        setTimeout(() => setUploadingProgress(0), 600);
-      }
-    }
-  };
-
-  const handleCameraCapture = async () => {
-    setShowMediaOptions(false);
-    const media = await takeMedia();
-    if (media && user && friendId) {
-      try {
-        setUploadingMedia(true);
-        setUploadingProgress(5);
-        let p = 5;
-        const timer = setInterval(() => {
-          p = Math.min(p + Math.floor(Math.random() * 8) + 3, 90);
-          setUploadingProgress(p);
-        }, 300);
-        const mediaType = media.type === 'video' ? 'video' : 'image';
-        const mediaUrl = await uploadMedia(
-          media.uri,
-          user.id,
-          mediaType,
-          (media as any).fileName ?? null,
-          (media as any).mimeType ?? null
-        );
-
-        if (mediaUrl) {
-          const newMessage = await sendDirectMessage(
-            user.id,
-            friendId,
-            '',
-            mediaType,
-            mediaUrl
-          );
-          setMessages((prev) => {
-            const next = upsertMessage(prev, newMessage);
-            setCachedThread(user.id, friendId, next, friendProfile);
-            return next;
-          });
-          
-          setTimeout(() => {
-            flatListRef.current?.scrollToEnd({ animated: true });
-          }, 100);
-          setUploadingProgress(100);
-        }
-      } catch (error) {
-        console.error('Error sending media:', error);
-        Alert.alert('Error', 'Failed to send media');
-      } finally {
-        setUploadingMedia(false);
-        setTimeout(() => setUploadingProgress(0), 600);
-      }
-    }
-  };
-
-  const handleDocumentPick = async () => {
-    setShowMediaOptions(false);
-    const doc = await pickDocument();
-    if (doc && user && friendId) {
-      try {
-        setUploadingMedia(true);
-        setUploadingProgress(10);
-        
-        // Simulate progress while uploading
-        let progress = 10;
-        const progressInterval = setInterval(() => {
-          progress = Math.min(progress + 15, 85);
-          setUploadingProgress(progress);
-        }, 400);
-        
-        const docUrl = await uploadDocument(
-          doc.uri,
-          user.id,
-          doc.name,
-          doc.mimeType
-        );
-
-        clearInterval(progressInterval);
-
-        if (docUrl) {
-          console.log('Document uploaded successfully, sending message...');
-          setUploadingProgress(90);
-          
-          try {
-            const newMessage = await sendDirectMessage(
-              user.id,
-              friendId,
-              `📄 ${doc.name}`,
-              'document',
-              docUrl
-            );
-            
-            console.log('Document message sent:', newMessage);
-            
-            if (newMessage) {
-              setMessages((prev) => {
-                const next = upsertMessage(prev, newMessage);
-                setCachedThread(user.id, friendId, next, friendProfile);
-                return next;
-              });
-              
-              setTimeout(() => {
-                flatListRef.current?.scrollToEnd({ animated: true });
-              }, 100);
-              setUploadingProgress(100);
-            } else {
-              console.error('sendDirectMessage returned null');
-              Alert.alert('Error', 'Failed to send document message to database.');
-            }
-          } catch (sendError: any) {
-            console.error('Error calling sendDirectMessage:', sendError);
-            const errorMessage = sendError?.message || 'Unknown error';
-            
-            // Check if it's a constraint violation (migration not run)
-            if (errorMessage.includes('violates check constraint') || 
-                errorMessage.includes('message_type_check')) {
-              Alert.alert(
-                'Database Update Required',
-                'The document message feature requires a database migration. Please run the migration file: 20251230000005_add_document_message_type.sql in your Supabase dashboard.',
-                [{ text: 'OK' }]
-              );
-            } else {
-              Alert.alert('Error', `Failed to send document: ${errorMessage}`);
-            }
-          }
-        } else {
-          clearInterval(progressInterval);
-          console.log('Document upload returned null URL');
-          Alert.alert('Upload Failed', 'Could not upload document. Please try again.');
-        }
-      } catch (error) {
-        console.error('Error sending document:', error);
-        Alert.alert('Error', `Failed to send document: ${error instanceof Error ? error.message : 'Unknown error'}`);
-      } finally {
-        setUploadingMedia(false);
-        setTimeout(() => setUploadingProgress(0), 600);
-      }
-    } else if (!doc) {
-      // User cancelled document picker
-      setUploadingMedia(false);
-      setUploadingProgress(0);
-    }
-  };
-
   const handleStartRecording = async () => {
     const success = await startRecording();
     if (success) {
@@ -617,7 +426,6 @@ export default function DirectMessageScreen() {
     
     setRecording(false);
     try {
-      setUploadingMedia(true);
       const voiceUrl = await stopRecording(user.id);
       
       if (voiceUrl) {
@@ -641,8 +449,6 @@ export default function DirectMessageScreen() {
     } catch (error) {
       console.error('Error sending voice message:', error);
       Alert.alert('Error', 'Failed to send voice message');
-    } finally {
-      setUploadingMedia(false);
     }
   };
 
@@ -692,6 +498,149 @@ export default function DirectMessageScreen() {
     } catch (error) {
       console.error('Error playing voice message:', error);
       Alert.alert('Error', 'Failed to play voice message');
+    }
+  };
+
+  // Media Handlers
+  const handlePickPhotos = async () => {
+    if (!user || !friendId) return;
+    
+    setShowAttachMenu(false);
+    
+    try {
+      const media = await pickMedia();
+      if (!media) {
+        return;
+      }
+
+      setUploadingMedia(true);
+
+      const mediaType = media.type === 'video' ? 'video' : 'image';
+      const uploadedUrl = await uploadMedia(
+        media.uri,
+        user.id,
+        mediaType,
+        media.fileName,
+        media.mimeType
+      );
+
+      if (uploadedUrl) {
+        const message = mediaType === 'video' ? '📹 Video' : '📷 Photo';
+        const newMessage = await sendDirectMessage(
+          user.id,
+          friendId,
+          message,
+          mediaType,
+          uploadedUrl
+        );
+        
+        setMessages((prev) => {
+          const next = upsertMessage(prev, newMessage);
+          setCachedThread(user.id, friendId, next, friendProfile);
+          return next;
+        });
+        
+        setTimeout(() => {
+          flatListRef.current?.scrollToEnd({ animated: true });
+        }, 100);
+      }
+    } catch (error) {
+      console.error('Error uploading media:', error);
+      Alert.alert('Error', 'Failed to upload media');
+    } finally {
+      setUploadingMedia(false);
+    }
+  };
+
+  const handleTakeCamera = async () => {
+    if (!user || !friendId) return;
+    
+    setShowAttachMenu(false);
+    
+    try {
+      const media = await takeMedia();
+      if (!media) {
+        return;
+      }
+
+      setUploadingMedia(true);
+
+      const mediaType = media.type === 'video' ? 'video' : 'image';
+      const uploadedUrl = await uploadMedia(
+        media.uri,
+        user.id,
+        mediaType,
+        media.fileName,
+        media.mimeType
+      );
+
+      if (uploadedUrl) {
+        const message = mediaType === 'video' ? '📹 Video' : '📷 Photo';
+        const newMessage = await sendDirectMessage(
+          user.id,
+          friendId,
+          message,
+          mediaType,
+          uploadedUrl
+        );
+        
+        setMessages((prev) => {
+          const next = upsertMessage(prev, newMessage);
+          setCachedThread(user.id, friendId, next, friendProfile);
+          return next;
+        });
+        
+        setTimeout(() => {
+          flatListRef.current?.scrollToEnd({ animated: true });
+        }, 100);
+      }
+    } catch (error) {
+      console.error('Error taking media:', error);
+      Alert.alert('Error', 'Failed to take media');
+    } finally {
+      setUploadingMedia(false);
+    }
+  };
+
+  const handlePickDocument = async () => {
+    if (!user || !friendId) return;
+    
+    setShowAttachMenu(false);
+    
+    try {
+      const doc = await pickDocument();
+      if (!doc) {
+        return;
+      }
+
+      setUploadingMedia(true);
+
+      const uploadedUrl = await uploadDocument(doc.uri, user.id, doc.name, doc.mimeType);
+
+      if (uploadedUrl) {
+        const newMessage = await sendDirectMessage(
+          user.id,
+          friendId,
+          `📄 ${doc.name}`,
+          'document',
+          uploadedUrl
+        );
+        
+        setMessages((prev) => {
+          const next = upsertMessage(prev, newMessage);
+          setCachedThread(user.id, friendId, next, friendProfile);
+          return next;
+        });
+        
+        setTimeout(() => {
+          flatListRef.current?.scrollToEnd({ animated: true });
+        }, 100);
+      }
+    } catch (error) {
+      console.error('Error uploading document:', error);
+      Alert.alert('Error', 'Failed to upload document');
+    } finally {
+      setUploadingMedia(false);
     }
   };
 
@@ -956,7 +905,7 @@ export default function DirectMessageScreen() {
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: '#0F172A' }]} edges={['top']}>
       <KeyboardAvoidingView
-        style={{ flex: 1 }}
+        style={{ flex: 1, backgroundColor: '#FFFFFF' }}
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
         keyboardVerticalOffset={0}
       >
@@ -1033,6 +982,15 @@ export default function DirectMessageScreen() {
 
       {/* Input */}
       <View style={styles.inputContainer}>
+        {/* Paperclip Attachment Button */}
+        <TouchableOpacity
+          style={styles.iconButton}
+          onPress={() => setShowAttachMenu(true)}
+          activeOpacity={0.7}
+        >
+          <Paperclip size={22} color="#737373" />
+        </TouchableOpacity>
+
         {/* Emoji Button */}
         <TouchableOpacity
           style={styles.iconButton}
@@ -1056,15 +1014,6 @@ export default function DirectMessageScreen() {
           maxLength={1000}
         />
 
-        {/* Media Button */}
-        <TouchableOpacity
-          style={styles.iconButton}
-          onPress={() => setShowMediaOptions(true)}
-          activeOpacity={0.7}
-        >
-          <Paperclip size={22} color="#737373" />
-        </TouchableOpacity>
-
         {/* Send Button */}
         {messageText.trim() && (
           <TouchableOpacity
@@ -1080,6 +1029,67 @@ export default function DirectMessageScreen() {
           </TouchableOpacity>
         )}
       </View>
+
+      {/* Attachment Menu Modal - WhatsApp Style */}
+      <Modal
+        visible={showAttachMenu}
+        animationType="fade"
+        transparent={true}
+        onRequestClose={() => setShowAttachMenu(false)}
+      >
+        <Pressable 
+          style={styles.attachMenuOverlay}
+          onPress={() => setShowAttachMenu(false)}
+        >
+          <View style={styles.attachMenuContainer}>
+            {/* Camera Option */}
+            <TouchableOpacity
+              style={styles.attachOption}
+              onPress={handleTakeCamera}
+              activeOpacity={0.7}
+            >
+              <View style={[styles.attachIconCircle, { backgroundColor: '#FF6B9D' }]}>
+                <Camera size={24} color="#FFFFFF" />
+              </View>
+              <Text style={styles.attachOptionText}>Camera</Text>
+            </TouchableOpacity>
+
+            {/* Photos Option */}
+            <TouchableOpacity
+              style={styles.attachOption}
+              onPress={handlePickPhotos}
+              activeOpacity={0.7}
+            >
+              <View style={[styles.attachIconCircle, { backgroundColor: '#8B5CF6' }]}>
+                <ImageIcon size={24} color="#FFFFFF" />
+              </View>
+              <Text style={styles.attachOptionText}>Photos</Text>
+            </TouchableOpacity>
+
+            {/* Document Option */}
+            <TouchableOpacity
+              style={styles.attachOption}
+              onPress={handlePickDocument}
+              activeOpacity={0.7}
+            >
+              <View style={[styles.attachIconCircle, { backgroundColor: '#3B82F6' }]}>
+                <File size={24} color="#FFFFFF" />
+              </View>
+              <Text style={styles.attachOptionText}>Document</Text>
+            </TouchableOpacity>
+          </View>
+        </Pressable>
+      </Modal>
+
+      {/* Uploading Indicator */}
+      {uploadingMedia && (
+        <View style={styles.uploadingOverlay}>
+          <View style={styles.uploadingContainer}>
+            <ActivityIndicator size="large" color="#0F172A" />
+            <Text style={styles.uploadingText}>Uploading...</Text>
+          </View>
+        </View>
+      )}
 
       {/* Emoji Picker Modal */}
       <Modal
@@ -1107,59 +1117,6 @@ export default function DirectMessageScreen() {
           </View>
         </View>
       </Modal>
-
-      {/* Media Options Modal */}
-      <Modal
-        visible={showMediaOptions}
-        animationType="fade"
-        transparent={true}
-        onRequestClose={() => setShowMediaOptions(false)}
-      >
-        <Pressable 
-          style={styles.modalOverlay}
-          onPress={() => setShowMediaOptions(false)}
-        >
-          <View style={styles.mediaOptionsContainer}>
-            <TouchableOpacity
-              style={styles.mediaOption}
-              onPress={handleMediaPick}
-            >
-              <Paperclip size={28} color="#4169E1" />
-              <Text style={styles.mediaOptionText}>Gallery</Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={styles.mediaOption}
-              onPress={handleCameraCapture}
-            >
-              <Camera size={28} color="#4169E1" />
-              <Text style={styles.mediaOptionText}>Camera</Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={styles.mediaOption}
-              onPress={handleDocumentPick}
-            >
-              <FileText size={28} color="#4169E1" />
-              <Text style={styles.mediaOptionText}>Document</Text>
-            </TouchableOpacity>
-          </View>
-        </Pressable>
-      </Modal>
-
-      {/* Uploading Media Indicator */}
-      {uploadingMedia && (
-        <View style={styles.uploadingOverlay}>
-          <View style={styles.uploadingContainer}>
-            <ActivityIndicator size="large" color="#4169E1" />
-            <Text style={styles.uploadingText}>
-              {recording
-                ? 'Sending voice message...'
-                : uploadingProgress > 0
-                  ? `Uploading media... ${uploadingProgress}%`
-                  : 'Uploading media...'}
-            </Text>
-          </View>
-        </View>
-      )}
       
       {/* Full-Screen Image Viewer Modal */}
       <Modal
@@ -1197,13 +1154,13 @@ export default function DirectMessageScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#FAFAFA',
+    backgroundColor: '#FFFFFF',
   },
   loadingContainer: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: '#FAFAFA',
+    backgroundColor: '#FFFFFF',
   },
   header: {
     flexDirection: 'row',
@@ -1381,7 +1338,7 @@ const styles = StyleSheet.create({
     elevation: 1,
   },
   myMessageBubble: {
-    backgroundColor: '#1a1a1a',
+    backgroundColor: '#0F172A',
     borderBottomRightRadius: 4,
   },
   theirMessageBubble: {
@@ -1441,9 +1398,9 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14,
     paddingTop: 10,
     paddingBottom: Platform.OS === 'ios' ? 28 : 10,
-    backgroundColor: '#FFFFFF',
+    backgroundColor: '#0F172A',
     borderTopWidth: 1,
-    borderTopColor: '#F0F0F0',
+    borderTopColor: '#1E293B',
     gap: 8,
   },
   iconButton: {
@@ -1647,6 +1604,49 @@ const styles = StyleSheet.create({
     color: '#1F2937',
     fontWeight: '600',
     letterSpacing: -0.2,
+  },
+  // Attachment Menu Styles (WhatsApp-style)
+  attachMenuOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'flex-end',
+  },
+  attachMenuContainer: {
+    backgroundColor: '#FFFFFF',
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    paddingVertical: 30,
+    paddingHorizontal: 20,
+    flexDirection: 'row',
+    justifyContent: 'space-around',
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: -2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
+    elevation: 10,
+  },
+  attachOption: {
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  attachIconCircle: {
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 8,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.15,
+    shadowRadius: 4,
+    elevation: 4,
+  },
+  attachOptionText: {
+    fontSize: 13,
+    color: '#374151',
+    fontWeight: '500',
   },
   // Image Viewer Modal Styles
   imageViewerContainer: {

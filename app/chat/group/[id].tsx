@@ -5,10 +5,10 @@ import { useLocalSearchParams, useRouter } from "expo-router";
 import { supabase } from "../../../lib/supabase";
 import { useAuth } from "../../../hooks/useAuth";
 import dayjs from "dayjs";
-import { uploadMedia, pickMedia, startRecording, stopRecording, pickDocument, uploadDocument } from "../../../lib/media";
 import EmojiSelector from 'react-native-emoji-selector';
-import { ArrowLeft, Send, Smile, Paperclip, X, Play, Pause, FileText } from 'lucide-react-native';
+import { ArrowLeft, Send, Smile, X, Play, Pause, FileText, Camera, Paperclip, Image as ImageIcon, File } from 'lucide-react-native';
 import { Audio } from 'expo-av';
+import { pickMedia, takeMedia, pickDocument, uploadMedia, uploadDocument } from '../../../lib/media';
 
 type Profile = { id: string; full_name?: string | null; avatar_url?: string | null };
 type Group = { id: string; name: string; avatar_url?: string | null };
@@ -39,6 +39,7 @@ export default function GroupChatScreen() {
   const [mentionQuery, setMentionQuery] = useState<string | null>(null);
   const [mentionResults, setMentionResults] = useState<Profile[]>([]);
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
+  const [showAttachMenu, setShowAttachMenu] = useState(false);
   const [uploadingMedia, setUploadingMedia] = useState(false);
   const [playingSound, setPlayingSound] = useState<{ [key: string]: boolean }>({});
   const soundObjects = useRef<{ [key: string]: Audio.Sound }>({});
@@ -203,103 +204,37 @@ export default function GroupChatScreen() {
     // Message will arrive via realtime
   }, [groupId, meId, input]);
 
-  const sendMedia = useCallback(async () => {
-    if (!meId || !groupId) return;
-    try {
-      setUploadingMedia(true);
-      const picked = await pickMedia();
-      if (!picked) {
-        setUploadingMedia(false);
-        return;
-      }
-      const { uri, type: pickedType, fileName, mimeType } = picked as any;
-      const msgType: 'image' | 'video' = pickedType === 'video' ? 'video' : 'image';
-      const publicUrl = await uploadMedia(uri, meId, msgType, fileName, mimeType);
-      if (!publicUrl) {
-        setUploadingMedia(false);
-        return;
-      }
-      await supabase
-        .from("group_messages")
-        .insert({ group_id: groupId, sender_id: meId, media_url: publicUrl, message_type: msgType });
-      // Message will arrive via realtime
-    } catch (error) {
-      console.error("Error sending media:", error);
-    } finally {
-      setUploadingMedia(false);
-    }
-  }, [groupId, meId]);
+  // Recording functionality disabled - state variable not defined
+  // const handleStartRecording = async () => {
+  //   const success = await startRecording();
+  //   if (success) {
+  //     setRecording(true);
+  //   }
+  // };
 
-  const sendDocument = useCallback(async () => {
-    if (!meId || !groupId) return;
-    try {
-      setUploadingMedia(true);
-      const doc = await pickDocument();
-      if (!doc) {
-        setUploadingMedia(false);
-        return;
-      }
-      
-      const publicUrl = await uploadDocument(doc.uri, meId, doc.name, doc.mimeType);
-      if (!publicUrl) {
-        setUploadingMedia(false);
-        Alert.alert('Upload Failed', 'Could not upload document. Please try again.');
-        return;
-      }
-      
-      const { error } = await supabase
-        .from("group_messages")
-        .insert({ 
-          group_id: groupId, 
-          sender_id: meId, 
-          content: `📄 ${doc.name}`,
-          media_url: publicUrl, 
-          message_type: 'document' 
-        });
-      
-      if (error) {
-        console.error("Error inserting document message:", error);
-        Alert.alert('Error', 'Failed to send document message.');
-      }
-      // Message will arrive via realtime
-    } catch (error) {
-      console.error("Error sending document:", error);
-      Alert.alert('Error', 'Failed to send document. Please check your connection and try again.');
-    } finally {
-      setUploadingMedia(false);
-    }
-  }, [groupId, meId]);
-
-  const handleStartRecording = async () => {
-    const success = await startRecording();
-    if (success) {
-      setRecording(true);
-    }
-  };
-
-  const handleStopRecording = async () => {
-    if (!meId || !groupId) return;
-    setRecording(false);
-    try {
-      setUploadingMedia(true);
-      const voiceUrl = await stopRecording(meId);
-      if (voiceUrl) {
-        await supabase
-          .from("group_messages")
-          .insert({ 
-            group_id: groupId, 
-            sender_id: meId, 
-            content: '🎤 Voice message',
-            media_url: voiceUrl, 
-            message_type: 'voice' 
-          });
-      }
-    } catch (error) {
-      console.error("Error sending voice message:", error);
-    } finally {
-      setUploadingMedia(false);
-    }
-  };
+  // const handleStopRecording = async () => {
+  //   if (!meId || !groupId) return;
+  //   setRecording(false);
+  //   try {
+  //     setUploadingMedia(true);
+  //     const voiceUrl = await stopRecording(meId);
+  //     if (voiceUrl) {
+  //       await supabase
+  //         .from("group_messages")
+  //         .insert({ 
+  //           group_id: groupId, 
+  //           sender_id: meId, 
+  //           content: '🎤 Voice message',
+  //           media_url: voiceUrl, 
+  //           message_type: 'voice' 
+  //         });
+  //     }
+  //   } catch (error) {
+  //     console.error("Error sending voice message:", error);
+  //   } finally {
+  //     setUploadingMedia(false);
+  //   }
+  // };
 
   const toggleVoicePlayback = async (messageId: string, voiceUrl: string) => {
     try {
@@ -334,6 +269,125 @@ export default function GroupChatScreen() {
     }
   };
 
+  // Media Handlers
+  const handlePickPhotos = async () => {
+    if (!meId || !groupId) return;
+    
+    setShowAttachMenu(false);
+    
+    try {
+      const media = await pickMedia();
+      if (!media) {
+        return;
+      }
+
+      setUploadingMedia(true);
+
+      const mediaType = media.type === 'video' ? 'video' : 'image';
+      const uploadedUrl = await uploadMedia(
+        media.uri,
+        meId,
+        mediaType,
+        media.fileName,
+        media.mimeType
+      );
+
+      if (uploadedUrl) {
+        const content = mediaType === 'video' ? '📹 Video' : '📷 Photo';
+        await supabase
+          .from("group_messages")
+          .insert({
+            group_id: groupId,
+            sender_id: meId,
+            content,
+            media_url: uploadedUrl,
+            message_type: mediaType
+          });
+      }
+    } catch (error) {
+      console.error('Error uploading media:', error);
+      Alert.alert('Error', 'Failed to upload media');
+    } finally {
+      setUploadingMedia(false);
+    }
+  };
+
+  const handleTakeCamera = async () => {
+    if (!meId || !groupId) return;
+    
+    setShowAttachMenu(false);
+    
+    try {
+      const media = await takeMedia();
+      if (!media) {
+        return;
+      }
+
+      setUploadingMedia(true);
+
+      const mediaType = media.type === 'video' ? 'video' : 'image';
+      const uploadedUrl = await uploadMedia(
+        media.uri,
+        meId,
+        mediaType,
+        media.fileName,
+        media.mimeType
+      );
+
+      if (uploadedUrl) {
+        const content = mediaType === 'video' ? '📹 Video' : '📷 Photo';
+        await supabase
+          .from("group_messages")
+          .insert({
+            group_id: groupId,
+            sender_id: meId,
+            content,
+            media_url: uploadedUrl,
+            message_type: mediaType
+          });
+      }
+    } catch (error) {
+      console.error('Error taking media:', error);
+      Alert.alert('Error', 'Failed to take media');
+    } finally {
+      setUploadingMedia(false);
+    }
+  };
+
+  const handlePickDocument = async () => {
+    if (!meId || !groupId) return;
+    
+    setShowAttachMenu(false);
+    
+    try {
+      const doc = await pickDocument();
+      if (!doc) {
+        return;
+      }
+
+      setUploadingMedia(true);
+
+      const uploadedUrl = await uploadDocument(doc.uri, meId, doc.name, doc.mimeType);
+
+      if (uploadedUrl) {
+        await supabase
+          .from("group_messages")
+          .insert({
+            group_id: groupId,
+            sender_id: meId,
+            content: `📄 ${doc.name}`,
+            media_url: uploadedUrl,
+            message_type: 'document'
+          });
+      }
+    } catch (error) {
+      console.error('Error uploading document:', error);
+      Alert.alert('Error', 'Failed to upload document');
+    } finally {
+      setUploadingMedia(false);
+    }
+  };
+
   useEffect(() => {
     // On focus, mark messages read
     if (!groupId || !meId) return;
@@ -359,21 +413,25 @@ export default function GroupChatScreen() {
           )}
           <View
             style={{
-              backgroundColor: mine ? "#DCF8C6" : "#fff",
-              borderRadius: 12,
-              padding: 10,
-              maxWidth: "85%",
+              backgroundColor: mine ? "#0F172A" : "#FFFFFF",
+              borderRadius: 18,
+              paddingHorizontal: 14,
+              paddingVertical: 9,
+              maxWidth: "80%",
               shadowColor: "#000",
               shadowOpacity: 0.05,
               shadowOffset: { width: 0, height: 1 },
-              shadowRadius: 2,
-              borderWidth: 0.5,
-              borderColor: "#eee",
+              shadowRadius: 3,
+              elevation: 1,
+              borderWidth: mine ? 0 : 1,
+              borderColor: mine ? "transparent" : "#F0F0F0",
+              borderBottomRightRadius: mine ? 4 : 18,
+              borderBottomLeftRadius: mine ? 18 : 4,
             }}
           >
             {/* Text content - only show for text messages or if there's text with media (except voice) */}
             {item.message_type === 'text' && item.content ? (
-              <Text style={{ fontSize: 16 }}>{item.content}</Text>
+              <Text style={{ fontSize: 15, color: mine ? "#FFFFFF" : "#1a1a1a", lineHeight: 20, letterSpacing: -0.2 }}>{item.content}</Text>
             ) : null}
             
             {/* Image Message */}
@@ -485,7 +543,7 @@ export default function GroupChatScreen() {
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: "#0F172A" }} edges={['top']}>
       <KeyboardAvoidingView 
-        style={{ flex: 1, backgroundColor: "#f5f5f5" }}
+        style={{ flex: 1, backgroundColor: "#FFFFFF" }}
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
         keyboardVerticalOffset={0}
       >
@@ -525,49 +583,34 @@ export default function GroupChatScreen() {
 
       {/* Input Container */}
       <View style={styles.inputContainer}>
+        {/* Paperclip Attachment Button */}
+        <TouchableOpacity
+          style={styles.iconButton}
+          onPress={() => setShowAttachMenu(true)}
+          activeOpacity={0.7}
+        >
+          <Paperclip size={22} color="#737373" />
+        </TouchableOpacity>
+
         {/* Emoji Button */}
         <TouchableOpacity
           style={styles.iconButton}
           onPress={() => setShowEmojiPicker(!showEmojiPicker)}
           activeOpacity={0.7}
         >
-          <Smile size={22} color="#4169E1" />
+          <Smile size={22} color="#737373" />
         </TouchableOpacity>
 
         {/* Text Input */}
         <TextInput
           style={styles.input}
           placeholder="Type a message..."
-          placeholderTextColor="#94A3B8"
+          placeholderTextColor="#A3A3A3"
           value={input}
           onChangeText={onChangeText}
           multiline
           maxLength={1000}
         />
-
-        {/* Media Button */}
-        <TouchableOpacity
-          style={styles.iconButton}
-          onPress={sendMedia}
-          activeOpacity={0.7}
-          disabled={uploadingMedia}
-        >
-          {uploadingMedia ? (
-            <ActivityIndicator size="small" color="#4169E1" />
-          ) : (
-            <Paperclip size={22} color="#4169E1" />
-          )}
-        </TouchableOpacity>
-
-        {/* Document Button */}
-        <TouchableOpacity
-          style={styles.iconButton}
-          onPress={sendDocument}
-          activeOpacity={0.7}
-          disabled={uploadingMedia}
-        >
-          <FileText size={22} color="#4169E1" />
-        </TouchableOpacity>
 
         {/* Send Button */}
         {input.trim() && (
@@ -584,6 +627,67 @@ export default function GroupChatScreen() {
           </TouchableOpacity>
         )}
       </View>
+
+      {/* Attachment Menu Modal - WhatsApp Style */}
+      <Modal
+        visible={showAttachMenu}
+        animationType="fade"
+        transparent={true}
+        onRequestClose={() => setShowAttachMenu(false)}
+      >
+        <Pressable 
+          style={styles.attachMenuOverlay}
+          onPress={() => setShowAttachMenu(false)}
+        >
+          <View style={styles.attachMenuContainer}>
+            {/* Camera Option */}
+            <TouchableOpacity
+              style={styles.attachOption}
+              onPress={handleTakeCamera}
+              activeOpacity={0.7}
+            >
+              <View style={[styles.attachIconCircle, { backgroundColor: '#FF6B9D' }]}>
+                <Camera size={24} color="#FFFFFF" />
+              </View>
+              <Text style={styles.attachOptionText}>Camera</Text>
+            </TouchableOpacity>
+
+            {/* Photos Option */}
+            <TouchableOpacity
+              style={styles.attachOption}
+              onPress={handlePickPhotos}
+              activeOpacity={0.7}
+            >
+              <View style={[styles.attachIconCircle, { backgroundColor: '#8B5CF6' }]}>
+                <ImageIcon size={24} color="#FFFFFF" />
+              </View>
+              <Text style={styles.attachOptionText}>Photos</Text>
+            </TouchableOpacity>
+
+            {/* Document Option */}
+            <TouchableOpacity
+              style={styles.attachOption}
+              onPress={handlePickDocument}
+              activeOpacity={0.7}
+            >
+              <View style={[styles.attachIconCircle, { backgroundColor: '#3B82F6' }]}>
+                <File size={24} color="#FFFFFF" />
+              </View>
+              <Text style={styles.attachOptionText}>Document</Text>
+            </TouchableOpacity>
+          </View>
+        </Pressable>
+      </Modal>
+
+      {/* Uploading Indicator */}
+      {uploadingMedia && (
+        <View style={styles.uploadingOverlay}>
+          <View style={styles.uploadingContainer}>
+            <ActivityIndicator size="large" color="#0F172A" />
+            <Text style={styles.uploadingText}>Uploading...</Text>
+          </View>
+        </View>
+      )}
 
       {/* Emoji Picker Modal */}
       <Modal
@@ -641,57 +745,47 @@ const styles = StyleSheet.create({
   inputContainer: {
     flexDirection: 'row',
     alignItems: 'flex-end',
-    paddingHorizontal: 16,
-    paddingTop: 14,
-    paddingBottom: Platform.OS === 'ios' ? 28 : 14,
-    backgroundColor: '#FFFFFF',
-    borderTopWidth: 0,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: -2 },
-    shadowOpacity: 0.06,
-    shadowRadius: 8,
-    elevation: 8,
-    gap: 10,
+    paddingHorizontal: 14,
+    paddingTop: 10,
+    paddingBottom: Platform.OS === 'ios' ? 28 : 10,
+    backgroundColor: '#0F172A',
+    borderTopWidth: 1,
+    borderTopColor: '#1E293B',
+    gap: 8,
   },
   safeBottom: {
     paddingBottom: Platform.OS === 'ios' ? 34 : 14,
   },
   iconButton: {
-    width: 38,
-    height: 38,
-    borderRadius: 19,
+    width: 36,
+    height: 36,
+    borderRadius: 18,
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: '#F3F4F6',
+    backgroundColor: 'transparent',
   },
   recordingButton: {
     backgroundColor: '#FEE2E2',
   },
   input: {
     flex: 1,
-    minHeight: 38,
+    minHeight: 36,
     maxHeight: 100,
-    backgroundColor: '#F9FAFB',
+    backgroundColor: '#F5F5F5',
     borderRadius: 20,
     paddingHorizontal: 16,
-    paddingVertical: 10,
-    fontSize: 15.5,
-    color: '#1F2937',
-    borderWidth: 1,
-    borderColor: '#E5E7EB',
+    paddingVertical: 9,
+    fontSize: 15,
+    color: '#1a1a1a',
+    borderWidth: 0,
   },
   sendButton: {
-    width: 38,
-    height: 38,
-    borderRadius: 19,
-    backgroundColor: '#4169E1',
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: '#1a1a1a',
     justifyContent: 'center',
     alignItems: 'center',
-    shadowColor: '#4169E1',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.3,
-    shadowRadius: 4,
-    elevation: 3,
   },
   sendButtonDisabled: {
     opacity: 0.4,
@@ -726,5 +820,112 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     color: '#1F2937',
     letterSpacing: -0.3,
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.6)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  mediaOptionsContainer: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 20,
+    padding: 20,
+    gap: 14,
+    width: '80%',
+    maxWidth: 320,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.2,
+    shadowRadius: 16,
+    elevation: 8,
+  },
+  mediaOption: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 18,
+    backgroundColor: '#F9FAFB',
+    borderRadius: 14,
+    gap: 14,
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+  },
+  mediaOptionText: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#1F2937',
+    letterSpacing: -0.2,
+  },
+  // Attachment Menu Styles (WhatsApp-style)
+  attachMenuOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'flex-end',
+  },
+  attachMenuContainer: {
+    backgroundColor: '#FFFFFF',
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    paddingVertical: 30,
+    paddingHorizontal: 20,
+    flexDirection: 'row',
+    justifyContent: 'space-around',
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: -2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
+    elevation: 10,
+  },
+  attachOption: {
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  attachIconCircle: {
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 8,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.15,
+    shadowRadius: 4,
+    elevation: 4,
+  },
+  attachOptionText: {
+    fontSize: 13,
+    color: '#374151',
+    fontWeight: '500',
+  },
+  uploadingOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: 'rgba(255, 255, 255, 0.9)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    zIndex: 1000,
+  },
+  uploadingContainer: {
+    alignItems: 'center',
+    backgroundColor: '#FFFFFF',
+    padding: 24,
+    borderRadius: 16,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.15,
+    shadowRadius: 12,
+    elevation: 10,
+  },
+  uploadingText: {
+    fontSize: 16,
+    color: '#1F2937',
+    fontWeight: '600',
+    letterSpacing: -0.2,
+    marginTop: 12,
   },
 });

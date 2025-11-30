@@ -585,7 +585,12 @@ export default function CreateListingScreen() {
         </View>
       </Modal>
 
-      <View style={styles.header}>
+      <KeyboardAvoidingView 
+        style={{ flex: 1 }}
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        keyboardVerticalOffset={0}
+      >
+        <View style={styles.header}>
         <TouchableOpacity style={styles.backButton} onPress={() => router.back()}>
           <ArrowLeft size={20} color="#020617" />
         </TouchableOpacity>
@@ -898,7 +903,8 @@ export default function CreateListingScreen() {
           )}
         </TouchableOpacity>
       </View>
-    </KeyboardAvoidingView>
+      </KeyboardAvoidingView>
+    </View>
   );
 }
 
