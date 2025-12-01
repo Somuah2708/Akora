@@ -23,6 +23,10 @@ import { registerForPushNotificationsAsync } from '@/lib/pushNotifications';
 import { supabase } from '@/lib/supabase';
 import { Platform } from 'react-native';
 import * as Notifications from 'expo-notifications';
+import { initSentry, setUser as setSentryUser } from '@/lib/sentry';
+
+// Initialize Sentry at app startup
+initSentry();
 
 export default function RootLayout() {
   useFrameworkReady();
@@ -35,6 +39,16 @@ export default function RootLayout() {
   // Register push notifications when user logs in
   useEffect(() => {
     console.log('🔐 Push token registration effect triggered. User:', user?.id, 'Loading:', loading);
+    
+    // Set Sentry user context
+    if (user) {
+      setSentryUser({
+        id: user.id,
+        email: user.email,
+      });
+    } else {
+      setSentryUser(null);
+    }
     
     // Wait for auth to finish loading AND user to exist
     if (loading) {
