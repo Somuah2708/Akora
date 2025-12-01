@@ -42,47 +42,29 @@ export const setupGlobalErrorHandlers = () => {
   });
 
   // 2. Catch unhandled promise rejections
-  const rejectionHandler = (event: PromiseRejectionEvent) => {
-    console.error('❌ Unhandled Promise Rejection:', event.reason);
-    
-    const error = event.reason instanceof Error 
-      ? event.reason 
-      : new Error(String(event.reason));
-    
-    Sentry.captureException(error, {
-      contexts: {
-        error: {
-          type: 'Unhandled Promise Rejection',
-          platform: Platform.OS,
-          promise: event.promise?.toString(),
-        },
-      },
-      level: 'error',
-    });
-  };
-
-  // Add listener for unhandled promise rejections
-  if (typeof window !== 'undefined') {
-    window.addEventListener('unhandledrejection', rejectionHandler as any);
-  } else if (typeof global !== 'undefined') {
-    process.on('unhandledRejection', (reason: any) => {
-      console.error('❌ Unhandled Promise Rejection (Node):', reason);
+  const rejectionTracking = require('promise/setimmediate/rejection-tracking');
+  rejectionTracking.enable({
+    allRejections: true,
+    onUnhandled: (id: string, error: Error) => {
+      console.error('❌ Unhandled Promise Rejection:', error);
       
-      const error = reason instanceof Error 
-        ? reason 
-        : new Error(String(reason));
+      const errorObj = error instanceof Error ? error : new Error(String(error));
       
-      Sentry.captureException(error, {
+      Sentry.captureException(errorObj, {
         contexts: {
           error: {
-            type: 'Unhandled Promise Rejection (Node)',
+            type: 'Unhandled Promise Rejection',
             platform: Platform.OS,
+            rejectionId: id,
           },
         },
         level: 'error',
       });
-    });
-  }
+    },
+    onHandled: () => {
+      // Promise rejection was handled later
+    },
+  });
 
   // 3. Intercept console.error to catch all logged errors
   const originalConsoleError = console.error;
@@ -193,9 +175,15 @@ export const setupGlobalErrorHandlers = () => {
       }
       
       return response;
-    } catch (error) {
+    } catch (error: any) {
       const duration = Date.now() - startTime;
       const url = typeof args[0] === 'string' ? args[0] : args[0].url;
+      
+      // Filter out abort errors - these are intentional cancellations
+      if (error?.name === 'AbortError' || error?.message?.includes('Aborted')) {
+        console.log('🌐 Fetch aborted (intentional):', url);
+        throw error;
+      }
       
       console.error('🌐 Network Error:', error);
       

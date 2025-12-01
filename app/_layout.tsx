@@ -61,10 +61,6 @@ Sentry.init({
   integrations: [
     Sentry.mobileReplayIntegration(),
     Sentry.feedbackIntegration(),
-    new Sentry.ReactNativeTracing({
-      routingInstrumentation: new Sentry.ReactNavigationInstrumentation(),
-      enableHTTPTracking: true,
-    }),
   ],
 });
 
@@ -245,29 +241,27 @@ export default Sentry.wrap(function RootLayout() {
   }
   
   return (
-    <ErrorBoundary>
-      <QueryClientProvider client={queryClient}>
-        <SafeAreaProvider>
-          <GestureHandlerRootView style={{ flex: 1 }}>
-            <ErrorBoundary>
-              <ToastProvider>
-                <VideoSettingsProvider>
-                  <NotificationProvider>
-                    <Stack screenOptions={{ headerShown: false }}>
-                      <Stack.Screen name="(tabs)" />
-                      <Stack.Screen name="auth" />
-                      {/* Ensure non-tab stacks (e.g., chat, user-profile, etc.) also have no header */}
-                      <Stack.Screen name="chat" />
-                      <Stack.Screen name="+not-found" options={{ headerShown: true }} />
-                    </Stack>
-                    <StatusBar style="light" />
-                  </NotificationProvider>
-                </VideoSettingsProvider>
-              </ToastProvider>
-            </ErrorBoundary>
-          </GestureHandlerRootView>
-        </SafeAreaProvider>
-      </QueryClientProvider>
-    </ErrorBoundary>
+    <QueryClientProvider client={queryClient}>
+      <SafeAreaProvider>
+        <GestureHandlerRootView style={{ flex: 1 }}>
+          <ToastProvider>
+            <VideoSettingsProvider>
+              <NotificationProvider>
+                <ErrorBoundary>
+                  <Stack screenOptions={{ headerShown: false }}>
+                    <Stack.Screen name="(tabs)" />
+                    <Stack.Screen name="auth" />
+                    {/* Ensure non-tab stacks (e.g., chat, user-profile, etc.) also have no header */}
+                    <Stack.Screen name="chat" />
+                    <Stack.Screen name="+not-found" options={{ headerShown: true }} />
+                  </Stack>
+                  <StatusBar style="light" />
+                </ErrorBoundary>
+              </NotificationProvider>
+            </VideoSettingsProvider>
+          </ToastProvider>
+        </GestureHandlerRootView>
+      </SafeAreaProvider>
+    </QueryClientProvider>
   );
 });
