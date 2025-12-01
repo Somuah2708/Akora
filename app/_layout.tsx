@@ -31,10 +31,12 @@ Sentry.init({
   dsn: 'https://300dd3fe7142a2a34ca08cf77ce39769@o4510042293731328.ingest.de.sentry.io/4510459892531280',
 
   // Set tracesSampleRate to 1.0 to capture 100% of transactions for performance monitoring.
-  tracesSampleRate: __DEV__ ? 1.0 : 0.2,
+  tracesSampleRate: 1.0, // Always 100% to catch everything
   
-  // Enable native crash reporting
+  // Enable native crash reporting (CRITICAL for iOS/Android crashes)
   enableNative: true,
+  enableNativeCrashHandling: true,
+  enableNativeNagger: true,
   
   // Enable auto session tracking
   enableAutoSessionTracking: true,
@@ -42,8 +44,8 @@ Sentry.init({
   // Add environment
   environment: __DEV__ ? 'development' : 'production',
   
-  // Enable debug mode in development
-  debug: __DEV__,
+  // ALWAYS enable debug mode to see what's being sent
+  debug: true, // Force TRUE to see Sentry logs in terminal
   
   // Attach stack traces to errors
   attachStacktrace: true,
@@ -51,18 +53,58 @@ Sentry.init({
   // Adds more context data to events (IP address, cookies, user, etc.)
   sendDefaultPii: true,
 
+  // Attach screenshots on errors (CRITICAL for UI bugs)
+  attachScreenshot: true,
+  
+  // Attach view hierarchy (CRITICAL for understanding UI state)
+  attachViewHierarchy: true,
+
   // Enable Logs
   enableLogs: true,
 
-  // Configure Session Replay
-  replaysSessionSampleRate: 0.1,
-  replaysOnErrorSampleRate: 1,
+  // Configure Session Replay (100% capture in dev)
+  replaysSessionSampleRate: __DEV__ ? 1.0 : 0.1, // 100% in dev, 10% in prod
+  replaysOnErrorSampleRate: 1.0, // Always capture on error
+  
+  // Maximum breadcrumbs to keep
+  maxBreadcrumbs: 100,
+  
+  // beforeSend hook to log EVERY event before sending
+  beforeSend(event, hint) {
+    console.log('🚨 [SENTRY] About to send event:', {
+      type: event.type,
+      level: event.level,
+      message: event.message,
+      exception: event.exception?.values?.[0]?.type,
+      timestamp: new Date().toISOString()
+    });
+    
+    // Log the full error details
+    if (hint?.originalException) {
+      console.log('🚨 [SENTRY] Original exception:', hint.originalException);
+    }
+    
+    // Always send the event
+    return event;
+  },
+  
+  // beforeBreadcrumb hook to log EVERY breadcrumb
+  beforeBreadcrumb(breadcrumb) {
+    console.log('🍞 [SENTRY] Breadcrumb:', breadcrumb);
+    return breadcrumb;
+  },
   
   integrations: [
-    Sentry.mobileReplayIntegration(),
+    Sentry.mobileReplayIntegration({
+      maskAllText: false,
+      maskAllImages: false,
+      maskAllVectors: false,
+    }),
     Sentry.feedbackIntegration(),
   ],
 });
+
+console.log('✅ [SENTRY] Initialized successfully');
 
 // Setup global error handlers to catch ALL errors
 setupGlobalErrorHandlers();

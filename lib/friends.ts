@@ -267,6 +267,8 @@ export async function unfriend(friendUserId: string) {
 
 // Direct Messages
 export async function getDirectMessages(userId: string, friendId: string) {
+  console.log('📥 [DB] getDirectMessages called:', { userId, friendId });
+  
   const { data, error } = await supabase
     .from('direct_messages')
     .select(`
@@ -279,9 +281,23 @@ export async function getDirectMessages(userId: string, friendId: string) {
       )
     `)
     .or(`and(sender_id.eq.${userId},receiver_id.eq.${friendId}),and(sender_id.eq.${friendId},receiver_id.eq.${userId})`)
-    .order('created_at', { ascending: true });
+    .order('created_at', { ascending: false }); // Newest first for inverted FlatList
 
-  if (error) throw error;
+  if (error) {
+    console.error('❌ [DB] Error fetching messages:', error);
+    throw error;
+  }
+  
+  console.log('✅ [DB] Fetched', data?.length || 0, 'messages from database');
+  if (data && data.length > 0) {
+    console.log('📬 [DB] Most recent message:', {
+      id: data[0].id,
+      created_at: data[0].created_at,
+      sender_id: data[0].sender_id,
+      message: data[0].message?.substring(0, 50)
+    });
+  }
+  
   return data as DirectMessage[];
 }
 
@@ -292,12 +308,12 @@ export async function sendDirectMessage(
   messageType: 'text' | 'image' | 'video' | 'voice' | 'document' = 'text',
   mediaUrl?: string
 ) {
-  console.log('sendDirectMessage called with:', {
+  console.log('📤 [DB] sendDirectMessage called:', {
     senderId,
     receiverId,
-    message: message.substring(0, 50),
+    message: message.substring(0, 50) + '...',
     messageType,
-    mediaUrl: mediaUrl?.substring(0, 50) + '...'
+    hasMediaUrl: !!mediaUrl
   });
 
   const { data, error } = await supabase
@@ -321,15 +337,20 @@ export async function sendDirectMessage(
     .single();
 
   if (error) {
-    console.error('Error in sendDirectMessage:', error);
+    console.error('❌ [DB] Error in sendDirectMessage:', error);
     throw error;
   }
   
-  console.log('Message sent successfully:', data?.id);
+  console.log('✅ [DB] Message inserted successfully:', {
+    id: data?.id,
+    created_at: data?.created_at,
+    sender: data?.sender?.full_name
+  });
   
   // Send push notification to receiver (don't await to not block message sending)
+  console.log('🔔 [DB] Triggering push notification...');
   sendChatMessageNotification(senderId, receiverId, message, messageType).catch(err => {
-    console.error('Failed to send push notification:', err);
+    console.error('❌ [DB] Failed to send push notification:', err);
   });
   
   return data as DirectMessage;

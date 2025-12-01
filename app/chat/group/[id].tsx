@@ -336,10 +336,33 @@ export default function GroupChatScreen() {
   const handleTakeCamera = async () => {
     if (!meId || !groupId) return;
     
+    console.log('🎥 [Group Camera] User tapped camera button');
+    Sentry.addBreadcrumb({
+      category: 'user-action',
+      message: 'User tapped camera button in group chat',
+      level: 'info',
+      data: { userId: meId, groupId }
+    });
+    
     setShowAttachMenu(false);
     
     try {
+      console.log('🎥 [Group Camera] Calling takeMedia()...');
+      Sentry.addBreadcrumb({
+        category: 'camera',
+        message: 'About to launch camera in group chat',
+        level: 'info'
+      });
+      
       const media = await takeMedia();
+      
+      console.log('🎥 [Group Camera] takeMedia() returned:', media ? 'success' : 'cancelled');
+      Sentry.addBreadcrumb({
+        category: 'camera',
+        message: media ? 'Camera returned media' : 'Camera cancelled',
+        level: 'info'
+      });
+      
       if (!media) {
         return;
       }
@@ -370,8 +393,19 @@ export default function GroupChatScreen() {
           });
       }
     } catch (error) {
-      console.error('Error taking media:', error);
-      Alert.alert('Error', 'Failed to take media');
+      console.error('❌ [Group Camera] Error in handleTakeCamera:', error);
+      Sentry.captureException(error, {
+        tags: { feature: 'camera', action: 'group-chat-camera' },
+        contexts: {
+          camera: {
+            userId: meId,
+            groupId,
+            platform: Platform.OS,
+            timestamp: new Date().toISOString()
+          }
+        }
+      });
+      Alert.alert('Camera Error', 'Failed to open camera. Please try again.');
     } finally {
       setUploadingMedia(false);
       setUploadProgress(0);

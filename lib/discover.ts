@@ -45,6 +45,7 @@ export async function fetchDiscoverFeed(
 
     // Fetch posts using the new function that filters by friendships and interests
     if (userId) {
+      console.log('📥 [DISCOVER] Fetching posts for user:', userId);
       const { data: posts, error } = await supabase
         .rpc('get_discover_posts', {
           p_user_id: userId,
@@ -53,23 +54,47 @@ export async function fetchDiscoverFeed(
         });
 
       if (error) {
-        console.error('Error fetching discover posts:', error);
+        console.error('❌ [DISCOVER] Error fetching discover posts:', error);
       }
 
       if (posts) {
+        console.log('✅ [DISCOVER] Fetched', posts.length, 'posts from database (already sorted newest first)');
+        if (posts.length > 0) {
+          console.log('📅 [DISCOVER] Most recent post:', posts[0].created_at);
+          console.log('📅 [DISCOVER] Oldest post:', posts[posts.length - 1].created_at);
+        }
+        
         // Fetch user profiles for each post
         const postIds = posts.map((p: any) => p.id);
+        console.log('👥 [DISCOVER] Fetching profiles for', postIds.length, 'posts');
         const { data: postsWithProfiles } = await supabase
           .from('posts')
           .select('*, user:profiles(id, username, full_name, avatar_url, is_admin), media_items')
           .in('id', postIds);
 
         if (postsWithProfiles) {
+          console.log('✅ [DISCOVER] Fetched profiles for posts');
+          
+          // Create a map to preserve the original order from get_discover_posts
+          const postOrderMap = new Map<string, number>();
+          posts.forEach((p: any, index: number) => postOrderMap.set(p.id, index));
+          
           // Filter out admin-authored posts for Discover
           const nonAdminPosts = postsWithProfiles.filter((post: any) => !post.user?.is_admin);
+          console.log('📊 [DISCOVER] Filtered to', nonAdminPosts.length, 'non-admin posts');
+          
+          // Re-sort to match the original order (newest first)
+          nonAdminPosts.sort((a: any, b: any) => {
+            const orderA = postOrderMap.get(a.id) ?? 999;
+            const orderB = postOrderMap.get(b.id) ?? 999;
+            return orderA - orderB;
+          });
+          console.log('🔄 [DISCOVER] Re-sorted posts to match database order (newest first)');
           
           // Fetch accurate likes and comments counts for all posts
           const postIdsForCounts = nonAdminPosts.map((p: any) => p.id);
+          
+          console.log('👍 [DISCOVER] Fetching likes and comments counts for', postIdsForCounts.length, 'posts');
           
           // Fetch likes counts
           const { data: likesData } = await supabase
@@ -108,6 +133,16 @@ export async function fetchDiscoverFeed(
           items.push(
             ...nonAdminPosts.map((post) => {
               const counts = countsMap.get(post.id) || { likes: 0, comments: 0 };
+              
+              // Log timestamp for debugging
+              console.log('🕐 [DISCOVER] Post from DB:', {
+                id: post.id.substring(0, 20),
+                created_at: post.created_at,
+                created_at_type: typeof post.created_at,
+                isValidDate: !isNaN(new Date(post.created_at).getTime()),
+                author: post.user?.full_name
+              });
+              
               return {
                 id: `post-${post.id}`,
                 type: 'post' as const,

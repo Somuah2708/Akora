@@ -14,6 +14,9 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 SplashScreen.preventAutoHideAsync();
 
+// Cache freshness threshold (5 minutes)
+const CACHE_FRESHNESS_MS = 5 * 60 * 1000;
+
 interface Conversation {
   friend: any; // Friend object from Supabase join
   latestMessage: {
@@ -50,6 +53,7 @@ export default function ChatScreen() {
   const [pinnedGroupIds, setPinnedGroupIds] = useState<Set<string>>(new Set());
   const [typingFriendIds, setTypingFriendIds] = useState<Set<string>>(new Set());
   const typingChannelsRef = useState<any[]>([])[0];
+  const [navigationLock, setNavigationLock] = useState<Set<string>>(new Set()); // Prevent double-tap
   const [actionSheet, setActionSheet] = useState<
     | { type: 'direct'; friendId: string; unreadCount: number; pinned: boolean }
     | { type: 'group'; groupId: string; unreadCount: number; pinned: boolean }
@@ -553,6 +557,35 @@ export default function ChatScreen() {
     return formatChatListTime(timestamp);
   };
 
+  // Prevent double-tap navigation (WhatsApp-style)
+  const navigateToChat = (type: 'direct' | 'group', id: string) => {
+    // Check if already navigating to this chat
+    if (navigationLock.has(id)) {
+      console.log('🚫 Navigation blocked - already navigating to:', id);
+      return;
+    }
+
+    // Lock this chat ID
+    setNavigationLock(prev => new Set(prev).add(id));
+    console.log('✅ Navigating to chat:', id);
+
+    // Navigate
+    if (type === 'direct') {
+      router.push(`/chat/direct/${id}`);
+    } else {
+      router.push(`/chat/group/${id}`);
+    }
+
+    // Unlock after 500ms (enough time for navigation)
+    setTimeout(() => {
+      setNavigationLock(prev => {
+        const next = new Set(prev);
+        next.delete(id);
+        return next;
+      });
+    }, 500);
+  };
+
   const getMessagePreview = (message: any): string => {
     if (!message) return 'No messages yet';
     
@@ -674,7 +707,18 @@ export default function ChatScreen() {
                       <TouchableOpacity 
                         key={`support-${friend?.id}`} 
                         style={[styles.chatItem, { backgroundColor: '#FEF3C7' }]}
-                        onPress={() => router.push(`/admin/messages/${friend?.id}`)}
+                        onPress={() => {
+                          if (navigationLock.has(`support-${friend?.id}`)) return;
+                          setNavigationLock(prev => new Set(prev).add(`support-${friend?.id}`));
+                          router.push(`/admin/messages/${friend?.id}`);
+                          setTimeout(() => {
+                            setNavigationLock(prev => {
+                              const next = new Set(prev);
+                              next.delete(`support-${friend?.id}`);
+                              return next;
+                            });
+                          }, 500);
+                        }}
                         activeOpacity={0.7}
                       >
                         <View style={styles.avatarContainer}>
@@ -744,7 +788,7 @@ export default function ChatScreen() {
                         <TouchableOpacity 
                           key={friend?.id} 
                           style={styles.chatItem}
-                          onPress={() => router.push(`/chat/direct/${friend?.id}`)}
+                          onPress={() => navigateToChat('direct', friend?.id)}
                           onLongPress={() => setActionSheet({ type: 'direct', friendId: friend?.id, unreadCount: conversation.unreadCount, pinned: isPinned })}
                           activeOpacity={0.7}
                         >
@@ -840,7 +884,7 @@ export default function ChatScreen() {
                           <TouchableOpacity 
                             key={g.group.id} 
                             style={styles.chatItem} 
-                            onPress={() => router.push(`/chat/group/${g.group.id}`)}
+                            onPress={() => navigateToChat('group', g.group.id)}
                             onLongPress={() => setActionSheet({ type: 'group', groupId: g.group.id, unreadCount: g.unreadCount, pinned: isPinned })}
                             activeOpacity={0.7}
                           >

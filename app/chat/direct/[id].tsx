@@ -17,6 +17,7 @@ import {
 } from 'react-native';
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { useLocalSearchParams, useRouter } from 'expo-router';
+import * as Sentry from '@sentry/react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { ArrowLeft, Send, Smile, X, Play, Pause, Check, CheckCheck, FileText, Paperclip, Camera, Image as ImageIcon, File } from 'lucide-react-native';
 import { useAuth } from '@/hooks/useAuth';
@@ -37,6 +38,9 @@ import EmojiSelector from 'react-native-emoji-selector';
 import { Audio } from 'expo-av';
 import { getCachedThread, setCachedThread, upsertMessageList } from '@/lib/chatCache';
 
+// Cache freshness threshold (5 minutes) - WhatsApp-style
+const CACHE_FRESHNESS_MS = 5 * 60 * 1000;
+
 export default function DirectMessageScreen() {
   const router = useRouter();
   const { id: friendId} = useLocalSearchParams<{ id: string }>();
@@ -56,12 +60,137 @@ export default function DirectMessageScreen() {
   const [playingSound, setPlayingSound] = useState<{ [key: string]: boolean }>({});
   const [firstUnreadIndex, setFirstUnreadIndex] = useState<number | null>(null);
   const [isKeyboardVisible, setIsKeyboardVisible] = useState(false);
+  const [isTyping, setIsTyping] = useState(false);
+  const [isOnline, setIsOnline] = useState(true);
+  const [failedMessages, setFailedMessages] = useState<Set<string>>(new Set());
   const flatListRef = useRef<FlatList>(null);
   const soundObjects = useRef<{ [key: string]: Audio.Sound }>({});
   const typingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const typingChannelRef = useRef<any>(null);
+  const hasInitiallyScrolled = useRef(false); // Track if we've done initial scroll
+  const isLoadingInitial = useRef(true); // Track if this is the first load
+
+  // Safe scroll to bottom with error handling
+  const safeScrollToBottom = useCallback(() => {
+    try {
+      requestAnimationFrame(() => {
+        if (messages.length > 0 && flatListRef.current) {
+          flatListRef.current.scrollToIndex({ 
+            index: 0, 
+            animated: true,
+            viewPosition: 0
+          });
+          hasInitiallyScrolled.current = true;
+        }
+      });
+    } catch (error) {
+      console.warn('ScrollToIndex failed, using fallback:', error);
+      try {
+        flatListRef.current?.scrollToEnd({ animated: true });
+      } catch (fallbackError) {
+        console.error('Scroll fallback also failed:', fallbackError);
+      }
+    }
+  }, [messages.length]);
+
+  // Handle new real-time message
+  const handleNewMessage = async (newMessage: DirectMessage) => {
+    console.log('🔔 [REALTIME] Processing new message:', {
+      id: newMessage.id,
+      sender: newMessage.sender_id,
+      receiver: newMessage.receiver_id,
+      message: newMessage.message?.substring(0, 50),
+      created_at: newMessage.created_at
+    });
+    
+    // Fetch sender profile if not included
+    let messageWithSender = newMessage;
+    if (!newMessage.sender) {
+      try {
+        console.log('👤 [REALTIME] Fetching sender profile for:', newMessage.sender_id);
+        const { data: senderProfile, error: profileError } = await supabase
+          .from('profiles')
+          .select('id, username, full_name, avatar_url')
+          .eq('id', newMessage.sender_id)
+          .single();
+        
+        if (!profileError && senderProfile) {
+          messageWithSender = {
+            ...newMessage,
+            sender: senderProfile
+          };
+          console.log('✅ [REALTIME] Fetched sender profile:', senderProfile.full_name);
+        } else {
+          console.error('❌ [REALTIME] Error fetching sender profile:', profileError);
+        }
+      } catch (error) {
+        console.error('❌ [REALTIME] Exception fetching sender profile:', error);
+      }
+    } else {
+      console.log('✅ [REALTIME] Message already has sender profile:', newMessage.sender.full_name);
+    }
+    
+    // If it's a shared post, fetch the post data
+    let messageWithPost = messageWithSender;
+    if (newMessage.message_type === 'post' && (newMessage as any).post_id) {
+      try {
+        const { data: post, error: postError } = await supabase
+          .from('posts')
+          .select(`
+            id,
+            content,
+            image_url,
+            image_urls,
+            video_url,
+            video_urls,
+            user_id,
+            created_at,
+            profiles!posts_user_id_fkey(id, username, full_name, avatar_url)
+          `)
+          .eq('id', (newMessage as any).post_id)
+          .single();
+        
+        if (postError) {
+          console.error('Error fetching shared post in real-time:', postError);
+        } else {
+          messageWithPost = { ...newMessage, post };
+          console.log('📬 Received shared post in real-time:', post?.content?.substring(0, 50));
+        }
+      } catch (error) {
+        console.error('Error fetching shared post in real-time:', error);
+      }
+    }
+    
+    setMessages((prev) => {
+      console.log('📝 [REALTIME] Current messages count:', prev.length);
+      const next = upsertMessage(prev, messageWithPost);
+      console.log('📝 [REALTIME] New messages count:', next.length);
+      setCachedThread(user!.id, friendId!, next, friendProfile);
+      return next;
+    });
+
+    // Mark as delivered if it's an INCOMING message (from friend to me)
+    if (newMessage.sender_id === friendId && newMessage.receiver_id === user?.id) {
+      console.log('📬 [REALTIME] Marking incoming message as delivered/read:', newMessage.id);
+      try {
+        await markMessageAsDelivered(newMessage.id);
+        await markMessageAsRead(newMessage.id);
+        console.log('✅ [REALTIME] Message marked as delivered and read');
+      } catch (error) {
+        console.error('❌ [REALTIME] Error marking message as read/delivered:', error);
+      }
+    } else {
+      console.log('📤 [REALTIME] This is an outgoing message (me to friend) - not marking as read');
+    }
+
+    // Scroll to bottom
+    setTimeout(() => {
+      safeScrollToBottom();
+    }, 100);
+  };
 
   // Upsert a message into the array by id and keep it unique
+  // Maintains descending order (newest first) for inverted FlatList
   const upsertMessage = useCallback((list: DirectMessage[], msg: DirectMessage) => {
     const map = new Map<string, DirectMessage>();
     for (const m of list) {
@@ -69,7 +198,10 @@ export default function DirectMessageScreen() {
     }
     const existing = map.get(msg.id);
     map.set(msg.id, existing ? { ...existing, ...msg } : msg);
-    return Array.from(map.values());
+    const result = Array.from(map.values());
+    // Sort newest first (descending) for inverted list
+    result.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+    return result;
   }, []);
 
   useEffect(() => {
@@ -88,23 +220,80 @@ export default function DirectMessageScreen() {
     };
   }, []);
 
+  // Network state monitoring
+  useEffect(() => {
+    let unsubscribe: (() => void) | undefined;
+    
+    const setupNetworkListener = async () => {
+      try {
+        const NetInfo = await import('@react-native-community/netinfo');
+        unsubscribe = NetInfo.default.addEventListener(state => {
+          const online = state.isConnected ?? true;
+          setIsOnline(online);
+          if (online) {
+            console.log('✅ [NETWORK] Back online');
+          } else {
+            console.log('⚠️ [NETWORK] Offline');
+          }
+        });
+      } catch (error) {
+        console.log('⚠️ NetInfo not available, assuming online');
+        setIsOnline(true);
+      }
+    };
+    
+    setupNetworkListener();
+    
+    return () => {
+      if (unsubscribe) unsubscribe();
+    };
+  }, []);
+
   useEffect(() => {
     if (user && friendId) {
-      // Show cached thread immediately (no spinner), then background sync
+      // WhatsApp-style instant loading: Show cache immediately, sync in background
       (async () => {
         const cached = await getCachedThread(user.id, friendId);
+        
         if (cached?.messages?.length) {
+          // Show cached messages INSTANTLY (no loading spinner)
+          console.log('\u2705 [CACHE] Showing cached messages:', cached.messages.length);
           setMessages(cached.messages);
           setLoading(false);
+          isLoadingInitial.current = false; // Initial load complete - don't auto-scroll
+          
+          // Check if cache is fresh (< 5 minutes old)
+          const cacheAge = Date.now() - new Date(cached.updatedAt || 0).getTime();
+          const isCacheFresh = cacheAge < CACHE_FRESHNESS_MS;
+          
+          console.log('\ud83d\udd52 [CACHE] Age:', Math.floor(cacheAge / 1000), 'seconds, Fresh:', isCacheFresh);
+          
+          if (isCacheFresh) {
+            // Cache is fresh! No need to fetch
+            console.log('\u2705 [CACHE] Cache is fresh, skipping cloud fetch');
+          } else {
+            // Cache is stale, silently refresh in background
+            console.log('\ud83d\udd04 [CACHE] Cache is stale, refreshing in background...');
+            loadMessages(true); // skipSpinner = true
+          }
+        } else {
+          // No cache: show loading and fetch from cloud
+          console.log('\u26a0\ufe0f [CACHE] No cache found, fetching from cloud...');
+          setLoading(true);
+          loadMessages(false);
         }
-        loadMessages(!!cached?.messages?.length);
       })();
+      
       loadFriendProfile();
+      setupTypingIndicator();
 
       // Subscribe to real-time messages with optimistic updates
       const conversationId = [user.id, friendId].sort().join('-');
+      console.log('📡 [REALTIME] Setting up subscription for conversation:', conversationId);
+      console.log('📡 [REALTIME] User ID:', user.id, 'Friend ID:', friendId);
+      
       const messageChannel = supabase
-        .channel(`chat:${conversationId}`)
+        .channel(`chat:${conversationId}:${Date.now()}`) // Add timestamp to ensure unique channel
         .on(
           'postgres_changes',
           {
@@ -114,57 +303,18 @@ export default function DirectMessageScreen() {
           },
           async (payload) => {
             const newMessage = payload.new as DirectMessage;
-            
-            // Process ALL messages (both incoming and our own sent messages)
-            // This ensures media appears in realtime for both sender and receiver
-            
-            // If it's a shared post, fetch the post data
-            let messageWithPost = newMessage;
-            if (newMessage.message_type === 'post' && (newMessage as any).post_id) {
-              try {
-                const { data: post, error: postError } = await supabase
-                  .from('posts')
-                  .select(`
-                    id,
-                    content,
-                    image_url,
-                    image_urls,
-                    video_url,
-                    video_urls,
-                    user_id,
-                    created_at,
-                    profiles!posts_user_id_fkey(id, username, full_name, avatar_url)
-                  `)
-                  .eq('id', (newMessage as any).post_id)
-                  .single();
-                
-                if (postError) {
-                  console.error('Error fetching shared post in real-time:', postError);
-                } else {
-                  messageWithPost = { ...newMessage, post };
-                  console.log('📬 Received shared post in real-time:', post?.content?.substring(0, 50));
-                }
-              } catch (error) {
-                console.error('Error fetching shared post in real-time:', error);
-              }
+            // Only process messages in this conversation
+            if (
+              (newMessage.sender_id === user.id && newMessage.receiver_id === friendId) ||
+              (newMessage.sender_id === friendId && newMessage.receiver_id === user.id)
+            ) {
+              console.log('📨 [REALTIME] Received INSERT event:', {
+                from: newMessage.sender_id === user.id ? 'me' : 'friend',
+                id: newMessage.id,
+                message: newMessage.message?.substring(0, 30)
+              });
+              await handleNewMessage(newMessage);
             }
-            
-            setMessages((prev) => {
-              const next = upsertMessage(prev, messageWithPost);
-              setCachedThread(user.id, friendId, next, friendProfile);
-              return next;
-            });
-
-            // Mark as delivered if it's an INCOMING message (from friend to me)
-            if (newMessage.sender_id === friendId && newMessage.receiver_id === user.id) {
-              markMessageAsDelivered(newMessage.id);
-              markMessageAsRead(newMessage.id);
-            }
-
-            // Scroll to bottom
-            setTimeout(() => {
-              flatListRef.current?.scrollToEnd({ animated: true });
-            }, 100);
           }
         )
         .on(
@@ -175,17 +325,32 @@ export default function DirectMessageScreen() {
             table: 'direct_messages',
           },
           (payload) => {
+            console.log('🔄 [REALTIME] Received UPDATE event:', payload.new);
             const updatedMessage = payload.new as DirectMessage;
             // Accept updates for either direction (read/delivered changes)
-            setMessages((prev) =>
-              prev.map((m) => (m.id === updatedMessage.id ? { ...m, ...updatedMessage } : m))
-            );
+            setMessages((prev) => {
+              const next = prev.map((m) => (m.id === updatedMessage.id ? { ...m, ...updatedMessage } : m));
+              // Persist update to cache
+              setCachedThread(user.id, friendId, next, friendProfile);
+              return next;
+            });
           }
         )
-        .subscribe();
+        .subscribe((status) => {
+          console.log('📡 [REALTIME] Subscription status:', status);
+          if (status === 'SUBSCRIBED') {
+            console.log('✅ [REALTIME] Successfully subscribed to messages');
+          } else if (status === 'CHANNEL_ERROR') {
+            console.error('❌ [REALTIME] Subscription error');
+          }
+        });
 
       return () => {
         supabase.removeChannel(messageChannel);
+        // Cleanup typing channel
+        if (typingChannelRef.current) {
+          supabase.removeChannel(typingChannelRef.current);
+        }
         // Cleanup audio
         Object.values(soundObjects.current).forEach(async (sound) => {
           try {
@@ -203,10 +368,18 @@ export default function DirectMessageScreen() {
     if (!user || !friendId) return;
 
     try {
-      if (!skipSpinner) setLoading(true);
+      // Only show loading spinner if skipSpinner is false (no cache)
+      if (!skipSpinner) {
+        console.log('\ud83d\udd04 [FETCH] Fetching messages with loading spinner...');
+        setLoading(true);
+      } else {
+        console.log('\ud83d\udd04 [FETCH] Silent background refresh (cache was stale)...');
+      }
       
       // Get messages with shared post data (Instagram-style)
+      console.log('📥 [FETCH] Fetching messages from database...');
       const msgs = await getDirectMessages(user.id, friendId);
+      console.log('📥 [FETCH] Retrieved', msgs.length, 'messages from database');
       
       // Fetch shared posts for messages with post_id
       const messagesWithPosts = await Promise.all(
@@ -256,16 +429,25 @@ export default function DirectMessageScreen() {
       const unreadMessages = messagesWithPosts.filter(
         (m) => m.receiver_id === user.id && !m.is_read
       );
-      await Promise.all(unreadMessages.map((m) => markMessageAsRead(m.id)));
+      if (unreadMessages.length > 0) {
+        console.log('✅ [FETCH] Marking', unreadMessages.length, 'messages as read');
+        await Promise.all(unreadMessages.map((m) => markMessageAsRead(m.id)));
+      }
       
       // Mark all as delivered
       const undeliveredMessages = messagesWithPosts.filter(
         (m) => m.receiver_id === user.id && !m.delivered_at
       );
-      await Promise.all(undeliveredMessages.map((m) => markMessageAsDelivered(m.id)));
+      if (undeliveredMessages.length > 0) {
+        console.log('📬 [FETCH] Marking', undeliveredMessages.length, 'messages as delivered');
+        await Promise.all(undeliveredMessages.map((m) => markMessageAsDelivered(m.id)));
+      }
+      
+      console.log('\u2705 [FETCH] Messages loaded and cached:', messagesWithPosts.length);
     } catch (error) {
-      console.error('Error loading messages:', error);
+      console.error('\u274c [FETCH] Error loading messages:', error);
     } finally {
+      // Always hide spinner when done (whether it was showing or not)
       if (!skipSpinner) setLoading(false);
     }
   };
@@ -334,8 +516,18 @@ export default function DirectMessageScreen() {
   const handleSend = async () => {
     if (!user || !friendId || !messageText.trim()) return;
 
+    console.log('📤 [SEND] Starting to send message...');
+    console.log('📤 [SEND] User:', user.id, 'Friend:', friendId);
+
+    // Check network status
+    if (!isOnline) {
+      Alert.alert('No Connection', 'Please check your internet connection and try again.');
+      return;
+    }
+
     const messageToSend = messageText.trim();
     const tempId = `temp-${Date.now()}`;
+    console.log('📤 [SEND] Temp ID:', tempId);
 
     try {
       // Optimistically add message to UI
@@ -355,8 +547,11 @@ export default function DirectMessageScreen() {
         },
       };
 
-  setMessages((prev) => {
+      console.log('📤 [SEND] Adding optimistic message to UI');
+      setMessages((prev) => {
+        console.log('📤 [SEND] Current messages:', prev.length);
         const next = upsertMessage(prev, optimisticMessage);
+        console.log('📤 [SEND] New messages after optimistic:', next.length);
         setCachedThread(user.id, friendId, next, friendProfile);
         return next;
       });
@@ -366,32 +561,105 @@ export default function DirectMessageScreen() {
 
       // Stop typing indicator
       if (typingChannelRef.current) {
-        typingChannelRef.current.track({ typing: false, userId: user.id });
+        try {
+          typingChannelRef.current.track({ typing: false, userId: user.id });
+        } catch (e) {
+          console.warn('Failed to stop typing indicator:', e);
+        }
       }
       if (typingTimeoutRef.current) {
         clearTimeout(typingTimeoutRef.current);
       }
 
-      // Scroll to bottom
+      // Scroll to bottom when sending new message
       setTimeout(() => {
-        flatListRef.current?.scrollToEnd({ animated: true });
+        safeScrollToBottom();
       }, 100);
 
       // Send to server
+      console.log('📤 [SEND] Sending to server...');
       const newMessage = await sendDirectMessage(user.id, friendId, messageToSend);
+      console.log('✅ [SEND] Server returned message:', newMessage.id);
+      console.log('✅ [SEND] Message has sender?', !!newMessage.sender);
 
       // Replace optimistic message with real one
+      console.log('📤 [SEND] Replacing optimistic message with real one');
+      setMessages((prev) => {
+        console.log('📤 [SEND] Messages before replace:', prev.length);
+        const replaced = prev.map((m) => (m.id === tempId ? newMessage : m));
+        const next = upsertMessageList(replaced, newMessage);
+        console.log('📤 [SEND] Messages after replace:', next.length);
+        setCachedThread(user.id, friendId, next, friendProfile);
+        return next;
+      });
+      
+      // Remove from failed messages if it was retried
+      setFailedMessages(prev => {
+        const next = new Set(prev);
+        next.delete(tempId);
+        return next;
+      });
+      
+      console.log('✅ [SEND] Message sent successfully!');
+    } catch (error) {
+      console.error('❌ [SEND] Error sending message:', error);
+      Sentry.captureException(error, {
+        tags: { feature: 'chat', action: 'send-message' },
+        contexts: { message: { friendId, messageLength: messageToSend.length } }
+      });
+      
+      // Mark message as failed
+      setFailedMessages(prev => new Set(prev).add(tempId));
+      
+      // Show retry option
+      Alert.alert(
+        'Message Failed',
+        'Failed to send message. Please check your connection.',
+        [
+          { text: 'Delete', style: 'destructive', onPress: () => {
+            setMessages((prev) => prev.filter((m) => m.id !== tempId));
+            setFailedMessages(prev => {
+              const next = new Set(prev);
+              next.delete(tempId);
+              return next;
+            });
+          }},
+          { text: 'Retry', onPress: () => retryMessage(tempId, messageToSend) }
+        ]
+      );
+    } finally {
+      setSending(false);
+    }
+  };
+
+  // Retry failed message
+  const retryMessage = async (tempId: string, messageContent: string) => {
+    if (!user || !friendId || !isOnline) {
+      Alert.alert('No Connection', 'Please check your internet connection.');
+      return;
+    }
+
+    try {
+      setSending(true);
+      const newMessage = await sendDirectMessage(user.id, friendId, messageContent);
+      
+      // Replace failed message with successful one
       setMessages((prev) => {
         const replaced = prev.map((m) => (m.id === tempId ? newMessage : m));
         const next = upsertMessageList(replaced, newMessage);
         setCachedThread(user.id, friendId, next, friendProfile);
         return next;
       });
+      
+      // Remove from failed messages
+      setFailedMessages(prev => {
+        const next = new Set(prev);
+        next.delete(tempId);
+        return next;
+      });
     } catch (error) {
-      console.error('Error sending message:', error);
-      Alert.alert('Error', 'Failed to send message');
-      // Remove optimistic message on error
-      setMessages((prev) => prev.filter((m) => m.id !== tempId));
+      console.error('Error retrying message:', error);
+      Alert.alert('Retry Failed', 'Still unable to send message. Please try again later.');
     } finally {
       setSending(false);
     }
@@ -426,7 +694,7 @@ export default function DirectMessageScreen() {
         });
         
         setTimeout(() => {
-          flatListRef.current?.scrollToEnd({ animated: true });
+          safeScrollToBottom();
         }, 100);
       }
     } catch (error) {
@@ -488,10 +756,21 @@ export default function DirectMessageScreen() {
   const handlePickPhotos = async () => {
     if (!user || !friendId) return;
     
+    console.log('🖼️ [Photos] User tapped photos button');
+    Sentry.addBreadcrumb({
+      category: 'user-action',
+      message: 'User tapped photos button in chat',
+      level: 'info',
+      data: { userId: user.id, friendId }
+    });
+    
     setShowAttachMenu(false);
     
     try {
+      console.log('🖼️ [Photos] Calling pickMedia()...');
       const media = await pickMedia();
+      
+      console.log('🖼️ [Photos] pickMedia() returned:', media ? 'success' : 'cancelled');
       if (!media) {
         return;
       }
@@ -526,12 +805,24 @@ export default function DirectMessageScreen() {
         });
         
         setTimeout(() => {
-          flatListRef.current?.scrollToEnd({ animated: true });
+          safeScrollToBottom();
         }, 100);
       }
-    } catch (error) {
-      console.error('Error uploading media:', error);
-      Alert.alert('Error', 'Failed to upload media');
+    } catch (error: any) {
+      console.error('❌ [Photos] Error in handlePickPhotos:', error);
+      Sentry.captureException(error, {
+        tags: { feature: 'media-picker', action: 'pick-photos' },
+        contexts: {
+          media: {
+            userId: user?.id,
+            friendId,
+            platform: Platform.OS,
+            errorMessage: error?.message,
+            timestamp: new Date().toISOString()
+          }
+        }
+      });
+      Alert.alert('Media Error', `Failed to pick media: ${error?.message || 'Unknown error'}`);
     } finally {
       setUploadingMedia(false);
       setUploadProgress(0);
@@ -541,11 +832,68 @@ export default function DirectMessageScreen() {
   const handleTakeCamera = async () => {
     if (!user || !friendId) return;
     
+    console.log('🎥 [Camera] User tapped camera button');
+    Sentry.addBreadcrumb({
+      category: 'user-action',
+      message: 'User tapped camera button in chat',
+      level: 'info',
+      data: { userId: user.id, friendId }
+    });
+    
+    // CRITICAL: Send error to Sentry BEFORE attempting camera (in case of freeze)
+    Sentry.captureMessage('⚠️ CAMERA ATTEMPT STARTED - If you see this without a success message, app froze', {
+      level: 'warning',
+      tags: { 
+        feature: 'camera',
+        action: 'pre-launch',
+        platform: Platform.OS,
+        userId: user.id
+      }
+    });
+    
     setShowAttachMenu(false);
     
     try {
+      console.log('🎥 [Camera] Calling takeMedia()...');
+      Sentry.addBreadcrumb({
+        category: 'camera',
+        message: 'About to launch camera - FREEZE DETECTION POINT',
+        level: 'warning'
+      });
+      
+      // Set a timeout to detect freeze (native crashes don't trigger catch)
+      const freezeTimeout = setTimeout(() => {
+        console.error('⏰ [Camera] CAMERA FREEZE DETECTED - App unresponsive for 5 seconds');
+        Sentry.captureMessage('🚨 CAMERA FREEZE DETECTED - App became unresponsive after launching camera', {
+          level: 'error',
+          tags: { 
+            feature: 'camera',
+            issue: 'freeze',
+            platform: Platform.OS 
+          }
+        });
+      }, 5000); // 5 second timeout
+      
       const media = await takeMedia();
+      
+      // If we get here, camera didn't freeze - clear timeout
+      clearTimeout(freezeTimeout);
+      
+      // Success message
+      Sentry.captureMessage('✅ CAMERA COMPLETED SUCCESSFULLY', {
+        level: 'info',
+        tags: { feature: 'camera', action: 'success' }
+      });
+      
+      console.log('🎥 [Camera] takeMedia() returned:', media ? 'success' : 'cancelled');
+      Sentry.addBreadcrumb({
+        category: 'camera',
+        message: media ? 'Camera returned media - NO FREEZE' : 'Camera cancelled by user',
+        level: 'info'
+      });
+      
       if (!media) {
+        console.log('🎥 [Camera] User cancelled, returning');
         return;
       }
 
@@ -579,12 +927,23 @@ export default function DirectMessageScreen() {
         });
         
         setTimeout(() => {
-          flatListRef.current?.scrollToEnd({ animated: true });
+          safeScrollToBottom();
         }, 100);
       }
     } catch (error) {
-      console.error('Error taking media:', error);
-      Alert.alert('Error', 'Failed to take media');
+      console.error('❌ [Camera] Error in handleTakeCamera:', error);
+      Sentry.captureException(error, {
+        tags: { feature: 'camera', action: 'take-photo' },
+        contexts: {
+          camera: {
+            userId: user?.id,
+            friendId,
+            platform: Platform.OS,
+            timestamp: new Date().toISOString()
+          }
+        }
+      });
+      Alert.alert('Camera Error', 'Failed to open camera. Please try again.');
     } finally {
       setUploadingMedia(false);
       setUploadProgress(0);
@@ -594,10 +953,21 @@ export default function DirectMessageScreen() {
   const handlePickDocument = async () => {
     if (!user || !friendId) return;
     
+    console.log('📄 [Documents] User tapped documents button');
+    Sentry.addBreadcrumb({
+      category: 'user-action',
+      message: 'User tapped documents button in chat',
+      level: 'info',
+      data: { userId: user.id, friendId }
+    });
+    
     setShowAttachMenu(false);
     
     try {
+      console.log('📄 [Documents] Calling pickDocument()...');
       const doc = await pickDocument();
+      
+      console.log('📄 [Documents] pickDocument() returned:', doc ? 'success' : 'cancelled');
       if (!doc) {
         return;
       }
@@ -629,12 +999,24 @@ export default function DirectMessageScreen() {
         });
         
         setTimeout(() => {
-          flatListRef.current?.scrollToEnd({ animated: true });
+          safeScrollToBottom();
         }, 100);
       }
-    } catch (error) {
-      console.error('Error uploading document:', error);
-      Alert.alert('Error', 'Failed to upload document');
+    } catch (error: any) {
+      console.error('❌ [Documents] Error in handlePickDocument:', error);
+      Sentry.captureException(error, {
+        tags: { feature: 'document-picker', action: 'pick-document' },
+        contexts: {
+          document: {
+            userId: user?.id,
+            friendId,
+            platform: Platform.OS,
+            errorMessage: error?.message,
+            timestamp: new Date().toISOString()
+          }
+        }
+      });
+      Alert.alert('Document Error', `Failed to pick document: ${error?.message || 'Unknown error'}`);
     } finally {
       setUploadingMedia(false);
       setUploadProgress(0);
@@ -643,7 +1025,9 @@ export default function DirectMessageScreen() {
 
   const renderMessage = ({ item, index }: { item: DirectMessage; index: number }) => {
     const isMyMessage = item.sender_id === user?.id;
-    const showDateDivider = index === 0 || !isSameDay(item.created_at, messages[index - 1]?.created_at);
+    // With descending order (newest first), compare with NEXT message (index - 1 is NEWER)
+    // Show divider if: first message OR different day than the message AFTER this one (index + 1 is OLDER)
+    const showDateDivider = index === messages.length - 1 || !isSameDay(item.created_at, messages[index + 1]?.created_at);
 
     return (
       <>
@@ -845,7 +1229,14 @@ export default function DirectMessageScreen() {
               {/* Read/Delivered indicators for sent messages */}
               {isMyMessage && (
                 <View style={styles.messageStatus}>
-                  {item.read_at ? (
+                  {failedMessages.has(item.id) ? (
+                    <TouchableOpacity 
+                      onPress={() => retryMessage(item.id, item.message)}
+                      style={styles.retryButton}
+                    >
+                      <Text style={styles.retryText}>⚠️ Tap to retry</Text>
+                    </TouchableOpacity>
+                  ) : item.read_at ? (
                     <CheckCheck size={14} color="rgba(255, 255, 255, 0.75)" />
                   ) : item.delivered_at ? (
                     <CheckCheck size={14} color="rgba(255, 255, 255, 0.5)" />
@@ -891,14 +1282,9 @@ export default function DirectMessageScreen() {
     }
   };
 
-  if (loading) {
-    return (
-      <View style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color="#4169E1" />
-      </View>
-    );
-  }
-
+  // Don't block UI with loading spinner - show cache immediately
+  // Loading state only used internally for fetch coordination
+  
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: '#0F172A' }]} edges={['top']}>
       <KeyboardAvoidingView
@@ -939,9 +1325,26 @@ export default function DirectMessageScreen() {
           </View>
           <View style={styles.headerTextContainer}>
             <Text style={styles.headerName}>{friendProfile?.full_name || 'Friend'}</Text>
+            {isTyping && (
+              <View style={styles.typingContainer}>
+                <Text style={styles.typingText}>typing</Text>
+                <View style={styles.typingDots}>
+                  <View style={[styles.typingDot, styles.typingDot1]} />
+                  <View style={[styles.typingDot, styles.typingDot2]} />
+                  <View style={[styles.typingDot, styles.typingDot3]} />
+                </View>
+              </View>
+            )}
           </View>
         </TouchableOpacity>
       </View>
+
+      {/* Offline Banner */}
+      {!isOnline && (
+        <View style={styles.offlineBanner}>
+          <Text style={styles.offlineText}>⚠️ No internet connection. Messages will be sent when online.</Text>
+        </View>
+      )}
 
       {/* Messages */}
       <FlatList
@@ -950,7 +1353,10 @@ export default function DirectMessageScreen() {
         renderItem={renderMessage}
         keyExtractor={(item) => item.id}
         contentContainerStyle={styles.messagesContent}
-        onContentSizeChange={() => flatListRef.current?.scrollToEnd({ animated: false })}
+        inverted={true}
+        initialNumToRender={20}
+        maxToRenderPerBatch={10}
+        windowSize={10}
         ListEmptyComponent={
           <View style={styles.emptyContainer}>
             <Text style={styles.emptyText}>
@@ -1244,6 +1650,58 @@ const styles = StyleSheet.create({
   },
   typingDot3: {
     opacity: 1,
+  },
+  typingContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 2,
+  },
+  typingText: {
+    fontSize: 12,
+    color: '#22C55E',
+    fontWeight: '500',
+    marginRight: 6,
+  },
+  typingDots: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 3,
+  },
+  typingDot: {
+    width: 4,
+    height: 4,
+    borderRadius: 2,
+    backgroundColor: '#22C55E',
+  },
+  typingDot1: {
+    opacity: 0.4,
+  },
+  typingDot2: {
+    opacity: 0.7,
+  },
+  typingDot3: {
+    opacity: 1,
+  },
+  offlineBanner: {
+    backgroundColor: '#FEF3C7',
+    paddingVertical: 8,
+    paddingHorizontal: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: '#FCD34D',
+  },
+  offlineText: {
+    fontSize: 13,
+    color: '#92400E',
+    textAlign: 'center',
+    fontWeight: '500',
+  },
+  retryButton: {
+    marginLeft: 4,
+  },
+  retryText: {
+    fontSize: 11,
+    color: 'rgba(255, 255, 255, 0.9)',
+    fontWeight: '500',
   },
   messagesContent: {
     paddingVertical: 16,

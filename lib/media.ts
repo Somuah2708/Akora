@@ -1,6 +1,5 @@
 import { supabase } from './supabase';
 import * as ImagePicker from 'expo-image-picker';
-import * as MediaLibrary from 'expo-media-library';
 import * as DocumentPicker from 'expo-document-picker';
 import * as ImageManipulator from 'expo-image-manipulator';
 import { Audio } from 'expo-av';
@@ -18,45 +17,125 @@ const DOCUMENT_MAX_BYTES = 10 * 1024 * 1024; // 10MB
 
 // ==================== CAMERA ====================
 export async function takeMedia(): Promise<ImagePicker.ImagePickerAsset | null> {
-  console.log('📷 Checking camera permission...');
-
-  // Step 1: Request permission FIRST (this prevents freeze)
-  const camPerm = await ImagePicker.requestCameraPermissionsAsync();
-  console.log('📷 Permission result:', camPerm.status);
-
-  if (camPerm.status !== 'granted') {
-    Alert.alert(
-      'Camera Permission Required',
-      'Please enable camera access in Settings > Privacy > Camera > Akora'
-    );
-    return null;
-  }
-
-  // Step 2: NOW launch camera (permission already granted, no freeze)
-  console.log('📷 Launching camera...');
+  console.log('📷 [takeMedia] Function called');
+  
+  Sentry.addBreadcrumb({
+    category: 'media',
+    message: 'takeMedia() called',
+    level: 'info',
+    data: { platform: Platform.OS }
+  });
 
   try {
+    console.log('📷 [takeMedia] Checking camera permission...');
+    Sentry.addBreadcrumb({
+      category: 'permissions',
+      message: 'Requesting camera permission',
+      level: 'info'
+    });
+
+    // Step 1: Request permission FIRST (this prevents freeze)
+    const camPerm = await ImagePicker.requestCameraPermissionsAsync();
+    console.log('📷 [takeMedia] Permission result:', camPerm.status);
+    
+    Sentry.addBreadcrumb({
+      category: 'permissions',
+      message: 'Camera permission result',
+      level: camPerm.status === 'granted' ? 'info' : 'warning',
+      data: { status: camPerm.status, canAskAgain: camPerm.canAskAgain }
+    });
+
+    if (camPerm.status !== 'granted') {
+      console.log('📷 [takeMedia] Permission denied');
+      Alert.alert(
+        'Camera Permission Required',
+        'Please enable camera access in Settings > Privacy > Camera > Akora'
+      );
+      return null;
+    }
+
+    // Step 2: NOW launch camera (permission already granted, no freeze)
+    console.log('📷 [takeMedia] ✅ Permission granted, launching camera...');
+    
+    // CRITICAL: Capture to Sentry BEFORE the native call that causes freeze
+    // This will show up in Sentry even if app crashes
+    const sentryEventId = Sentry.captureMessage('🚨 NATIVE CAMERA LAUNCH IMMINENT - Next line causes freeze on iOS', {
+      level: 'error',
+      tags: { 
+        feature: 'camera-native',
+        critical: 'freeze-point',
+        platform: Platform.OS,
+        timestamp: new Date().toISOString()
+      },
+      extra: {
+        warning: 'If you see this error without a success message, the app froze during ImagePicker.launchCameraAsync',
+        nextLine: 'ImagePicker.launchCameraAsync',
+        iosVersion: Platform.Version
+      }
+    });
+    
+    // Force Sentry to send this immediately (don't wait for batch)
+    await Sentry.flush(2000);
+    
+    console.log('📷 [takeMedia] 🚨 CALLING ImagePicker.launchCameraAsync NOW...');
+    console.log('📷 [takeMedia] 🚨 IF YOU SEE THIS LOG BUT NOT THE NEXT ONE, APP FROZE HERE');
+    
     const result = await ImagePicker.launchCameraAsync({
       mediaTypes: ['images', 'videos'] as any,
       quality: 0.7,
       allowsEditing: false,
     });
+    
+    console.log('📷 [takeMedia] 🎉 launchCameraAsync returned successfully - NO FREEZE!');
+    console.log('📷 [takeMedia] 🎉 THIS LOG PROVES THE APP DID NOT FREEZE');
+    
+    // Send success message to Sentry
+    Sentry.captureMessage('✅ Camera launched successfully - NO FREEZE detected', {
+      level: 'info',
+      tags: { feature: 'camera-native', result: 'success' }
+    });
+    
+    Sentry.addBreadcrumb({
+      category: 'camera',
+      message: 'Camera launched successfully - app did not freeze',
+      level: 'info',
+      data: { cancelled: result.canceled }
+    });
 
-    console.log('📷 Camera result:', result.canceled ? 'cancelled' : 'success');
+    console.log('📷 [takeMedia] Camera result:', result.canceled ? 'cancelled' : 'success');
 
     if (result.canceled) {
+      console.log('📷 [takeMedia] User cancelled camera');
       return null;
     }
 
     if (result.assets?.[0]) {
+      console.log('📷 [takeMedia] ✅ Media captured successfully:', result.assets[0].type);
       return result.assets[0];
     }
 
+    console.log('📷 [takeMedia] No media assets returned');
     return null;
-  } catch (error) {
-    console.error('📷 Camera error:', error);
-    Sentry.captureException(error, { function: 'takeMedia', platform: Platform.OS });
-    Alert.alert('Error', 'Failed to open camera');
+  } catch (error: any) {
+    console.error('❌ [takeMedia] ERROR:', error);
+    console.error('❌ [takeMedia] Error details:', {
+      message: error?.message,
+      code: error?.code,
+      stack: error?.stack
+    });
+    
+    Sentry.captureException(error, {
+      tags: { function: 'takeMedia', platform: Platform.OS },
+      contexts: {
+        camera: {
+          errorMessage: error?.message,
+          errorCode: error?.code,
+          platform: Platform.OS
+        }
+      }
+    });
+    
+    Alert.alert('Camera Error', `Failed to open camera: ${error?.message || 'Unknown error'}`);
     return null;
   }
 }
@@ -65,44 +144,102 @@ export async function takeMedia(): Promise<ImagePicker.ImagePickerAsset | null> 
 export async function pickMedia(): Promise<ImagePicker.ImagePickerAsset | null> {
   console.log('🖼️ Checking media library permission...');
 
-  // Step 1: Request permission FIRST
-  const mediaPerm = await MediaLibrary.requestPermissionsAsync();
+  // EXPO GO iOS FIX: Use ImagePicker's own permission (not MediaLibrary)
+  // MediaLibrary has issues in Expo Go on iOS
+  const mediaPerm = await ImagePicker.requestMediaLibraryPermissionsAsync();
   console.log('🖼️ Permission result:', mediaPerm.status);
 
   if (mediaPerm.status !== 'granted') {
     Alert.alert(
       'Photos Permission Required',
-      'Please enable photos access in Settings > Privacy > Photos > Akora'
+      'Please enable photos access in Settings > Privacy > Photos > Expo Go'
     );
     return null;
   }
 
   // Step 2: NOW launch gallery
   console.log('🖼️ Launching photo library...');
+  
+  Sentry.addBreadcrumb({
+    category: 'gallery',
+    message: 'About to launch image library',
+    level: 'info',
+    data: { platform: Platform.OS }
+  });
 
   try {
-    const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ['images', 'videos'] as any,
+    // EXPO GO iOS FIX: Use different options for iOS
+    const pickerOptions: ImagePicker.ImagePickerOptions = {
+      mediaTypes: Platform.OS === 'ios' 
+        ? ImagePicker.MediaTypeOptions.All  // iOS: use MediaTypeOptions enum
+        : ['images', 'videos'] as any,       // Android: array works
       quality: 0.7,
       allowsEditing: false,
-      selectionLimit: 1,
+      // Don't use selectionLimit in Expo Go (causes issues)
+      ...(Platform.OS !== 'ios' && { selectionLimit: 1 }),
+    };
+    
+    console.log('🖼️ [pickMedia] Picker options:', pickerOptions);
+    
+    const result = await ImagePicker.launchImageLibraryAsync(pickerOptions);
+
+    console.log('🖼️ [pickMedia] Gallery result:', {
+      canceled: result.canceled,
+      hasAssets: !!result.assets,
+      assetsLength: result.assets?.length
     });
 
-    console.log('🖼️ Gallery result:', result.canceled ? 'cancelled' : 'success');
-
     if (result.canceled) {
+      console.log('🖼️ [pickMedia] User cancelled gallery');
       return null;
     }
 
     if (result.assets?.[0]) {
+      console.log('🖼️ [pickMedia] ✅ Media picked successfully:', {
+        type: result.assets[0].type,
+        uri: result.assets[0].uri,
+        width: result.assets[0].width,
+        height: result.assets[0].height
+      });
       return result.assets[0];
     }
 
+    console.log('🖼️ [pickMedia] ⚠️ No media assets returned from picker');
+    
+    // EXPO GO iOS BUG: Sometimes returns success but no assets
+    if (Platform.OS === 'ios' && !result.canceled && !result.assets) {
+      console.log('🖼️ [pickMedia] 🐛 iOS Expo Go bug detected - picker returned empty');
+      Sentry.captureMessage('iOS Expo Go gallery picker returned empty assets', {
+        level: 'warning',
+        tags: { platform: 'ios', bug: 'expo-go-gallery' }
+      });
+      Alert.alert(
+        'Media Library Issue',
+        'Expo Go has limited media library access on iOS. For full functionality, please use a development build.\n\nTry selecting the photo again, or use the camera instead.'
+      );
+    }
+    
     return null;
-  } catch (error) {
-    console.error('🖼️ Gallery error:', error);
-    Sentry.captureException(error, { function: 'pickMedia', platform: Platform.OS });
-    Alert.alert('Error', 'Failed to open photo library');
+  } catch (error: any) {
+    console.error('❌ [pickMedia] ERROR:', error);
+    console.error('❌ [pickMedia] Error details:', {
+      message: error?.message,
+      code: error?.code,
+      stack: error?.stack
+    });
+    
+    Sentry.captureException(error, {
+      tags: { function: 'pickMedia', platform: Platform.OS },
+      contexts: {
+        gallery: {
+          errorMessage: error?.message,
+          errorCode: error?.code,
+          platform: Platform.OS
+        }
+      }
+    });
+    
+    Alert.alert('Gallery Error', `Failed to open gallery: ${error?.message || 'Unknown error'}`);
     return null;
   }
 }

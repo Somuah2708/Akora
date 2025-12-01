@@ -20,18 +20,45 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 const { width, height } = Dimensions.get('window');
 
 function getTimeAgo(dateString: string): string {
+  if (!dateString) return 'just now';
+  
   const now = new Date();
   const past = new Date(dateString);
+  
+  // Validate the date
+  if (isNaN(past.getTime())) {
+    console.warn('Invalid date string:', dateString);
+    return 'just now';
+  }
+  
   const diffMs = now.getTime() - past.getTime();
+  
+  // Handle future dates (shouldn't happen, but just in case)
+  if (diffMs < 0) {
+    console.warn('Future date detected:', dateString);
+    return 'just now';
+  }
+  
+  const diffSecs = Math.floor(diffMs / 1000);
   const diffMins = Math.floor(diffMs / 60000);
   const diffHours = Math.floor(diffMs / 3600000);
   const diffDays = Math.floor(diffMs / 86400000);
+  const diffWeeks = Math.floor(diffDays / 7);
+  const diffMonths = Math.floor(diffDays / 30);
+  const diffYears = Math.floor(diffDays / 365);
 
-  if (diffMins < 1) return 'just now';
+  if (diffSecs < 10) return 'just now';
+  if (diffSecs < 60) return `${diffSecs}s ago`;
   if (diffMins < 60) return `${diffMins}m ago`;
   if (diffHours < 24) return `${diffHours}h ago`;
   if (diffDays < 7) return `${diffDays}d ago`;
-  return past.toLocaleDateString();
+  if (diffWeeks < 4) return `${diffWeeks}w ago`;
+  if (diffMonths < 12) return `${diffMonths}mo ago`;
+  if (diffYears === 1) return '1y ago';
+  if (diffYears > 1) return `${diffYears}y ago`;
+  
+  // Fallback to formatted date
+  return past.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
 }
 
 type InterestMeta = {
@@ -316,7 +343,9 @@ export default function DiscoverScreen() {
         user?.id,
         activeFilter === 'all' || activeFilter === 'friends' ? undefined : activeFilter
       );
-      // Enrich with like/save state for current user (counts already come from fetchDiscoverFeed)
+      
+      // Feed is already sorted by created_at DESC from database
+      // Just enrich with like/save state for current user
       if (user?.id) {
         const postIds = feed.filter((f) => f.type === 'post' && f.sourceId).map((f) => String(f.sourceId));
         if (postIds.length > 0) {
@@ -327,6 +356,7 @@ export default function DiscoverScreen() {
           const liked = new Set((likesRes.data || []).map((r: any) => r.post_id));
           const saved = new Set((bmsRes.data || []).map((r: any) => r.post_id));
           
+          // Enrich but maintain the order from database (newest first)
           const enriched = feed.map((f) => {
             if (f.type === 'post' && f.sourceId) {
               return {
@@ -341,27 +371,16 @@ export default function DiscoverScreen() {
             }
             return f;
           });
-          const sorted = enriched.slice().sort((a, b) => {
-            const ad = a.created_at || (a as any).date || '';
-            const bd = b.created_at || (b as any).date || '';
-            return new Date(bd).getTime() - new Date(ad).getTime();
-          });
-          setDiscoverFeed(sorted);
+          
+          console.log('✅ [DISCOVER] Loaded', enriched.length, 'posts (newest first)');
+          setDiscoverFeed(enriched);
         } else {
-          const sorted = feed.slice().sort((a, b) => {
-            const ad = a.created_at || (a as any).date || '';
-            const bd = b.created_at || (b as any).date || '';
-            return new Date(bd).getTime() - new Date(ad).getTime();
-          });
-          setDiscoverFeed(sorted);
+          console.log('✅ [DISCOVER] Loaded', feed.length, 'items (newest first)');
+          setDiscoverFeed(feed);
         }
       } else {
-        const sorted = feed.slice().sort((a, b) => {
-          const ad = a.created_at || (a as any).date || '';
-          const bd = b.created_at || (b as any).date || '';
-          return new Date(bd).getTime() - new Date(ad).getTime();
-        });
-        setDiscoverFeed(sorted);
+        console.log('✅ [DISCOVER] Loaded', feed.length, 'items (no user, newest first)');
+        setDiscoverFeed(feed);
       }
     } catch (e) {
       console.error('Error loading discover feed', e);
@@ -1419,13 +1438,15 @@ export default function DiscoverScreen() {
           filteredFeed
             .filter((item) => item.type === 'post') // Only show posts
             .map((item) => {
-              // Debug log for each item
-              console.log('🔍 [DISCOVER] Rendering item:', item.id, 'desc:', item.description?.substring(0, 20));
-              console.log('  - has media_items?', !!(item as any).media_items);
-              console.log('  - media_items length:', (item as any).media_items?.length);
-              if ((item as any).media_items) {
-                console.log('  - media_items:', JSON.stringify((item as any).media_items, null, 2));
-              }
+              // Debug log for timestamps
+              const timeAgo = getTimeAgo(item.created_at || new Date().toISOString());
+              console.log('🕐 [DISCOVER] Post timestamp:', {
+                id: item.id.substring(0, 20),
+                created_at: item.created_at,
+                timeAgo: timeAgo,
+                author: item.author?.full_name
+              });
+              
               return (
                 <View 
                   key={item.id} 
@@ -1460,7 +1481,7 @@ export default function DiscoverScreen() {
                         </View>
                       )}
                     </View>
-                    <Text style={styles.postTime}>{getTimeAgo(item.created_at || new Date().toISOString())}</Text>
+                    <Text style={styles.postTime}>{timeAgo}</Text>
                   </View>
                 </TouchableOpacity>
               </View>
