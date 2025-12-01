@@ -5,7 +5,7 @@ import * as DocumentPicker from 'expo-document-picker';
 import * as ImageManipulator from 'expo-image-manipulator';
 import { Audio } from 'expo-av';
 import { Platform, Alert } from 'react-native';
-import { captureException, addBreadcrumb } from './sentry';
+import * as Sentry from '@sentry/react-native';
 
 const IMAGE_MAX_BYTES = 5 * 1024 * 1024; // 5MB
 const VIDEO_MAX_BYTES = 25 * 1024 * 1024; // 25MB
@@ -55,7 +55,7 @@ export async function takeMedia(): Promise<ImagePicker.ImagePickerAsset | null> 
     return null;
   } catch (error) {
     console.error('📷 Camera error:', error);
-    captureException(error as Error, { function: 'takeMedia', platform: Platform.OS });
+    Sentry.captureException(error, { function: 'takeMedia', platform: Platform.OS });
     Alert.alert('Error', 'Failed to open camera');
     return null;
   }
@@ -101,7 +101,7 @@ export async function pickMedia(): Promise<ImagePicker.ImagePickerAsset | null> 
     return null;
   } catch (error) {
     console.error('🖼️ Gallery error:', error);
-    captureException(error as Error, { function: 'pickMedia', platform: Platform.OS });
+    Sentry.captureException(error, { function: 'pickMedia', platform: Platform.OS });
     Alert.alert('Error', 'Failed to open photo library');
     return null;
   }
@@ -150,7 +150,7 @@ export async function pickDocument(): Promise<{
     };
   } catch (error) {
     console.error('📄 [Documents] Error:', error);
-    captureException(error as Error, { function: 'pickDocument', platform: Platform.OS });
+    Sentry.captureException(error, { function: 'pickDocument', platform: Platform.OS });
     Alert.alert('Error', 'Failed to pick document. Please try again.');
     return null;
   }
@@ -271,7 +271,7 @@ export async function uploadMedia(
     return urlData.publicUrl;
   } catch (error: any) {
     console.error('❌ Upload error:', error);
-    captureException(error as Error, { 
+    Sentry.captureException(error, { 
       function: 'uploadMedia', 
       type, 
       platform: Platform.OS,
@@ -342,7 +342,7 @@ export async function uploadDocument(
     return urlData.publicUrl;
   } catch (error: any) {
     console.error('❌ Document upload error:', error);
-    captureException(error as Error, { 
+    Sentry.captureException(error, { 
       function: 'uploadDocument', 
       platform: Platform.OS,
       fileName,
@@ -385,7 +385,7 @@ export async function startRecording(): Promise<boolean> {
     return true;
   } catch (error) {
     console.error('Error starting recording:', error);
-    captureException(error as Error, { function: 'startRecording', platform: Platform.OS });
+    Sentry.captureException(error, { function: 'startRecording', platform: Platform.OS });
     Alert.alert('Error', 'Failed to start recording');
     recording = null;
     return false;
@@ -427,7 +427,7 @@ export async function stopRecording(userId: string): Promise<string | null> {
     return urlData.publicUrl;
   } catch (error) {
     console.error('Error stopping recording:', error);
-    captureException(error as Error, { function: 'stopRecording', platform: Platform.OS, userId });
+    Sentry.captureException(error, { function: 'stopRecording', platform: Platform.OS, userId });
     Alert.alert('Error', 'Failed to save voice message');
     recording = null;
     return null;

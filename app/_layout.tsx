@@ -23,12 +23,50 @@ import { registerForPushNotificationsAsync } from '@/lib/pushNotifications';
 import { supabase } from '@/lib/supabase';
 import { Platform } from 'react-native';
 import * as Notifications from 'expo-notifications';
-import { initSentry, setUser as setSentryUser } from '@/lib/sentry';
+import * as Sentry from '@sentry/react-native';
 
-// Initialize Sentry at app startup
-initSentry();
+Sentry.init({
+  dsn: 'https://300dd3fe7142a2a34ca08cf77ce39769@o4510042293731328.ingest.de.sentry.io/4510459892531280',
 
-export default function RootLayout() {
+  // Set tracesSampleRate to 1.0 to capture 100% of transactions for performance monitoring.
+  tracesSampleRate: __DEV__ ? 1.0 : 0.2,
+  
+  // Enable native crash reporting
+  enableNative: true,
+  
+  // Enable auto session tracking
+  enableAutoSessionTracking: true,
+  
+  // Add environment
+  environment: __DEV__ ? 'development' : 'production',
+  
+  // Enable debug mode in development
+  debug: __DEV__,
+  
+  // Attach stack traces to errors
+  attachStacktrace: true,
+
+  // Adds more context data to events (IP address, cookies, user, etc.)
+  sendDefaultPii: true,
+
+  // Enable Logs
+  enableLogs: true,
+
+  // Configure Session Replay
+  replaysSessionSampleRate: 0.1,
+  replaysOnErrorSampleRate: 1,
+  
+  integrations: [
+    Sentry.mobileReplayIntegration(),
+    Sentry.feedbackIntegration(),
+    new Sentry.ReactNativeTracing({
+      routingInstrumentation: new Sentry.ReactNavigationInstrumentation(),
+      enableHTTPTracking: true,
+    }),
+  ],
+});
+
+export default Sentry.wrap(function RootLayout() {
   useFrameworkReady();
   const { user, loading } = useAuth();
   const segments = useSegments();
@@ -42,12 +80,12 @@ export default function RootLayout() {
     
     // Set Sentry user context
     if (user) {
-      setSentryUser({
+      Sentry.setUser({
         id: user.id,
         email: user.email,
       });
     } else {
-      setSentryUser(null);
+      Sentry.setUser(null);
     }
     
     // Wait for auth to finish loading AND user to exist
@@ -223,4 +261,4 @@ export default function RootLayout() {
       </SafeAreaProvider>
     </QueryClientProvider>
   );
-}
+});

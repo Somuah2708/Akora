@@ -35,3 +35,9 @@ yarn-error.*
 
 # typescript
 *.tsbuildinfo
+
+.env.local
+
+# sentry
+ios/sentry.properties
+android/sentry.properties

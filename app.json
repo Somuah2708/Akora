@@ -50,8 +50,9 @@
       [
         "@sentry/react-native/expo",
         {
-          "organization": "your-sentry-org",
-          "project": "your-sentry-project"
+          "url": "https://sentry.io/",
+          "organization": "ceit",
+          "project": "akora"
         }
       ]
     ],
@@ -64,9 +65,7 @@
         "projectId": "c8ab4f5d-adfd-4ea0-8c24-96df65b27dac"
       }
     },
-    "runtimeVersion": {
-      "policy": "appVersion"
-    },
+    "runtimeVersion": "1.0.0",
     "updates": {
       "url": "https://u.expo.dev/c8ab4f5d-adfd-4ea0-8c24-96df65b27dac"
     },
