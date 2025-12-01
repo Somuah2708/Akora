@@ -3,7 +3,7 @@ import { Search, Plus, MoveVertical as MoreVertical, X, MessageCircle, UserPlus,
 import { useFonts, Inter_400Regular, Inter_600SemiBold } from '@expo-google-fonts/inter';
 import { useEffect, useState } from 'react';
 import { SplashScreen, useRouter } from 'expo-router';
-import { getConversationList, searchUsers as searchUsersHelper, getUserOnlineStatus, subscribeToUserPresence } from '@/lib/friends';
+import { getConversationList, searchUsers as searchUsersHelper } from '@/lib/friends';
 import { pinChat, getSettingsForUser, markDirectConversationRead, markGroupConversationRead } from '@/lib/chatSettings';
 import { useAuth } from '@/hooks/useAuth';
 import { formatProfileSubtitle } from '@/lib/display';
@@ -45,7 +45,6 @@ export default function ChatScreen() {
   const [searchQuery, setSearchQuery] = useState('');
   const [searchResults, setSearchResults] = useState<Profile[]>([]);
   const [searchLoading, setSearchLoading] = useState(false);
-  const [onlineUsers, setOnlineUsers] = useState<Set<string>>(new Set());
   const [refreshing, setRefreshing] = useState(false);
   const [pinnedDirectIds, setPinnedDirectIds] = useState<Set<string>>(new Set());
   const [pinnedGroupIds, setPinnedGroupIds] = useState<Set<string>>(new Set());
@@ -220,30 +219,6 @@ export default function ChatScreen() {
         )
         .subscribe();
 
-      // Subscribe to profile updates for online status
-      const profileSubscription = supabase
-        .channel('profile_status_changes')
-        .on('postgres_changes',
-          {
-            event: 'UPDATE',
-            schema: 'public',
-            table: 'profiles',
-          },
-          (payload) => {
-            const updatedProfile = payload.new as any;
-            setOnlineUsers(prev => {
-              const newSet = new Set(prev);
-              if (updatedProfile.is_online) {
-                newSet.add(updatedProfile.id);
-              } else {
-                newSet.delete(updatedProfile.id);
-              }
-              return newSet;
-            });
-          }
-        )
-        .subscribe();
-
       // Subscribe to real-time updates for admin support messages (admins only)
       let supportMessageSub: any = null;
       if (isAdmin) {
@@ -294,7 +269,6 @@ export default function ChatScreen() {
 
       return () => {
         messageSubscription.unsubscribe();
-        profileSubscription.unsubscribe();
         groupMessageSub.unsubscribe();
         if (supportMessageSub) supportMessageSub.unsubscribe();
         // Cleanup typing channels
@@ -420,25 +394,6 @@ export default function ChatScreen() {
       setConversations(convos);
   // After loading conversations, refresh typing subscriptions
   // handled by effect watching conversations.length
-      
-      // Load online status for all friends
-      const friendIds = convos.map(c => {
-        // Handle friend being an array or object
-        const friend = Array.isArray(c.friend) ? c.friend[0] : c.friend;
-        return friend?.id;
-      }).filter(Boolean) as string[];
-      
-      const statuses = await Promise.all(
-        friendIds.map(id => getUserOnlineStatus(id))
-      );
-      
-      const online = new Set<string>();
-      statuses.forEach((status, index) => {
-        if (status.isOnline) {
-          online.add(friendIds[index]);
-        }
-      });
-      setOnlineUsers(online);
     } catch (error) {
       console.error('Error fetching conversations:', error);
       Alert.alert('Error', 'Failed to load conversations');
@@ -783,7 +738,6 @@ export default function ChatScreen() {
                       const friend = Array.isArray(conversation.friend) 
                         ? conversation.friend[0] 
                         : conversation.friend;
-                      const isOnline = onlineUsers.has(friend?.id);
                       const isTyping = typingFriendIds.has(friend?.id);
                       const isPinned = pinnedDirectIds.has(friend?.id);
                       return (
@@ -801,9 +755,6 @@ export default function ChatScreen() {
                               }} 
                               style={styles.avatar} 
                             />
-                            {isOnline && (
-                              <View style={styles.onlineIndicator} />
-                            )}
                           </View>
                           <View style={styles.chatInfo}>
                             <View style={styles.chatHeader}>

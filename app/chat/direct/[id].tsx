@@ -13,6 +13,7 @@ import {
   Pressable,
   Animated,
   Linking,
+  Keyboard,
 } from 'react-native';
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { useLocalSearchParams, useRouter } from 'expo-router';
@@ -27,13 +28,10 @@ import {
   markMessageAsDelivered,
   subscribeToDirectMessages,
   getFriends,
-  updateOnlineStatus,
-  getUserOnlineStatus,
-  subscribeToUserPresence,
   type DirectMessage,
 } from '@/lib/friends';
 import { startRecording, stopRecording, cancelRecording, pickMedia, takeMedia, pickDocument, uploadMedia, uploadDocument } from '@/lib/media';
-import { formatMessageTime, formatLastSeen, groupMessagesByDay } from '@/lib/timeUtils';
+import { formatMessageTime } from '@/lib/timeUtils';
 import { supabase } from '@/lib/supabase';
 import EmojiSelector from 'react-native-emoji-selector';
 import { Audio } from 'expo-av';
@@ -52,13 +50,12 @@ export default function DirectMessageScreen() {
   const [recording, setRecording] = useState(false);
   const [showAttachMenu, setShowAttachMenu] = useState(false);
   const [uploadingMedia, setUploadingMedia] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState(0); // WhatsApp-style progress
   const [imageViewerVisible, setImageViewerVisible] = useState(false);
   const [selectedImageUrl, setSelectedImageUrl] = useState<string | null>(null);
   const [playingSound, setPlayingSound] = useState<{ [key: string]: boolean }>({});
-  const [isTyping, setIsTyping] = useState(false);
-  const [friendIsOnline, setFriendIsOnline] = useState(false);
-  const [friendLastSeen, setFriendLastSeen] = useState<string | null>(null);
   const [firstUnreadIndex, setFirstUnreadIndex] = useState<number | null>(null);
+  const [isKeyboardVisible, setIsKeyboardVisible] = useState(false);
   const flatListRef = useRef<FlatList>(null);
   const soundObjects = useRef<{ [key: string]: Audio.Sound }>({});
   const typingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -76,6 +73,22 @@ export default function DirectMessageScreen() {
   }, []);
 
   useEffect(() => {
+    const keyboardWillShow = Keyboard.addListener(
+      Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow',
+      () => setIsKeyboardVisible(true)
+    );
+    const keyboardWillHide = Keyboard.addListener(
+      Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide',
+      () => setIsKeyboardVisible(false)
+    );
+
+    return () => {
+      keyboardWillShow.remove();
+      keyboardWillHide.remove();
+    };
+  }, []);
+
+  useEffect(() => {
     if (user && friendId) {
       // Show cached thread immediately (no spinner), then background sync
       (async () => {
@@ -87,10 +100,6 @@ export default function DirectMessageScreen() {
         loadMessages(!!cached?.messages?.length);
       })();
       loadFriendProfile();
-      loadFriendOnlineStatus();
-
-      // Update own online status
-      updateOnlineStatus(user.id, true);
 
       // Subscribe to real-time messages with optimistic updates
       const conversationId = [user.id, friendId].sort().join('-');
@@ -105,10 +114,9 @@ export default function DirectMessageScreen() {
           },
           async (payload) => {
             const newMessage = payload.new as DirectMessage;
-            // Only handle INCOMING messages to avoid duplicating our own optimistic sends
-            if (!(newMessage.sender_id === friendId && newMessage.receiver_id === user.id)) {
-              return;
-            }
+            
+            // Process ALL messages (both incoming and our own sent messages)
+            // This ensures media appears in realtime for both sender and receiver
             
             // If it's a shared post, fetch the post data
             let messageWithPost = newMessage;
@@ -147,11 +155,11 @@ export default function DirectMessageScreen() {
               return next;
             });
 
-            // Mark as delivered
-            markMessageAsDelivered(newMessage.id);
-
-            // Mark as read immediately
-            markMessageAsRead(newMessage.id);
+            // Mark as delivered if it's an INCOMING message (from friend to me)
+            if (newMessage.sender_id === friendId && newMessage.receiver_id === user.id) {
+              markMessageAsDelivered(newMessage.id);
+              markMessageAsRead(newMessage.id);
+            }
 
             // Scroll to bottom
             setTimeout(() => {
@@ -176,26 +184,8 @@ export default function DirectMessageScreen() {
         )
         .subscribe();
 
-      // Subscribe to friend's online status
-      const unsubscribePresence = subscribeToUserPresence(
-        friendId,
-        (isOnline, lastSeen) => {
-          setFriendIsOnline(isOnline);
-          setFriendLastSeen(lastSeen);
-        }
-      );
-
-      // Setup typing indicator channel
-      setupTypingIndicator();
-
       return () => {
         supabase.removeChannel(messageChannel);
-        unsubscribePresence();
-        if (typingChannelRef.current) {
-          supabase.removeChannel(typingChannelRef.current);
-        }
-        // Mark as offline when leaving
-        updateOnlineStatus(user.id, false);
         // Cleanup audio
         Object.values(soundObjects.current).forEach(async (sound) => {
           try {
@@ -292,13 +282,6 @@ export default function DirectMessageScreen() {
     } catch (error) {
       console.error('Error loading friend profile:', error);
     }
-  };
-
-  const loadFriendOnlineStatus = async () => {
-    if (!friendId) return;
-    const status = await getUserOnlineStatus(friendId);
-    setFriendIsOnline(status.isOnline);
-    setFriendLastSeen(status.lastSeen);
   };
 
   const navigateToPost = (postId: string) => {
@@ -514,6 +497,7 @@ export default function DirectMessageScreen() {
       }
 
       setUploadingMedia(true);
+      setUploadProgress(0);
 
       const mediaType = media.type === 'video' ? 'video' : 'image';
       const uploadedUrl = await uploadMedia(
@@ -521,7 +505,8 @@ export default function DirectMessageScreen() {
         user.id,
         mediaType,
         media.fileName,
-        media.mimeType
+        media.mimeType,
+        (progress) => setUploadProgress(progress) // WhatsApp-style progress callback
       );
 
       if (uploadedUrl) {
@@ -549,6 +534,7 @@ export default function DirectMessageScreen() {
       Alert.alert('Error', 'Failed to upload media');
     } finally {
       setUploadingMedia(false);
+      setUploadProgress(0);
     }
   };
 
@@ -564,6 +550,7 @@ export default function DirectMessageScreen() {
       }
 
       setUploadingMedia(true);
+      setUploadProgress(0);
 
       const mediaType = media.type === 'video' ? 'video' : 'image';
       const uploadedUrl = await uploadMedia(
@@ -571,7 +558,8 @@ export default function DirectMessageScreen() {
         user.id,
         mediaType,
         media.fileName,
-        media.mimeType
+        media.mimeType,
+        (progress) => setUploadProgress(progress) // WhatsApp-style progress callback
       );
 
       if (uploadedUrl) {
@@ -599,6 +587,7 @@ export default function DirectMessageScreen() {
       Alert.alert('Error', 'Failed to take media');
     } finally {
       setUploadingMedia(false);
+      setUploadProgress(0);
     }
   };
 
@@ -614,8 +603,15 @@ export default function DirectMessageScreen() {
       }
 
       setUploadingMedia(true);
+      setUploadProgress(0);
 
-      const uploadedUrl = await uploadDocument(doc.uri, user.id, doc.name, doc.mimeType);
+      const uploadedUrl = await uploadDocument(
+        doc.uri,
+        user.id,
+        doc.name,
+        doc.mimeType,
+        (progress) => setUploadProgress(progress) // WhatsApp-style progress callback
+      );
 
       if (uploadedUrl) {
         const newMessage = await sendDirectMessage(
@@ -641,6 +637,7 @@ export default function DirectMessageScreen() {
       Alert.alert('Error', 'Failed to upload document');
     } finally {
       setUploadingMedia(false);
+      setUploadProgress(0);
     }
   };
 
@@ -906,7 +903,7 @@ export default function DirectMessageScreen() {
     <SafeAreaView style={[styles.container, { backgroundColor: '#0F172A' }]} edges={['top']}>
       <KeyboardAvoidingView
         style={{ flex: 1, backgroundColor: '#FFFFFF' }}
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
         keyboardVerticalOffset={0}
       >
       {/* Header */}
@@ -939,26 +936,9 @@ export default function DirectMessageScreen() {
                 </Text>
               </View>
             )}
-            {/* Online indicator */}
-            {friendIsOnline && <View style={styles.onlineIndicator} />}
           </View>
           <View style={styles.headerTextContainer}>
             <Text style={styles.headerName}>{friendProfile?.full_name || 'Friend'}</Text>
-            {/* Typing indicator or online status */}
-            {isTyping ? (
-              <View style={styles.typingContainer}>
-                <Text style={styles.typingText}>typing</Text>
-                <View style={styles.typingDots}>
-                  <View style={[styles.typingDot, styles.typingDot1]} />
-                  <View style={[styles.typingDot, styles.typingDot2]} />
-                  <View style={[styles.typingDot, styles.typingDot3]} />
-                </View>
-              </View>
-            ) : (
-              <Text style={styles.headerHandle}>
-                {formatLastSeen(friendLastSeen, friendIsOnline)}
-              </Text>
-            )}
           </View>
         </TouchableOpacity>
       </View>
@@ -980,54 +960,62 @@ export default function DirectMessageScreen() {
         }
       />
 
-      {/* Input */}
-      <View style={styles.inputContainer}>
-        {/* Paperclip Attachment Button */}
-        <TouchableOpacity
-          style={styles.iconButton}
-          onPress={() => setShowAttachMenu(true)}
-          activeOpacity={0.7}
-        >
-          <Paperclip size={22} color="#737373" />
-        </TouchableOpacity>
-
-        {/* Emoji Button */}
-        <TouchableOpacity
-          style={styles.iconButton}
-          onPress={() => setShowEmojiPicker(!showEmojiPicker)}
-          activeOpacity={0.7}
-        >
-          <Smile size={22} color="#737373" />
-        </TouchableOpacity>
-
-        {/* Text Input */}
-        <TextInput
-          style={styles.input}
-          placeholder="Type a message..."
-          placeholderTextColor="#A3A3A3"
-          value={messageText}
-          onChangeText={(text) => {
-            setMessageText(text);
-            handleTyping();
-          }}
-          multiline
-          maxLength={1000}
-        />
-
-        {/* Send Button */}
-        {messageText.trim() && (
+      {/* Input Wrapper - ensures background color covers bottom area */}
+      <View style={{ 
+        backgroundColor: '#0F172A',
+        paddingBottom: isKeyboardVisible ? (Platform.OS === 'android' ? 8 : 0) : (Platform.OS === 'android' ? 20 : 10)
+      }}>
+        <View style={[
+          styles.inputContainer,
+          { paddingBottom: isKeyboardVisible ? 12 : (Platform.OS === 'android' ? 16 : 16) }
+        ]}>
+          {/* Paperclip Attachment Button */}
           <TouchableOpacity
-            style={[styles.sendButton, sending && styles.sendButtonDisabled]}
-            onPress={handleSend}
-            disabled={!messageText.trim() || sending}
+            style={styles.iconButton}
+            onPress={() => setShowAttachMenu(true)}
+            activeOpacity={0.7}
           >
-            {sending ? (
-              <ActivityIndicator size="small" color="#FFFFFF" />
-            ) : (
-              <Send size={20} color="#FFFFFF" />
-            )}
+            <Paperclip size={22} color="#737373" />
           </TouchableOpacity>
-        )}
+
+          {/* Emoji Button */}
+          <TouchableOpacity
+            style={styles.iconButton}
+            onPress={() => setShowEmojiPicker(!showEmojiPicker)}
+            activeOpacity={0.7}
+          >
+            <Smile size={22} color="#737373" />
+          </TouchableOpacity>
+
+          {/* Text Input */}
+          <TextInput
+            style={styles.input}
+            placeholder="Type a message..."
+            placeholderTextColor="#A3A3A3"
+            value={messageText}
+            onChangeText={(text) => {
+              setMessageText(text);
+              handleTyping();
+            }}
+            multiline
+            maxLength={1000}
+          />
+
+          {/* Send Button */}
+          {messageText.trim() && (
+            <TouchableOpacity
+              style={[styles.sendButton, sending && styles.sendButtonDisabled]}
+              onPress={handleSend}
+              disabled={!messageText.trim() || sending}
+            >
+              {sending ? (
+                <ActivityIndicator size="small" color="#FFFFFF" />
+              ) : (
+                <Send size={20} color="#FFFFFF" />
+              )}
+            </TouchableOpacity>
+          )}
+        </View>
       </View>
 
       {/* Attachment Menu Modal - WhatsApp Style */}
@@ -1081,12 +1069,16 @@ export default function DirectMessageScreen() {
         </Pressable>
       </Modal>
 
-      {/* Uploading Indicator */}
+      {/* WhatsApp-Style Upload Progress */}
       {uploadingMedia && (
         <View style={styles.uploadingOverlay}>
           <View style={styles.uploadingContainer}>
-            <ActivityIndicator size="large" color="#0F172A" />
-            <Text style={styles.uploadingText}>Uploading...</Text>
+            <View style={styles.progressCircleContainer}>
+              <Text style={styles.uploadPercentage}>{Math.round(uploadProgress)}%</Text>
+            </View>
+            <Text style={styles.uploadingText}>
+              {uploadProgress < 20 ? 'Preparing...' : uploadProgress < 95 ? 'Uploading...' : 'Finishing...'}
+            </Text>
           </View>
         </View>
       )}
@@ -1397,7 +1389,6 @@ const styles = StyleSheet.create({
     alignItems: 'flex-end',
     paddingHorizontal: 14,
     paddingTop: 10,
-    paddingBottom: Platform.OS === 'ios' ? 28 : 10,
     backgroundColor: '#0F172A',
     borderTopWidth: 1,
     borderTopColor: '#1E293B',
@@ -1598,6 +1589,21 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.3,
     shadowRadius: 16,
     elevation: 10,
+  },
+  progressCircleContainer: {
+    width: 80,
+    height: 80,
+    borderRadius: 40,
+    backgroundColor: '#EEF2FF',
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 4,
+    borderColor: '#4F46E5',
+  },
+  uploadPercentage: {
+    fontSize: 24,
+    fontWeight: '700',
+    color: '#4F46E5',
   },
   uploadingText: {
     fontSize: 16,

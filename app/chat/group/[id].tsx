@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { View, Text, FlatList, TextInput, TouchableOpacity, Image, Modal, Pressable, ActivityIndicator, StyleSheet, Linking, Alert, KeyboardAvoidingView, Platform } from "react-native";
+import { View, Text, FlatList, TextInput, TouchableOpacity, Image, Modal, Pressable, ActivityIndicator, StyleSheet, Linking, Alert, KeyboardAvoidingView, Platform, Keyboard } from "react-native";
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { supabase } from "../../../lib/supabase";
@@ -41,7 +41,9 @@ export default function GroupChatScreen() {
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
   const [showAttachMenu, setShowAttachMenu] = useState(false);
   const [uploadingMedia, setUploadingMedia] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState(0);
   const [playingSound, setPlayingSound] = useState<{ [key: string]: boolean }>({});
+  const [isKeyboardVisible, setIsKeyboardVisible] = useState(false);
   const soundObjects = useRef<{ [key: string]: Audio.Sound }>({});
 
   const meId = user?.id as string | undefined;
@@ -80,6 +82,22 @@ export default function GroupChatScreen() {
   useEffect(() => {
     loadInitial();
   }, [loadInitial]);
+
+  useEffect(() => {
+    const keyboardWillShow = Keyboard.addListener(
+      Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow',
+      () => setIsKeyboardVisible(true)
+    );
+    const keyboardWillHide = Keyboard.addListener(
+      Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide',
+      () => setIsKeyboardVisible(false)
+    );
+
+    return () => {
+      keyboardWillShow.remove();
+      keyboardWillHide.remove();
+    };
+  }, []);
 
   useEffect(() => {
     if (!groupId) return;
@@ -282,6 +300,7 @@ export default function GroupChatScreen() {
       }
 
       setUploadingMedia(true);
+      setUploadProgress(0);
 
       const mediaType = media.type === 'video' ? 'video' : 'image';
       const uploadedUrl = await uploadMedia(
@@ -289,7 +308,8 @@ export default function GroupChatScreen() {
         meId,
         mediaType,
         media.fileName,
-        media.mimeType
+        media.mimeType,
+        (progress) => setUploadProgress(progress)
       );
 
       if (uploadedUrl) {
@@ -309,6 +329,7 @@ export default function GroupChatScreen() {
       Alert.alert('Error', 'Failed to upload media');
     } finally {
       setUploadingMedia(false);
+      setUploadProgress(0);
     }
   };
 
@@ -324,6 +345,7 @@ export default function GroupChatScreen() {
       }
 
       setUploadingMedia(true);
+      setUploadProgress(0);
 
       const mediaType = media.type === 'video' ? 'video' : 'image';
       const uploadedUrl = await uploadMedia(
@@ -331,7 +353,8 @@ export default function GroupChatScreen() {
         meId,
         mediaType,
         media.fileName,
-        media.mimeType
+        media.mimeType,
+        (progress) => setUploadProgress(progress)
       );
 
       if (uploadedUrl) {
@@ -351,6 +374,7 @@ export default function GroupChatScreen() {
       Alert.alert('Error', 'Failed to take media');
     } finally {
       setUploadingMedia(false);
+      setUploadProgress(0);
     }
   };
 
@@ -366,8 +390,15 @@ export default function GroupChatScreen() {
       }
 
       setUploadingMedia(true);
+      setUploadProgress(0);
 
-      const uploadedUrl = await uploadDocument(doc.uri, meId, doc.name, doc.mimeType);
+      const uploadedUrl = await uploadDocument(
+        doc.uri,
+        meId,
+        doc.name,
+        doc.mimeType,
+        (progress) => setUploadProgress(progress)
+      );
 
       if (uploadedUrl) {
         await supabase
@@ -385,6 +416,7 @@ export default function GroupChatScreen() {
       Alert.alert('Error', 'Failed to upload document');
     } finally {
       setUploadingMedia(false);
+      setUploadProgress(0);
     }
   };
 
@@ -544,7 +576,7 @@ export default function GroupChatScreen() {
     <SafeAreaView style={{ flex: 1, backgroundColor: "#0F172A" }} edges={['top']}>
       <KeyboardAvoidingView 
         style={{ flex: 1, backgroundColor: "#FFFFFF" }}
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
         keyboardVerticalOffset={0}
       >
         {/* Header */}
@@ -581,51 +613,59 @@ export default function GroupChatScreen() {
         onContentSizeChange={() => listRef.current?.scrollToEnd({ animated: true })}
       />
 
-      {/* Input Container */}
-      <View style={styles.inputContainer}>
-        {/* Paperclip Attachment Button */}
-        <TouchableOpacity
-          style={styles.iconButton}
-          onPress={() => setShowAttachMenu(true)}
-          activeOpacity={0.7}
-        >
-          <Paperclip size={22} color="#737373" />
-        </TouchableOpacity>
-
-        {/* Emoji Button */}
-        <TouchableOpacity
-          style={styles.iconButton}
-          onPress={() => setShowEmojiPicker(!showEmojiPicker)}
-          activeOpacity={0.7}
-        >
-          <Smile size={22} color="#737373" />
-        </TouchableOpacity>
-
-        {/* Text Input */}
-        <TextInput
-          style={styles.input}
-          placeholder="Type a message..."
-          placeholderTextColor="#A3A3A3"
-          value={input}
-          onChangeText={onChangeText}
-          multiline
-          maxLength={1000}
-        />
-
-        {/* Send Button */}
-        {input.trim() && (
+      {/* Input Wrapper - ensures background color covers bottom area */}
+      <View style={{ 
+        backgroundColor: '#0F172A',
+        paddingBottom: isKeyboardVisible ? (Platform.OS === 'android' ? 8 : 0) : (Platform.OS === 'android' ? 20 : 10)
+      }}>
+        <View style={[
+          styles.inputContainer,
+          { paddingBottom: isKeyboardVisible ? 12 : (Platform.OS === 'android' ? 16 : 16) }
+        ]}>
+          {/* Paperclip Attachment Button */}
           <TouchableOpacity
-            style={[styles.sendButton, sending && styles.sendButtonDisabled]}
-            onPress={sendText}
-            disabled={!input.trim() || sending}
+            style={styles.iconButton}
+            onPress={() => setShowAttachMenu(true)}
+            activeOpacity={0.7}
           >
-            {sending ? (
-              <ActivityIndicator size="small" color="#FFFFFF" />
-            ) : (
-              <Send size={20} color="#FFFFFF" />
-            )}
+            <Paperclip size={22} color="#737373" />
           </TouchableOpacity>
-        )}
+
+          {/* Emoji Button */}
+          <TouchableOpacity
+            style={styles.iconButton}
+            onPress={() => setShowEmojiPicker(!showEmojiPicker)}
+            activeOpacity={0.7}
+          >
+            <Smile size={22} color="#737373" />
+          </TouchableOpacity>
+
+          {/* Text Input */}
+          <TextInput
+            style={styles.input}
+            placeholder="Type a message..."
+            placeholderTextColor="#A3A3A3"
+            value={input}
+            onChangeText={onChangeText}
+            multiline
+            maxLength={1000}
+          />
+
+          {/* Send Button */}
+          {input.trim() && (
+            <TouchableOpacity
+              style={[styles.sendButton, sending && styles.sendButtonDisabled]}
+              onPress={sendText}
+              disabled={!input.trim() || sending}
+            >
+              {sending ? (
+                <ActivityIndicator size="small" color="#FFFFFF" />
+              ) : (
+                <Send size={20} color="#FFFFFF" />
+              )}
+            </TouchableOpacity>
+          )}
+        </View>
       </View>
 
       {/* Attachment Menu Modal - WhatsApp Style */}
@@ -683,8 +723,12 @@ export default function GroupChatScreen() {
       {uploadingMedia && (
         <View style={styles.uploadingOverlay}>
           <View style={styles.uploadingContainer}>
-            <ActivityIndicator size="large" color="#0F172A" />
-            <Text style={styles.uploadingText}>Uploading...</Text>
+            <View style={styles.progressCircleContainer}>
+              <Text style={styles.uploadPercentage}>{uploadProgress}%</Text>
+            </View>
+            <Text style={styles.uploadingText}>
+              {uploadProgress < 20 ? 'Preparing...' : uploadProgress < 90 ? 'Uploading...' : 'Finishing...'}
+            </Text>
           </View>
         </View>
       )}
@@ -747,7 +791,6 @@ const styles = StyleSheet.create({
     alignItems: 'flex-end',
     paddingHorizontal: 14,
     paddingTop: 10,
-    paddingBottom: Platform.OS === 'ios' ? 28 : 10,
     backgroundColor: '#0F172A',
     borderTopWidth: 1,
     borderTopColor: '#1E293B',
@@ -920,6 +963,21 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.15,
     shadowRadius: 12,
     elevation: 10,
+  },
+  progressCircleContainer: {
+    width: 80,
+    height: 80,
+    borderRadius: 40,
+    borderWidth: 4,
+    borderColor: '#6366F1',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  uploadPercentage: {
+    fontSize: 24,
+    fontWeight: '700',
+    color: '#6366F1',
   },
   uploadingText: {
     fontSize: 16,

@@ -1,5 +1,6 @@
 import { supabase } from './supabase';
 import * as ImagePicker from 'expo-image-picker';
+import * as MediaLibrary from 'expo-media-library';
 import * as DocumentPicker from 'expo-document-picker';
 import { Audio } from 'expo-av';
 import { Platform, Alert } from 'react-native';
@@ -8,42 +9,149 @@ const IMAGE_MAX_BYTES = 5 * 1024 * 1024; // 5MB
 const VIDEO_MAX_BYTES = 25 * 1024 * 1024; // 25MB
 const DOCUMENT_MAX_BYTES = 10 * 1024 * 1024; // 10MB
 
-// Global locks to prevent concurrent picker operations
-let isPickingMedia = false;
-let isPickingDocument = false;
+/**
+ * FIXED: No-freeze approach
+ * Request permissions FIRST, THEN launch picker
+ */
 
-// Auto-reset locks on app start/hot reload
-if (__DEV__) {
-  // In development, reset on hot reload
-  isPickingMedia = false;
-  isPickingDocument = false;
-}
+// ==================== CAMERA ====================
+export async function takeMedia(): Promise<ImagePicker.ImagePickerAsset | null> {
+  console.log('📷 Checking camera permission...');
 
-// Export reset function for debugging
-export function resetPickerLocks() {
-  isPickingMedia = false;
-  isPickingDocument = false;
-}
+  // Step 1: Request permission FIRST (this prevents freeze)
+  const camPerm = await ImagePicker.requestCameraPermissionsAsync();
+  console.log('📷 Permission result:', camPerm.status);
 
-// Request permissions
-export async function requestMediaPermissions() {
-  const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
-  if (status !== 'granted') {
-    Alert.alert('Permission Required', 'Please grant media library access to upload photos/videos');
-    return false;
+  if (camPerm.status !== 'granted') {
+    Alert.alert(
+      'Camera Permission Required',
+      'Please enable camera access in Settings > Privacy > Camera > Akora'
+    );
+    return null;
   }
-  return true;
-}
 
-export async function requestCameraPermissions() {
-  const { status } = await ImagePicker.requestCameraPermissionsAsync();
-  if (status !== 'granted') {
-    Alert.alert('Permission Required', 'Please grant camera access to take photos/videos');
-    return false;
+  // Step 2: NOW launch camera (permission already granted, no freeze)
+  console.log('📷 Launching camera...');
+
+  try {
+    const result = await ImagePicker.launchCameraAsync({
+      mediaTypes: ['images', 'videos'] as any,
+      quality: 0.7,
+      allowsEditing: false,
+    });
+
+    console.log('📷 Camera result:', result.canceled ? 'cancelled' : 'success');
+
+    if (result.canceled) {
+      return null;
+    }
+
+    if (result.assets?.[0]) {
+      return result.assets[0];
+    }
+
+    return null;
+  } catch (error) {
+    console.error('📷 Camera error:', error);
+    Alert.alert('Error', 'Failed to open camera');
+    return null;
   }
-  return true;
 }
 
+// ==================== GALLERY ====================
+export async function pickMedia(): Promise<ImagePicker.ImagePickerAsset | null> {
+  console.log('🖼️ Checking media library permission...');
+
+  // Step 1: Request permission FIRST
+  const mediaPerm = await MediaLibrary.requestPermissionsAsync();
+  console.log('🖼️ Permission result:', mediaPerm.status);
+
+  if (mediaPerm.status !== 'granted') {
+    Alert.alert(
+      'Photos Permission Required',
+      'Please enable photos access in Settings > Privacy > Photos > Akora'
+    );
+    return null;
+  }
+
+  // Step 2: NOW launch gallery
+  console.log('🖼️ Launching photo library...');
+
+  try {
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ['images', 'videos'] as any,
+      quality: 0.7,
+      allowsEditing: false,
+      selectionLimit: 1,
+    });
+
+    console.log('🖼️ Gallery result:', result.canceled ? 'cancelled' : 'success');
+
+    if (result.canceled) {
+      return null;
+    }
+
+    if (result.assets?.[0]) {
+      return result.assets[0];
+    }
+
+    return null;
+  } catch (error) {
+    console.error('🖼️ Gallery error:', error);
+    Alert.alert('Error', 'Failed to open photo library');
+    return null;
+  }
+}
+
+// ==================== DOCUMENTS ====================
+export async function pickDocument(): Promise<{
+  uri: string;
+  name: string;
+  size: number;
+  mimeType: string;
+} | null> {
+  try {
+    console.log('📄 [Documents] Opening document picker...');
+
+    const result = await DocumentPicker.getDocumentAsync({
+      type: '*/*',
+      copyToCacheDirectory: true,
+    });
+
+    if (result.canceled) {
+      console.log('📄 [Documents] User cancelled');
+      return null;
+    }
+
+    if (!result.assets || result.assets.length === 0) {
+      return null;
+    }
+
+    const doc = result.assets[0];
+
+    // Validate file size
+    if (doc.size && doc.size > DOCUMENT_MAX_BYTES) {
+      const sizeMB = (DOCUMENT_MAX_BYTES / (1024 * 1024)).toFixed(0);
+      Alert.alert('File Too Large', `Maximum file size is ${sizeMB}MB. Please choose a smaller file.`);
+      return null;
+    }
+
+    console.log('📄 [Documents] Document selected:', doc.name);
+
+    return {
+      uri: doc.uri,
+      name: doc.name,
+      size: doc.size || 0,
+      mimeType: doc.mimeType || 'application/octet-stream',
+    };
+  } catch (error) {
+    console.error('📄 [Documents] Error:', error);
+    Alert.alert('Error', 'Failed to pick document. Please try again.');
+    return null;
+  }
+}
+
+// ==================== AUDIO RECORDING ====================
 export async function requestAudioPermissions() {
   const { status } = await Audio.requestPermissionsAsync();
   if (status !== 'granted') {
@@ -53,274 +161,176 @@ export async function requestAudioPermissions() {
   return true;
 }
 
-// Pick image/video from gallery
-export async function pickMedia(): Promise<ImagePicker.ImagePickerAsset | null> {
-  if (isPickingMedia) {
-    return null;
-  }
-  
-  isPickingMedia = true;
-  
-  // Safety timeout to release lock after 60 seconds
-  const timeout = setTimeout(() => {
-    isPickingMedia = false;
-  }, 60000);
-  
-  try {
-    // Expo will automatically request permissions when needed
-    const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ['images', 'videos'],
-      allowsEditing: false,
-      quality: 0.8,
-      selectionLimit: 1,
-      videoMaxDuration: 60, // 60 seconds max
-    });
-    
-    if (!result.canceled && result.assets[0]) {
-      return result.assets[0];
-    }
-    return null;
-  } catch (error) {
-    console.error('Error picking media:', error);
-    Alert.alert('Error', 'Failed to pick media');
-    return null;
-  } finally {
-    clearTimeout(timeout);
-    isPickingMedia = false;
-  }
-}
+// ==================== UPLOAD WITH PROGRESS ====================
+// WhatsApp-style upload with percentage progress and compression
 
-// Take photo/video with camera
-export async function takeMedia(): Promise<ImagePicker.ImagePickerAsset | null> {
-  if (isPickingMedia) {
-    return null;
-  }
-  
-  isPickingMedia = true;
-  
-  // Safety timeout to release lock after 60 seconds
-  const timeout = setTimeout(() => {
-    isPickingMedia = false;
-  }, 60000);
-  
-  try {
-    // Expo will automatically request permissions when needed
-    const result = await ImagePicker.launchCameraAsync({
-      mediaTypes: ['images', 'videos'],
-      allowsEditing: false,
-      quality: 0.8,
-      videoMaxDuration: 60,
-    });
-    
-    if (!result.canceled && result.assets[0]) {
-      return result.assets[0];
-    }
-    return null;
-  } catch (error) {
-    console.error('Error taking media:', error);
-    Alert.alert('Error', 'Failed to take media');
-    return null;
-  } finally {
-    clearTimeout(timeout);
-    isPickingMedia = false;
-  }
-}
-
-// Pick document from device
-export async function pickDocument(): Promise<{
-  uri: string;
-  name: string;
-  size: number;
-  mimeType: string;
-} | null> {
-  if (isPickingDocument) {
-    return null;
-  }
-  
-  isPickingDocument = true;
-  
-  // Safety timeout to release lock after 60 seconds
-  const timeout = setTimeout(() => {
-    isPickingDocument = false;
-  }, 60000);
-  
-  try {
-    const result = await DocumentPicker.getDocumentAsync({
-      type: '*/*',
-      copyToCacheDirectory: true,
-    });
-    
-    if (result.canceled || !result.assets || result.assets.length === 0) {
-      return null;
-    }
-
-    const doc = result.assets[0];
-
-    // Check file size
-    if (doc.size && doc.size > DOCUMENT_MAX_BYTES) {
-      Alert.alert('File Too Large', `Maximum file size is ${DOCUMENT_MAX_BYTES / (1024 * 1024)}MB`);
-      return null;
-    }
-
-    return {
-      uri: doc.uri,
-      name: doc.name,
-      size: doc.size || 0,
-      mimeType: doc.mimeType || 'application/octet-stream',
-    };
-  } catch (error) {
-    console.error('Error picking document:', error);
-    Alert.alert('Error', 'Failed to pick document');
-    return null;
-  } finally {
-    clearTimeout(timeout);
-    isPickingDocument = false;
-  }
-}
-
-// Upload media to Supabase Storage
 export async function uploadMedia(
   uri: string,
   userId: string,
   type: 'image' | 'video',
   fileName?: string | null,
-  mimeType?: string | null
+  mimeType?: string | null,
+  onProgress?: (progress: number) => void
 ): Promise<string | null> {
   try {
     const timestamp = Date.now();
-    // Determine extension
+    
+    // Progress: 0-10% - Preparing file
+    onProgress?.(5);
+    
+    let processedUri = uri;
+    
+    // WhatsApp-style: Compress images before upload (faster upload, less data)
+    if (type === 'image') {
+      console.log('🖼️ Compressing image for faster upload...');
+      onProgress?.(10);
+      
+      const compressed = await ImageManipulator.manipulateAsync(
+        uri,
+        [{ resize: { width: 1920 } }], // Max width 1920px (WhatsApp quality)
+        { compress: 0.7, format: ImageManipulator.SaveFormat.JPEG }
+      );
+      processedUri = compressed.uri;
+      console.log('✅ Image compressed');
+    }
+    
+    // Progress: 10-20% - Reading file
+    onProgress?.(15);
+    
     const inferExtFromMime = (mt?: string | null) => {
       switch (mt) {
-        case 'image/jpeg':
-          return 'jpg';
-        case 'image/png':
-          return 'png';
+        case 'image/jpeg': return 'jpg';
+        case 'image/png': return 'png';
         case 'image/heic':
-        case 'image/heif':
-          return 'heic';
-        case 'video/mp4':
-          return 'mp4';
-        case 'video/quicktime':
-          return 'mov';
-        default:
-          return type === 'image' ? 'jpg' : 'mp4';
+        case 'image/heif': return 'heic';
+        case 'video/mp4': return 'mp4';
+        case 'video/quicktime': return 'mov';
+        default: return type === 'image' ? 'jpg' : 'mp4';
       }
     };
 
-    const extFromName = fileName && fileName.includes('.') ? fileName.split('.').pop() : null;
+    const extFromName = fileName?.includes('.') ? fileName.split('.').pop() : null;
     const finalExt = (extFromName || inferExtFromMime(mimeType)) || (type === 'image' ? 'jpg' : 'mp4');
     const safeFileName = `${userId}_${timestamp}.${finalExt}`;
     const filePath = `messages/media/${userId}/${safeFileName}`;
 
-    // Fetch the file as ArrayBuffer (React Native)
-    const response = await fetch(uri);
-    const arrayBuffer = await response.arrayBuffer();
-    const bytes = new Uint8Array(arrayBuffer);
+    // Fetch file as blob (faster than ArrayBuffer)
+    const response = await fetch(processedUri);
+    const blob = await response.blob();
+    
+    onProgress?.(20);
 
-    // Size guard (prevents 413 Payload too large)
-    const size = bytes.byteLength;
+    // Size check
+    const size = blob.size;
     const max = type === 'image' ? IMAGE_MAX_BYTES : VIDEO_MAX_BYTES;
     if (size > max) {
       Alert.alert(
         'File too large',
-        `${type === 'image' ? 'Image' : 'Video'} exceeds the ${Math.round(max / (1024*1024))}MB limit. Please choose a smaller file.`
+        `${type === 'image' ? 'Image' : 'Video'} exceeds ${Math.round(max / (1024*1024))}MB limit.`
       );
       return null;
     }
 
-    // Upload to Supabase Storage
+    console.log(`📤 Uploading ${type} (${(size / 1024).toFixed(0)}KB)...`);
+
+    // Progress: 20-90% - Uploading
+    // Supabase doesn't support upload progress natively, so we simulate it
+    const uploadSimulation = setInterval(() => {
+      onProgress?.((prev) => {
+        const current = prev || 20;
+        return Math.min(current + 10, 90); // Increment by 10% up to 90%
+      });
+    }, 300); // Update every 300ms (feels fast like WhatsApp)
+
     const { data, error } = await supabase.storage
       .from('chat-media')
-      .upload(filePath, bytes, {
+      .upload(filePath, blob, {
         contentType: mimeType || (type === 'image' ? 'image/jpeg' : 'video/mp4'),
         upsert: false,
       });
 
+    clearInterval(uploadSimulation);
+
     if (error) throw error;
 
-    // Get public URL
+    // Progress: 90-100% - Getting URL
+    onProgress?.(95);
+
     const { data: urlData } = supabase.storage
       .from('chat-media')
       .getPublicUrl(filePath);
 
+    onProgress?.(100);
+    console.log('✅ Upload complete');
+
     return urlData.publicUrl;
   } catch (error: any) {
-    console.error('Error uploading media:', error);
-    const message = typeof error?.message === 'string' ? error.message : '';
-    if (message.toLowerCase().includes('payload too large')) {
-      Alert.alert('File too large', 'The selected media exceeds the maximum allowed size.');
-    } else if (message.toLowerCase().includes('bucket not found')) {
-      Alert.alert('Storage bucket missing', 'The chat-media bucket does not exist yet. Please run the storage migration.');
-    } else {
-      Alert.alert('Error', 'Failed to upload media');
-    }
+    console.error('❌ Upload error:', error);
+    Alert.alert('Upload Failed', 'Could not upload media. Please try again.');
     return null;
   }
 }
 
-// Upload document to Supabase Storage
 export async function uploadDocument(
   uri: string,
   userId: string,
   fileName: string,
-  mimeType: string
+  mimeType: string,
+  onProgress?: (progress: number) => void
 ): Promise<string | null> {
   try {
-    console.log('Starting document upload:', { fileName, mimeType, uri });
+    onProgress?.(5);
+    
     const timestamp = Date.now();
     const sanitizedFileName = fileName.replace(/[^a-zA-Z0-9._-]/g, '_');
     const filePath = `messages/documents/${userId}/${timestamp}_${sanitizedFileName}`;
 
-    // Fetch the file as ArrayBuffer (React Native)
-    console.log('Fetching file from URI...');
+    onProgress?.(15);
+    
     const response = await fetch(uri);
-    const arrayBuffer = await response.arrayBuffer();
-    const bytes = new Uint8Array(arrayBuffer);
-    console.log('File fetched, size:', bytes.byteLength, 'bytes');
+    const blob = await response.blob();
+    
+    onProgress?.(20);
 
-    // Size guard
-    const size = bytes.byteLength;
+    const size = blob.size;
     if (size > DOCUMENT_MAX_BYTES) {
-      console.log('File too large:', size, '>', DOCUMENT_MAX_BYTES);
-      Alert.alert(
-        'File too large',
-        `Document exceeds the ${Math.round(DOCUMENT_MAX_BYTES / (1024*1024))}MB limit.`
-      );
+      Alert.alert('File too large', `Maximum ${Math.round(DOCUMENT_MAX_BYTES / (1024*1024))}MB`);
       return null;
     }
 
-    // Upload to Supabase Storage
-    console.log('Uploading to Supabase Storage:', filePath);
+    console.log(`📤 Uploading document (${(size / 1024).toFixed(0)}KB)...`);
+
+    const uploadSimulation = setInterval(() => {
+      onProgress?.((prev) => {
+        const current = prev || 20;
+        return Math.min(current + 10, 90);
+      });
+    }, 300);
+
     const { data, error } = await supabase.storage
       .from('chat-media')
-      .upload(filePath, bytes, {
+      .upload(filePath, blob, {
         contentType: mimeType,
         upsert: false,
       });
 
-    if (error) {
-      console.error('Supabase upload error:', error);
-      throw error;
-    }
+    clearInterval(uploadSimulation);
 
-    console.log('Upload successful, getting public URL...');
-    // Get public URL
+    if (error) throw error;
+
+    onProgress?.(95);
+
     const { data: urlData } = supabase.storage
       .from('chat-media')
       .getPublicUrl(filePath);
 
-    console.log('Public URL obtained:', urlData.publicUrl);
+    onProgress?.(100);
+    console.log('✅ Document upload complete');
+
     return urlData.publicUrl;
   } catch (error: any) {
-    console.error('Error uploading document:', error);
-    const message = typeof error?.message === 'string' ? error.message : '';
-    if (message.toLowerCase().includes('payload too large')) {
-      Alert.alert('File too large', 'The selected document exceeds the maximum allowed size.');
-    } else if (message.toLowerCase().includes('bucket not found')) {
-      Alert.alert('Storage Error', 'The chat-media storage bucket does not exist. Please contact support.');
-    } else {
-      Alert.alert('Upload Error', `Failed to upload document: ${message || 'Unknown error'}`);
-    }
+    console.error('❌ Document upload error:', error);
+    Alert.alert('Upload Failed', 'Could not upload document. Please try again.');
     return null;
   }
 }
