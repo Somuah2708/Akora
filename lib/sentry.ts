@@ -4,7 +4,7 @@ import { Platform } from 'react-native';
 // Initialize Sentry - you'll need to create a project at sentry.io and get your DSN
 export const initSentry = () => {
   Sentry.init({
-    dsn: 'YOUR_SENTRY_DSN_HERE', // Replace with your actual Sentry DSN from sentry.io
+    dsn: 'https://300dd3fe7142a2a34ca08cf77ce39769@o4510042293731328.ingest.de.sentry.io/4510459892531280',
     
     // Set tracesSampleRate to 1.0 to capture 100% of transactions for performance monitoring.
     // We recommend adjusting this value in production
