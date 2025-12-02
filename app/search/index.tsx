@@ -8,9 +8,11 @@ import {
   Image,
   ActivityIndicator,
   Alert,
+  RefreshControl,
 } from 'react-native';
 import { useFonts, Inter_400Regular, Inter_600SemiBold } from '@expo-google-fonts/inter';
 import { useEffect, useState, useCallback } from 'react';
+import { useRefresh } from '@/hooks/useRefresh';
 import { SplashScreen, useRouter } from 'expo-router';
 import { Search, UserPlus, UserCheck, Clock, X, ArrowLeft } from 'lucide-react-native';
 import { useAuth } from '@/hooks/useAuth';
@@ -34,6 +36,14 @@ export default function SearchScreen() {
   const [users, setUsers] = useState<UserWithFriendshipStatus[]>([]);
   const [loading, setLoading] = useState(false);
   const [sendingRequest, setSendingRequest] = useState<string | null>(null);
+
+  const { isRefreshing, handleRefresh } = useRefresh({
+    onRefresh: async () => {
+      if (searchQuery.trim()) {
+        await handleSearch();
+      }
+    },
+  });
 
   const [fontsLoaded] = useFonts({
     'Inter-Regular': Inter_400Regular,
@@ -255,6 +265,14 @@ export default function SearchScreen() {
           keyExtractor={(item) => item.id}
           contentContainerStyle={styles.listContent}
           showsVerticalScrollIndicator={false}
+          refreshControl={
+            <RefreshControl
+              refreshing={isRefreshing}
+              onRefresh={handleRefresh}
+              tintColor="#4169E1"
+              colors={['#4169E1']}
+            />
+          }
         />
       )}
     </View>

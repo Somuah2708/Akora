@@ -19,6 +19,7 @@ import { useAuth } from '@/hooks/useAuth';
 import { ToastProvider } from '@/components/Toast';
 import { VideoSettingsProvider } from '@/contexts/VideoSettingsContext';
 import { NotificationProvider } from '@/contexts/NotificationContext';
+import { AppLayout } from '@/components/AppLayout';
 import { registerForPushNotificationsAsync } from '@/lib/pushNotifications';
 import { supabase } from '@/lib/supabase';
 import { Platform } from 'react-native';
@@ -290,14 +291,16 @@ export default Sentry.wrap(function RootLayout() {
             <VideoSettingsProvider>
               <NotificationProvider>
                 <ErrorBoundary>
-                  <Stack screenOptions={{ headerShown: false }}>
-                    <Stack.Screen name="(tabs)" />
-                    <Stack.Screen name="auth" />
-                    {/* Ensure non-tab stacks (e.g., chat, user-profile, etc.) also have no header */}
-                    <Stack.Screen name="chat" />
-                    <Stack.Screen name="+not-found" options={{ headerShown: true }} />
-                  </Stack>
-                  <StatusBar style="light" />
+                  <AppLayout>
+                    <Stack screenOptions={{ headerShown: false }}>
+                      <Stack.Screen name="(tabs)" />
+                      <Stack.Screen name="auth" />
+                      {/* Ensure non-tab stacks (e.g., chat, user-profile, etc.) also have no header */}
+                      <Stack.Screen name="chat" />
+                      <Stack.Screen name="+not-found" options={{ headerShown: true }} />
+                    </Stack>
+                    <StatusBar style="light" />
+                  </AppLayout>
                 </ErrorBoundary>
               </NotificationProvider>
             </VideoSettingsProvider>

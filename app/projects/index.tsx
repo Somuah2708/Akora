@@ -1,6 +1,7 @@
-import { View, Text, StyleSheet, ScrollView, Image, TouchableOpacity, TextInput, Dimensions } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, Image, TouchableOpacity, TextInput, Dimensions, RefreshControl } from 'react-native';
 import { useFonts, Inter_400Regular, Inter_600SemiBold } from '@expo-google-fonts/inter';
 import { useEffect, useState } from 'react';
+import { useRefresh } from '@/hooks/useRefresh';
 import { SplashScreen, useRouter } from 'expo-router';
 import { ArrowLeft, Search, Filter, Target, Clock, Users, ChevronRight, Building2, Calendar, Heart, Star, Briefcase, ArrowUpRight, CircleCheck as CheckCircle } from 'lucide-react-native';
 
@@ -140,7 +141,18 @@ export default function ProjectsScreen() {
   }
 
   return (
-    <ScrollView style={styles.container} showsVerticalScrollIndicator={false}>
+    <ScrollView 
+      style={styles.container} 
+      showsVerticalScrollIndicator={false}
+      refreshControl={
+        <RefreshControl
+          refreshing={isRefreshing}
+          onRefresh={handleRefresh}
+          tintColor="#4169E1"
+          colors={['#4169E1']}
+        />
+      }
+    >
       <View style={styles.header}>
         <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
           <ArrowLeft size={24} color="#000000" />

@@ -1,7 +1,8 @@
 import React, { useEffect, useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Alert } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Alert, RefreshControl } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useAuth } from '@/hooks/useAuth';
+import { useRefresh } from '@/hooks/useRefresh';
 import { supabase, type ProductService } from '@/lib/supabase';
 import { ArrowLeft, CheckCircle2, Star, Trash2 } from 'lucide-react-native';
 
@@ -13,6 +14,31 @@ export default function AdminMarketplaceScreen() {
 
   const isAdmin = (user as any)?.is_admin;
 
+  const loadItems = async () => {
+    try {
+      setLoading(true);
+      const { data, error } = await supabase
+        .from('products_services')
+        .select('*')
+        .order('created_at', { ascending: false })
+        .limit(200);
+
+      if (error) throw error;
+      setItems((data as any) || []);
+    } catch (err) {
+      console.error('Error loading marketplace items for admin', err);
+      Alert.alert('Error', 'Could not load marketplace items.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const { isRefreshing, handleRefresh } = useRefresh({
+    onRefresh: async () => {
+      await loadItems();
+    },
+  });
+
   useEffect(() => {
     if (!user) return;
     if (!isAdmin) {
@@ -20,25 +46,6 @@ export default function AdminMarketplaceScreen() {
       router.back();
       return;
     }
-
-    const loadItems = async () => {
-      try {
-        setLoading(true);
-        const { data, error } = await supabase
-          .from('products_services')
-          .select('*')
-          .order('created_at', { ascending: false })
-          .limit(200);
-
-        if (error) throw error;
-        setItems((data as any) || []);
-      } catch (err) {
-        console.error('Error loading marketplace items for admin', err);
-        Alert.alert('Error', 'Could not load marketplace items.');
-      } finally {
-        setLoading(false);
-      }
-    };
 
     loadItems();
   }, [user, isAdmin, router]);
@@ -119,7 +126,18 @@ export default function AdminMarketplaceScreen() {
         </View>
       </View>
 
-      <ScrollView style={styles.scroll} contentContainerStyle={styles.scrollContent}>
+      <ScrollView 
+        style={styles.scroll} 
+        contentContainerStyle={styles.scrollContent}
+        refreshControl={
+          <RefreshControl
+            refreshing={isRefreshing}
+            onRefresh={handleRefresh}
+            tintColor="#4169E1"
+            colors={['#4169E1']}
+          />
+        }
+      >
         {loading ? (
           <Text style={styles.helperText}>Loading listings...</Text>
         ) : items.length === 0 ? (

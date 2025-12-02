@@ -1,6 +1,7 @@
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Dimensions, Modal } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Dimensions, Modal, RefreshControl } from 'react-native';
 import { useFonts, Inter_400Regular, Inter_600SemiBold } from '@expo-google-fonts/inter';
 import { useEffect, useState } from 'react';
+import { useRefresh } from '@/hooks/useRefresh';
 import { SplashScreen, useRouter } from 'expo-router';
 import { ArrowLeft, Plus, Bell, Sparkles, Sun, Moon, Coffee, Book, Dumbbell, Brain, Heart, Battery, CircleCheck as CheckCircle2, ChartBar as BarChart3, Calendar, Clock, ArrowUpRight, Target, X } from 'lucide-react-native';
 
@@ -74,6 +75,13 @@ export default function HabitsScreen() {
   const router = useRouter();
   const [activeCategory, setActiveCategory] = useState('all');
   const [showAddModal, setShowAddModal] = useState(false);
+  
+  const { isRefreshing, handleRefresh } = useRefresh({
+    onRefresh: async () => {
+      // Reload habit data here
+      await new Promise(resolve => setTimeout(resolve, 300));
+    },
+  });
   const [fontsLoaded] = useFonts({
     'Inter-Regular': Inter_400Regular,
     'Inter-SemiBold': Inter_600SemiBold,
@@ -96,7 +104,17 @@ export default function HabitsScreen() {
 
   return (
     <View style={styles.container}>
-      <ScrollView showsVerticalScrollIndicator={false}>
+      <ScrollView 
+        showsVerticalScrollIndicator={false}
+        refreshControl={
+          <RefreshControl
+            refreshing={isRefreshing}
+            onRefresh={handleRefresh}
+            tintColor="#4169E1"
+            colors={['#4169E1']}
+          />
+        }
+      >
         <View style={styles.header}>
           <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
             <ArrowLeft size={24} color="#000000" />

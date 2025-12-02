@@ -1,6 +1,7 @@
-import { View, Text, StyleSheet, ScrollView, Image, TouchableOpacity, Dimensions, ActivityIndicator, Alert } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, Image, TouchableOpacity, Dimensions, ActivityIndicator, Alert, RefreshControl } from 'react-native';
 import { useFonts, Inter_400Regular, Inter_600SemiBold } from '@expo-google-fonts/inter';
 import { useEffect, useState } from 'react';
+import { useRefresh } from '@/hooks/useRefresh';
 import { SplashScreen, useRouter } from 'expo-router';
 import { ArrowLeft, X } from 'lucide-react-native';
 import { supabase, type ProductService, type Profile } from '@/lib/supabase';
@@ -41,6 +42,12 @@ export default function SavedListingsScreen() {
   const { user } = useAuth();
   const [savedListings, setSavedListings] = useState<ProductServiceWithUser[]>([]);
   const [loading, setLoading] = useState(true);
+
+  const { isRefreshing, handleRefresh } = useRefresh({
+    onRefresh: async () => {
+      await fetchSavedListings();
+    },
+  });
 
   const [fontsLoaded] = useFonts({
     'Inter-Regular': Inter_400Regular,
@@ -153,7 +160,18 @@ export default function SavedListingsScreen() {
         </View>
       </View>
 
-      <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
+      <ScrollView 
+        style={styles.content} 
+        showsVerticalScrollIndicator={false}
+        refreshControl={
+          <RefreshControl
+            refreshing={isRefreshing}
+            onRefresh={handleRefresh}
+            tintColor="#4169E1"
+            colors={['#4169E1']}
+          />
+        }
+      >
         {loading ? (
           <View style={styles.loadingContainer}>
             <ActivityIndicator size="large" color="#4169E1" />

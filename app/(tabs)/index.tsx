@@ -1,6 +1,7 @@
 import { View, Text, StyleSheet, ScrollView, Image, TouchableOpacity, FlatList, Dimensions, Alert, Modal, TextInput, ActivityIndicator, RefreshControl } from 'react-native';
 import { useFonts, Inter_400Regular, Inter_600SemiBold } from '@expo-google-fonts/inter';
 import { useEffect, useState, useCallback, useRef } from 'react';
+import { HEADER_COLOR } from '@/constants/Colors';
 import { SplashScreen, useRouter, useFocusEffect } from 'expo-router';
 import { Bell, ThumbsUp, MessagesSquare, Share2, Star, MoreHorizontal, Plus, BookOpen, PartyPopper, Calendar, TrendingUp, Users, Newspaper, Search, User, Edit3, Trash2, Play, X } from 'lucide-react-native';
 import { supabase, type Post, type Profile, type HomeFeaturedItem, type HomeCategoryTab, type TrendingArticle } from '@/lib/supabase';
@@ -1399,14 +1400,21 @@ export default function HomeScreen() {
         style={styles.scrollView}
         showsVerticalScrollIndicator={false}
         stickyHeaderIndices={[]}
-        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
+        refreshControl={
+          <RefreshControl 
+            refreshing={refreshing} 
+            onRefresh={onRefresh}
+            tintColor="#FFFFFF"
+            colors={['#FFFFFF']}
+          />
+        }
         onScroll={(event) => {
           setScrollY(event.nativeEvent.contentOffset.y);
         }}
         scrollEventThrottle={16}
       >
         {/* Header */}
-        <View style={[styles.header, { paddingTop: insets.top + 16, marginTop: -200, paddingTop: insets.top + 216 }]}>
+        <View style={[styles.header, { paddingTop: insets.top + 16 }]}>
         <Text style={styles.logoText}>Akora</Text>
         <View style={styles.headerIcons}>
           <NotificationBellIcon />
@@ -1980,7 +1988,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
     paddingTop: 16,
     paddingBottom: 20,
-    backgroundColor: '#0F172A',
+    backgroundColor: HEADER_COLOR,
     width: '100%',
   },
   logoText: {

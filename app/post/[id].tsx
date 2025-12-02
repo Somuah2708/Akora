@@ -39,6 +39,7 @@ export default function PostDetailScreen() {
   const [loading, setLoading] = useState(true);
   const [isLiked, setIsLiked] = useState(false);
   const [isBookmarked, setIsBookmarked] = useState(false);
+  const [currentMediaIndex, setCurrentMediaIndex] = useState(0);
 
   useEffect(() => {
     const load = async () => {
@@ -172,18 +173,64 @@ export default function PostDetailScreen() {
       <ScrollView showsVerticalScrollIndicator={false}>
         {/* Media - Mixed Media Support */}
         {post.media_items && post.media_items.length > 0 ? (
-          <ScrollView 
-            horizontal 
-            pagingEnabled 
-            showsHorizontalScrollIndicator={false}
-            snapToInterval={width}
-            decelerationRate="fast"
-          >
-            {post.media_items.map((mediaItem, i) => (
-              <View key={i} style={[styles.hero, { width }]}>
-                {mediaItem.type === 'video' ? (
+          <View style={styles.carouselContainer}>
+            <ScrollView 
+              horizontal 
+              pagingEnabled 
+              showsHorizontalScrollIndicator={false}
+              snapToInterval={width}
+              decelerationRate="fast"
+              onScroll={(event) => {
+                const scrollX = event.nativeEvent.contentOffset.x;
+                const currentIndex = Math.round(scrollX / width);
+                setCurrentMediaIndex(currentIndex);
+              }}
+              scrollEventThrottle={16}
+            >
+              {post.media_items.map((mediaItem, i) => (
+                <View key={i} style={[styles.hero, { width }]}>
+                  {mediaItem.type === 'video' ? (
+                    <Video
+                      source={{ uri: mediaItem.url }}
+                      style={styles.hero}
+                      useNativeControls
+                      resizeMode={ResizeMode.CONTAIN}
+                      isLooping
+                      isMuted={false}
+                      volume={1.0}
+                      onError={(err) => console.warn('Video error:', err)}
+                    />
+                  ) : (
+                    <Image source={{ uri: mediaItem.url }} style={styles.hero} resizeMode="cover" />
+                  )}
+                </View>
+              ))}
+            </ScrollView>
+            {post.media_items.length > 1 && (
+              <View style={styles.carouselIndicator}>
+                <Text style={styles.carouselIndicatorText}>
+                  {currentMediaIndex + 1}/{post.media_items.length}
+                </Text>
+              </View>
+            )}
+          </View>
+        ) : post.video_urls && post.video_urls.length > 0 ? (
+          <View style={styles.carouselContainer}>
+            <ScrollView 
+              horizontal 
+              pagingEnabled 
+              showsHorizontalScrollIndicator={false}
+              onScroll={(event) => {
+                const scrollX = event.nativeEvent.contentOffset.x;
+                const currentIndex = Math.round(scrollX / width);
+                setCurrentMediaIndex(currentIndex);
+              }}
+              scrollEventThrottle={16}
+            >
+              {post.video_urls.map((videoUrl, i) => (
+                <View key={i} style={styles.videoContainer}>
                   <Video
-                    source={{ uri: mediaItem.url }}
+                    source={{ uri: videoUrl }}
                     style={styles.hero}
                     useNativeControls
                     resizeMode={ResizeMode.CONTAIN}
@@ -192,29 +239,17 @@ export default function PostDetailScreen() {
                     volume={1.0}
                     onError={(err) => console.warn('Video error:', err)}
                   />
-                ) : (
-                  <Image source={{ uri: mediaItem.url }} style={styles.hero} resizeMode="cover" />
-                )}
+                </View>
+              ))}
+            </ScrollView>
+            {post.video_urls.length > 1 && (
+              <View style={styles.carouselIndicator}>
+                <Text style={styles.carouselIndicatorText}>
+                  {currentMediaIndex + 1}/{post.video_urls.length}
+                </Text>
               </View>
-            ))}
-          </ScrollView>
-        ) : post.video_urls && post.video_urls.length > 0 ? (
-          <ScrollView horizontal pagingEnabled showsHorizontalScrollIndicator={false}>
-            {post.video_urls.map((videoUrl, i) => (
-              <View key={i} style={styles.videoContainer}>
-                <Video
-                  source={{ uri: videoUrl }}
-                  style={styles.hero}
-                  useNativeControls
-                  resizeMode={ResizeMode.CONTAIN}
-                  isLooping
-                  isMuted={false}
-                  volume={1.0}
-                  onError={(err) => console.warn('Video error:', err)}
-                />
-              </View>
-            ))}
-          </ScrollView>
+            )}
+          </View>
         ) : post.video_url ? (
           <View style={styles.videoContainer}>
             <Video
@@ -229,11 +264,30 @@ export default function PostDetailScreen() {
             />
           </View>
         ) : post.image_urls && post.image_urls.length > 0 ? (
-          <ScrollView horizontal pagingEnabled showsHorizontalScrollIndicator={false}>
-            {post.image_urls.map((u, i) => (
-              <Image key={i} source={{ uri: u }} style={styles.hero} />
-            ))}
-          </ScrollView>
+          <View style={styles.carouselContainer}>
+            <ScrollView 
+              horizontal 
+              pagingEnabled 
+              showsHorizontalScrollIndicator={false}
+              onScroll={(event) => {
+                const scrollX = event.nativeEvent.contentOffset.x;
+                const currentIndex = Math.round(scrollX / width);
+                setCurrentMediaIndex(currentIndex);
+              }}
+              scrollEventThrottle={16}
+            >
+              {post.image_urls.map((u, i) => (
+                <Image key={i} source={{ uri: u }} style={styles.hero} />
+              ))}
+            </ScrollView>
+            {post.image_urls.length > 1 && (
+              <View style={styles.carouselIndicator}>
+                <Text style={styles.carouselIndicatorText}>
+                  {currentMediaIndex + 1}/{post.image_urls.length}
+                </Text>
+              </View>
+            )}
+          </View>
         ) : post.image_url ? (
           <Image source={{ uri: post.image_url }} style={styles.hero} />
         ) : null}
@@ -307,8 +361,27 @@ const styles = StyleSheet.create({
   header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, paddingTop: 60, paddingBottom: 12, borderBottomWidth: 1, borderBottomColor: '#E5E7EB' },
   backBtn: { width: 44, height: 44, borderRadius: 22, alignItems: 'center', justifyContent: 'center', backgroundColor: '#F5F5F5' },
   headerTitle: { fontSize: 18, color: '#111827', fontFamily: 'Inter-SemiBold' },
+  carouselContainer: {
+    width,
+    height: width,
+    position: 'relative',
+  },
   hero: { width, height: width, backgroundColor: '#F3F4F6' },
   videoContainer: { width, height: width },
+  carouselIndicator: {
+    position: 'absolute',
+    top: 12,
+    right: 12,
+    backgroundColor: 'rgba(0, 0, 0, 0.6)',
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 12,
+  },
+  carouselIndicatorText: {
+    color: '#FFFFFF',
+    fontSize: 12,
+    fontFamily: 'Inter-SemiBold',
+  },
   actions: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 12 },
   leftActions: { flexDirection: 'row', gap: 16 },
   actionBtn: { padding: 4 },

@@ -1,6 +1,7 @@
-import { View, Text, StyleSheet, ScrollView, Image, TouchableOpacity, Dimensions } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, Image, TouchableOpacity, Dimensions, RefreshControl } from 'react-native';
 import { useFonts, Inter_400Regular, Inter_600SemiBold } from '@expo-google-fonts/inter';
 import { useEffect } from 'react';
+import { useRefresh } from '@/hooks/useRefresh';
 import { SplashScreen, useRouter } from 'expo-router';
 import { ArrowLeft, Clock, MapPin, Building2, Wallet } from 'lucide-react-native';
 
@@ -79,6 +80,14 @@ const FEATURED_JOBS = [
 
 export default function AllFeaturedJobsScreen() {
   const router = useRouter();
+  
+  const { isRefreshing, handleRefresh } = useRefresh({
+    onRefresh: async () => {
+      // Reload featured jobs
+      await new Promise(resolve => setTimeout(resolve, 300));
+    },
+  });
+  
   const [fontsLoaded] = useFonts({
     'Inter-Regular': Inter_400Regular,
     'Inter-SemiBold': Inter_600SemiBold,
@@ -104,7 +113,18 @@ export default function AllFeaturedJobsScreen() {
         <View style={{ width: 40 }} />
       </View>
 
-      <ScrollView style={styles.scrollView} showsVerticalScrollIndicator={false}>
+      <ScrollView 
+        style={styles.scrollView} 
+        showsVerticalScrollIndicator={false}
+        refreshControl={
+          <RefreshControl
+            refreshing={isRefreshing}
+            onRefresh={handleRefresh}
+            tintColor="#4169E1"
+            colors={['#4169E1']}
+          />
+        }
+      >
         <View style={styles.grid}>
           {FEATURED_JOBS.map((job) => (
             <TouchableOpacity 
