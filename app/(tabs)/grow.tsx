@@ -1,5 +1,7 @@
+import React from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Dimensions, Image, ActivityIndicator, Modal, Share, Alert, Platform, RefreshControl } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { HEADER_COLOR } from '@/constants/Colors';
 import * as Linking from 'expo-linking';
 import * as Clipboard from 'expo-clipboard';
 import { useFonts, Inter_400Regular, Inter_600SemiBold } from '@expo-google-fonts/inter';
@@ -52,7 +54,7 @@ const USER_STATS = {
   friends: 342,
 };
 
-export default function ProfileScreen() {
+const ProfileScreen = React.memo(function ProfileScreen() {
   const router = useRouter();
   const { user, profile: authProfile, signOut } = useAuth();
   const insets = useSafeAreaInsets();
@@ -384,10 +386,16 @@ export default function ProfileScreen() {
         <RefreshControl 
           refreshing={refreshing} 
           onRefresh={onRefresh}
-          tintColor="#000000"
+          tintColor="#FFFFFF"
+          colors={['#0EA5E9']}
+          progressBackgroundColor="#FFFFFF"
+          progressViewOffset={insets.top + 60}
         />
       }
     >
+      {/* FIX: Dark background filler for pull-to-refresh gap */}
+      <View style={{ position: 'absolute', top: -1000, left: 0, right: 0, height: 1000, backgroundColor: HEADER_COLOR }} />
+      
       {/* Avatar Preview Modal */}
       <Modal
         transparent
@@ -977,7 +985,9 @@ export default function ProfileScreen() {
       </Modal>
     </ScrollView>
   );
-}
+});
+
+export default ProfileScreen;
 
 const styles = StyleSheet.create({
   container: {

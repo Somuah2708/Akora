@@ -91,42 +91,12 @@ export async function fetchDiscoverFeed(
           });
           console.log('🔄 [DISCOVER] Re-sorted posts to match database order (newest first)');
           
-          // Fetch accurate likes and comments counts for all posts
-          const postIdsForCounts = nonAdminPosts.map((p: any) => p.id);
-          
-          console.log('👍 [DISCOVER] Fetching likes and comments counts for', postIdsForCounts.length, 'posts');
-          
-          // Fetch likes counts
-          const { data: likesData } = await supabase
-            .from('post_likes')
-            .select('post_id')
-            .in('post_id', postIdsForCounts);
-          
-          // Fetch comments counts
-          const { data: commentsData } = await supabase
-            .from('post_comments')
-            .select('post_id')
-            .in('post_id', postIdsForCounts);
-          
-          // Count likes per post
-          const likesCountMap = new Map<string, number>();
-          (likesData || []).forEach((like: any) => {
-            const count = likesCountMap.get(like.post_id) || 0;
-            likesCountMap.set(like.post_id, count + 1);
-          });
-          
-          // Count comments per post
-          const commentsCountMap = new Map<string, number>();
-          (commentsData || []).forEach((comment: any) => {
-            const count = commentsCountMap.get(comment.post_id) || 0;
-            commentsCountMap.set(comment.post_id, count + 1);
-          });
-          
+          // Use counts from posts table directly
           const countsMap = new Map<string, { likes: number; comments: number }>();
-          postIdsForCounts.forEach((postId: string) => {
-            countsMap.set(postId, {
-              likes: likesCountMap.get(postId) || 0,
-              comments: commentsCountMap.get(postId) || 0,
+          nonAdminPosts.forEach((post: any) => {
+            countsMap.set(post.id, {
+              likes: post.likes_count || 0,
+              comments: post.comments_count || 0,
             });
           });
           
@@ -188,40 +158,12 @@ export async function fetchDiscoverFeed(
       if (posts) {
         const nonAdminPosts = posts.filter((post: any) => !post.user?.is_admin);
         
-        // Fetch accurate likes and comments counts
-        const postIdsForCounts = nonAdminPosts.map((p: any) => p.id);
-        
-        // Fetch likes counts
-        const { data: likesData } = await supabase
-          .from('post_likes')
-          .select('post_id')
-          .in('post_id', postIdsForCounts);
-        
-        // Fetch comments counts
-        const { data: commentsData } = await supabase
-          .from('post_comments')
-          .select('post_id')
-          .in('post_id', postIdsForCounts);
-        
-        // Count likes per post
-        const likesCountMap = new Map<string, number>();
-        (likesData || []).forEach((like: any) => {
-          const count = likesCountMap.get(like.post_id) || 0;
-          likesCountMap.set(like.post_id, count + 1);
-        });
-        
-        // Count comments per post
-        const commentsCountMap = new Map<string, number>();
-        (commentsData || []).forEach((comment: any) => {
-          const count = commentsCountMap.get(comment.post_id) || 0;
-          commentsCountMap.set(comment.post_id, count + 1);
-        });
-        
+        // Use counts from posts table directly
         const countsMap = new Map<string, { likes: number; comments: number }>();
-        postIdsForCounts.forEach((postId: string) => {
-          countsMap.set(postId, {
-            likes: likesCountMap.get(postId) || 0,
-            comments: commentsCountMap.get(postId) || 0,
+        nonAdminPosts.forEach((post: any) => {
+          countsMap.set(post.id, {
+            likes: post.likes_count || 0,
+            comments: post.comments_count || 0,
           });
         });
         

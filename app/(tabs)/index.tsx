@@ -15,8 +15,6 @@ import { useNotifications } from '@/contexts/NotificationContext';
 import NotificationBellIcon from '@/components/NotificationBellIcon';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-SplashScreen.preventAutoHideAsync();
-
 const { width, height } = Dimensions.get('window');
 const CARD_WIDTH = width - 48;
 
@@ -1087,6 +1085,13 @@ export default function HomeScreen() {
 
   return (
     <View style={styles.container}>
+      {/* Full Screen Refresh Overlay */}
+      {refreshing && (
+        <View style={styles.loadingOverlay}>
+          <ActivityIndicator size="large" color="#000000" />
+        </View>
+      )}
+
       {/* Share Modal (Instagram-style) */}
       <Modal
         visible={shareModalVisible}
@@ -1120,7 +1125,7 @@ export default function HomeScreen() {
             <ScrollView style={styles.shareFriendsList} showsVerticalScrollIndicator={false}>
               {loadingFriends ? (
                 <View style={styles.shareLoadingState}>
-                  <ActivityIndicator size="large" color="#0EA5E9" />
+                  <ActivityIndicator size="large" color="#000000" />
                   <Text style={styles.shareLoadingText}>Loading friends...</Text>
                 </View>
               ) : friendsList.length === 0 ? (
@@ -1261,7 +1266,7 @@ export default function HomeScreen() {
             <ScrollView style={styles.searchResultsContainer} showsVerticalScrollIndicator={false}>
               {searchLoading ? (
                 <View style={styles.searchLoadingState}>
-                  <ActivityIndicator size="large" color="#0EA5E9" />
+                  <ActivityIndicator size="large" color="#000000" />
                   <Text style={styles.searchLoadingText}>Searching...</Text>
                 </View>
               ) : searchQuery.length === 0 ? (
@@ -1404,9 +1409,8 @@ export default function HomeScreen() {
           <RefreshControl 
             refreshing={refreshing} 
             onRefresh={onRefresh}
-            tintColor="#FFFFFF"
-            colors={['#FFFFFF']}
-            progressViewOffset={insets.top + 80}
+            tintColor="#0EA5E9"
+            colors={['#0EA5E9']}
           />
         }
         onScroll={(event) => {
@@ -1414,8 +1418,11 @@ export default function HomeScreen() {
         }}
         scrollEventThrottle={16}
       >
+        {/* FIX: Dark background filler for pull-to-refresh gap */}
+        <View style={{ position: 'absolute', top: -1000, left: 0, right: 0, height: 1000, backgroundColor: HEADER_COLOR }} />
+
         {/* Header */}
-        <View style={[styles.header, { paddingTop: insets.top + 16 }]}>
+        <View style={[styles.header, { paddingTop: insets.top + 4 }]}>
         <Text style={styles.logoText}>Akora</Text>
         <View style={styles.headerIcons}>
           <NotificationBellIcon />
@@ -1977,6 +1984,17 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: '#FFFFFF',
     width: '100%',
+  },
+  loadingOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: '#FFFFFF',
+    zIndex: 9999,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   scrollView: {
     flex: 1,

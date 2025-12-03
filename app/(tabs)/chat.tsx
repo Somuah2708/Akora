@@ -1,8 +1,9 @@
-import { View, Text, StyleSheet, ScrollView, Image, TouchableOpacity, TextInput, Modal, FlatList, Alert, RefreshControl } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, Image, TouchableOpacity, TextInput, Modal, FlatList, Alert, RefreshControl, ActivityIndicator } from 'react-native';
 import { Search, Plus, MoveVertical as MoreVertical, X, MessageCircle, UserPlus, Check, CheckCheck, Users, ArrowLeft } from 'lucide-react-native';
 import { useFonts, Inter_400Regular, Inter_600SemiBold } from '@expo-google-fonts/inter';
 import { useEffect, useState } from 'react';
 import { SplashScreen, useRouter } from 'expo-router';
+import { HEADER_COLOR } from '@/constants/Colors';
 import { getConversationList, searchUsers as searchUsersHelper } from '@/lib/friends';
 import { pinChat, getSettingsForUser, markDirectConversationRead, markGroupConversationRead } from '@/lib/chatSettings';
 import { useAuth } from '@/hooks/useAuth';
@@ -11,8 +12,6 @@ import { supabase } from '@/lib/supabase';
 import { formatChatListTime } from '@/lib/timeUtils';
 import type { Profile } from '@/lib/supabase';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-
-SplashScreen.preventAutoHideAsync();
 
 // Cache freshness threshold (5 minutes)
 const CACHE_FRESHNESS_MS = 5 * 60 * 1000;
@@ -628,6 +627,13 @@ export default function ChatScreen() {
 
   return (
     <View style={styles.container}>
+      {/* Full Screen Refresh Overlay */}
+      {refreshing && (
+        <View style={styles.loadingOverlay}>
+          <ActivityIndicator size="large" color="#000000" />
+        </View>
+      )}
+
       {loading ? (
         <ScrollView style={styles.chatList} contentContainerStyle={{ paddingTop: 12 }}>
           {[...Array(6)].map((_, i) => (
@@ -644,8 +650,18 @@ export default function ChatScreen() {
         <ScrollView 
           style={styles.chatList}
           showsVerticalScrollIndicator={false}
-          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#64748B" />}
+          refreshControl={
+            <RefreshControl 
+              refreshing={refreshing} 
+              onRefresh={onRefresh} 
+              tintColor="#0EA5E9"
+              colors={['#0EA5E9']}
+            />
+          }
         >
+          {/* FIX: Dark background filler for pull-to-refresh gap */}
+          <View style={{ position: 'absolute', top: -1000, left: 0, right: 0, height: 1000, backgroundColor: HEADER_COLOR }} />
+
           {/* Header inside ScrollView */}
           <View style={[styles.header, { paddingTop: insets.top + 16, marginTop: -200, paddingTop: insets.top + 216 }]}>
             <View style={styles.headerTop}>
@@ -1141,8 +1157,19 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: '#F8FAFC',
   },
+  loadingOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: '#FFFFFF',
+    zIndex: 9999,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
   header: {
-    backgroundColor: '#0F172A',
+    backgroundColor: HEADER_COLOR,
     paddingTop: 16,
     paddingBottom: 20,
     paddingHorizontal: 20,

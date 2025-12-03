@@ -208,21 +208,13 @@ export default function DiscoverScreen() {
   );
 
   const interestFilters = useMemo(() => {
-    // Only show user's selected interests - if they haven't selected any, only show For You and Friends
-    const baseSelection = userInterests.size > 0
-      ? Array.from(userInterests)
+    // Only show user's explicitly selected interests (subcategories)
+    // Don't show parent categories that were auto-added
+    const baseSelection = userExplicitSelections.size > 0
+      ? Array.from(userExplicitSelections)
       : [];
 
-    const hiddenParents = new Set<string>();
-    userInterests.forEach((id) => {
-      const parentId = getInterestMeta(id)?.parentId;
-      if (parentId) {
-        hiddenParents.add(parentId);
-      }
-    });
-
     const rankedFilters = baseSelection
-      .filter((id) => !(hiddenParents.has(id) && SUBCATEGORY_IDS_BY_PARENT.has(id)))
       .map((id) => {
         const meta = getInterestMeta(id);
         const sortKey = FILTER_ORDER.indexOf(id);
@@ -240,7 +232,7 @@ export default function DiscoverScreen() {
       { id: 'friends', label: 'Friends', icon: Users },
       ...rankedFilters.map(({ sortKey, ...rest }) => rest),
     ];
-  }, [userInterests]);
+  }, [userExplicitSelections]);
 
   const filteredInterestOptions = useMemo(() => {
     const query = interestSearch.trim().toLowerCase();
@@ -1195,6 +1187,13 @@ export default function DiscoverScreen() {
 
   return (
     <View style={styles.container}>
+      {/* Full Screen Refresh Overlay */}
+      {refreshing && (
+        <View style={styles.loadingOverlay}>
+          <ActivityIndicator size="large" color="#000000" />
+        </View>
+      )}
+
       <Modal
         animationType="slide"
         transparent
@@ -1425,7 +1424,7 @@ export default function DiscoverScreen() {
             <ScrollView style={styles.shareFriendsList} showsVerticalScrollIndicator={false}>
               {loadingFriends ? (
                 <View style={styles.shareLoadingState}>
-                  <ActivityIndicator size="large" color="#0EA5E9" />
+                  <ActivityIndicator size="large" color="#000000" />
                   <Text style={styles.shareLoadingText}>Loading friends...</Text>
                 </View>
               ) : friendsList.length === 0 ? (
@@ -1492,9 +1491,8 @@ export default function DiscoverScreen() {
           <RefreshControl 
             refreshing={refreshing} 
             onRefresh={onRefresh}
-            tintColor="#FFFFFF"
-            colors={['#FFFFFF']}
-            progressViewOffset={insets.top + 80}
+            tintColor="#0EA5E9"
+            colors={['#0EA5E9']}
           />
         }
         onScroll={(event) => {
@@ -1502,14 +1500,15 @@ export default function DiscoverScreen() {
         }}
         scrollEventThrottle={16}
       >
+        {/* FIX: Dark background filler for pull-to-refresh gap */}
+        <View style={{ position: 'absolute', top: -1000, left: 0, right: 0, height: 1000, backgroundColor: HEADER_COLOR }} />
+
         {/* Header */}
         <View style={[styles.headerWrapper, { paddingTop: insets.top }]}>
           <View style={styles.headerGradient}>
-            <View style={styles.headerRow}>
-              <View style={styles.headerTextCol}>
-                <Text style={styles.headerTitle}>Discover</Text>
-                <Text style={styles.headerSubtitleAlt} numberOfLines={3} ellipsizeMode="tail">See what your friends are up to and posts from people who share your interests</Text>
-              </View>
+            {/* Title row with action buttons */}
+            <View style={styles.headerTopRow}>
+              <Text style={styles.headerTitle}>Discover</Text>
               <View style={styles.headerActions}>
                 <TouchableOpacity
                   style={styles.headerIconButton}
@@ -1531,6 +1530,10 @@ export default function DiscoverScreen() {
                 </TouchableOpacity>
               </View>
             </View>
+            {/* Subtitle row - full width */}
+            <Text style={styles.headerSubtitleAlt} numberOfLines={2} ellipsizeMode="tail">
+              See what your friends are up to and posts from people who share your interests
+            </Text>
           </View>
         </View>
 
@@ -1560,7 +1563,7 @@ export default function DiscoverScreen() {
         {/* Posts Feed */}
         {loading && !refreshing ? (
           <View style={styles.loadingContainer}>
-            <ActivityIndicator size="large" color="#0095F6" />
+            <ActivityIndicator size="large" color="#000000" />
             <Text style={styles.loadingText}>Loading personalized content...</Text>
           </View>
         ) : filteredFeed.length === 0 ? (
@@ -1937,6 +1940,17 @@ const styles = StyleSheet.create({
     flex: 1, 
     backgroundColor: '#FFFFFF' 
   },
+  loadingOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: '#FFFFFF',
+    zIndex: 9999,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
   scrollView: {
     flex: 1,
   },
@@ -1945,9 +1959,15 @@ const styles = StyleSheet.create({
   },
   headerGradient: {
     paddingHorizontal: 20,
-    paddingTop: 21,
-    paddingBottom: 20,
+    paddingTop: 8,
+    paddingBottom: 16,
     backgroundColor: HEADER_COLOR,
+  },
+  headerTopRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 8,
   },
   headerRow: {
     flexDirection: 'row',
@@ -1966,11 +1986,10 @@ const styles = StyleSheet.create({
     letterSpacing: -0.5,
   },
   headerSubtitleAlt: {
-    marginTop: 8,
     fontSize: 14,
     fontFamily: 'Inter-Regular',
-    color: 'rgba(255,255,255,0.7)',
-    lineHeight: 20,
+    color: 'rgba(255,255,255,0.75)',
+    lineHeight: 19,
   },
   headerActions: {
     flexDirection: 'row',
@@ -2078,9 +2097,9 @@ const styles = StyleSheet.create({
     paddingVertical: 4,
   },
   categorySectionWithSelections: {
-    borderColor: '#0A84FF',
+    borderColor: '#0F172A',
     borderWidth: 2,
-    backgroundColor: '#F0F9FF',
+    backgroundColor: '#F1F5F9',
   },
   categoryHeader: {
     flexDirection: 'row',
@@ -2094,7 +2113,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#F9FAFB',
   },
   categoryHeaderWithSelections: {
-    backgroundColor: '#EFF6FF',
+    backgroundColor: '#F1F5F9',
   },
   categoryHeaderLeft: {
     flexDirection: 'row',
@@ -2113,7 +2132,7 @@ const styles = StyleSheet.create({
   categoryIconWrapperSelected: {
     backgroundColor: '#DBEAFE',
     borderWidth: 2,
-    borderColor: '#0A84FF',
+    borderColor: '#0F172A',
   },
   categoryHeaderText: {
     flex: 1,
@@ -2124,7 +2143,7 @@ const styles = StyleSheet.create({
     color: '#111827',
   },
   categoryTitleSelected: {
-    color: '#0A84FF',
+    color: '#0F172A',
   },
   categorySubtitle: {
     marginTop: 4,
@@ -2137,10 +2156,10 @@ const styles = StyleSheet.create({
     marginTop: 6,
     fontSize: 11,
     fontFamily: 'Inter-Regular',
-    color: '#4B5563',
+    color: '#6B7280',
   },
   categoryMetaTextSelected: {
-    color: '#0A84FF',
+    color: '#0F172A',
     fontFamily: 'Inter-SemiBold',
   },
   categoryHeaderRight: {
@@ -2151,7 +2170,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 10,
     paddingVertical: 4,
     borderRadius: 999,
-    backgroundColor: '#0A84FF',
+    backgroundColor: '#0F172A',
   },
   categoryStatusText: {
     fontSize: 11,
@@ -2168,8 +2187,8 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   categorySoloBadgeSelected: {
-    backgroundColor: '#0A84FF',
-    borderColor: '#0A84FF',
+    backgroundColor: '#0F172A',
+    borderColor: '#0F172A',
   },
   chevronExpanded: {
     transform: [{ rotate: '180deg' }],
@@ -2186,7 +2205,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   categoryActionButton: {
-    backgroundColor: '#0A84FF',
+    backgroundColor: '#0F172A',
     borderRadius: 16,
     paddingHorizontal: 16,
     paddingVertical: 8,
@@ -2232,8 +2251,8 @@ const styles = StyleSheet.create({
     backgroundColor: '#FFFFFF',
   },
   subcategoryPillSelected: {
-    borderColor: '#0A84FF',
-    backgroundColor: '#0A84FF',
+    borderColor: '#0F172A',
+    backgroundColor: '#0F172A',
   },
   subcategoryLabel: {
     fontSize: 12,
@@ -2245,7 +2264,7 @@ const styles = StyleSheet.create({
   },
   modalPrimaryButton: {
     marginTop: 18,
-    backgroundColor: '#0A84FF',
+    backgroundColor: '#0F172A',
     borderRadius: 20,
     paddingVertical: 14,
     alignItems: 'center',
@@ -2254,6 +2273,7 @@ const styles = StyleSheet.create({
   modalPrimaryButtonText: {
     fontSize: 15,
     fontFamily: 'Inter-SemiBold',
+    color: '#FFFFFF',
     color: '#FFFFFF',
   },
   filtersContainer: {

@@ -1,11 +1,10 @@
-import { View, Text, StyleSheet, ScrollView, Image, TouchableOpacity, TextInput, Dimensions } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, Image, TouchableOpacity, TextInput, Dimensions, RefreshControl, ActivityIndicator } from 'react-native';
 import { useFonts, Inter_400Regular, Inter_600SemiBold } from '@expo-google-fonts/inter';
-import { useEffect } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import { SplashScreen, useRouter } from 'expo-router';
+import { HEADER_COLOR } from '@/constants/Colors';
 import { Search, Plus, MoveVertical as MoreVertical, Bell, Moon, Lock, CircleHelp as HelpCircle, LogOut, Shield, Languages, MessageSquare, Bookmark, ShoppingBag, GraduationCap, Briefcase, MessageCircle, Building2, Calendar, Heart, FileText, Users, Newspaper, Globe, Video } from 'lucide-react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-
-SplashScreen.preventAutoHideAsync();
 
 const { width } = Dimensions.get('window');
 const CARD_WIDTH = width - 48;
@@ -116,10 +115,19 @@ const HERITAGE_ITEMS = [
 export default function HubScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
+  const [refreshing, setRefreshing] = useState(false);
   const [fontsLoaded] = useFonts({
     'Inter-Regular': Inter_400Regular,
     'Inter-SemiBold': Inter_600SemiBold,
   });
+
+  const onRefresh = useCallback(() => {
+    setRefreshing(true);
+    // Simulate refresh
+    setTimeout(() => {
+      setRefreshing(false);
+    }, 800);
+  }, []);
 
   useEffect(() => {
     if (fontsLoaded) {
@@ -136,68 +144,88 @@ export default function HubScreen() {
   const rightColumnItems = HERITAGE_ITEMS.filter((_, index) => index % 2 === 1);
 
   return (
-    <ScrollView 
-      style={styles.container} 
-      showsVerticalScrollIndicator={false}
-    >
-      <View style={[styles.header, { paddingTop: insets.top + 16, marginTop: -200, paddingTop: insets.top + 216 }]}>
-        <Text style={styles.title}>Hub</Text>
-        <Text style={styles.subtitle}>Connect, grow, and engage with the community</Text>
-      </View>
+    <View style={styles.container}>
+      {/* Full Screen Refresh Overlay */}
+      {refreshing && (
+        <View style={styles.loadingOverlay}>
+          <ActivityIndicator size="large" color="#000000" />
+        </View>
+      )}
 
-      {/* Two Column Layout */}
-      <View style={styles.columnsContainer}>
-        {/* Left Column */}
-        <View style={styles.column}>
-          {leftColumnItems.map((item) => {
-            const IconComponent = item.icon;
-            return (
-              <TouchableOpacity 
-                key={item.id}
-                style={styles.gridItem}
-                onPress={() => item.route && router.push(item.route as any)}
-              >
-                <Image source={{ uri: item.image }} style={styles.itemImage} />
-                <View style={styles.itemContent}>
-                  <View style={styles.iconContainer}>
-                    <IconComponent size={24} color="#FFFFFF" strokeWidth={1.5} />
-                  </View>
-                  <View style={styles.textContainer}>
-                    <Text style={styles.itemTitle} numberOfLines={2}>{item.title}</Text>
-                    <Text style={styles.itemDescription} numberOfLines={2}>{item.description}</Text>
-                  </View>
-                </View>
-              </TouchableOpacity>
-            );
-          })}
+      <ScrollView 
+        style={styles.scrollView} 
+        showsVerticalScrollIndicator={false}
+        refreshControl={
+          <RefreshControl 
+            refreshing={refreshing} 
+            onRefresh={onRefresh}
+            tintColor="#0EA5E9"
+            colors={['#0EA5E9']}
+          />
+        }
+      >
+        {/* FIX: Dark background filler for pull-to-refresh gap */}
+        <View style={{ position: 'absolute', top: -1000, left: 0, right: 0, height: 1000, backgroundColor: HEADER_COLOR }} />
+
+        <View style={[styles.header, { paddingTop: insets.top + 16, marginTop: -200, paddingTop: insets.top + 216 }]}>
+          <Text style={styles.title}>Hub</Text>
+          <Text style={styles.subtitle}>Connect, grow, and engage with the community</Text>
         </View>
 
-        {/* Right Column */}
-        <View style={styles.column}>
-          {rightColumnItems.map((item) => {
-            const IconComponent = item.icon;
-            return (
-              <TouchableOpacity 
-                key={item.id}
-                style={styles.gridItem}
-                onPress={() => item.route && router.push(item.route as any)}
-              >
-                <Image source={{ uri: item.image }} style={styles.itemImage} />
-                <View style={styles.itemContent}>
-                  <View style={styles.iconContainer}>
-                    <IconComponent size={24} color="#FFFFFF" strokeWidth={1.5} />
+        {/* Two Column Layout */}
+        <View style={styles.columnsContainer}>
+          {/* Left Column */}
+          <View style={styles.column}>
+            {leftColumnItems.map((item) => {
+              const IconComponent = item.icon;
+              return (
+                <TouchableOpacity 
+                  key={item.id}
+                  style={styles.gridItem}
+                  onPress={() => item.route && router.push(item.route as any)}
+                >
+                  <Image source={{ uri: item.image }} style={styles.itemImage} />
+                  <View style={styles.itemContent}>
+                    <View style={styles.iconContainer}>
+                      <IconComponent size={24} color="#FFFFFF" strokeWidth={1.5} />
+                    </View>
+                    <View style={styles.textContainer}>
+                      <Text style={styles.itemTitle} numberOfLines={2}>{item.title}</Text>
+                      <Text style={styles.itemDescription} numberOfLines={2}>{item.description}</Text>
+                    </View>
                   </View>
-                  <View style={styles.textContainer}>
-                    <Text style={styles.itemTitle} numberOfLines={2}>{item.title}</Text>
-                    <Text style={styles.itemDescription} numberOfLines={2}>{item.description}</Text>
+                </TouchableOpacity>
+              );
+            })}
+          </View>
+
+          {/* Right Column */}
+          <View style={styles.column}>
+            {rightColumnItems.map((item) => {
+              const IconComponent = item.icon;
+              return (
+                <TouchableOpacity 
+                  key={item.id}
+                  style={styles.gridItem}
+                  onPress={() => item.route && router.push(item.route as any)}
+                >
+                  <Image source={{ uri: item.image }} style={styles.itemImage} />
+                  <View style={styles.itemContent}>
+                    <View style={styles.iconContainer}>
+                      <IconComponent size={24} color="#FFFFFF" strokeWidth={1.5} />
+                    </View>
+                    <View style={styles.textContainer}>
+                      <Text style={styles.itemTitle} numberOfLines={2}>{item.title}</Text>
+                      <Text style={styles.itemDescription} numberOfLines={2}>{item.description}</Text>
+                    </View>
                   </View>
-                </View>
-              </TouchableOpacity>
-            );
-          })}
+                </TouchableOpacity>
+              );
+            })}
+          </View>
         </View>
-      </View>
-    </ScrollView>
+      </ScrollView>
+    </View>
   );
 }
 
@@ -206,11 +234,25 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: '#FFFFFF',
   },
+  loadingOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: '#FFFFFF',
+    zIndex: 9999,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  scrollView: {
+    flex: 1,
+  },
   header: {
     paddingHorizontal: 20,
     paddingTop: 16,
     paddingBottom: 20,
-    backgroundColor: '#0F172A',
+    backgroundColor: HEADER_COLOR,
   },
   title: {
     fontSize: 32,
