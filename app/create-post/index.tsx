@@ -2,7 +2,7 @@ import { View, Text, StyleSheet, TextInput, TouchableOpacity, ScrollView, Alert,
 import { useFonts, Inter_400Regular, Inter_600SemiBold } from '@expo-google-fonts/inter';
 import { useEffect, useRef, useState } from 'react';
 import { SplashScreen, useLocalSearchParams, useRouter } from 'expo-router';
-import { ArrowLeft, Image as ImageIcon, Send, Globe, Users, Lock, X, ChevronDown, Video as VideoIcon, Edit3, Sparkles, MessageSquare } from 'lucide-react-native';
+import { ArrowLeft, Image as ImageIcon, Send, X, ChevronDown, Video as VideoIcon, Edit3, MessageSquare } from 'lucide-react-native';
 import MediaEditorModal from '@/components/MediaEditorModal';
 import * as ImagePicker from 'expo-image-picker';
 import { Video, ResizeMode } from 'expo-av';
@@ -41,12 +41,6 @@ const CATEGORY_OPTIONS: CategoryOption[] = CATEGORY_GROUPS.flatMap((group) => {
 
   return entries;
 });
-
-const VISIBILITY_OPTIONS = [
-  { value: 'public', label: 'Public', icon: Globe, description: 'Anyone can see this post' },
-  { value: 'friends_only', label: 'Friends Only', icon: Users, description: 'Only your friends can see this' },
-  { value: 'private', label: 'Private', icon: Lock, description: 'Only you can see this' },
-];
 
 interface MediaItem {
   uri: string;
@@ -108,12 +102,8 @@ export default function CreatePostScreen() {
   const [editorVisible, setEditorVisible] = useState(false);
   const [currentEditItem, setCurrentEditItem] = useState<{ uri: string; type: 'image' | 'video'; index: number } | null>(null);
   const [category, setCategory] = useState('general');
-  const [visibility, setVisibility] = useState('friends_only');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [showCategoryPicker, setShowCategoryPicker] = useState(false);
-  const [showVisibilityPicker, setShowVisibilityPicker] = useState(false);
-  const [addToHighlights, setAddToHighlights] = useState(false);
-  const [highlightTitle, setHighlightTitle] = useState('');
   
   const [fontsLoaded] = useFonts({
     'Inter-Regular': Inter_400Regular,
@@ -136,18 +126,8 @@ export default function CreatePostScreen() {
     checkAuth();
   }, [user]);
 
-  // Preconfigure when launched for creating a highlight directly
+  // Auto-pick media if coming from library
   useEffect(() => {
-    if (params?.highlight === '1') {
-      setAddToHighlights(true);
-      if (typeof params.ht === 'string' && params.ht.length > 0) {
-        try {
-          setHighlightTitle(decodeURIComponent(params.ht));
-        } catch {
-          setHighlightTitle(params.ht);
-        }
-      }
-    }
   }, [params?.highlight, params?.ht]);
 
   // Auto-open media picker if requested (first-time only)
@@ -450,7 +430,6 @@ export default function CreatePostScreen() {
         youtube_urls: null,
         media_items: uploadedMediaItems.length > 0 ? uploadedMediaItems : null,
         category,
-        visibility,
       };
       
       console.log('Inserting post:', postData);
@@ -463,25 +442,6 @@ export default function CreatePostScreen() {
       }
 
       console.log('Post created successfully:', data);
-
-      // Optionally add to highlights
-      try {
-        if (addToHighlights && data && data.length > 0) {
-          const post = data[0];
-          const { error: hErr } = await supabase.from('profile_highlights').insert({
-            user_id: user.id,
-            title: (highlightTitle || 'Highlight').slice(0, 40),
-            visible: true,
-            pinned: false,
-            post_id: post.id,
-          });
-          if (hErr) {
-            console.error('Add to highlights error:', hErr);
-          }
-        }
-      } catch (e) {
-        console.warn('Failed to add to highlights:', e);
-      }
 
       Alert.alert('Success', 'Post added successfully', [
         { text: 'OK', onPress: () => router.back() }
@@ -499,8 +459,6 @@ export default function CreatePostScreen() {
   }
 
   const selectedCategory = CATEGORY_OPTIONS.find((c) => c.value === category);
-  const selectedVisibility = VISIBILITY_OPTIONS.find(v => v.value === visibility);
-  const VisibilityIcon = selectedVisibility?.icon || Globe;
 
   return (
     <View style={styles.container}>
@@ -516,7 +474,7 @@ export default function CreatePostScreen() {
         </TouchableOpacity>
         <View style={styles.headerCenter}>
           <Text style={styles.title}>Create Post</Text>
-          <Text style={styles.subtitle}>Share your thoughts</Text>
+          <Text style={styles.subtitle}>Share a moment with your community</Text>
         </View>
         <TouchableOpacity 
           style={[styles.submitButton, (!content.trim() || isSubmitting) && styles.submitButtonDisabled]}
@@ -542,7 +500,7 @@ export default function CreatePostScreen() {
           </View>
           <TextInput
             style={styles.contentInput}
-            placeholder="What's on your mind? Share something amazing..."
+            placeholder="Caption"
             placeholderTextColor="#94A3B8"
             multiline
             value={content}
@@ -627,30 +585,25 @@ export default function CreatePostScreen() {
         )}
 
         {/* Add Media Button */}
-        <TouchableOpacity 
-          style={[styles.addMediaCard, media.length >= 20 && styles.addMediaCardDisabled]} 
+        <TouchableOpacity
+          style={[styles.addMediaCard, media.length >= 20 && styles.addMediaCardDisabled]}
           onPress={pickMedia}
           disabled={media.length >= 20}
         >
           <LinearGradient
-            colors={media.length >= 20 ? ['#F1F5F9', '#F1F5F9'] : ['#EEF2FF', '#E0E7FF']}
+            colors={media.length >= 20 ? ['#E2E8F0', '#E2E8F0'] : ['#334155', '#475569']}
             style={styles.addMediaGradient}
           >
             <View style={styles.addMediaIconCircle}>
-              <ImageIcon size={24} color={media.length >= 20 ? '#CBD5E1' : '#6366F1'} />
+              <ImageIcon size={24} color={media.length >= 20 ? '#94A3B8' : '#0F172A'} />
             </View>
             <View style={styles.addMediaTextContainer}>
               <Text style={[styles.addMediaTitle, media.length >= 20 && styles.addMediaTitleDisabled]}>
                 {media.length === 0 ? 'Add Photos & Videos' : 'Add More Media'}
               </Text>
-              <Text style={[styles.addMediaSubtitle, media.length >= 20 && styles.addMediaSubtitleDisabled]}>
-                {media.length === 0 ? 'Mix images and videos in one post' : `${media.length}/20 items added`}
-              </Text>
             </View>
           </LinearGradient>
-        </TouchableOpacity>
-
-        {/* Settings Section */}
+        </TouchableOpacity>        {/* Settings Section */}
         <View style={styles.settingsSection}>
           {/* Category Selection */}
           <View style={styles.card}>
@@ -672,62 +625,7 @@ export default function CreatePostScreen() {
               <ChevronDown size={20} color="#94A3B8" />
             </TouchableOpacity>
 
-            <View style={styles.settingDivider} />
-
-            {/* Visibility Selection */}
-            <TouchableOpacity 
-              style={styles.settingItem}
-              onPress={() => setShowVisibilityPicker(true)}
-            >
-              <View style={styles.settingLeft}>
-                <View style={[styles.settingIconCircle, { backgroundColor: '#E0E7FF' }]}>
-                  <VisibilityIcon size={18} color="#6366F1" />
-                </View>
-                <View style={styles.settingTextContainer}>
-                  <Text style={styles.settingLabel}>Visibility</Text>
-                  <Text style={styles.settingValue}>{selectedVisibility?.label}</Text>
-                </View>
-              </View>
-              <ChevronDown size={20} color="#94A3B8" />
-            </TouchableOpacity>
-
-            <View style={styles.settingDivider} />
-
-            {/* Highlights Toggle */}
-            <TouchableOpacity
-              style={styles.settingItem}
-              onPress={() => setAddToHighlights(!addToHighlights)}
-            >
-              <View style={styles.settingLeft}>
-                <View style={[styles.settingIconCircle, { backgroundColor: addToHighlights ? '#FEF3C7' : '#F3F4F6' }]}>
-                  <Sparkles size={18} color={addToHighlights ? '#F59E0B' : '#9CA3AF'} />
-                </View>
-                <View style={styles.settingTextContainer}>
-                  <Text style={styles.settingLabel}>Add to Highlights</Text>
-                  <Text style={styles.settingValue}>
-                    {addToHighlights ? 'Enabled' : 'Disabled'}
-                  </Text>
-                </View>
-              </View>
-              <View style={[styles.toggle, addToHighlights && styles.toggleActive]}>
-                <View style={[styles.toggleCircle, addToHighlights && styles.toggleCircleActive]} />
-              </View>
-            </TouchableOpacity>
           </View>
-
-          {/* Highlight Title Input */}
-          {addToHighlights && (
-            <View style={[styles.card, styles.highlightTitleCard]}>
-              <TextInput
-                style={styles.highlightTitleInput}
-                placeholder="Give your highlight a title..."
-                placeholderTextColor="#94A3B8"
-                maxLength={40}
-                value={highlightTitle}
-                onChangeText={setHighlightTitle}
-              />
-            </View>
-          )}
         </View>
 
         {/* Bottom Spacing */}
@@ -812,58 +710,6 @@ export default function CreatePostScreen() {
         </View>
       </Modal>
 
-      {/* Visibility Picker Modal */}
-      <Modal
-        visible={showVisibilityPicker}
-        transparent
-        animationType="slide"
-        onRequestClose={() => setShowVisibilityPicker(false)}
-      >
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalContent}>
-            <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>Post Visibility</Text>
-              <TouchableOpacity onPress={() => setShowVisibilityPicker(false)}>
-                <X size={24} color="#1E293B" />
-              </TouchableOpacity>
-            </View>
-            <ScrollView style={styles.modalScroll}>
-              {VISIBILITY_OPTIONS.map((vis) => {
-                const Icon = vis.icon;
-                return (
-                  <TouchableOpacity
-                    key={vis.value}
-                    style={[
-                      styles.modalOption,
-                      visibility === vis.value && styles.modalOptionSelected
-                    ]}
-                    onPress={() => {
-                      setVisibility(vis.value);
-                      setShowVisibilityPicker(false);
-                    }}
-                  >
-                    <View style={styles.visibilityOption}>
-                      <Icon size={20} color={visibility === vis.value ? '#475569' : '#64748B'} />
-                      <View style={styles.visibilityOptionText}>
-                        <Text style={[
-                          styles.modalOptionText,
-                          visibility === vis.value && styles.modalOptionTextSelected
-                        ]}>
-                          {vis.label}
-                        </Text>
-                        <Text style={styles.visibilityOptionDescription}>
-                          {vis.description}
-                        </Text>
-                      </View>
-                    </View>
-                  </TouchableOpacity>
-                );
-              })}
-            </ScrollView>
-          </View>
-        </View>
-      </Modal>
-
       {/* Media Editor Modal - WhatsApp Style */}
       {currentEditItem && (
         <MediaEditorModal
@@ -881,7 +727,7 @@ export default function CreatePostScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#F1F5F9',
+    backgroundColor: '#FFFFFF',
   },
   header: {
     flexDirection: 'row',
@@ -890,11 +736,14 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
     paddingTop: 60,
     paddingBottom: 20,
+    backgroundColor: '#0F172A',
+    borderBottomLeftRadius: 24,
+    borderBottomRightRadius: 24,
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.05,
-    shadowRadius: 8,
-    elevation: 3,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.15,
+    shadowRadius: 12,
+    elevation: 8,
   },
   backButton: {
     padding: 4,
@@ -903,14 +752,9 @@ const styles = StyleSheet.create({
     width: 40,
     height: 40,
     borderRadius: 20,
-    backgroundColor: '#F8FAFC',
+    backgroundColor: 'rgba(255, 255, 255, 0.15)',
     justifyContent: 'center',
     alignItems: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.1,
-    shadowRadius: 3,
-    elevation: 2,
   },
   headerCenter: {
     flex: 1,
@@ -920,30 +764,30 @@ const styles = StyleSheet.create({
   title: {
     fontSize: 22,
     fontFamily: 'Inter-SemiBold',
-    color: '#0F172A',
+    color: '#FFFFFF',
     letterSpacing: -0.5,
   },
   subtitle: {
     fontSize: 13,
     fontFamily: 'Inter-Regular',
-    color: '#64748B',
+    color: 'rgba(255, 255, 255, 0.7)',
     marginTop: 2,
   },
   submitButton: {
     width: 48,
     height: 48,
     borderRadius: 24,
-    backgroundColor: '#6366F1',
+    backgroundColor: '#ffc857',
     justifyContent: 'center',
     alignItems: 'center',
-    shadowColor: '#6366F1',
+    shadowColor: '#ffc857',
     shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
+    shadowOpacity: 0.4,
     shadowRadius: 8,
     elevation: 5,
   },
   submitButtonDisabled: {
-    backgroundColor: '#CBD5E1',
+    backgroundColor: 'rgba(255, 255, 255, 0.3)',
     shadowOpacity: 0,
     elevation: 0,
   },
@@ -958,11 +802,13 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     padding: 20,
     marginBottom: 16,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.06,
+    shadowOpacity: 0.04,
     shadowRadius: 8,
-    elevation: 2,
+    elevation: 1,
   },
   cardHeader: {
     flexDirection: 'row',
@@ -1122,7 +968,7 @@ const styles = StyleSheet.create({
   addMediaTitle: {
     fontSize: 17,
     fontFamily: 'Inter-SemiBold',
-    color: '#0F172A',
+    color: '#FFFFFF',
     marginBottom: 4,
   },
   addMediaTitleDisabled: {

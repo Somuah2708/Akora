@@ -295,7 +295,7 @@ export default function EditPostScreen() {
       <ScrollView style={styles.formContainer} showsVerticalScrollIndicator={false}>
         <TextInput
           style={styles.contentInput}
-          placeholder="What's on your mind?"
+          placeholder="Caption"
           placeholderTextColor="#94A3B8"
           multiline
           value={content}

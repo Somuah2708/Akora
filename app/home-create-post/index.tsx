@@ -297,10 +297,10 @@ export default function HomeCreatePostScreen() {
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
       keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 20}
     >
-      <LinearGradient colors={['#FFFFFF', '#F8FAFC']} style={styles.header}>
+      <View style={styles.header}>
         <TouchableOpacity onPress={() => router.back()} style={styles.backButton}> 
           <View style={styles.backButtonCircle}>
-            <ArrowLeft size={22} color="#1E293B" />
+            <ArrowLeft size={22} color="#FFFFFF" />
           </View>
         </TouchableOpacity>
         <View style={styles.headerCenter}>
@@ -314,13 +314,13 @@ export default function HomeCreatePostScreen() {
         >
           {isSubmitting ? <ActivityIndicator color="#FFFFFF" size="small" /> : <Send size={18} color="#FFFFFF" />}
         </TouchableOpacity>
-      </LinearGradient>
+      </View>
 
       <ScrollView style={styles.formContainer} showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>
         <View style={styles.card}>
           <TextInput
             style={styles.contentInput}
-            placeholder="What's happening?"
+            placeholder="Caption"
             placeholderTextColor="#94A3B8"
             multiline
             value={content}
@@ -365,11 +365,10 @@ export default function HomeCreatePostScreen() {
         )}
 
         <TouchableOpacity style={[styles.addMediaCard, media.length >= 20 && styles.addMediaCardDisabled]} onPress={pickMedia} disabled={media.length >= 20}>
-          <LinearGradient colors={media.length >= 20 ? ['#F1F5F9', '#F1F5F9'] : ['#EEF2FF', '#E0E7FF']} style={styles.addMediaGradient}>
-            <View style={styles.addMediaIconCircle}><ImageIcon size={24} color={media.length >= 20 ? '#CBD5E1' : '#6366F1'} /></View>
+          <LinearGradient colors={media.length >= 20 ? ['#E2E8F0', '#E2E8F0'] : ['#334155', '#475569']} style={styles.addMediaGradient}>
+            <View style={styles.addMediaIconCircle}><ImageIcon size={24} color={media.length >= 20 ? '#94A3B8' : '#0F172A'} /></View>
             <View style={styles.addMediaTextContainer}>
               <Text style={[styles.addMediaTitle, media.length >= 20 && styles.addMediaTitleDisabled]}>{media.length === 0 ? 'Add Photos & Videos' : 'Add More Media'}</Text>
-              <Text style={[styles.addMediaSubtitle, media.length >= 20 && styles.addMediaSubtitleDisabled]}>{media.length === 0 ? 'Mix images and videos in one post' : `${media.length}/20 items added`}</Text>
             </View>
           </LinearGradient>
         </TouchableOpacity>
@@ -391,18 +390,18 @@ export default function HomeCreatePostScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#F1F5F9' },
-  header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 20, paddingTop: 60, paddingBottom: 20 },
+  container: { flex: 1, backgroundColor: '#FFFFFF' },
+  header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 20, paddingTop: 60, paddingBottom: 20, backgroundColor: '#0F172A', borderBottomLeftRadius: 24, borderBottomRightRadius: 24, shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.15, shadowRadius: 12, elevation: 8 },
   backButton: { padding: 4 },
-  backButtonCircle: { width: 40, height: 40, borderRadius: 20, backgroundColor: '#F8FAFC', justifyContent: 'center', alignItems: 'center' },
+  backButtonCircle: { width: 40, height: 40, borderRadius: 20, backgroundColor: 'rgba(255, 255, 255, 0.15)', justifyContent: 'center', alignItems: 'center' },
   headerCenter: { flex: 1, alignItems: 'center', marginHorizontal: 16 },
-  title: { fontSize: 22, fontWeight: '600', color: '#0F172A', letterSpacing: -0.5 },
-  subtitle: { fontSize: 13, color: '#64748B', marginTop: 2 },
-  submitButton: { width: 48, height: 48, borderRadius: 24, backgroundColor: '#6366F1', justifyContent: 'center', alignItems: 'center' },
-  submitButtonDisabled: { backgroundColor: '#94A3B8' },
+  title: { fontSize: 22, fontWeight: '600', color: '#FFFFFF', letterSpacing: -0.5 },
+  subtitle: { fontSize: 13, color: 'rgba(255, 255, 255, 0.7)', marginTop: 2 },
+  submitButton: { width: 48, height: 48, borderRadius: 24, backgroundColor: '#ffc857', justifyContent: 'center', alignItems: 'center', shadowColor: '#ffc857', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.4, shadowRadius: 8, elevation: 5 },
+  submitButtonDisabled: { backgroundColor: 'rgba(255, 255, 255, 0.3)', shadowOpacity: 0, elevation: 0 },
   formContainer: { flex: 1 },
   scrollContent: { padding: 20, paddingBottom: 140 },
-  card: { backgroundColor: '#FFFFFF', borderRadius: 16, padding: 16, marginBottom: 20, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.05, shadowRadius: 8, elevation: 2 },
+  card: { backgroundColor: '#FFFFFF', borderRadius: 16, padding: 16, marginBottom: 20, borderWidth: 1, borderColor: '#E2E8F0', shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.04, shadowRadius: 8, elevation: 1 },
   contentInput: { minHeight: 160, fontSize: 16, color: '#0F172A' },
   characterCount: { alignItems: 'flex-end', marginTop: 8 },
   characterCountText: { fontSize: 12, color: '#64748B' },
@@ -423,7 +422,7 @@ const styles = StyleSheet.create({
   addMediaGradient: { flexDirection: 'row', alignItems: 'center', padding: 16, gap: 16 },
   addMediaIconCircle: { width: 52, height: 52, borderRadius: 26, backgroundColor: '#FFFFFF', justifyContent: 'center', alignItems: 'center' },
   addMediaTextContainer: { flex: 1 },
-  addMediaTitle: { fontSize: 16, fontWeight: '600', color: '#1E293B' },
+  addMediaTitle: { fontSize: 16, fontWeight: '600', color: '#FFFFFF' },
   addMediaTitleDisabled: { color: '#94A3B8' },
   addMediaSubtitle: { fontSize: 13, color: '#64748B', marginTop: 4 },
   addMediaSubtitleDisabled: { color: '#94A3B8' },

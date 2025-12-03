@@ -10,6 +10,18 @@ const IMAGE_MAX_BYTES = 5 * 1024 * 1024; // 5MB
 const VIDEO_MAX_BYTES = 25 * 1024 * 1024; // 25MB
 const DOCUMENT_MAX_BYTES = 10 * 1024 * 1024; // 10MB
 
+// Helper to provide mediaTypes in a way that works with both
+// new and old expo-image-picker APIs across iOS/Android.
+const getPickerMediaTypes = (): any => {
+  if ((ImagePicker as any).MediaType) {
+    const MT = (ImagePicker as any).MediaType;
+    return [MT.Image, MT.Video];
+  }
+
+  // Fallback for older API: use deprecated MediaTypeOptions
+  return ImagePicker.MediaTypeOptions.All;
+};
+
 /**
  * FIXED: No-freeze approach
  * Request permissions FIRST, THEN launch picker
@@ -75,13 +87,13 @@ export async function takeMedia(): Promise<ImagePicker.ImagePickerAsset | null> 
     });
     
     // Force Sentry to send this immediately (don't wait for batch)
-    await Sentry.flush(2000);
-    
+    Sentry.flush();
+
     console.log('📷 [takeMedia] 🚨 CALLING ImagePicker.launchCameraAsync NOW...');
     console.log('📷 [takeMedia] 🚨 IF YOU SEE THIS LOG BUT NOT THE NEXT ONE, APP FROZE HERE');
     
     const result = await ImagePicker.launchCameraAsync({
-      mediaTypes: ['images', 'videos'] as any,
+      mediaTypes: getPickerMediaTypes(),
       quality: 0.7,
       allowsEditing: false,
     });
@@ -168,17 +180,13 @@ export async function pickMedia(): Promise<ImagePicker.ImagePickerAsset | null> 
   });
 
   try {
-    // EXPO GO iOS FIX: Use different options for iOS
+    // Use helper so we support both new and old expo-image-picker APIs
     const pickerOptions: ImagePicker.ImagePickerOptions = {
-      mediaTypes: Platform.OS === 'ios' 
-        ? ImagePicker.MediaTypeOptions.All  // iOS: use MediaTypeOptions enum
-        : ['images', 'videos'] as any,       // Android: array works
+      mediaTypes: getPickerMediaTypes(),
       quality: 0.7,
       allowsEditing: false,
-      // Don't use selectionLimit in Expo Go (causes issues)
-      ...(Platform.OS !== 'ios' && { selectionLimit: 1 }),
     };
-    
+  
     console.log('🖼️ [pickMedia] Picker options:', pickerOptions);
     
     const result = await ImagePicker.launchImageLibraryAsync(pickerOptions);
@@ -287,7 +295,7 @@ export async function pickDocument(): Promise<{
     };
   } catch (error) {
     console.error('📄 [Documents] Error:', error);
-    Sentry.captureException(error, { function: 'pickDocument', platform: Platform.OS });
+    Sentry.captureException(error, { extra: { source: 'pickDocument', platform: Platform.OS } });
     Alert.alert('Error', 'Failed to pick document. Please try again.');
     return null;
   }
@@ -356,9 +364,23 @@ export async function uploadMedia(
     const safeFileName = `${userId}_${timestamp}.${finalExt}`;
     const filePath = `messages/media/${userId}/${safeFileName}`;
 
-    // Fetch file as blob (faster than ArrayBuffer)
-    const response = await fetch(processedUri);
-    const blob = await response.blob();
+    // Fetch file data in a way that works in Expo Go / React Native
+    const response = await fetch(processedUri as any);
+    const anyResponse = response as any;
+    let blob: Blob;
+    if (typeof anyResponse.blob === 'function') {
+      // Web-style blob API (may be polyfilled)
+      blob = await anyResponse.blob();
+    } else if (typeof anyResponse.arrayBuffer === 'function') {
+      // Fallback for environments without response.blob()
+      const buffer = await anyResponse.arrayBuffer();
+      // Blob is available in React Native via the global polyfill
+      blob = new Blob([buffer], {
+        type: mimeType || (type === 'image' ? 'image/jpeg' : 'video/mp4'),
+      });
+    } else {
+      throw new Error('Unable to read file data for upload (no blob/arrayBuffer on response)');
+    }
     
     onProgress?.(20);
 
@@ -375,13 +397,11 @@ export async function uploadMedia(
 
     console.log(`📤 Uploading ${type} (${(size / 1024).toFixed(0)}KB)...`);
 
-    // Progress: 20-90% - Uploading
-    // Supabase doesn't support upload progress natively, so we simulate it
+    // Progress: 20-90% - Uploading (simulate since Supabase doesn't give progress)
+    let simulatedProgress = 20;
     const uploadSimulation = setInterval(() => {
-      onProgress?.((prev) => {
-        const current = prev || 20;
-        return Math.min(current + 10, 90); // Increment by 10% up to 90%
-      });
+      simulatedProgress = Math.min(simulatedProgress + 10, 90);
+      onProgress?.(simulatedProgress);
     }, 300); // Update every 300ms (feels fast like WhatsApp)
 
     const { data, error } = await supabase.storage
@@ -409,11 +429,13 @@ export async function uploadMedia(
   } catch (error: any) {
     console.error('❌ Upload error:', error);
     Sentry.captureException(error, { 
-      function: 'uploadMedia', 
-      type, 
-      platform: Platform.OS,
-      fileSize: error.fileSize,
-      fileName 
+      extra: { 
+        source: 'uploadMedia',
+        type,
+        platform: Platform.OS,
+        fileSize: (error as any)?.fileSize,
+        fileName,
+      }
     });
     Alert.alert('Upload Failed', 'Could not upload media. Please try again.');
     return null;
@@ -436,8 +458,17 @@ export async function uploadDocument(
 
     onProgress?.(15);
     
-    const response = await fetch(uri);
-    const blob = await response.blob();
+    const response = await fetch(uri as any);
+    const anyResponse = response as any;
+    let blob: Blob;
+    if (typeof anyResponse.blob === 'function') {
+      blob = await anyResponse.blob();
+    } else if (typeof anyResponse.arrayBuffer === 'function') {
+      const buffer = await anyResponse.arrayBuffer();
+      blob = new Blob([buffer], { type: mimeType });
+    } else {
+      throw new Error('Unable to read document data for upload (no blob/arrayBuffer on response)');
+    }
     
     onProgress?.(20);
 
@@ -449,11 +480,10 @@ export async function uploadDocument(
 
     console.log(`📤 Uploading document (${(size / 1024).toFixed(0)}KB)...`);
 
+    let simulatedProgress = 20;
     const uploadSimulation = setInterval(() => {
-      onProgress?.((prev) => {
-        const current = prev || 20;
-        return Math.min(current + 10, 90);
-      });
+      simulatedProgress = Math.min(simulatedProgress + 10, 90);
+      onProgress?.(simulatedProgress);
     }, 300);
 
     const { data, error } = await supabase.storage
@@ -480,10 +510,12 @@ export async function uploadDocument(
   } catch (error: any) {
     console.error('❌ Document upload error:', error);
     Sentry.captureException(error, { 
-      function: 'uploadDocument', 
-      platform: Platform.OS,
-      fileName,
-      mimeType 
+      extra: {
+        source: 'uploadDocument',
+        platform: Platform.OS,
+        fileName,
+        mimeType,
+      }
     });
     Alert.alert('Upload Failed', 'Could not upload document. Please try again.');
     return null;
@@ -522,7 +554,7 @@ export async function startRecording(): Promise<boolean> {
     return true;
   } catch (error) {
     console.error('Error starting recording:', error);
-    Sentry.captureException(error, { function: 'startRecording', platform: Platform.OS });
+    Sentry.captureException(error, { extra: { source: 'startRecording', platform: Platform.OS } });
     Alert.alert('Error', 'Failed to start recording');
     recording = null;
     return false;
@@ -564,7 +596,7 @@ export async function stopRecording(userId: string): Promise<string | null> {
     return urlData.publicUrl;
   } catch (error) {
     console.error('Error stopping recording:', error);
-    Sentry.captureException(error, { function: 'stopRecording', platform: Platform.OS, userId });
+    Sentry.captureException(error, { extra: { source: 'stopRecording', platform: Platform.OS, userId } });
     Alert.alert('Error', 'Failed to save voice message');
     recording = null;
     return null;

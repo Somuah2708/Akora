@@ -3,7 +3,7 @@ import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Dimensions, Activ
 import { useFonts, Inter_400Regular, Inter_600SemiBold } from '@expo-google-fonts/inter';
 import { useRouter, useLocalSearchParams, useFocusEffect } from 'expo-router';
 import { HEADER_COLOR } from '@/constants/Colors';
-import { Compass, ThumbsUp, MessagesSquare, Lightbulb, SlidersHorizontal, Check, X, ChevronDown, Users, Camera, Share2, Star } from 'lucide-react-native';
+import { Compass, ThumbsUp, MessagesSquare, Lightbulb, SlidersHorizontal, Check, X, Users, Camera, Share2, Star } from 'lucide-react-native';
 import type { LucideIcon } from 'lucide-react-native';
 import { useAuth } from '@/hooks/useAuth';
 import { supabase } from '@/lib/supabase';
@@ -183,7 +183,6 @@ export default function DiscoverScreen() {
   const [activeFilter, setActiveFilter] = useState<'all' | 'friends' | string>('all');
   const [discoverFeed, setDiscoverFeed] = useState<DiscoverItem[]>([]);
   const [userInterests, setUserInterests] = useState<Set<string>>(new Set());
-  const [userExplicitSelections, setUserExplicitSelections] = useState<Set<string>>(new Set());
   const [friendIds, setFriendIds] = useState<Set<string>>(new Set());
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -195,7 +194,6 @@ export default function DiscoverScreen() {
   const scrollViewRef = useRef<ScrollView>(null);
   const [interestModalVisible, setInterestModalVisible] = useState(false);
   const [interestSearch, setInterestSearch] = useState('');
-  const [expandedCategories, setExpandedCategories] = useState<Set<string>>(new Set());
   const [shareModalVisible, setShareModalVisible] = useState(false);
   const [selectedPostForShare, setSelectedPostForShare] = useState<DiscoverItem | null>(null);
   const [friendsList, setFriendsList] = useState<any[]>([]);
@@ -208,10 +206,9 @@ export default function DiscoverScreen() {
   );
 
   const interestFilters = useMemo(() => {
-    // Only show user's explicitly selected interests (subcategories)
-    // Don't show parent categories that were auto-added
-    const baseSelection = userExplicitSelections.size > 0
-      ? Array.from(userExplicitSelections)
+    // Show user's selected interests (main categories only)
+    const baseSelection = userInterests.size > 0
+      ? Array.from(userInterests)
       : [];
 
     const rankedFilters = baseSelection
@@ -232,7 +229,7 @@ export default function DiscoverScreen() {
       { id: 'friends', label: 'Friends', icon: Users },
       ...rankedFilters.map(({ sortKey, ...rest }) => rest),
     ];
-  }, [userExplicitSelections]);
+  }, [userInterests]);
 
   const filteredInterestOptions = useMemo(() => {
     const query = interestSearch.trim().toLowerCase();
@@ -265,18 +262,9 @@ export default function DiscoverScreen() {
   }, [interestSearch]);
 
   const openInterestModal = useCallback(() => {
-    const nextExpanded = new Set<string>();
-    userInterests.forEach((id) => {
-      const parentId = getInterestMeta(id)?.parentId;
-      if (parentId) {
-        nextExpanded.add(parentId);
-      }
-    });
-
     setInterestSearch('');
-    setExpandedCategories(nextExpanded);
     setInterestModalVisible(true);
-  }, [userInterests]);
+  }, []);
 
   const closeInterestModal = useCallback(() => {
     setInterestModalVisible(false);
@@ -314,17 +302,7 @@ export default function DiscoverScreen() {
     updateVisibleVideos();
   }, [updateVisibleVideos]);
 
-  const toggleCategoryExpansion = useCallback((categoryId: string) => {
-    setExpandedCategories((prev) => {
-      const next = new Set(prev);
-      if (next.has(categoryId)) {
-        next.delete(categoryId);
-      } else {
-        next.add(categoryId);
-      }
-      return next;
-    });
-  }, []);
+
 
   const [fontsLoaded] = useFonts({
     'Inter-Regular': Inter_400Regular,
@@ -551,16 +529,8 @@ export default function DiscoverScreen() {
       }
       
       const interests = new Set((data || []).map((r: any) => r.category));
-      // Separate explicit user selections from auto-added parents
-      const explicitSelections = new Set(
-        Array.from(interests).filter(id => {
-          const meta = getInterestMeta(id);
-          return meta?.parentId !== undefined; // Only subcategories are explicit user selections
-        })
-      );
-      console.log('✅ Loaded', interests.size, 'total interests (', explicitSelections.size, 'explicit):', Array.from(explicitSelections));
+      console.log('✅ Loaded', interests.size, 'interests:', Array.from(interests));
       setUserInterests(interests);
-      setUserExplicitSelections(explicitSelections);
     };
     loadInterests();
   }, [user?.id]);
@@ -575,15 +545,8 @@ export default function DiscoverScreen() {
           .eq('user_id', user.id);
         if (data) {
           const interests = new Set(data.map((r: any) => r.category));
-          const explicitSelections = new Set(
-            Array.from(interests).filter(id => {
-              const meta = getInterestMeta(id);
-              return meta?.parentId !== undefined;
-            })
-          );
           setUserInterests(interests);
-          setUserExplicitSelections(explicitSelections);
-          console.log('🔄 Refreshed interests in modal:', interests.size, '(', explicitSelections.size, 'explicit)');
+          console.log('🔄 Refreshed interests in modal:', interests.size);
         }
       };
       reloadInterests();
@@ -630,12 +593,9 @@ export default function DiscoverScreen() {
       return;
     }
 
-    const parentId = getInterestMeta(interestId)?.parentId;
     const previousSelection = new Set(userInterests);
-    const previousExplicit = new Set(userExplicitSelections);
     const previousActive = activeFilter;
     const nextSelection = new Set(userInterests);
-    const nextExplicit = new Set(userExplicitSelections);
     const isSelected = nextSelection.has(interestId);
 
     console.log('🔄 Toggling interest:', interestId, isSelected ? 'OFF' : 'ON');
@@ -643,80 +603,37 @@ export default function DiscoverScreen() {
     if (isSelected) {
       // DESELECTING
       nextSelection.delete(interestId);
-      if (parentId) {
-        nextExplicit.delete(interestId); // Remove from explicit selections
-      }
-
-      const categoriesToDelete = [interestId];
-      let removeParent = false;
-
-      if (parentId) {
-        const siblings = SUBCATEGORY_IDS_BY_PARENT.get(parentId) ?? [];
-        const hasOtherSiblings = siblings.some((id) => id !== interestId && nextSelection.has(id));
-        if (!hasOtherSiblings) {
-          removeParent = true;
-          nextSelection.delete(parentId);
-        }
-      }
-
-      if (parentId && removeParent) {
-        categoriesToDelete.push(parentId);
-      }
 
       // Switch to 'all' if we're deselecting the active filter
-      if (activeFilter === interestId || (parentId && activeFilter === parentId)) {
+      if (activeFilter === interestId) {
         setActiveFilter('all');
       }
 
       // Update UI immediately for instant feedback
       setUserInterests(nextSelection);
-      setUserExplicitSelections(nextExplicit);
 
       // Persist to database
-      if (categoriesToDelete.length > 0) {
-        const { error } = await supabase
-          .from('user_interests')
-          .delete()
-          .eq('user_id', user.id)
-          .in('category', categoriesToDelete);
+      const { error } = await supabase
+        .from('user_interests')
+        .delete()
+        .eq('user_id', user.id)
+        .eq('category', interestId);
 
-        if (error) {
-          console.error('❌ Failed to remove interest from DB:', error);
-          // Rollback on error
-          setUserInterests(previousSelection);
-          setUserExplicitSelections(previousExplicit);
-          setActiveFilter(previousActive);
-        } else {
-          console.log('✅ Removed interests from DB:', categoriesToDelete);
-        }
+      if (error) {
+        console.error('❌ Failed to remove interest from DB:', error);
+        // Rollback on error
+        setUserInterests(previousSelection);
+        setActiveFilter(previousActive);
+      } else {
+        console.log('✅ Removed interest from DB:', interestId);
       }
     } else {
       // SELECTING
       const wasEmpty = nextSelection.size === 0;
       nextSelection.add(interestId);
-      if (parentId) {
-        nextExplicit.add(interestId); // Track as explicit user selection
-      }
-
-      const categoriesToInsert: { user_id: string; category: string }[] = [];
-
-      if (!previousSelection.has(interestId)) {
-        categoriesToInsert.push({ user_id: user.id, category: interestId });
-      }
-
-      // Auto-add parent category if selecting a subcategory
-      if (parentId) {
-        if (!nextSelection.has(parentId)) {
-          nextSelection.add(parentId);
-        }
-        if (!previousSelection.has(parentId)) {
-          categoriesToInsert.push({ user_id: user.id, category: parentId });
-        }
-      }
 
       // Update UI immediately for instant feedback
       setUserInterests(nextSelection);
-      setUserExplicitSelections(nextExplicit);
       
       // Auto-switch to new interest if it was the first selection
       if (wasEmpty) {
@@ -724,145 +641,26 @@ export default function DiscoverScreen() {
       }
 
       // Persist to database
-      if (categoriesToInsert.length > 0) {
-        const { error } = await supabase
-          .from('user_interests')
-          .insert(categoriesToInsert);
+      const { error } = await supabase
+        .from('user_interests')
+        .insert([{ user_id: user.id, category: interestId }]);
 
-        if (error) {
-          console.error('❌ Failed to add interest to DB:', error);
-          // Rollback on error
-          setUserInterests(previousSelection);
-          setUserExplicitSelections(previousExplicit);
-          setActiveFilter(previousActive);
-        } else {
-          console.log('✅ Added interests to DB:', categoriesToInsert.map(c => c.category));
-        }
+      if (error) {
+        console.error('❌ Failed to add interest to DB:', error);
+        // Rollback on error
+        setUserInterests(previousSelection);
+        setActiveFilter(previousActive);
+      } else {
+        console.log('✅ Added interest to DB:', interestId);
       }
     }
   };
 
-  const toggleCategoryGroup = useCallback(
-    async (category: InterestCategoryDefinition, mode: 'select' | 'clear') => {
-      if (!user?.id) {
-        console.warn('No user logged in - cannot toggle category group');
-        return;
-      }
 
-      const previousSelection = new Set(userInterests);
-      const previousExplicit = new Set(userExplicitSelections);
-      const previousActive = activeFilter;
-      const subcategoryIds = SUBCATEGORY_IDS_BY_PARENT.get(category.id) ?? [];
-      const bundle = [category.id, ...subcategoryIds];
 
-      console.log('🔄 Batch toggling category:', category.label, mode, '(', bundle.length, 'items)');
 
-      if (mode === 'select') {
-        // SELECTING ALL IN CATEGORY
-        const nextSelection = new Set(previousSelection);
-        const nextExplicit = new Set(previousExplicit);
-        bundle.forEach((id) => {
-          nextSelection.add(id);
-          // Add subcategories to explicit selections
-          if (subcategoryIds.includes(id)) {
-            nextExplicit.add(id);
-          }
-        });
-        
-        // Update UI immediately
-        setUserInterests(nextSelection);
-        setUserExplicitSelections(nextExplicit);
-        setExpandedCategories((prev) => new Set(prev).add(category.id));
-        
-        // Auto-switch to category if it was first selection
-        if (previousSelection.size === 0) {
-          setActiveFilter(category.id);
-        }
 
-        const rowsToInsert = bundle
-          .filter((id) => !previousSelection.has(id))
-          .map((id) => ({ user_id: user.id, category: id }));
 
-        if (rowsToInsert.length === 0) {
-          console.log('✅ All topics already selected');
-          return;
-        }
-
-        const { error } = await supabase.from('user_interests').insert(rowsToInsert);
-
-        if (error) {
-          console.error('❌ Failed to follow category group:', error);
-          setUserInterests(previousSelection);
-          setUserExplicitSelections(previousExplicit);
-          setActiveFilter(previousActive);
-        } else {
-          console.log('✅ Added', rowsToInsert.length, 'interests to DB');
-        }
-      } else {
-        // CLEARING ALL IN CATEGORY
-        const nextSelection = new Set(previousSelection);
-        const nextExplicit = new Set(previousExplicit);
-        bundle.forEach((id) => {
-          nextSelection.delete(id);
-          nextExplicit.delete(id);
-        });
-        
-        // Update UI immediately
-        setUserInterests(nextSelection);
-        setUserExplicitSelections(nextExplicit);
-        
-        // Switch to 'all' if clearing the active filter
-        if (activeFilter === category.id || subcategoryIds.includes(activeFilter)) {
-          setActiveFilter('all');
-        }
-
-        const rowsToDelete = bundle.filter((id) => previousSelection.has(id));
-        if (rowsToDelete.length === 0) {
-          console.log('✅ Nothing to clear');
-          return;
-        }
-
-        const { error } = await supabase
-          .from('user_interests')
-          .delete()
-          .eq('user_id', user.id)
-          .in('category', rowsToDelete);
-
-        if (error) {
-          console.error('❌ Failed to clear category group:', error);
-          setUserInterests(previousSelection);
-          setUserExplicitSelections(previousExplicit);
-          setActiveFilter(previousActive);
-        } else {
-          console.log('✅ Removed', rowsToDelete.length, 'interests from DB');
-        }
-      }
-    },
-    [user?.id, userInterests, userExplicitSelections, activeFilter]
-  );
-
-  useEffect(() => {
-    if (!interestSearch.trim()) {
-      return;
-    }
-    setExpandedCategories(new Set(filteredInterestOptions.map((category) => category.id)));
-  }, [interestSearch, filteredInterestOptions]);
-
-  useEffect(() => {
-    if (interestSearch.trim()) {
-      return;
-    }
-    setExpandedCategories((prev) => {
-      const next = new Set(prev);
-      userInterests.forEach((id) => {
-        const parentId = getInterestMeta(id)?.parentId;
-        if (parentId) {
-          next.add(parentId);
-        }
-      });
-      return next;
-    });
-  }, [userInterests, interestSearch]);
 
   const handleLikeToggle = async (itemId: string) => {
     if (!user?.id) return;
@@ -1234,147 +1032,52 @@ export default function DiscoverScreen() {
             >
               {filteredInterestOptions.map((category) => {
                 const IconComponent = category.icon;
-                const hasSubcategories = Boolean(category.subcategories?.length);
-                const subcategoryIds = SUBCATEGORY_IDS_BY_PARENT.get(category.id) ?? [];
-                const selectedSubCount = subcategoryIds.filter((id) => userInterests.has(id)).length;
-                const totalSubCount = subcategoryIds.length;
                 const categorySelected = userInterests.has(category.id);
-                const isExpanded = hasSubcategories ? expandedCategories.has(category.id) : categorySelected;
-                const followingBadgeVisible = hasSubcategories ? selectedSubCount > 0 : categorySelected;
-                const allTopicsSelected = totalSubCount > 0 && selectedSubCount === totalSubCount;
-                const hasSelectedInterests = hasSubcategories ? selectedSubCount > 0 : categorySelected;
 
                 return (
                   <View key={category.id} style={[
                     styles.categorySection,
-                    hasSelectedInterests && styles.categorySectionWithSelections
+                    categorySelected && styles.categorySectionWithSelections
                   ]}>
                     <TouchableOpacity
                       activeOpacity={0.85}
                       style={[
-                        styles.categoryHeader, 
-                        isExpanded && hasSubcategories && styles.categoryHeaderExpanded,
-                        hasSelectedInterests && styles.categoryHeaderWithSelections
+                        styles.categoryHeader,
+                        categorySelected && styles.categoryHeaderWithSelections
                       ]}
-                      onPress={() =>
-                        hasSubcategories
-                          ? toggleCategoryExpansion(category.id)
-                          : toggleUserInterest(category.id)
-                      }
+                      onPress={() => toggleUserInterest(category.id)}
                     >
                       <View style={styles.categoryHeaderLeft}>
                         <View style={[
                           styles.categoryIconWrapper,
-                          hasSelectedInterests && styles.categoryIconWrapperSelected
+                          categorySelected && styles.categoryIconWrapperSelected
                         ]}>
-                          <IconComponent size={20} color={hasSelectedInterests ? "#0A84FF" : "#6B7280"} strokeWidth={1.75} />
+                          <IconComponent size={20} color={categorySelected ? "#0A84FF" : "#6B7280"} strokeWidth={1.75} />
                         </View>
                         <View style={styles.categoryHeaderText}>
                           <Text style={[
                             styles.categoryTitle,
-                            hasSelectedInterests && styles.categoryTitleSelected
+                            categorySelected && styles.categoryTitleSelected
                           ]}>{category.label}</Text>
                           <Text style={styles.categorySubtitle}>{category.description}</Text>
-                          {hasSubcategories && (
-                            <Text style={[
-                              styles.categoryMetaText,
-                              hasSelectedInterests && styles.categoryMetaTextSelected
-                            ]}>
-                              {selectedSubCount > 0
-                                ? `${selectedSubCount} of ${totalSubCount} topics selected`
-                                : `${totalSubCount} topics`}
-                            </Text>
-                          )}
                         </View>
                       </View>
                       <View style={styles.categoryHeaderRight}>
-                        {followingBadgeVisible && (
+                        {categorySelected && (
                           <View style={styles.categoryStatusBadge}>
                             <Text style={styles.categoryStatusText}>Following</Text>
                           </View>
                         )}
-                        {hasSubcategories ? (
-                          <ChevronDown
-                            size={18}
-                            color="#1F2937"
-                            strokeWidth={2}
-                            style={isExpanded ? styles.chevronExpanded : undefined}
-                          />
-                        ) : (
-                          <View
-                            style={[
-                              styles.categorySoloBadge,
-                              categorySelected && styles.categorySoloBadgeSelected,
-                            ]}
-                          >
-                            {categorySelected && <Check size={14} color="#FFFFFF" strokeWidth={2} />}
-                          </View>
-                        )}
+                        <View
+                          style={[
+                            styles.categorySoloBadge,
+                            categorySelected && styles.categorySoloBadgeSelected,
+                          ]}
+                        >
+                          {categorySelected && <Check size={14} color="#FFFFFF" strokeWidth={2} />}
+                        </View>
                       </View>
                     </TouchableOpacity>
-
-                    {hasSubcategories && isExpanded && (
-                      <View style={styles.categoryBody}>
-                        <View style={styles.categoryActions}>
-                          <TouchableOpacity
-                            style={[
-                              styles.categoryActionButton,
-                              allTopicsSelected && styles.categoryActionButtonDisabled,
-                            ]}
-                            onPress={() => {
-                              if (!allTopicsSelected) {
-                                toggleCategoryGroup(category, 'select');
-                              }
-                            }}
-                            disabled={allTopicsSelected}
-                          >
-                            <Text
-                              style={[
-                                styles.categoryActionText,
-                                allTopicsSelected && styles.categoryActionTextMuted,
-                              ]}
-                            >
-                              {allTopicsSelected ? 'Following all topics' : 'Follow all topics'}
-                            </Text>
-                          </TouchableOpacity>
-                          {selectedSubCount > 0 && (
-                            <TouchableOpacity
-                              style={styles.categoryActionButtonGhost}
-                              onPress={() => toggleCategoryGroup(category, 'clear')}
-                            >
-                              <Text style={styles.categoryActionGhostText}>Clear</Text>
-                            </TouchableOpacity>
-                          )}
-                        </View>
-
-                        <View style={styles.subcategoryGrid}>
-                          {category.subcategories?.map((sub) => {
-                            const isSelected = userInterests.has(sub.id);
-                            return (
-                              <TouchableOpacity
-                                key={sub.id}
-                                style={[
-                                  styles.subcategoryPill,
-                                  isSelected && styles.subcategoryPillSelected,
-                                ]}
-                                onPress={() => toggleUserInterest(sub.id)}
-                                activeOpacity={0.85}
-                              >
-                                <Text
-                                  style={[
-                                    styles.subcategoryLabel,
-                                    isSelected && styles.subcategoryLabelSelected,
-                                  ]}
-                                >
-                                  {sub.label}
-                                </Text>
-                                {isSelected && <Check size={14} color="#FFFFFF" strokeWidth={2} />}
-                              </TouchableOpacity>
-                            );
-                          })}
-                        </View>
-                      </View>
-                    )}
                   </View>
                 );
               })}
@@ -1525,7 +1228,7 @@ export default function DiscoverScreen() {
                 >
                   <SlidersHorizontal size={16} color="#FFFFFF" strokeWidth={2} />
                   <Text style={styles.headerGhostText}>
-                    {userExplicitSelections.size > 0 ? `Interests (${userExplicitSelections.size})` : 'Interests'}
+                    {userInterests.size > 0 ? `Interests (${userInterests.size})` : 'Interests'}
                   </Text>
                 </TouchableOpacity>
               </View>
@@ -2273,7 +1976,6 @@ const styles = StyleSheet.create({
   modalPrimaryButtonText: {
     fontSize: 15,
     fontFamily: 'Inter-SemiBold',
-    color: '#FFFFFF',
     color: '#FFFFFF',
   },
   filtersContainer: {
