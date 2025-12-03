@@ -208,9 +208,10 @@ export default function DiscoverScreen() {
   );
 
   const interestFilters = useMemo(() => {
+    // Only show user's selected interests - if they haven't selected any, only show For You and Friends
     const baseSelection = userInterests.size > 0
       ? Array.from(userInterests)
-      : INTEREST_LIBRARY.map((option) => option.id);
+      : [];
 
     const hiddenParents = new Set<string>();
     userInterests.forEach((id) => {
@@ -1493,6 +1494,7 @@ export default function DiscoverScreen() {
             onRefresh={onRefresh}
             tintColor="#FFFFFF"
             colors={['#FFFFFF']}
+            progressViewOffset={insets.top + 80}
           />
         }
         onScroll={(event) => {
@@ -1943,7 +1945,7 @@ const styles = StyleSheet.create({
   },
   headerGradient: {
     paddingHorizontal: 20,
-    paddingTop: 16,
+    paddingTop: 21,
     paddingBottom: 20,
     backgroundColor: HEADER_COLOR,
   },

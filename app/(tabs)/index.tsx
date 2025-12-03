@@ -1406,6 +1406,7 @@ export default function HomeScreen() {
             onRefresh={onRefresh}
             tintColor="#FFFFFF"
             colors={['#FFFFFF']}
+            progressViewOffset={insets.top + 80}
           />
         }
         onScroll={(event) => {
@@ -1986,7 +1987,7 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'center',
     paddingHorizontal: 20,
-    paddingTop: 16,
+    paddingTop: 80,
     paddingBottom: 20,
     backgroundColor: HEADER_COLOR,
     width: '100%',
