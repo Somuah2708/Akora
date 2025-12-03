@@ -10,6 +10,7 @@ import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/hooks/useAuth';
 import MediaEditorModal from '@/components/MediaEditorModal';
 import { LinearGradient } from 'expo-linear-gradient';
+import { uploadFile, type UploadProgress } from '@/lib/upload';
 
 interface MediaItem {
   uri: string;
@@ -61,6 +62,9 @@ export default function HomeCreatePostScreen() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [editorVisible, setEditorVisible] = useState(false);
   const [currentEditItem, setCurrentEditItem] = useState<{ uri: string; type: 'image' | 'video'; index: number } | null>(null);
+  const [uploadProgress, setUploadProgress] = useState<number>(0);
+  const [isUploading, setIsUploading] = useState(false);
+  const [uploadStatus, setUploadStatus] = useState<string>('');
 
   useEffect(() => {
     if (!user) {
@@ -182,43 +186,27 @@ export default function HomeCreatePostScreen() {
     setMedia((prev) => prev.filter((_, i) => i !== index));
   };
 
-  const uploadMedia = async (uri: string, type: 'image' | 'video'): Promise<string | null> => {
+  const uploadMediaWithProgress = async (uri: string, type: 'image' | 'video', index: number, total: number): Promise<string | null> => {
     try {
-      console.log('📤 Starting upload for:', type, uri);
       const fileExt = type === 'image' ? 'jpg' : 'mp4';
-      const fileName = `${Date.now()}-${Math.random().toString(36).slice(2)}.${fileExt}`;
-      const filePath = `posts/${fileName}`;
+      const fileName = `posts/${user?.id}-${Date.now()}-${index}.${fileExt}`;
       
-      // Read file as base64 using legacy API
-      const base64 = await readAsStringAsync(uri, {
-        encoding: 'base64' as any,
+      setUploadStatus(`Uploading ${type} ${index + 1} of ${total}...`);
+      
+      const url = await uploadFile(uri, fileName, type, {
+        bucket: 'post-media',
+        maxImageSize: 1920,
+        imageQuality: 0.85,
+        maxVideoSizeMB: 100,
+        retries: 3,
+        onProgress: (progress) => {
+          const fileProgress = progress.percentage / 100;
+          const overallProgress = ((index + fileProgress) / total) * 100;
+          setUploadProgress(Math.floor(overallProgress));
+        },
       });
-      console.log('✅ Read file as base64, length:', base64.length);
       
-      // Decode base64 to ArrayBuffer
-      const arrayBuffer = decode(base64);
-      console.log('✅ Decoded to ArrayBuffer');
-      
-      // Upload to Supabase Storage
-      const { data, error } = await supabase.storage
-        .from('post-media')
-        .upload(filePath, arrayBuffer, {
-          contentType: type === 'image' ? 'image/jpeg' : 'video/mp4',
-          upsert: false,
-        });
-      
-      if (error) {
-        console.error('❌ Upload error:', error);
-        throw error;
-      }
-      
-      console.log('✅ Upload successful:', data);
-      
-      // Get public URL
-      const { data: urlData } = supabase.storage.from('post-media').getPublicUrl(filePath);
-      console.log('✅ Public URL:', urlData.publicUrl);
-      
-      return urlData.publicUrl;
+      return url;
     } catch (e: any) {
       console.error('❌ Upload failed:', e);
       Alert.alert('Upload Error', e.message || 'Failed to upload media');
@@ -236,37 +224,31 @@ export default function HomeCreatePostScreen() {
       return;
     }
     setIsSubmitting(true);
+    setIsUploading(true);
+    setUploadProgress(0);
+    setUploadStatus('Preparing upload...');
     try {
       console.log('📤 Starting submission with', media.length, 'media items');
-      media.forEach((item, idx) => {
-        console.log(`  Upload Item ${idx}: ${item.type}`);
-      });
       
       const imageUrls: string[] = [];
       const videoUrls: string[] = [];
       const mediaItems: Array<{ type: 'image' | 'video'; url: string }> = [];
       
-      for (const item of media) {
+      for (let i = 0; i < media.length; i++) {
+        const item = media[i];
         console.log(`📤 Uploading: ${item.type}`);
-        const url = await uploadMedia(item.uri, item.type);
+        const url = await uploadMediaWithProgress(item.uri, item.type, i, media.length);
         if (url) {
-          console.log(`✅ Uploaded ${item.type}: ${url.substring(0, 60)}...`);
-          // Store in mixed media array (preserves order and type)
+          console.log(`✅ Uploaded ${item.type}`);
           mediaItems.push({ type: item.type, url });
           
-          // Also store in separate arrays for backward compatibility
           if (item.type === 'image') imageUrls.push(url);
           else videoUrls.push(url);
-        } else {
-          console.error(`❌ Failed to upload ${item.type}`);
         }
       }
       
-      console.log('📊 Upload summary:');
-      console.log('  - Images:', imageUrls.length);
-      console.log('  - Videos:', videoUrls.length);
-      console.log('  - Media items:', mediaItems.length);
-      console.log('  - Media items array:', JSON.stringify(mediaItems, null, 2));
+      setUploadStatus('Creating post...');
+      setUploadProgress(95);
       
       const postData: any = {
         user_id: user.id,
@@ -281,13 +263,22 @@ export default function HomeCreatePostScreen() {
         // Home feed: no category, visibility, highlights
       };
       const { error } = await supabase.from('posts').insert(postData);
+      
       if (error) throw error;
+      
+      setUploadProgress(100);
+      setUploadStatus('Complete!');
+      
       Alert.alert('Success', 'Post created!', [{ text: 'OK', onPress: () => router.back() }]);
     } catch (e: any) {
-      console.error('Create post error', e);
+      console.error('❌ Error:', e);
+      setUploadStatus('Upload failed');
       Alert.alert('Error', e.message || 'Failed to create post');
     } finally {
       setIsSubmitting(false);
+      setIsUploading(false);
+      setUploadProgress(0);
+      setUploadStatus('');
     }
   };
 
@@ -317,6 +308,25 @@ export default function HomeCreatePostScreen() {
       </View>
 
       <ScrollView style={styles.formContainer} showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>
+        {/* Upload Progress Indicator */}
+        {isUploading && (
+          <View style={styles.uploadProgressContainer}>
+            <View style={styles.uploadProgressHeader}>
+              <Text style={styles.uploadProgressTitle}>{uploadStatus}</Text>
+              <Text style={styles.uploadProgressPercentage}>{uploadProgress}%</Text>
+            </View>
+            <View style={styles.uploadProgressBar}>
+              <View style={[styles.uploadProgressFill, { width: `${uploadProgress}%` }]} />
+            </View>
+            <Text style={styles.uploadProgressHint}>
+              {uploadProgress < 30 && 'Optimizing media...'}
+              {uploadProgress >= 30 && uploadProgress < 95 && 'Uploading to server...'}
+              {uploadProgress >= 95 && uploadProgress < 100 && 'Almost done...'}
+              {uploadProgress === 100 && '✓ Upload complete!'}
+            </Text>
+          </View>
+        )}
+
         <View style={styles.card}>
           <TextInput
             style={styles.contentInput}
@@ -401,6 +411,52 @@ const styles = StyleSheet.create({
   submitButtonDisabled: { backgroundColor: 'rgba(255, 255, 255, 0.3)', shadowOpacity: 0, elevation: 0 },
   formContainer: { flex: 1 },
   scrollContent: { padding: 20, paddingBottom: 140 },
+  uploadProgressContainer: {
+    backgroundColor: '#F8FAFC',
+    borderRadius: 16,
+    padding: 20,
+    marginBottom: 16,
+    borderWidth: 1,
+    borderColor: '#E0E7FF',
+    shadowColor: '#6366F1',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.08,
+    shadowRadius: 8,
+    elevation: 2,
+  },
+  uploadProgressHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  uploadProgressTitle: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: '#0F172A',
+  },
+  uploadProgressPercentage: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: '#6366F1',
+  },
+  uploadProgressBar: {
+    height: 6,
+    backgroundColor: '#E2E8F0',
+    borderRadius: 3,
+    overflow: 'hidden',
+    marginBottom: 8,
+  },
+  uploadProgressFill: {
+    height: '100%',
+    backgroundColor: '#6366F1',
+    borderRadius: 3,
+  },
+  uploadProgressHint: {
+    fontSize: 13,
+    color: '#64748B',
+    textAlign: 'center',
+  },
   card: { backgroundColor: '#FFFFFF', borderRadius: 16, padding: 16, marginBottom: 20, borderWidth: 1, borderColor: '#E2E8F0', shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.04, shadowRadius: 8, elevation: 1 },
   contentInput: { minHeight: 160, fontSize: 16, color: '#0F172A' },
   characterCount: { alignItems: 'flex-end', marginTop: 8 },
