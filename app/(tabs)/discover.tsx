@@ -199,6 +199,19 @@ export default function DiscoverScreen() {
   const [friendsList, setFriendsList] = useState<any[]>([]);
   const [searchFriends, setSearchFriends] = useState('');
   const [loadingFriends, setLoadingFriends] = useState(false);
+  const [mediaAspectRatios, setMediaAspectRatios] = useState<{[key: string]: number}>({});
+
+  // Handle media load to get actual dimensions (Instagram approach)
+  const handleMediaLoad = useCallback((mediaId: string, width: number, height: number) => {
+    const aspectRatio = width / height;
+    // Clamp between 0.5 (tall) and 1.91 (wide) like Instagram
+    const clampedRatio = Math.max(0.5, Math.min(1.91, aspectRatio));
+    
+    setMediaAspectRatios(prev => ({
+      ...prev,
+      [mediaId]: clampedRatio
+    }));
+  }, []);
 
   const interestKey = useMemo(
     () => Array.from(userInterests).sort().join(','),
@@ -1373,7 +1386,10 @@ export default function DiscoverScreen() {
                           {mediaItem.type === 'video' ? (
                             <Video
                               source={{ uri: mediaItem.url }}
-                              style={styles.postImage}
+                              style={[
+                                styles.postImage,
+                                { aspectRatio: mediaAspectRatios[`item_${item.id}_media_${index}`] || 1 }
+                              ]}
                               useNativeControls
                               resizeMode={ResizeMode.COVER}
                               isLooping={true}
@@ -1387,6 +1403,15 @@ export default function DiscoverScreen() {
                                   ? 0.0 
                                   : 1.0
                               }
+                              onReadyForDisplay={(data) => {
+                                if (data.naturalSize) {
+                                  handleMediaLoad(
+                                    `item_${item.id}_media_${index}`,
+                                    data.naturalSize.width,
+                                    data.naturalSize.height
+                                  );
+                                }
+                              }}
                               onError={(err) => {
                                 console.error('❌ Video error:', err);
                                 console.warn('Video play error (mixed media)', err);
@@ -1399,8 +1424,15 @@ export default function DiscoverScreen() {
                             >
                               <CachedImage
                                 uri={mediaItem.url}
-                                style={styles.postImage}
+                                style={[
+                                  styles.postImage,
+                                  { aspectRatio: mediaAspectRatios[`item_${item.id}_media_${index}`] || 1 }
+                                ]}
                                 contentFit="cover"
+                                onLoad={(event) => {
+                                  const { width, height } = event.source;
+                                  handleMediaLoad(`item_${item.id}_media_${index}`, width, height);
+                                }}
                               />
                             </TouchableOpacity>
                           )}
@@ -1456,7 +1488,10 @@ export default function DiscoverScreen() {
                       <View key={index} style={styles.mediaPage}>
                         <Video
                           source={{ uri: videoUrl }}
-                          style={styles.postImage}
+                          style={[
+                            styles.postImage,
+                            { aspectRatio: mediaAspectRatios[`item_${item.id}_video_${index}`] || 1 }
+                          ]}
                           useNativeControls
                           resizeMode={ResizeMode.COVER}
                           isLooping={true}
@@ -1470,6 +1505,15 @@ export default function DiscoverScreen() {
                               ? 0.0 
                               : 1.0
                           }
+                          onReadyForDisplay={(data) => {
+                            if (data.naturalSize) {
+                              handleMediaLoad(
+                                `item_${item.id}_video_${index}`,
+                                data.naturalSize.width,
+                                data.naturalSize.height
+                              );
+                            }
+                          }}
                           onError={(err) => console.warn('Video play error (carousel item)', err)}
                         />
                       </View>
@@ -1510,8 +1554,15 @@ export default function DiscoverScreen() {
                       >
                         <CachedImage
                           uri={imageUrl}
-                          style={styles.postImage}
+                          style={[
+                            styles.postImage,
+                            { aspectRatio: mediaAspectRatios[`item_${item.id}_img_${index}`] || 1 }
+                          ]}
                           contentFit="cover"
+                          onLoad={(event) => {
+                            const { width, height } = event.source;
+                            handleMediaLoad(`item_${item.id}_img_${index}`, width, height);
+                          }}
                         />
                       </TouchableOpacity>
                     ))}
@@ -1532,12 +1583,24 @@ export default function DiscoverScreen() {
                 <View style={styles.mediaPage}>
                   <Video
                     source={{ uri: item.video_url }}
-                    style={styles.postImage}
+                    style={[
+                      styles.postImage,
+                      { aspectRatio: mediaAspectRatios[`item_${item.id}_single`] || 1 }
+                    ]}
                     useNativeControls
                     resizeMode={ResizeMode.COVER}
                     isLooping={true}
                     shouldPlay={isScreenFocused && visibleVideos.has(item.id)}
                     volume={isMuted ? 0.0 : 1.0}
+                    onReadyForDisplay={(data) => {
+                      if (data.naturalSize) {
+                        handleMediaLoad(
+                          `item_${item.id}_single`,
+                          data.naturalSize.width,
+                          data.naturalSize.height
+                        );
+                      }
+                    }}
                     onError={(err) => console.warn('Video play error (single)', err)}
                   />
                 </View>
@@ -1546,8 +1609,15 @@ export default function DiscoverScreen() {
                   <View style={styles.mediaPage}>
                     <CachedImage 
                       uri={item.image} 
-                      style={styles.postImage}
+                      style={[
+                        styles.postImage,
+                        { aspectRatio: mediaAspectRatios[`item_${item.id}_single`] || 1 }
+                      ]}
                       contentFit="cover"
+                      onLoad={(event) => {
+                        const { width, height } = event.source;
+                        handleMediaLoad(`item_${item.id}_single`, width, height);
+                      }}
                     />
                   </View>
                 </TouchableOpacity>
@@ -2093,8 +2163,6 @@ const styles = StyleSheet.create({
   },
   postImage: {
     width: '100%',
-    height: width,
-    backgroundColor: '#F3F4F6',
   },
   carouselContainer: {
     position: 'relative',
@@ -2104,9 +2172,6 @@ const styles = StyleSheet.create({
   },
   mediaPage: {
     width: width,
-    height: width,
-    backgroundColor: '#F3F4F6',
-    overflow: 'hidden',
   },
   carouselIndicator: {
     position: 'absolute',

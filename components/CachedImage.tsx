@@ -10,6 +10,7 @@ interface CachedImageProps {
   transition?: number;
   recyclingKey?: string;
   priority?: 'low' | 'normal' | 'high';
+  onLoad?: (event: any) => void;
 }
 
 /**
@@ -24,6 +25,7 @@ export const CachedImage: React.FC<CachedImageProps> = ({
   transition = 200,
   recyclingKey,
   priority = 'normal',
+  onLoad,
 }) => {
   return (
     <Image
@@ -35,6 +37,7 @@ export const CachedImage: React.FC<CachedImageProps> = ({
       placeholder={placeholder}
       recyclingKey={recyclingKey}
       priority={priority}
+      onLoad={onLoad}
     />
   );
 };

@@ -1,7 +1,7 @@
 import { supabase } from './supabase';
-import * as FileSystem from 'expo-file-system';
 import * as ImageManipulator from 'expo-image-manipulator';
 import { decode } from 'base64-arraybuffer';
+import { getInfoAsync, readAsStringAsync } from 'expo-file-system/legacy';
 
 export interface UploadProgress {
   loaded: number;
@@ -39,21 +39,30 @@ async function optimizeImage(uri: string, options: UploadOptions): Promise<strin
     console.log('📸 Optimizing image:', uri);
     
     // Get image info
-    const info = await FileSystem.getInfoAsync(uri);
+    const info = await getInfoAsync(uri);
     const originalSize = ('size' in info && info.size ? info.size : 0) / (1024 * 1024); // MB
     console.log(`📊 Original image size: ${originalSize.toFixed(2)} MB`);
 
-    // Compress and resize
+    // Get original image dimensions to determine orientation
+    const imageAsset = await ImageManipulator.manipulateAsync(uri, [], {});
+    
+    // Determine which dimension to constrain based on orientation
+    // This ensures we resize based on the larger dimension, maintaining aspect ratio without cropping
+    const resizeAction = imageAsset.width > imageAsset.height
+      ? { resize: { width: maxImageSize } }  // Landscape: constrain width
+      : { resize: { height: maxImageSize } }; // Portrait: constrain height
+
+    // Compress and resize without cropping
     const manipResult = await ImageManipulator.manipulateAsync(
       uri,
-      [{ resize: { width: maxImageSize } }], // Maintain aspect ratio
+      [resizeAction],
       {
         compress: imageQuality,
         format: ImageManipulator.SaveFormat.JPEG,
       }
     );
 
-    const newInfo = await FileSystem.getInfoAsync(manipResult.uri);
+    const newInfo = await getInfoAsync(manipResult.uri);
     const newSize = ('size' in newInfo && newInfo.size ? newInfo.size : 0) / (1024 * 1024);
     const savings = ((originalSize - newSize) / originalSize * 100).toFixed(1);
     
@@ -173,7 +182,7 @@ export async function uploadFile(
 
     // Step 2: Read file as base64
     console.log('📤 Reading file for upload...');
-    const base64 = await FileSystem.readAsStringAsync(processedUri, {
+    const base64 = await readAsStringAsync(processedUri, {
       encoding: 'base64' as any,
     });
 
@@ -297,7 +306,7 @@ export async function uploadMultipleFiles(
  */
 export async function getFileSizeMB(uri: string): Promise<number> {
   try {
-    const info = await FileSystem.getInfoAsync(uri);
+    const info = await getInfoAsync(uri);
     return ('size' in info && info.size ? info.size : 0) / (1024 * 1024);
   } catch (error) {
     console.error('Error getting file size:', error);

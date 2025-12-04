@@ -1,4 +1,4 @@
-import { View, Text, StyleSheet, ScrollView, Image, TouchableOpacity, FlatList, Dimensions, Alert, Modal, TextInput, ActivityIndicator, RefreshControl } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, Image, TouchableOpacity, FlatList, Dimensions, Alert, Modal, TextInput, ActivityIndicator, RefreshControl, Image as RNImage } from 'react-native';
 import { useFonts, Inter_400Regular, Inter_600SemiBold } from '@expo-google-fonts/inter';
 import { useEffect, useState, useCallback, useRef } from 'react';
 import { HEADER_COLOR } from '@/constants/Colors';
@@ -178,6 +178,7 @@ export default function HomeScreen() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [carouselIndices, setCarouselIndices] = useState<{ [key: string]: number }>({});
+  const [mediaAspectRatios, setMediaAspectRatios] = useState<{[key: string]: number}>({});
   const [activeCategoryId, setActiveCategoryId] = useState<string | null>(null);
   const [featured, setFeatured] = useState<HomeFeaturedItem[]>([]);
   const [categoryTabs, setCategoryTabs] = useState<HomeCategoryTab[]>([]);
@@ -193,6 +194,18 @@ export default function HomeScreen() {
   // Share modal
   const [shareModalVisible, setShareModalVisible] = useState(false);
   const [selectedPostForShare, setSelectedPostForShare] = useState<PostWithUser | null>(null);
+
+  // Handle media load to get actual dimensions (Instagram approach)
+  const handleMediaLoad = useCallback((mediaId: string, width: number, height: number) => {
+    const aspectRatio = width / height;
+    // Clamp between 0.5 (tall) and 1.91 (wide) like Instagram
+    const clampedRatio = Math.max(0.5, Math.min(1.91, aspectRatio));
+    
+    setMediaAspectRatios(prev => ({
+      ...prev,
+      [mediaId]: clampedRatio
+    }));
+  }, []);
   const [friendsList, setFriendsList] = useState<any[]>([]);
   const [searchFriends, setSearchFriends] = useState('');
   const [loadingFriends, setLoadingFriends] = useState(false);
@@ -1712,7 +1725,10 @@ export default function HomeScreen() {
                           {mediaItem.type === 'video' ? (
                             <Video
                               source={{ uri: mediaItem.url }}
-                              style={styles.postImage}
+                              style={[
+                                styles.postImage,
+                                { aspectRatio: mediaAspectRatios[`post_${post.id}_media_${index}`] || 1 }
+                              ]}
                               useNativeControls
                               resizeMode={ResizeMode.COVER}
                               isLooping={true}
@@ -1726,6 +1742,15 @@ export default function HomeScreen() {
                                   ? 0.0 
                                   : 1.0
                               }
+                              onReadyForDisplay={(data) => {
+                                if (data.naturalSize) {
+                                  handleMediaLoad(
+                                    `post_${post.id}_media_${index}`,
+                                    data.naturalSize.width,
+                                    data.naturalSize.height
+                                  );
+                                }
+                              }}
                               onError={(err) => {
                                 console.error('❌ Video error:', err);
                                 console.warn('Video play error (mixed media)', err);
@@ -1738,9 +1763,15 @@ export default function HomeScreen() {
                             >
                               <Image
                                 source={{ uri: mediaItem.url }}
-                                style={styles.postImage}
+                                style={[
+                                  styles.postImage,
+                                  { aspectRatio: mediaAspectRatios[`post_${post.id}_media_${index}`] || 1 }
+                                ]}
                                 resizeMode="cover"
-                                onLoad={() => console.log(`✅ Image ${index} loaded successfully`)}
+                                onLoad={(event) => {
+                                  const { width, height } = event.nativeEvent.source;
+                                  handleMediaLoad(`post_${post.id}_media_${index}`, width, height);
+                                }}
                                 onError={(err) => {
                                   console.error(`❌ Image ${index} failed to load:`, err.nativeEvent);
                                   console.error('Image URL:', mediaItem.url);
@@ -1800,7 +1831,10 @@ export default function HomeScreen() {
                       <View key={index} style={styles.mediaPage}>
                         <Video
                           source={{ uri: videoUrl }}
-                          style={styles.postImage}
+                          style={[
+                            styles.postImage,
+                            { aspectRatio: mediaAspectRatios[`post_${post.id}_video_${index}`] || 1 }
+                          ]}
                           useNativeControls
                           resizeMode={ResizeMode.COVER}
                           isLooping={true}
@@ -1814,6 +1848,15 @@ export default function HomeScreen() {
                               ? 0.0 
                               : 1.0
                           }
+                          onReadyForDisplay={(data) => {
+                            if (data.naturalSize) {
+                              handleMediaLoad(
+                                `post_${post.id}_video_${index}`,
+                                data.naturalSize.width,
+                                data.naturalSize.height
+                              );
+                            }
+                          }}
                           onError={(err) => console.warn('Video play error (carousel item)', err)}
                         />
                       </View>
@@ -1854,8 +1897,15 @@ export default function HomeScreen() {
                       >
                         <Image
                           source={{ uri: imageUrl }}
-                          style={styles.postImage}
+                          style={[
+                            styles.postImage,
+                            { aspectRatio: mediaAspectRatios[`post_${post.id}_img_${index}`] || 1 }
+                          ]}
                           resizeMode="cover"
+                          onLoad={(event) => {
+                            const { width, height } = event.nativeEvent.source;
+                            handleMediaLoad(`post_${post.id}_img_${index}`, width, height);
+                          }}
                           onError={(e) => console.warn('Image load error', imageUrl, e.nativeEvent?.error)}
                         />
                       </TouchableOpacity>
@@ -1874,20 +1924,39 @@ export default function HomeScreen() {
               ) : post.video_url ? (
                 <Video
                   source={{ uri: post.video_url }}
-                  style={styles.postImage}
+                  style={[
+                    styles.postImage,
+                    { aspectRatio: mediaAspectRatios[`post_${post.id}_single`] || 1 }
+                  ]}
                   useNativeControls
                   resizeMode={ResizeMode.COVER}
                   isLooping
                   shouldPlay={isScreenFocused && visibleVideos.has(post.id)}
                   volume={isMuted ? 0.0 : 1.0}
+                  onReadyForDisplay={(data) => {
+                    if (data.naturalSize) {
+                      handleMediaLoad(
+                        `post_${post.id}_single`,
+                        data.naturalSize.width,
+                        data.naturalSize.height
+                      );
+                    }
+                  }}
                   onError={(err) => console.warn('Video play error (single)', err)}
                 />
               ) : post.image_url ? (
                 <TouchableOpacity activeOpacity={0.85} onPress={() => router.push(`/post/${post.id}`)}>
                   <Image 
                     source={{ uri: post.image_url }} 
-                    style={styles.postImage}
+                    style={[
+                      styles.postImage,
+                      { aspectRatio: mediaAspectRatios[`post_${post.id}_single`] || 1 }
+                    ]}
                     resizeMode="cover"
+                    onLoad={(event) => {
+                      const { width, height } = event.nativeEvent.source;
+                      handleMediaLoad(`post_${post.id}_single`, width, height);
+                    }}
                   />
                 </TouchableOpacity>
               ) : null}
@@ -2281,8 +2350,6 @@ const styles = StyleSheet.create({
   },
   postImage: {
     width: width,
-    height: width, // Square 1:1 ratio like Instagram
-    backgroundColor: '#000000',
   },
   carouselIndicator: {
     position: 'absolute',
@@ -2300,9 +2367,6 @@ const styles = StyleSheet.create({
   },
   mediaPage: {
     width: width,
-    height: width, // Square container
-    backgroundColor: '#000000',
-    overflow: 'hidden',
     alignSelf: 'center',
   },
   postActions: {
