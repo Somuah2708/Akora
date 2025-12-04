@@ -924,8 +924,11 @@ export default function ListingDetailScreen() {
 
               {!isOwner && listing.contact_whatsapp && (
                 <View style={styles.actions}>
-                  <TouchableOpacity style={styles.whatsappButton} onPress={handleWhatsAppContact}>
-                    <Text style={styles.whatsappButtonText}>💬 Chat on WhatsApp</Text>
+                  <TouchableOpacity 
+                    style={styles.whatsappButton} 
+                    onPress={() => Alert.alert('Coming Soon', 'Chat feature is coming soon!')}
+                  >
+                    <Text style={styles.whatsappButtonText}>💬 Chat</Text>
                   </TouchableOpacity>
                 </View>
               )}

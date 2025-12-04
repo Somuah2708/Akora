@@ -69,19 +69,35 @@ export async function fetchDiscoverFeed(
         console.log('👥 [DISCOVER] Fetching profiles for', postIds.length, 'posts');
         const { data: postsWithProfiles } = await supabase
           .from('posts')
-          .select('*, user:profiles(id, username, full_name, avatar_url, is_admin), media_items')
+          .select('*, user:profiles(id, username, full_name, avatar_url, is_admin, role), media_items')
           .in('id', postIds);
 
         if (postsWithProfiles) {
           console.log('✅ [DISCOVER] Fetched profiles for posts');
+          
+          // Debug: Log admin status for each post
+          postsWithProfiles.forEach((post: any) => {
+            console.log('🔍 [DISCOVER] Post author check:', {
+              postId: post.id.substring(0, 20),
+              author: post.user?.full_name,
+              is_admin: post.user?.is_admin,
+              userObject: post.user
+            });
+          });
           
           // Create a map to preserve the original order from get_discover_posts
           const postOrderMap = new Map<string, number>();
           posts.forEach((p: any, index: number) => postOrderMap.set(p.id, index));
           
           // Filter out admin-authored posts for Discover
-          const nonAdminPosts = postsWithProfiles.filter((post: any) => !post.user?.is_admin);
-          console.log('📊 [DISCOVER] Filtered to', nonAdminPosts.length, 'non-admin posts');
+          const nonAdminPosts = postsWithProfiles.filter((post: any) => {
+            const isAdmin = post.user?.is_admin === true || post.user?.role === 'admin';
+            if (isAdmin) {
+              console.log('🚫 [DISCOVER] Filtering out admin post:', post.id.substring(0, 20), 'by', post.user?.full_name);
+            }
+            return !isAdmin;
+          });
+          console.log('📊 [DISCOVER] Filtered to', nonAdminPosts.length, 'non-admin posts (from', postsWithProfiles.length, 'total)');
           
           // Re-sort to match the original order (newest first)
           nonAdminPosts.sort((a: any, b: any) => {
@@ -150,13 +166,31 @@ export async function fetchDiscoverFeed(
       // If no user ID, show public posts only
       const { data: posts } = await supabase
         .from('posts')
-        .select('*, user:profiles(id, username, full_name, avatar_url, is_admin)')
+        .select('*, user:profiles(id, username, full_name, avatar_url, is_admin, role)')
         .eq('visibility', 'public')
         .order('created_at', { ascending: false })
         .limit(10);
 
       if (posts) {
-        const nonAdminPosts = posts.filter((post: any) => !post.user?.is_admin);
+        console.log('✅ [DISCOVER] Fetched', posts.length, 'public posts');
+        
+        // Debug: Log admin status
+        posts.forEach((post: any) => {
+          console.log('🔍 [DISCOVER-PUBLIC] Post author check:', {
+            postId: post.id.substring(0, 20),
+            author: post.user?.full_name,
+            is_admin: post.user?.is_admin
+          });
+        });
+        
+        const nonAdminPosts = posts.filter((post: any) => {
+          const isAdmin = post.user?.is_admin === true || post.user?.role === 'admin';
+          if (isAdmin) {
+            console.log('🚫 [DISCOVER-PUBLIC] Filtering out admin post:', post.id.substring(0, 20), 'by', post.user?.full_name);
+          }
+          return !isAdmin;
+        });
+        console.log('📊 [DISCOVER-PUBLIC] Filtered to', nonAdminPosts.length, 'non-admin posts (from', posts.length, 'total)');
         
         // Use counts from posts table directly
         const countsMap = new Map<string, { likes: number; comments: number }>();
