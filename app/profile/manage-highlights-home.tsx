@@ -1,6 +1,8 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, Image, ActivityIndicator, Alert, TextInput, Modal, Pressable, Dimensions, ScrollView } from 'react-native';
-import { useRouter } from 'expo-router';
+import { useRouter } from 'expo-router'
+import { DebouncedTouchable } from '@/components/DebouncedTouchable';
+import { debouncedRouter } from '@/utils/navigationDebounce';;
 import { useAuth } from '@/hooks/useAuth';
 import { supabase } from '@/lib/supabase';
 import { ArrowLeft, Plus, Star } from 'lucide-react-native';
@@ -88,13 +90,13 @@ export default function ManageHighlightsHome() {
 
   const createHighlightFlow = (title?: string) => {
     const t = encodeURIComponent(title || 'Highlight');
-    router.push(`/create-post?highlight=1&autoPick=1&ht=${t}` as any);
+    debouncedRouter.push(`/create-post?highlight=1&autoPick=1&ht=${t}`);
   };
 
   return (
     <View style={styles.container}>
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
+        <TouchableOpacity onPress={() => debouncedRouter.back()} style={styles.backBtn}>
           <ArrowLeft size={22} color="#111827" />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Manage Highlights</Text>
@@ -119,7 +121,7 @@ export default function ManageHighlightsHome() {
             </View>
           ) : (
             groups.map(g => (
-              <TouchableOpacity key={g.title} style={styles.groupRow} onPress={() => router.push(`/profile/manage-highlights?t=${encodeURIComponent(g.title)}` as any)}>
+              <TouchableOpacity key={g.title} style={styles.groupRow} onPress={() => debouncedRouter.push(`/profile/manage-highlights?t=${encodeURIComponent(g.title)}` as any)}>
                 <View style={styles.coverBox}>
                   {g.coverThumb ? (
                     <Image source={{ uri: g.coverThumb }} style={styles.coverImg} />

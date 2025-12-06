@@ -11,7 +11,9 @@ import {
   KeyboardAvoidingView,
   Platform,
 } from 'react-native';
-import { useRouter, useLocalSearchParams } from 'expo-router';
+import { useRouter, useLocalSearchParams } from 'expo-router'
+import { DebouncedTouchable } from '@/components/DebouncedTouchable';
+import { debouncedRouter } from '@/utils/navigationDebounce';;
 import { ArrowLeft, Upload, File, X, Paperclip } from 'lucide-react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import * as DocumentPicker from 'expo-document-picker';
@@ -61,14 +63,14 @@ export default function EditDocumentScreen() {
     } else if (!authLoading && !user) {
       // No user logged in, redirect
       console.log('[Edit Document] No user found, redirecting to sign in');
-      router.push('/auth/sign-in');
+      debouncedRouter.push('/auth/sign-in');
     }
   }, [id, user?.id, authLoading]);
 
   const loadDocument = async () => {
     if (!user || !id) {
       console.log('[Edit Document] No user or id, redirecting back');
-      router.push('/secretariat/documents/my-documents');
+      debouncedRouter.push('/secretariat/documents/my-documents');
       return;
     }
 
@@ -90,7 +92,7 @@ export default function EditDocumentScreen() {
         } else {
           Alert.alert('Error', 'Failed to load document. Please try again.');
         }
-        router.push('/secretariat/documents/my-documents');
+        debouncedRouter.push('/secretariat/documents/my-documents');
         return;
       }
 
@@ -101,7 +103,7 @@ export default function EditDocumentScreen() {
         } else {
           Alert.alert('Error', 'Document not found or you do not have permission to edit it.');
         }
-        router.push('/secretariat/documents/my-documents');
+        debouncedRouter.push('/secretariat/documents/my-documents');
         return;
       }
 
@@ -128,7 +130,7 @@ export default function EditDocumentScreen() {
       } else {
         Alert.alert('Error', 'Failed to load document. Please try again.');
       }
-      router.push('/secretariat/documents/my-documents');
+      debouncedRouter.push('/secretariat/documents/my-documents');
     } finally {
       setLoading(false);
     }
@@ -331,7 +333,7 @@ export default function EditDocumentScreen() {
 
       if (Platform.OS === 'web') {
         window.alert('✓ Document updated successfully!');
-        router.push('/secretariat/documents/my-documents');
+        debouncedRouter.push('/secretariat/documents/my-documents');
       } else {
         Alert.alert(
           'Success',
@@ -339,7 +341,7 @@ export default function EditDocumentScreen() {
           [
             {
               text: 'OK',
-              onPress: () => router.push('/secretariat/documents/my-documents'),
+              onPress: () => debouncedRouter.push('/secretariat/documents/my-documents'),
             },
           ]
         );
@@ -361,7 +363,7 @@ export default function EditDocumentScreen() {
       if (Platform.OS === 'web') {
         const confirmed = window.confirm('Discard changes?');
         if (confirmed) {
-          router.push('/secretariat/documents/my-documents');
+          debouncedRouter.push('/secretariat/documents/my-documents');
         }
       } else {
         Alert.alert(
@@ -372,7 +374,7 @@ export default function EditDocumentScreen() {
             {
               text: 'Discard',
               style: 'destructive',
-              onPress: () => router.push('/secretariat/documents/my-documents'),
+              onPress: () => debouncedRouter.push('/secretariat/documents/my-documents'),
             },
           ]
         );

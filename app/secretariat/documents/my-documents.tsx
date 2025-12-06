@@ -9,7 +9,9 @@ import {
   Alert,
   Platform,
 } from 'react-native';
-import { useRouter } from 'expo-router';
+import { useRouter } from 'expo-router'
+import { DebouncedTouchable } from '@/components/DebouncedTouchable';
+import { debouncedRouter } from '@/utils/navigationDebounce';;
 import {
   ArrowLeft,
   FileText,
@@ -152,7 +154,7 @@ export default function MyDocumentsScreen() {
   };
 
   const handleEdit = (id: string) => {
-    router.push(`/secretariat/documents/edit/${id}` as any);
+    debouncedRouter.push(`/secretariat/documents/edit/${id}`);
   };
 
   const formatFileSize = (bytes: number) => {
@@ -213,7 +215,7 @@ export default function MyDocumentsScreen() {
           style={styles.headerGradient}
         >
           <View style={styles.header}>
-            <TouchableOpacity onPress={() => router.push('/secretariat/documents')} style={styles.backButton}>
+            <TouchableOpacity onPress={() => debouncedRouter.push('/secretariat/documents')} style={styles.backButton}>
               <ArrowLeft size={24} color="#FFFFFF" />
             </TouchableOpacity>
             <View style={styles.headerCenter}>
@@ -240,7 +242,7 @@ export default function MyDocumentsScreen() {
         style={styles.headerGradient}
       >
         <View style={styles.header}>
-          <TouchableOpacity onPress={() => router.push('/secretariat/documents')} style={styles.backButton}>
+          <TouchableOpacity onPress={() => debouncedRouter.push('/secretariat/documents')} style={styles.backButton}>
             <ArrowLeft size={24} color="#FFFFFF" />
           </TouchableOpacity>
           <View style={styles.headerCenter}>
@@ -263,7 +265,7 @@ export default function MyDocumentsScreen() {
             </Text>
             <TouchableOpacity
               style={styles.uploadButton}
-              onPress={() => router.push('/secretariat/documents/upload')}
+              onPress={() => debouncedRouter.push('/secretariat/documents/upload')}
             >
               <Text style={styles.uploadButtonText}>Upload Document</Text>
             </TouchableOpacity>
@@ -281,7 +283,7 @@ export default function MyDocumentsScreen() {
                 </View>
 
                 {/* Title and Category */}
-                <TouchableOpacity onPress={() => router.push(`/secretariat/documents/${doc.id}` as any)}>
+                <TouchableOpacity onPress={() => debouncedRouter.push(`/secretariat/documents/${doc.id}`)}>
                   <Text style={styles.documentTitle}>{doc.title}</Text>
                   <View style={styles.categoryBadge}>
                     <Text style={styles.categoryText}>{doc.category}</Text>

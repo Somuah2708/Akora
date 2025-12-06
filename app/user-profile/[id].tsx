@@ -4,7 +4,9 @@ import * as Linking from 'expo-linking';
 import * as Clipboard from 'expo-clipboard';
 import { useFonts, Inter_400Regular, Inter_600SemiBold } from '@expo-google-fonts/inter';
 import { useState, useEffect, useMemo } from 'react';
-import { useRouter, useLocalSearchParams, Stack } from 'expo-router';
+import { useRouter, useLocalSearchParams, Stack } from 'expo-router'
+import { DebouncedTouchable } from '@/components/DebouncedTouchable';
+import { debouncedRouter } from '@/utils/navigationDebounce';;
 import { 
   Grid3x3,
   Bookmark,
@@ -285,7 +287,7 @@ export default function UserProfileScreen() {
         <View style={styles.header}>
           <View style={styles.headerTop}>
             <View style={styles.headerLeftRow}>
-              <TouchableOpacity style={styles.backButton} onPress={() => router.back()}>
+              <TouchableOpacity style={styles.backButton} onPress={() => debouncedRouter.back()}>
                 <ArrowLeft size={24} color="#000000" strokeWidth={2} />
               </TouchableOpacity>
               <View style={styles.nameRow}>
@@ -530,7 +532,7 @@ export default function UserProfileScreen() {
               <TouchableOpacity
                 key={post.id}
                 style={styles.gridItem}
-                onPress={() => router.push(`/post/${post.id}`)}
+                onPress={() => debouncedRouter.push(`/post/${post.id}`)}
               >
                 {thumbnail ? (
                   <View style={styles.gridMediaContainer}>

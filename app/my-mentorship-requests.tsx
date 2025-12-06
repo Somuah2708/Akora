@@ -10,7 +10,9 @@ import {
   ActivityIndicator,
   Linking,
 } from 'react-native';
-import { useRouter } from 'expo-router';
+import { useRouter } from 'expo-router'
+import { DebouncedTouchable } from '@/components/DebouncedTouchable';
+import { debouncedRouter } from '@/utils/navigationDebounce';;
 import { Ionicons } from '@expo/vector-icons';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '@/hooks/useAuth';
@@ -227,7 +229,7 @@ export default function MyMentorshipRequests() {
     <View style={styles.container}>
       {/* Header */}
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
+        <TouchableOpacity onPress={() => debouncedRouter.back()} style={styles.backButton}>
           <Ionicons name="arrow-back" size={24} color="#000" />
         </TouchableOpacity>
         <View style={styles.headerTitleContainer}>
@@ -289,7 +291,7 @@ export default function MyMentorshipRequests() {
             </Text>
             <TouchableOpacity
               style={styles.browseButton}
-              onPress={() => router.push('/education')}
+              onPress={() => debouncedRouter.push('/education')}
             >
               <Text style={styles.browseButtonText}>Browse Mentors</Text>
             </TouchableOpacity>
@@ -299,7 +301,7 @@ export default function MyMentorshipRequests() {
             <TouchableOpacity 
               key={request.id} 
               style={styles.requestCard}
-              onPress={() => router.push(`/education/mentor/${request.mentor_id}`)}
+              onPress={() => debouncedRouter.push(`/education/mentor/${request.mentor_id}`)}
               activeOpacity={0.7}
             >
               {/* Mentor Info */}

@@ -12,7 +12,9 @@ import {
   Platform,
   Image,
 } from 'react-native';
-import { useRouter, useLocalSearchParams } from 'expo-router';
+import { useRouter, useLocalSearchParams } from 'expo-router'
+import { DebouncedTouchable } from '@/components/DebouncedTouchable';
+import { debouncedRouter } from '@/utils/navigationDebounce';;
 import { ArrowLeft, Upload, X, Plus, Image as ImageIcon, Link as LinkIcon, Paperclip, FileText, File } from 'lucide-react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import * as ImagePicker from 'expo-image-picker';
@@ -116,7 +118,7 @@ export default function EditAnnouncementScreen() {
         } else {
           Alert.alert('Error', 'Announcement not found or you do not have permission to edit it.');
         }
-        router.back();
+        debouncedRouter.back();
         return;
       }
 
@@ -151,7 +153,7 @@ export default function EditAnnouncementScreen() {
       } else {
         Alert.alert('Error', error.message || 'Failed to load announcement');
       }
-      router.back();
+      debouncedRouter.back();
     } finally {
       setInitialLoading(false);
     }
@@ -327,7 +329,7 @@ export default function EditAnnouncementScreen() {
 
       // Redirect to My Announcements page
       setTimeout(() => {
-        router.replace('/secretariat/announcements/my-announcements');
+        debouncedRouter.replace('/secretariat/announcements/my-announcements');
       }, 100);
     } catch (error: any) {
       console.error('Error updating announcement:', error);
@@ -346,7 +348,7 @@ export default function EditAnnouncementScreen() {
     
     if (Platform.OS === 'web') {
       if (window.confirm(confirmMessage)) {
-        router.back();
+        debouncedRouter.back();
       }
     } else {
       Alert.alert(
@@ -357,7 +359,7 @@ export default function EditAnnouncementScreen() {
           {
             text: 'Discard',
             style: 'destructive',
-            onPress: () => router.back(),
+            onPress: () => debouncedRouter.back(),
           },
         ]
       );

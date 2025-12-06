@@ -12,7 +12,9 @@ import {
   Animated,
   Alert,
 } from 'react-native';
-import { useLocalSearchParams, useRouter } from 'expo-router';
+import { useLocalSearchParams, useRouter } from 'expo-router'
+import { DebouncedTouchable } from '@/components/DebouncedTouchable';
+import { debouncedRouter } from '@/utils/navigationDebounce';;
 import {
   ArrowLeft,
   Bookmark,
@@ -264,7 +266,7 @@ export default function ArticleDetailScreen() {
     <View style={styles.container}>
       {/* Animated Header */}
       <Animated.View style={[styles.header, { opacity: headerOpacity }]}>
-        <TouchableOpacity onPress={() => router.back()} style={styles.headerButton}>
+        <TouchableOpacity onPress={() => debouncedRouter.back()} style={styles.headerButton}>
           <ArrowLeft size={24} color="#000" />
         </TouchableOpacity>
         <Text style={styles.headerTitle} numberOfLines={1}>
@@ -309,7 +311,7 @@ export default function ArticleDetailScreen() {
             style={styles.heroGradient}
           >
             <View style={styles.floatingActions}>
-              <TouchableOpacity onPress={() => router.back()} style={styles.floatingButton}>
+              <TouchableOpacity onPress={() => debouncedRouter.back()} style={styles.floatingButton}>
                 <ArrowLeft size={24} color="#FFF" />
               </TouchableOpacity>
               <View style={styles.floatingButtonsRight}>
@@ -435,7 +437,7 @@ export default function ArticleDetailScreen() {
                   article={related}
                   variant="compact"
                   onPress={() => {
-                    router.push({
+                    debouncedRouter.push({
                       pathname: '/news/article-detail',
                       params: { articleData: JSON.stringify(related) },
                     });

@@ -1,6 +1,8 @@
 import { View, Text, StyleSheet, ScrollView, TextInput, TouchableOpacity, Image, Alert, ActivityIndicator } from 'react-native';
 import { useState, useEffect } from 'react';
-import { useRouter, useLocalSearchParams } from 'expo-router';
+import { useRouter, useLocalSearchParams } from 'expo-router'
+import { DebouncedTouchable } from '@/components/DebouncedTouchable';
+import { debouncedRouter } from '@/utils/navigationDebounce';;
 import { ArrowLeft, Upload, Image as ImageIcon, X, Sparkles } from 'lucide-react-native';
 import * as ImagePicker from 'expo-image-picker';
 import { supabase, type TrendingArticle } from '@/lib/supabase';
@@ -61,7 +63,7 @@ export default function TrendingEditScreen() {
     } catch (error: any) {
       console.error('Error fetching article:', error);
       Alert.alert('Error', 'Failed to load article');
-      router.back();
+      debouncedRouter.back();
     } finally {
       setLoading(false);
     }
@@ -176,7 +178,7 @@ export default function TrendingEditScreen() {
         [
           {
             text: 'OK',
-            onPress: () => router.back(),
+            onPress: () => debouncedRouter.back(),
           },
         ]
       );
@@ -214,7 +216,7 @@ export default function TrendingEditScreen() {
     <View style={styles.container}>
       {/* Header */}
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
+        <TouchableOpacity onPress={() => debouncedRouter.back()} style={styles.backButton}>
           <ArrowLeft size={24} color="#111827" strokeWidth={2} />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Edit Trending Article</Text>

@@ -8,7 +8,9 @@ import {
   ActivityIndicator,
   Switch,
 } from 'react-native';
-import { useRouter } from 'expo-router';
+import { useRouter } from 'expo-router'
+import { DebouncedTouchable } from '@/components/DebouncedTouchable';
+import { debouncedRouter } from '@/utils/navigationDebounce';;
 import { ArrowLeft, Bell, Calendar, Clock, Trash2, BellOff, Users } from 'lucide-react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { supabase } from '@/lib/supabase';
@@ -236,7 +238,7 @@ export default function EventNotificationsScreen() {
         style={styles.headerGradient}
       >
         <View style={styles.header}>
-          <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
+          <TouchableOpacity onPress={() => debouncedRouter.back()} style={styles.backButton}>
             <ArrowLeft size={24} color="#FFFFFF" />
           </TouchableOpacity>
           <View style={styles.headerCenter}>
@@ -285,7 +287,7 @@ export default function EventNotificationsScreen() {
                 <TouchableOpacity
                   key={event.id}
                   style={styles.userCreationCard}
-                  onPress={() => router.push(`/events/${event.id}` as any)}
+                  onPress={() => debouncedRouter.push(`/events/${event.id}`)}
                 >
                   <View style={styles.userCreationHeader}>
                     <View style={[
@@ -334,7 +336,7 @@ export default function EventNotificationsScreen() {
                 <TouchableOpacity
                   key={event.id}
                   style={styles.newEventCard}
-                  onPress={() => router.push(`/events/${event.id}` as any)}
+                  onPress={() => debouncedRouter.push(`/events/${event.id}`)}
                 >
                   <View style={styles.newEventHeader}>
                     <View style={styles.newBadge}>
@@ -372,7 +374,7 @@ export default function EventNotificationsScreen() {
             </Text>
             <TouchableOpacity 
               style={styles.exploreButton}
-              onPress={() => router.push('/secretariat/event-calendar' as any)}
+              onPress={() => debouncedRouter.push('/secretariat/event-calendar')}
             >
               <LinearGradient
                 colors={['#4169E1', '#5B7FE8']}

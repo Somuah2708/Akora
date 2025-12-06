@@ -9,7 +9,9 @@ import {
   Alert,
   ActivityIndicator,
 } from 'react-native';
-import { useRouter } from 'expo-router';
+import { useRouter } from 'expo-router'
+import { DebouncedTouchable } from '@/components/DebouncedTouchable';
+import { debouncedRouter } from '@/utils/navigationDebounce';;
 import { useFocusEffect } from '@react-navigation/native';
 import { ArrowLeft, Bookmark, Calendar, MapPin, Clock, Users, Trash2, Package } from 'lucide-react-native';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -198,7 +200,7 @@ export default function SavedEventsScreen() {
         style={styles.headerGradient}
       >
         <View style={styles.header}>
-          <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
+          <TouchableOpacity onPress={() => debouncedRouter.back()} style={styles.backButton}>
             <ArrowLeft size={24} color="#FFFFFF" />
           </TouchableOpacity>
           <View style={styles.headerCenter}>
@@ -221,7 +223,7 @@ export default function SavedEventsScreen() {
             </Text>
             <TouchableOpacity 
               style={styles.exploreButton}
-              onPress={() => router.push('/secretariat/event-calendar' as any)}
+              onPress={() => debouncedRouter.push('/secretariat/event-calendar')}
             >
               <LinearGradient
                 colors={['#4169E1', '#5B7FE8']}
@@ -303,7 +305,7 @@ export default function SavedEventsScreen() {
                     <View style={styles.actions}>
                       <TouchableOpacity 
                         style={styles.viewButton}
-                        onPress={() => router.push(`/events/${event.id}` as any)}
+                        onPress={() => debouncedRouter.push(`/events/${event.id}`)}
                       >
                         <Text style={styles.viewButtonText}>View Details</Text>
                       </TouchableOpacity>

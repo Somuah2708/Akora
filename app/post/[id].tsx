@@ -1,5 +1,7 @@
 import { View, Text, StyleSheet, ScrollView, Image, TouchableOpacity, ActivityIndicator, Alert, Dimensions, Share } from 'react-native';
-import { useLocalSearchParams, useRouter } from 'expo-router';
+import { useLocalSearchParams, useRouter } from 'expo-router'
+import { DebouncedTouchable } from '@/components/DebouncedTouchable';
+import { debouncedRouter } from '@/utils/navigationDebounce';;
 import { useEffect, useState } from 'react';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/hooks/useAuth';
@@ -163,7 +165,7 @@ export default function PostDetailScreen() {
   return (
     <View style={styles.container}>
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
+        <TouchableOpacity onPress={() => debouncedRouter.back()} style={styles.backBtn}>
           <ArrowLeft size={22} color="#111827" />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Post</Text>
@@ -306,7 +308,7 @@ export default function PostDetailScreen() {
                 <Text style={styles.actionCount}>{post.likes_count}</Text>
               )}
             </TouchableOpacity>
-            <TouchableOpacity onPress={() => router.push(`/post-comments/${post.id}`)} style={styles.actionBtnWithCount}>
+            <TouchableOpacity onPress={() => debouncedRouter.push(`/post-comments/${post.id}`)} style={styles.actionBtnWithCount}>
               <MessagesSquare size={24} color="#000000" strokeWidth={2} />
               {(post.comments_count ?? 0) > 0 && (
                 <Text style={styles.actionCount}>{post.comments_count}</Text>
@@ -338,13 +340,13 @@ export default function PostDetailScreen() {
 
         {/* View Comments Link */}
         {(post.comments_count ?? 0) > 0 ? (
-          <TouchableOpacity onPress={() => router.push(`/post-comments/${post.id}`)} style={styles.viewCommentsContainer}>
+          <TouchableOpacity onPress={() => debouncedRouter.push(`/post-comments/${post.id}`)} style={styles.viewCommentsContainer}>
             <Text style={styles.viewComments}>
               View all {post.comments_count} {post.comments_count === 1 ? 'comment' : 'comments'}
             </Text>
           </TouchableOpacity>
         ) : (
-          <TouchableOpacity onPress={() => router.push(`/post-comments/${post.id}`)} style={styles.viewCommentsContainer}>
+          <TouchableOpacity onPress={() => debouncedRouter.push(`/post-comments/${post.id}`)} style={styles.viewCommentsContainer}>
             <Text style={styles.viewComments}>
               Be the first to comment
             </Text>

@@ -1,7 +1,9 @@
 import React, { useMemo, useState } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, ActivityIndicator, Alert, Switch } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
-import { useLocalSearchParams, useRouter } from 'expo-router';
+import { useLocalSearchParams, useRouter } from 'expo-router'
+import { DebouncedTouchable } from '@/components/DebouncedTouchable';
+import { debouncedRouter } from '@/utils/navigationDebounce';;
 import { useAuth } from '@/hooks/useAuth';
 import { supabase } from '@/lib/supabase';
 import { ArrowLeft } from 'lucide-react-native';
@@ -92,7 +94,7 @@ export default function AddFromLibrary() {
       } else {
         toast.show('Highlight added successfully');
       }
-      router.back();
+      debouncedRouter.back();
     } catch (e) {
       console.error(e);
       Alert.alert('Error', 'Failed to add from library');
@@ -104,7 +106,7 @@ export default function AddFromLibrary() {
   return (
     <View style={styles.container}>
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
+        <TouchableOpacity onPress={() => debouncedRouter.back()} style={styles.backBtn}>
           <ArrowLeft size={22} color="#111827" />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Add from library</Text>

@@ -1,7 +1,9 @@
 import { View, Text, StyleSheet, ScrollView, Image, TouchableOpacity, Dimensions, ActivityIndicator, RefreshControl, Alert, TextInput } from 'react-native';
 import { useFonts, Inter_400Regular, Inter_600SemiBold, Inter_700Bold } from '@expo-google-fonts/inter';
 import { useEffect, useState, useCallback } from 'react';
-import { useRouter } from 'expo-router';
+import { useRouter } from 'expo-router'
+import { DebouncedTouchable } from '@/components/DebouncedTouchable';
+import { debouncedRouter } from '@/utils/navigationDebounce';;
 import { Heart, ShoppingBag, Star, Trash2, Share2, ExternalLink, Sparkles, ArrowLeft, Eye, Search } from 'lucide-react-native';
 import { supabase, type ProductService, type Profile } from '@/lib/supabase';
 import { useAuth } from '@/hooks/useAuth';
@@ -131,7 +133,7 @@ export default function FavoritesScreen() {
   };
 
   const handleViewProduct = (productId: string) => {
-    router.push(`/services/${productId}` as any);
+    debouncedRouter.push(`/services/${productId}`);
   };
 
   // Filter favorites based on search query
@@ -157,7 +159,7 @@ export default function FavoritesScreen() {
           colors={['#4169E1', '#5B7FE8']}
           style={styles.header}
         >
-          <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
+          <TouchableOpacity onPress={() => debouncedRouter.back()} style={styles.backButton}>
             <ArrowLeft size={24} color="#FFFFFF" />
           </TouchableOpacity>
           <Text style={styles.headerTitle}>Favorites</Text>
@@ -169,7 +171,7 @@ export default function FavoritesScreen() {
           <Text style={styles.emptyText}>Create an account to save your favorite marketplace items</Text>
           <TouchableOpacity 
             style={styles.signInButton}
-            onPress={() => router.push('/auth/sign-in' as any)}
+            onPress={() => debouncedRouter.push('/auth/sign-in')}
           >
             <Text style={styles.signInButtonText}>Sign In</Text>
           </TouchableOpacity>
@@ -185,7 +187,7 @@ export default function FavoritesScreen() {
           colors={['#4169E1', '#5B7FE8']}
           style={styles.header}
         >
-          <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
+          <TouchableOpacity onPress={() => debouncedRouter.back()} style={styles.backButton}>
             <ArrowLeft size={24} color="#FFFFFF" />
           </TouchableOpacity>
           <Text style={styles.headerTitle}>Favorites</Text>
@@ -203,7 +205,7 @@ export default function FavoritesScreen() {
     <View style={styles.container}>
       {/* Header with Back Button and Title */}
       <View style={styles.topBar}>
-        <TouchableOpacity onPress={() => router.back()} style={styles.backButtonTop}>
+        <TouchableOpacity onPress={() => debouncedRouter.back()} style={styles.backButtonTop}>
           <ArrowLeft size={24} color="#000000" />
         </TouchableOpacity>
         <Text style={styles.topBarTitle}>Favorites</Text>
@@ -260,7 +262,7 @@ export default function FavoritesScreen() {
             </Text>
             <TouchableOpacity
               style={styles.browseButton}
-              onPress={() => router.push('/services' as any)}
+              onPress={() => debouncedRouter.push('/services')}
             >
               <ShoppingBag size={20} color="#FFFFFF" />
               <Text style={styles.browseButtonText}>Browse Marketplace</Text>

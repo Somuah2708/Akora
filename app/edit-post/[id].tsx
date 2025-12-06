@@ -10,7 +10,9 @@ import {
   ActivityIndicator,
   StyleSheet,
 } from 'react-native';
-import { useRouter, useLocalSearchParams } from 'expo-router';
+import { useRouter, useLocalSearchParams } from 'expo-router'
+import { DebouncedTouchable } from '@/components/DebouncedTouchable';
+import { debouncedRouter } from '@/utils/navigationDebounce';;
 import { ArrowLeft, Send, X, Image as ImageIcon } from 'lucide-react-native';
 import * as ImagePicker from 'expo-image-picker';
 import { supabase } from '@/lib/supabase';
@@ -71,7 +73,7 @@ export default function EditPostScreen() {
       // Verify user owns this post
       if (data.user_id !== user?.id) {
         Alert.alert('Error', 'You can only edit your own posts');
-        router.back();
+        debouncedRouter.back();
         return;
       }
 
@@ -88,7 +90,7 @@ export default function EditPostScreen() {
     } catch (error: any) {
       console.error('Error fetching post:', error);
       Alert.alert('Error', 'Failed to load post');
-      router.back();
+      debouncedRouter.back();
     } finally {
       setLoading(false);
     }
@@ -249,7 +251,7 @@ export default function EditPostScreen() {
       console.log('Post updated successfully');
 
       Alert.alert('Success', 'Post updated successfully', [
-        { text: 'OK', onPress: () => router.back() }
+        { text: 'OK', onPress: () => debouncedRouter.back() }
       ]);
     } catch (error: any) {
       console.error('Error updating post:', error);
@@ -275,7 +277,7 @@ export default function EditPostScreen() {
   return (
     <View style={styles.container}>
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
+        <TouchableOpacity onPress={() => debouncedRouter.back()} style={styles.backButton}>
           <ArrowLeft size={24} color="#1E293B" />
         </TouchableOpacity>
         <Text style={styles.title}>Edit Post</Text>

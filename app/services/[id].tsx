@@ -1,7 +1,9 @@
 import { View, Text, StyleSheet, ScrollView, Image, TouchableOpacity, Dimensions, ActivityIndicator, Alert, Linking } from 'react-native';
 import { useFonts, Inter_400Regular, Inter_600SemiBold, Inter_700Bold } from '@expo-google-fonts/inter';
 import { useEffect, useState, useCallback } from 'react';
-import { SplashScreen, useRouter, useLocalSearchParams, useFocusEffect } from 'expo-router';
+import { SplashScreen, useRouter, useLocalSearchParams, useFocusEffect } from 'expo-router'
+import { DebouncedTouchable } from '@/components/DebouncedTouchable';
+import { debouncedRouter } from '@/utils/navigationDebounce';;
 import { ArrowLeft, ThumbsUp, MapPin, Clock, ShieldAlert, Share2, MessagesSquare, Phone, MessageSquareMore } from 'lucide-react-native';
 import { supabase, type ProductService, type Profile } from '@/lib/supabase';
 import { SAMPLE_PRODUCTS } from '@/lib/marketplace';
@@ -231,7 +233,7 @@ export default function ProductDetailScreen() {
     return (
       <View style={styles.errorContainer}>
         <Text style={styles.errorText}>Product not found</Text>
-        <TouchableOpacity style={styles.backHomeButton} onPress={() => router.back()}>
+        <TouchableOpacity style={styles.backHomeButton} onPress={() => debouncedRouter.back()}>
           <Text style={styles.backHomeText}>Go Back</Text>
         </TouchableOpacity>
       </View>
@@ -268,7 +270,7 @@ export default function ProductDetailScreen() {
 
               if (error) throw error;
               Alert.alert('Deleted', 'The listing has been removed.');
-              router.replace('/services');
+              debouncedRouter.replace('/services');
             } catch (err) {
               console.error('Error deleting listing', err);
               Alert.alert('Error', 'Could not delete this listing.');
@@ -283,7 +285,7 @@ export default function ProductDetailScreen() {
     <View style={styles.container}>
       {/* Header */}
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
+        <TouchableOpacity onPress={() => debouncedRouter.back()} style={styles.backButton}>
           <ArrowLeft size={24} color="#020617" />
         </TouchableOpacity>
         <View style={styles.headerActions}>
@@ -385,7 +387,7 @@ export default function ProductDetailScreen() {
                 {isOwner && (
                   <TouchableOpacity
                     style={styles.ownerActionButton}
-                    onPress={() => router.push(`/services/edit/${product.id}`)}
+                    onPress={() => debouncedRouter.push(`/services/edit/${product.id}`)}
                   >
                     <Text style={styles.ownerActionText}>Edit ad</Text>
                   </TouchableOpacity>
@@ -435,7 +437,7 @@ export default function ProductDetailScreen() {
                     <TouchableOpacity
                       key={item.id}
                       style={styles.moreItemCard}
-                      onPress={() => router.push(`/services/${item.id}`)}
+                      onPress={() => debouncedRouter.push(`/services/${item.id}`)}
                     >
                       <Image
                         source={{ uri: item.image_url || 'https://images.unsplash.com/photo-1460925895917-afdab827c52f?w=800' }}

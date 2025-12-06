@@ -1,7 +1,9 @@
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator, Alert } from 'react-native';
 import { useFonts, Inter_400Regular, Inter_600SemiBold } from '@expo-google-fonts/inter';
 import { useEffect, useState } from 'react';
-import { SplashScreen, useRouter } from 'expo-router';
+import { SplashScreen, useRouter } from 'expo-router'
+import { DebouncedTouchable } from '@/components/DebouncedTouchable';
+import { debouncedRouter } from '@/utils/navigationDebounce';;
 import { ArrowLeft, Heart, Calendar, DollarSign, Receipt, Download, CheckCircle } from 'lucide-react-native';
 import { supabase } from '../../../lib/supabase';
 
@@ -44,7 +46,7 @@ export default function MyDonationsScreen() {
 
       if (!user) {
         Alert.alert('Not Signed In', 'Please sign in to view your donations', [
-          { text: 'OK', onPress: () => router.back() }
+          { text: 'OK', onPress: () => debouncedRouter.back() }
         ]);
         return;
       }
@@ -112,7 +114,7 @@ export default function MyDonationsScreen() {
   return (
     <View style={styles.container}>
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
+        <TouchableOpacity onPress={() => debouncedRouter.back()} style={styles.backButton}>
           <ArrowLeft size={24} color="#000000" />
         </TouchableOpacity>
         <Text style={styles.title}>My Donations</Text>
@@ -144,7 +146,7 @@ export default function MyDonationsScreen() {
               </Text>
               <TouchableOpacity 
                 style={styles.browseButton}
-                onPress={() => router.back()}
+                onPress={() => debouncedRouter.back()}
               >
                 <Text style={styles.browseButtonText}>Browse Campaigns</Text>
               </TouchableOpacity>

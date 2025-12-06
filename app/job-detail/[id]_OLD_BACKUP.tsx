@@ -1,7 +1,9 @@
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Image, ActivityIndicator } from 'react-native';
 import { useFonts, Inter_400Regular, Inter_600SemiBold, Inter_700Bold } from '@expo-google-fonts/inter';
 import { useEffect, useState } from 'react';
-import { SplashScreen, useRouter, useLocalSearchParams } from 'expo-router';
+import { SplashScreen, useRouter, useLocalSearchParams } from 'expo-router'
+import { DebouncedTouchable } from '@/components/DebouncedTouchable';
+import { debouncedRouter } from '@/utils/navigationDebounce';;
 import { ArrowLeft, Briefcase, MapPin, Building2, Wallet, Clock, Mail, Phone, Calendar, Edit } from 'lucide-react-native';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/hooks/useAuth';
@@ -130,7 +132,7 @@ export default function JobDetailScreen() {
     return (
       <View style={[styles.container, styles.centerContent]}>
         <Text style={styles.errorText}>Job not found</Text>
-        <TouchableOpacity style={styles.backButtonAlt} onPress={() => router.back()}>
+        <TouchableOpacity style={styles.backButtonAlt} onPress={() => debouncedRouter.back()}>
           <Text style={styles.backButtonText}>Go Back</Text>
         </TouchableOpacity>
       </View>
@@ -140,14 +142,14 @@ export default function JobDetailScreen() {
   return (
     <View style={styles.container}>
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.push('/workplace/recent-opportunities' as any)} style={styles.backButton}>
+        <TouchableOpacity onPress={() => debouncedRouter.push('/workplace/recent-opportunities')} style={styles.backButton}>
           <ArrowLeft size={24} color="#000000" />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Job Details</Text>
         {job.isOwner && (
           <TouchableOpacity 
             style={styles.editButton}
-            onPress={() => router.push(`/edit-job-listing/${job.id}` as any)}
+            onPress={() => debouncedRouter.push(`/edit-job-listing/${job.id}`)}
           >
             <Edit size={20} color="#4169E1" />
           </TouchableOpacity>
@@ -247,7 +249,7 @@ export default function JobDetailScreen() {
         {!job.isOwner && job.daysUntilDeadline > 0 && (
           <TouchableOpacity 
             style={styles.applyButton}
-            onPress={() => router.push(`/job-application/${job.id}` as any)}
+            onPress={() => debouncedRouter.push(`/job-application/${job.id}`)}
           >
             <LinearGradient
               colors={['#4169E1', '#3B5DCB']}

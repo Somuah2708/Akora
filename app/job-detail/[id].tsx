@@ -1,7 +1,9 @@
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Image, ActivityIndicator, Dimensions, Share, Animated, Linking, Alert } from 'react-native';
 import { useFonts, Inter_400Regular, Inter_500Medium, Inter_600SemiBold, Inter_700Bold } from '@expo-google-fonts/inter';
 import { useEffect, useState, useRef } from 'react';
-import { SplashScreen, useRouter, useLocalSearchParams } from 'expo-router';
+import { SplashScreen, useRouter, useLocalSearchParams } from 'expo-router'
+import { DebouncedTouchable } from '@/components/DebouncedTouchable';
+import { debouncedRouter } from '@/utils/navigationDebounce';;
 import { ArrowLeft, Briefcase, MapPin, Building2, Wallet, Clock, Calendar, Edit, Share2, Bookmark, ChevronRight, TrendingUp, Users, CheckCircle, AlertCircle, Mail, Trash2 } from 'lucide-react-native';
 import { supabase, Job } from '@/lib/supabase';
 import { useAuth } from '@/hooks/useAuth';
@@ -152,7 +154,7 @@ export default function JobDetailScreen() {
               if (error) throw error;
 
               Alert.alert('Success', 'Job listing deleted successfully', [
-                { text: 'OK', onPress: () => router.replace('/workplace') }
+                { text: 'OK', onPress: () => debouncedRouter.replace('/workplace') }
               ]);
             } catch (error: any) {
               console.error('Error deleting job:', error);
@@ -192,7 +194,7 @@ export default function JobDetailScreen() {
       <View style={[styles.container, styles.centerContent]}>
         <Briefcase size={64} color="#E5E7EB" />
         <Text style={styles.errorText}>Job not found</Text>
-        <TouchableOpacity style={styles.backButtonAlt} onPress={() => router.back()}>
+        <TouchableOpacity style={styles.backButtonAlt} onPress={() => debouncedRouter.back()}>
           <Text style={styles.backButtonText}>Go Back</Text>
         </TouchableOpacity>
       </View>
@@ -210,7 +212,7 @@ export default function JobDetailScreen() {
     <View style={styles.container}>
       {/* Sticky Header */}
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()} style={styles.headerButton}>
+        <TouchableOpacity onPress={() => debouncedRouter.back()} style={styles.headerButton}>
           <ArrowLeft size={24} color="#1F2937" />
         </TouchableOpacity>
         
@@ -240,7 +242,7 @@ export default function JobDetailScreen() {
           {isOwner && (
             <TouchableOpacity
               style={styles.headerButton}
-              onPress={() => router.push(`/edit-job-listing/${job.id}` as any)}
+              onPress={() => debouncedRouter.push(`/edit-job-listing/${job.id}`)}
             >
               <Edit size={20} color="#4169E1" />
             </TouchableOpacity>
@@ -338,7 +340,7 @@ export default function JobDetailScreen() {
         {isOwner ? (
           <TouchableOpacity
             style={styles.statusBanner}
-            onPress={() => router.push(`/job-applications-review/${job.id}` as any)}
+            onPress={() => debouncedRouter.push(`/job-applications-review/${job.id}`)}
           >
             <LinearGradient
               colors={['#10B981', '#059669']}
@@ -424,7 +426,7 @@ export default function JobDetailScreen() {
         <View style={styles.fabContainer}>
           <TouchableOpacity
             style={styles.fab}
-            onPress={() => router.push(`/job-application/${job.id}` as any)}
+            onPress={() => debouncedRouter.push(`/job-application/${job.id}`)}
             activeOpacity={0.9}
           >
             <LinearGradient
@@ -444,7 +446,7 @@ export default function JobDetailScreen() {
         <View style={styles.fabContainer}>
           <TouchableOpacity
             style={styles.fab}
-            onPress={() => router.push(`/job-applications-review/${job.id}` as any)}
+            onPress={() => debouncedRouter.push(`/job-applications-review/${job.id}`)}
             activeOpacity={0.9}
           >
             <LinearGradient

@@ -1,7 +1,9 @@
 import { View, Text, StyleSheet, ScrollView, Image, TouchableOpacity, TextInput, Dimensions, Animated, Modal, RefreshControl } from 'react-native';
 import { useFonts, Inter_400Regular, Inter_600SemiBold } from '@expo-google-fonts/inter';
 import { useEffect, useState, useCallback, useRef } from 'react';
-import { SplashScreen, useRouter } from 'expo-router';
+import { SplashScreen, useRouter } from 'expo-router'
+import { DebouncedTouchable } from '@/components/DebouncedTouchable';
+import { debouncedRouter } from '@/utils/navigationDebounce';;
 import { Search, Filter, ArrowDownWideNarrow as SortDesc, MapPin, SearchSlash, ArrowLeft, Briefcase, GraduationCap, Wrench, Palette, Coffee, Stethoscope, Book, Camera, Plus, ShoppingBag, X, Bookmark, Trash2, Star } from 'lucide-react-native';
 import { supabase, type ProductService, type Profile, type Region, type City, type LocationWithCount } from '@/lib/supabase';
 import { SAMPLE_PRODUCTS } from '@/lib/marketplace';
@@ -296,7 +298,7 @@ const fetchLocations = useCallback(async () => {
   const handleCategoryPress = (categoryId: string) => {
     const category = CATEGORIES.find(cat => cat.id === categoryId);
     if (category) {
-      router.push(`/services/category/${encodeURIComponent(category.name)}`);
+      debouncedRouter.push(`/services/category/${encodeURIComponent(category.name)}`);
     }
   };
 
@@ -305,7 +307,7 @@ const fetchLocations = useCallback(async () => {
       Alert.alert('Authentication Required', 'Please sign in to add a listing');
       return;
     }
-    router.push('/services/create');
+    debouncedRouter.push('/services/create');
   };
 
   const handleAddNewLocation = async () => {
@@ -832,7 +834,7 @@ const fetchLocations = useCallback(async () => {
         }
       >
         <View style={styles.header}>
-          <TouchableOpacity onPress={() => router.push('/(tabs)/hub')} style={styles.backButton}>
+          <TouchableOpacity onPress={() => debouncedRouter.push('/(tabs)/hub')} style={styles.backButton}>
             <ArrowLeft size={24} color="#020617" />
           </TouchableOpacity>
           <View style={styles.headerTextContainer}>
@@ -840,7 +842,7 @@ const fetchLocations = useCallback(async () => {
             <Text style={styles.subtitle}>Buy & sell within the Akora community</Text>
           </View>
           <TouchableOpacity 
-            onPress={() => router.push('/services/saved')} 
+            onPress={() => debouncedRouter.push('/services/saved')} 
             style={styles.bookmarkButton}
           >
             <Star size={24} color="#020617" />
@@ -964,7 +966,7 @@ const fetchLocations = useCallback(async () => {
               <TouchableOpacity 
                 key={product.id} 
                 style={styles.productCard}
-                onPress={() => router.push(`/listing/${product.id}`)}
+                onPress={() => debouncedRouter.push(`/listing/${product.id}`)}
               >
                 <Image 
                   source={{ uri: (product as any).image_urls?.[0] || product.image_url || 'https://images.unsplash.com/photo-1460925895917-afdab827c52f?w=800&auto=format&fit=crop&q=60' }} 

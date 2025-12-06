@@ -13,7 +13,9 @@ import {
   Image,
   Linking,
 } from 'react-native';
-import { useRouter } from 'expo-router';
+import { useRouter } from 'expo-router'
+import { DebouncedTouchable } from '@/components/DebouncedTouchable';
+import { debouncedRouter } from '@/utils/navigationDebounce';;
 import { Ionicons } from '@expo/vector-icons';
 import * as DocumentPicker from 'expo-document-picker';
 import { supabase } from '@/lib/supabase';
@@ -161,7 +163,7 @@ export default function AdminAlumniMentorsScreen() {
     
     if (!profile?.is_admin) {
       Alert.alert('Access Denied', 'You do not have permission to access this page.');
-      router.back();
+      debouncedRouter.back();
     }
   }, [profile, router]);
 
@@ -590,7 +592,7 @@ export default function AdminAlumniMentorsScreen() {
       >
         {/* Header */}
         <View style={styles.header}>
-          <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
+          <TouchableOpacity onPress={() => debouncedRouter.back()} style={styles.backButton}>
             <Ionicons name="arrow-back" size={24} color="#000" />
           </TouchableOpacity>
           <View style={styles.headerContent}>

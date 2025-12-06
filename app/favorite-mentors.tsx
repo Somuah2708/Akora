@@ -9,7 +9,9 @@ import {
   ActivityIndicator,
   Alert,
 } from 'react-native';
-import { useRouter } from 'expo-router';
+import { useRouter } from 'expo-router'
+import { DebouncedTouchable } from '@/components/DebouncedTouchable';
+import { debouncedRouter } from '@/utils/navigationDebounce';;
 import { Ionicons } from '@expo/vector-icons';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '@/hooks/useAuth';
@@ -114,7 +116,7 @@ export default function FavoriteMentors() {
   };
 
   const handleRequestMentorship = (mentorId: string) => {
-    router.push(`/request-mentorship?mentorId=${mentorId}`);
+    debouncedRouter.push(`/request-mentorship?mentorId=${mentorId}`);
   };
 
   if (loading) {
@@ -130,7 +132,7 @@ export default function FavoriteMentors() {
     <View style={styles.container}>
       {/* Header */}
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
+        <TouchableOpacity onPress={() => debouncedRouter.back()} style={styles.backButton}>
           <Ionicons name="arrow-back" size={24} color="#000" />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Favorite Mentors</Text>
@@ -151,7 +153,7 @@ export default function FavoriteMentors() {
             </Text>
             <TouchableOpacity
               style={styles.browseButton}
-              onPress={() => router.push('/education')}
+              onPress={() => debouncedRouter.push('/education')}
             >
               <Text style={styles.browseButtonText}>Browse Mentors</Text>
             </TouchableOpacity>

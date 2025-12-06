@@ -12,7 +12,9 @@ import {
 import { Plus, Search, Users, Lock, Globe, Calendar, GraduationCap, ArrowLeft, X, MessageCircle } from 'lucide-react-native';
 import { useAuth } from '@/hooks/useAuth';
 import { supabase } from '@/lib/supabase';
-import { useRouter } from 'expo-router';
+import { useRouter } from 'expo-router'
+import { DebouncedTouchable } from '@/components/DebouncedTouchable';
+import { debouncedRouter } from '@/utils/navigationDebounce';;
 
 interface Circle {
   id: string;
@@ -358,7 +360,7 @@ export default function CirclesScreen() {
       }
 
       if (chat) {
-        router.push(`/chat/${chat.id}` as any);
+        debouncedRouter.push(`/chat/${chat.id}`);
       } else {
         Alert.alert('Info', 'Chat not found for this circle');
       }
@@ -375,7 +377,7 @@ export default function CirclesScreen() {
     }
     
     console.log('Opening group chat for circle:', circle.name, 'Group ID:', circle.group_chat_id);
-    router.push(`/chat/group/${circle.group_chat_id}` as any);
+    debouncedRouter.push(`/chat/group/${circle.group_chat_id}`);
   };
 
   const handleJoinRequest = async (requestId: string, action: 'approve' | 'reject') => {
@@ -444,7 +446,7 @@ export default function CirclesScreen() {
       style={styles.circleCard}
       onPress={() => {
         console.log('🔵 Circle card pressed, navigating to:', `/circles/${circle.id}`);
-        router.push(`/circles/${circle.id}` as any);
+        debouncedRouter.push(`/circles/${circle.id}`);
       }}
       activeOpacity={0.7}
     >
@@ -512,7 +514,7 @@ export default function CirclesScreen() {
       <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
         {/* Header */}
         <View style={styles.header}>
-          <TouchableOpacity onPress={() => router.push('/(tabs)')} style={styles.backButton}>
+          <TouchableOpacity onPress={() => debouncedRouter.push('/(tabs)')} style={styles.backButton}>
             <ArrowLeft size={24} color="#333" />
           </TouchableOpacity>
           <View style={styles.headerTextContainer}>

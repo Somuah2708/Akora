@@ -9,7 +9,9 @@ import {
   RefreshControl,
   Alert,
 } from 'react-native';
-import { router } from 'expo-router';
+import { router } from 'expo-router'
+import { DebouncedTouchable } from '@/components/DebouncedTouchable';
+import { debouncedRouter } from '@/utils/navigationDebounce';;
 import { ArrowLeft, Bookmark, Heart, Star, Trash2 } from 'lucide-react-native';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/hooks/useAuth';
@@ -190,7 +192,7 @@ export default function SavedMentorsScreen() {
     return (
       <View style={styles.container}>
         <View style={styles.header}>
-          <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
+          <TouchableOpacity onPress={() => debouncedRouter.back()} style={styles.backButton}>
             <ArrowLeft size={24} color="#000" />
           </TouchableOpacity>
           <Text style={styles.headerTitle}>Saved Mentors</Text>
@@ -207,7 +209,7 @@ export default function SavedMentorsScreen() {
     <View style={styles.container}>
       {/* Header */}
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
+        <TouchableOpacity onPress={() => debouncedRouter.back()} style={styles.backButton}>
           <ArrowLeft size={24} color="#000" />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Saved Mentors</Text>
@@ -234,7 +236,7 @@ export default function SavedMentorsScreen() {
             <View key={mentor.mentor_id} style={styles.mentorCard}>
               <TouchableOpacity
                 style={styles.cardContent}
-                onPress={() => router.push(`/education/mentor/${mentor.mentor_id}` as any)}
+                onPress={() => debouncedRouter.push(`/education/mentor/${mentor.mentor_id}`)}
                 activeOpacity={0.95}
               >
                 <Image
@@ -293,7 +295,7 @@ export default function SavedMentorsScreen() {
             </Text>
             <TouchableOpacity
               style={styles.browseButton}
-              onPress={() => router.push('/education?tab=mentors')}
+              onPress={() => debouncedRouter.push('/education?tab=mentors')}
             >
               <Text style={styles.browseButtonText}>Browse Mentors</Text>
             </TouchableOpacity>

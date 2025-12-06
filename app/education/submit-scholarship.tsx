@@ -1,6 +1,8 @@
 import { View, Text, StyleSheet, ScrollView, TextInput, TouchableOpacity, Alert, ActivityIndicator, Image } from 'react-native';
 import { useState } from 'react';
-import { useRouter } from 'expo-router';
+import { useRouter } from 'expo-router'
+import { DebouncedTouchable } from '@/components/DebouncedTouchable';
+import { debouncedRouter } from '@/utils/navigationDebounce';;
 import { ArrowLeft, Award, DollarSign, Calendar, FileText, Globe, Send, CheckCircle, Upload, X } from 'lucide-react-native';
 import { useAuth } from '@/hooks/useAuth';
 import { supabase } from '@/lib/supabase';
@@ -172,7 +174,7 @@ export default function SubmitScholarshipScreen() {
         [
           {
             text: 'OK',
-            onPress: () => router.back(),
+            onPress: () => debouncedRouter.back(),
           },
         ]
       );
@@ -188,7 +190,7 @@ export default function SubmitScholarshipScreen() {
     <View style={styles.container}>
       {/* Header */}
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
+        <TouchableOpacity onPress={() => debouncedRouter.back()} style={styles.backButton}>
           <ArrowLeft size={24} color="#000000" />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Submit Scholarship</Text>

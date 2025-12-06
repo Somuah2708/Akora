@@ -1,7 +1,9 @@
 import { useEffect, useState } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, TextInput, Alert, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useRouter } from 'expo-router';
+import { useRouter } from 'expo-router'
+import { DebouncedTouchable } from '@/components/DebouncedTouchable';
+import { debouncedRouter } from '@/utils/navigationDebounce';;
 import { ArrowLeft, Save, DollarSign, FileText, Award, Smartphone, Building2, Clock } from 'lucide-react-native';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/hooks/useAuth';
@@ -59,7 +61,7 @@ export default function AdminSettingsScreen() {
 
       if (userRole !== 'admin' && userRole !== 'staff') {
         Alert.alert('Access Denied', 'Admin access required');
-        router.back();
+        debouncedRouter.back();
         return;
       }
 
@@ -220,7 +222,7 @@ CREATE POLICY "admin_configs_update" ON admin_configs
     <SafeAreaView style={styles.container} edges={['top']}>
       {/* Header */}
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
+        <TouchableOpacity onPress={() => debouncedRouter.back()} style={styles.backButton}>
           <ArrowLeft size={24} color="#111827" />
         </TouchableOpacity>
         <View style={{ flex: 1 }}>

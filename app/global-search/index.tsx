@@ -12,7 +12,9 @@ import {
   Dimensions,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { router } from 'expo-router';
+import { router } from 'expo-router'
+import { DebouncedTouchable } from '@/components/DebouncedTouchable';
+import { debouncedRouter } from '@/utils/navigationDebounce';;
 import { supabase } from '../../lib/supabase';
 import type { Profile, Post, TrendingArticle, ProductService, Job, Campaign, Livestream } from '../../lib/supabase';
 import { Search, X, User, FileText, TrendingUp, ShoppingBag, Briefcase, Heart, Radio, ChevronRight } from 'lucide-react-native';
@@ -240,25 +242,25 @@ export default function GlobalSearchScreen() {
   const handleResultPress = (result: SearchResult) => {
     switch (result.type) {
       case 'user':
-        router.push(`/profile-view/${result.id}` as any);
+        debouncedRouter.push(`/profile-view/${result.id}`);
         break;
       case 'post':
-        router.push(`/post-comments/${result.id}`);
+        debouncedRouter.push(`/post-comments/${result.id}`);
         break;
       case 'article':
-        router.push(`/trending-article/${result.id}`);
+        debouncedRouter.push(`/trending-article/${result.id}`);
         break;
       case 'product':
-        router.push(`/product-details/${result.id}` as any);
+        debouncedRouter.push(`/product-details/${result.id}`);
         break;
       case 'job':
-        router.push(`/job-details/${result.id}` as any);
+        debouncedRouter.push(`/job-details/${result.id}`);
         break;
       case 'campaign':
-        router.push(`/campaign-details/${result.id}` as any);
+        debouncedRouter.push(`/campaign-details/${result.id}`);
         break;
       case 'livestream':
-        router.push(`/livestream/${result.id}` as any);
+        debouncedRouter.push(`/livestream/${result.id}`);
         break;
     }
   };
@@ -314,7 +316,7 @@ export default function GlobalSearchScreen() {
       <View style={styles.header}>
         <TouchableOpacity 
           style={styles.backButton}
-          onPress={() => router.back()}
+          onPress={() => debouncedRouter.back()}
         >
           <X size={24} color="#000000" />
         </TouchableOpacity>

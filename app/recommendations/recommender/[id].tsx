@@ -1,6 +1,8 @@
 import { useEffect, useState, useCallback } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, ActivityIndicator, Alert, TextInput, KeyboardAvoidingView, Platform, Linking } from 'react-native';
-import { useRouter, useLocalSearchParams } from 'expo-router';
+import { useRouter, useLocalSearchParams } from 'expo-router'
+import { DebouncedTouchable } from '@/components/DebouncedTouchable';
+import { debouncedRouter } from '@/utils/navigationDebounce';;
 import { ArrowLeft, Check, XCircle, Send, Link as LinkIcon } from 'lucide-react-native';
 import { supabase } from '@/lib/supabase';
 import { getSignedEvidenceUrls } from '@/lib/evidence';
@@ -143,7 +145,7 @@ export default function RecommenderPortalScreen() {
   return (
     <KeyboardAvoidingView style={styles.container} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
+        <TouchableOpacity onPress={() => debouncedRouter.back()} style={styles.backButton}>
           <ArrowLeft size={22} color="#000" />
         </TouchableOpacity>
         <Text style={styles.title}>Recommender Portal</Text>

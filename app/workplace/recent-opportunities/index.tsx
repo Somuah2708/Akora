@@ -1,7 +1,9 @@
 import { View, Text, StyleSheet, ScrollView, Image, TouchableOpacity, ActivityIndicator } from 'react-native';
 import { useFonts, Inter_400Regular, Inter_600SemiBold } from '@expo-google-fonts/inter';
 import { useEffect, useState, useCallback } from 'react';
-import { SplashScreen, useRouter, useFocusEffect } from 'expo-router';
+import { SplashScreen, useRouter, useFocusEffect } from 'expo-router'
+import { DebouncedTouchable } from '@/components/DebouncedTouchable';
+import { debouncedRouter } from '@/utils/navigationDebounce';;
 import { ArrowLeft, MapPin, Wallet, Clock, Calendar, Briefcase } from 'lucide-react-native';
 import { supabase } from '@/lib/supabase';
 
@@ -59,7 +61,7 @@ export default function RecentOpportunitiesScreen() {
   return (
     <View style={styles.container}>
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.push('/workplace' as any)} style={styles.backButton}>
+        <TouchableOpacity onPress={() => debouncedRouter.push('/workplace')} style={styles.backButton}>
           <ArrowLeft size={24} color="#000000" />
         </TouchableOpacity>
         <Text style={styles.title}>Recent Opportunities</Text>
@@ -107,7 +109,7 @@ export default function RecentOpportunitiesScreen() {
                 <TouchableOpacity 
                   key={job.id} 
                   style={styles.jobCard}
-                  onPress={() => router.push(`/job-detail/${job.id}` as any)}
+                  onPress={() => debouncedRouter.push(`/job-detail/${job.id}`)}
                 >
                   <Image 
                     source={{ uri: imageUri || 'https://images.unsplash.com/photo-1486406146926-c627a92ad1ab?w=800' }} 

@@ -14,7 +14,9 @@ import {
   Dimensions,
 } from 'react-native';
 import { Search, ArrowLeft, Play, Clock, Calendar, Settings, Plus } from 'lucide-react-native';
-import { useRouter } from 'expo-router';
+import { useRouter } from 'expo-router'
+import { DebouncedTouchable } from '@/components/DebouncedTouchable';
+import { debouncedRouter } from '@/utils/navigationDebounce';;
 import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../hooks/useAuth';
 
@@ -260,7 +262,7 @@ export default function LiveStreamScreen() {
     <View style={styles.container}>
       {/* Header */}
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
+        <TouchableOpacity onPress={() => debouncedRouter.back()} style={styles.backButton}>
           <ArrowLeft size={24} color="#000000" strokeWidth={2} />
         </TouchableOpacity>
         <View style={styles.headerTextContainer}>
@@ -274,7 +276,7 @@ export default function LiveStreamScreen() {
         {(profile?.role === 'admin' || profile?.is_admin) && (
           <TouchableOpacity 
             style={styles.adminButton}
-            onPress={() => router.push('/live/admin')}
+            onPress={() => debouncedRouter.push('/live/admin')}
           >
             <Settings size={20} color="#8B0000" strokeWidth={2} />
           </TouchableOpacity>
@@ -361,7 +363,7 @@ export default function LiveStreamScreen() {
       {(profile?.role === 'admin' || profile?.is_admin) && (
         <TouchableOpacity
           style={styles.fab}
-          onPress={() => router.push('/live/admin')}
+          onPress={() => debouncedRouter.push('/live/admin')}
           activeOpacity={0.85}
         >
           <Plus size={28} color="#FFFFFF" strokeWidth={2.5} />

@@ -367,7 +367,8 @@ export async function uploadMedia(
     // Fetch file data in a way that works in Expo Go / React Native
     const response = await fetch(processedUri as any);
     const anyResponse = response as any;
-    let blob: Blob;
+    let blob: Blob | null = null;
+    
     if (typeof anyResponse.blob === 'function') {
       // Web-style blob API (may be polyfilled)
       blob = await anyResponse.blob();
@@ -380,6 +381,10 @@ export async function uploadMedia(
       });
     } else {
       throw new Error('Unable to read file data for upload (no blob/arrayBuffer on response)');
+    }
+    
+    if (!blob) {
+      throw new Error('Failed to create blob from file data');
     }
     
     onProgress?.(20);

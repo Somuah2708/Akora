@@ -1,6 +1,8 @@
 import { View, Text, StyleSheet, ScrollView, TextInput, TouchableOpacity, Alert, ActivityIndicator, Modal, FlatList } from 'react-native';
 import { useState, useEffect } from 'react';
-import { useRouter } from 'expo-router';
+import { useRouter } from 'expo-router'
+import { DebouncedTouchable } from '@/components/DebouncedTouchable';
+import { debouncedRouter } from '@/utils/navigationDebounce';;
 import { ArrowLeft, User, Briefcase, GraduationCap, Heart, Calendar, FileText, Upload, CheckCircle, ChevronDown, X } from 'lucide-react-native';
 import { useAuth } from '@/hooks/useAuth';
 import { supabase } from '@/lib/supabase';
@@ -240,7 +242,7 @@ export default function VolunteerMentorScreen() {
         [
           {
             text: 'OK',
-            onPress: () => router.back(),
+            onPress: () => debouncedRouter.back(),
           },
         ]
       );
@@ -256,7 +258,7 @@ export default function VolunteerMentorScreen() {
     <View style={styles.container}>
       {/* Header */}
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
+        <TouchableOpacity onPress={() => debouncedRouter.back()} style={styles.backButton}>
           <ArrowLeft size={24} color="#000000" />
         </TouchableOpacity>
         <View style={styles.headerText}>

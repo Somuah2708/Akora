@@ -1,6 +1,8 @@
 import React, { useEffect, useState } from 'react';
 import { View, Text, StyleSheet, TextInput, TouchableOpacity, Alert, ActivityIndicator, ScrollView, Image, Dimensions } from 'react-native';
-import { useLocalSearchParams, useRouter, SplashScreen } from 'expo-router';
+import { useLocalSearchParams, useRouter, SplashScreen } from 'expo-router'
+import { DebouncedTouchable } from '@/components/DebouncedTouchable';
+import { debouncedRouter } from '@/utils/navigationDebounce';;
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/hooks/useAuth';
 import { ArrowLeft, Trash2, Save, CheckCircle, Image as ImageIcon } from 'lucide-react-native';
@@ -173,7 +175,7 @@ export default function EditListing() {
     } catch (err) {
       console.error('Failed to fetch listing', err);
       Alert.alert('Error', 'Failed to load listing');
-      router.back();
+      debouncedRouter.back();
     } finally {
       setLoading(false);
     }
@@ -328,9 +330,9 @@ export default function EditListing() {
           Alert.alert('✅ Success!', 'Your listing has been updated successfully!');
           setTimeout(() => {
             if ((isEducationUpdate || isMentorUpdate) && (profile?.is_admin || profile?.role === 'admin')) {
-              router.replace('/education/admin');
+              debouncedRouter.replace('/education/admin');
             } else {
-              router.replace('/my-listings');
+              debouncedRouter.replace('/my-listings');
             }
           }, 500);
     } catch (err) {
@@ -393,9 +395,9 @@ export default function EditListing() {
         
         // Navigate to my-listings page
         if ((category === 'Universities' || category === 'Scholarships' || category === 'Alumni Mentors') && (profile?.is_admin || profile?.role === 'admin')) {
-          router.push('/education/admin');
+          debouncedRouter.push('/education/admin');
         } else {
-          router.push('/my-listings');
+          debouncedRouter.push('/my-listings');
         }
         
         // Show success message after navigation
@@ -440,7 +442,7 @@ export default function EditListing() {
       >
         <View style={styles.header}>
           <TouchableOpacity
-            onPress={() => router.push('/my-listings')}
+            onPress={() => debouncedRouter.push('/my-listings')}
             style={styles.backButton}
           >
             <ArrowLeft size={24} color="#FFFFFF" />

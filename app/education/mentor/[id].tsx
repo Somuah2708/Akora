@@ -1,6 +1,8 @@
 import { View, Text, StyleSheet, ScrollView, Image, TouchableOpacity, TextInput, Alert, Linking } from 'react-native';
 import React, { useState, useEffect } from 'react';
-import { useRouter, useLocalSearchParams, useFocusEffect } from 'expo-router';
+import { useRouter, useLocalSearchParams, useFocusEffect } from 'expo-router'
+import { DebouncedTouchable } from '@/components/DebouncedTouchable';
+import { debouncedRouter } from '@/utils/navigationDebounce';;
 import { ArrowLeft, Building2, GraduationCap, Clock, MapPin, Linkedin, Mail, MessageCircle, Phone, Send, FileText, UserCircle2 } from 'lucide-react-native';
 import { useAuth } from '@/hooks/useAuth';
 import { supabase } from '@/lib/supabase';
@@ -78,7 +80,7 @@ export default function MentorDetailScreen() {
     } catch (error: any) {
       console.error('Error fetching mentor:', error);
       Alert.alert('Error', 'Failed to load mentor details');
-      router.back();
+      debouncedRouter.back();
     } finally {
       setLoading(false);
     }
@@ -255,7 +257,7 @@ export default function MentorDetailScreen() {
               setSelectedAreas([]);
               setMessage('');
               // Navigate back to mentors list
-              router.back();
+              debouncedRouter.back();
             },
           },
         ]
@@ -290,7 +292,7 @@ export default function MentorDetailScreen() {
     return (
       <View style={styles.container}>
         <View style={styles.header}>
-          <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
+          <TouchableOpacity onPress={() => debouncedRouter.back()} style={styles.backButton}>
             <ArrowLeft size={24} color="#000000" />
           </TouchableOpacity>
         </View>
@@ -307,7 +309,7 @@ export default function MentorDetailScreen() {
     <View style={styles.container}>
       {/* Header */}
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
+        <TouchableOpacity onPress={() => debouncedRouter.back()} style={styles.backButton}>
           <ArrowLeft size={24} color="#000000" />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Mentor Profile</Text>
@@ -325,7 +327,7 @@ export default function MentorDetailScreen() {
               <TouchableOpacity
                 style={styles.viewProfileButton}
                 onPress={() => {
-                  router.push(`/user-profile/${mentor.user_id}`);
+                  debouncedRouter.push(`/user-profile/${mentor.user_id}`);
                 }}
               >
                 <UserCircle2 size={20} color="#fff" />

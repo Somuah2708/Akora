@@ -8,7 +8,9 @@ import {
   ActivityIndicator,
   Dimensions,
 } from 'react-native';
-import { useRouter } from 'expo-router';
+import { useRouter } from 'expo-router'
+import { DebouncedTouchable } from '@/components/DebouncedTouchable';
+import { debouncedRouter } from '@/utils/navigationDebounce';;
 import { useFocusEffect } from '@react-navigation/native';
 import { 
   ArrowLeft, 
@@ -227,7 +229,7 @@ export default function EventCalendarScreen() {
       <TouchableOpacity
         key={event.id}
         style={styles.eventCard}
-        onPress={() => router.push(`/events/${event.id}` as any)}
+        onPress={() => debouncedRouter.push(`/events/${event.id}`)}
         activeOpacity={0.7}
       >
         <LinearGradient
@@ -258,7 +260,7 @@ export default function EventCalendarScreen() {
                   <TouchableOpacity
                     onPress={(e) => {
                       e.stopPropagation();
-                      router.push(`/create-event?edit=${event.id}` as any);
+                      debouncedRouter.push(`/create-event?edit=${event.id}`);
                     }}
                     style={styles.editButton}
                   >
@@ -326,13 +328,13 @@ export default function EventCalendarScreen() {
         {/* Fixed Back Button */}
         <View style={styles.fixedHeaderContainer}>
           <View style={styles.fixedHeader}>
-            <TouchableOpacity onPress={() => router.back()} style={styles.backButtonFixed}>
+            <TouchableOpacity onPress={() => debouncedRouter.back()} style={styles.backButtonFixed}>
               <ArrowLeft size={24} color="#1E3A8A" />
             </TouchableOpacity>
             {isAdmin && (
               <TouchableOpacity
                 style={styles.addButtonFixed}
-                onPress={() => router.push('/create-event' as any)}
+                onPress={() => debouncedRouter.push('/create-event')}
               >
                 <Plus size={24} color="#1E3A8A" />
               </TouchableOpacity>
@@ -469,7 +471,7 @@ export default function EventCalendarScreen() {
             {isAdmin && (
               <TouchableOpacity
                 style={styles.emptyButton}
-                onPress={() => router.push('/create-event' as any)}
+                onPress={() => debouncedRouter.push('/create-event')}
               >
                 <Plus size={20} color="#FFFFFF" />
                 <Text style={styles.emptyButtonText}>Add Event</Text>

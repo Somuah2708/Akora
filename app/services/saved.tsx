@@ -2,7 +2,9 @@ import { View, Text, StyleSheet, ScrollView, Image, TouchableOpacity, Dimensions
 import { useFonts, Inter_400Regular, Inter_600SemiBold } from '@expo-google-fonts/inter';
 import { useEffect, useState } from 'react';
 import { useRefresh } from '@/hooks/useRefresh';
-import { SplashScreen, useRouter } from 'expo-router';
+import { SplashScreen, useRouter } from 'expo-router'
+import { DebouncedTouchable } from '@/components/DebouncedTouchable';
+import { debouncedRouter } from '@/utils/navigationDebounce';;
 import { ArrowLeft, X } from 'lucide-react-native';
 import { supabase, type ProductService, type Profile } from '@/lib/supabase';
 import { useAuth } from '@/hooks/useAuth';
@@ -151,7 +153,7 @@ export default function SavedListingsScreen() {
   return (
     <View style={styles.container}>
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
+        <TouchableOpacity onPress={() => debouncedRouter.back()} style={styles.backButton}>
           <ArrowLeft size={24} color="#000000" />
         </TouchableOpacity>
         <View style={styles.headerTextContainer}>
@@ -193,7 +195,7 @@ export default function SavedListingsScreen() {
                   <X size={16} color="#FFFFFF" />
                 </TouchableOpacity>
                 <TouchableOpacity 
-                  onPress={() => router.push(`/listing/${product.id}`)}
+                  onPress={() => debouncedRouter.push(`/listing/${product.id}`)}
                   style={styles.cardContent}
                 >
                   <Image 

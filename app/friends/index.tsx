@@ -1,6 +1,8 @@
 import { View, Text, StyleSheet, TouchableOpacity, FlatList, Image, TextInput, ActivityIndicator, Alert } from 'react-native';
 import { useState, useEffect } from 'react';
-import { useRouter } from 'expo-router';
+import { useRouter } from 'expo-router'
+import { DebouncedTouchable } from '@/components/DebouncedTouchable';
+import { debouncedRouter } from '@/utils/navigationDebounce';;
 import { formatProfileSubtitle } from '@/lib/display';
 import { Search, UserPlus, Check, X, MessageCircle, ArrowLeft } from 'lucide-react-native';
 import { useAuth } from '@/hooks/useAuth';
@@ -125,7 +127,7 @@ export default function FriendsScreen() {
     <View style={styles.listItem}>
       <TouchableOpacity
         style={styles.userInfo}
-        onPress={() => router.push(`/user-profile/${item.friend_id}`)}
+        onPress={() => debouncedRouter.push(`/user-profile/${item.friend_id}`)}
       >
         {item.friend?.avatar_url ? (
           <Image source={{ uri: item.friend.avatar_url }} style={styles.avatar} />
@@ -152,7 +154,7 @@ export default function FriendsScreen() {
       </TouchableOpacity>
       <TouchableOpacity
         style={styles.messageButton}
-        onPress={() => router.push(`/chat/direct/${item.friend_id}`)}
+        onPress={() => debouncedRouter.push(`/chat/direct/${item.friend_id}`)}
       >
         <MessageCircle size={20} color="#4169E1" />
       </TouchableOpacity>
@@ -163,7 +165,7 @@ export default function FriendsScreen() {
     <View style={styles.listItem}>
       <TouchableOpacity 
         style={styles.userInfo}
-        onPress={() => router.push(`/user-profile/${item.sender_id}`)}
+        onPress={() => debouncedRouter.push(`/user-profile/${item.sender_id}`)}
       >
         {item.sender?.avatar_url ? (
           <Image source={{ uri: item.sender.avatar_url }} style={styles.avatar} />
@@ -225,7 +227,7 @@ export default function FriendsScreen() {
       <View style={styles.listItem}>
         <TouchableOpacity 
           style={styles.userInfo}
-          onPress={() => router.push(`/user-profile/${item.id}`)}
+          onPress={() => debouncedRouter.push(`/user-profile/${item.id}`)}
         >
           {item.avatar_url ? (
             <Image source={{ uri: item.avatar_url }} style={styles.avatar} />
@@ -268,7 +270,7 @@ export default function FriendsScreen() {
       <View style={styles.header}>
         <TouchableOpacity 
           style={styles.backButton}
-          onPress={() => router.back()}
+          onPress={() => debouncedRouter.back()}
         >
           <ArrowLeft size={24} color="#000000" />
         </TouchableOpacity>
@@ -375,7 +377,7 @@ export default function FriendsScreen() {
                       <View style={styles.listItem}>
                         <TouchableOpacity
                           style={styles.userInfo}
-                          onPress={() => router.push(`/user-profile/${item.receiver_id}`)}
+                          onPress={() => debouncedRouter.push(`/user-profile/${item.receiver_id}`)}
                         >
                           {item.receiver?.avatar_url ? (
                             <Image source={{ uri: item.receiver.avatar_url }} style={styles.avatar} />

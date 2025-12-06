@@ -1,7 +1,9 @@
 import { View, Text, StyleSheet, ScrollView, Image, TouchableOpacity, TextInput, Dimensions, Alert, RefreshControl, Linking, Modal } from 'react-native';
 import { useFonts, Inter_400Regular, Inter_600SemiBold } from '@expo-google-fonts/inter';
 import { useEffect, useState, useCallback } from 'react';
-import { SplashScreen, useRouter, useFocusEffect } from 'expo-router';
+import { SplashScreen, useRouter, useFocusEffect } from 'expo-router'
+import { DebouncedTouchable } from '@/components/DebouncedTouchable';
+import { debouncedRouter } from '@/utils/navigationDebounce';;
 import { ArrowLeft, ShoppingBag, Search, Heart, Plus, Phone, MessageCircle, Trash2, Edit2, Package, Settings, X } from 'lucide-react-native';
 import { supabase, type SecretariatShopProduct, type Profile } from '@/lib/supabase';
 import { useAuth } from '@/hooks/useAuth';
@@ -255,7 +257,7 @@ export default function SecretariatShopScreen() {
     <View style={styles.container}>
       {/* Header */}
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
+        <TouchableOpacity onPress={() => debouncedRouter.back()} style={styles.backButton}>
           <ArrowLeft size={24} color="#000000" />
         </TouchableOpacity>
         <View style={styles.headerTextContainer}>
@@ -325,7 +327,7 @@ export default function SecretariatShopScreen() {
           <View style={styles.adminActionsContainer}>
             <TouchableOpacity 
               style={styles.postButton}
-              onPress={() => router.push('/secretariat-shop/post-item')}
+              onPress={() => debouncedRouter.push('/secretariat-shop/post-item')}
             >
               <LinearGradient
                 colors={['#10B981', '#059669']}
@@ -340,7 +342,7 @@ export default function SecretariatShopScreen() {
 
             <TouchableOpacity 
               style={styles.myItemsButton}
-              onPress={() => router.push('/secretariat-shop/my-posted-items')}
+              onPress={() => debouncedRouter.push('/secretariat-shop/my-posted-items')}
             >
               <Package size={18} color="#4169E1" />
               <Text style={styles.myItemsText}>Manage Inventory</Text>
@@ -401,7 +403,7 @@ export default function SecretariatShopScreen() {
                 <TouchableOpacity
                   key={product.id}
                   style={styles.productCard}
-                  onPress={() => router.push(`/secretariat-shop/${product.id}` as any)}
+                  onPress={() => debouncedRouter.push(`/secretariat-shop/${product.id}`)}
                 >
                   <Image
                     source={{ uri: product.images[0] || 'https://images.unsplash.com/photo-1523381210434-271e8be1f52b?w=800' }}
@@ -415,7 +417,7 @@ export default function SecretariatShopScreen() {
                         style={styles.editButton}
                         onPress={(e) => {
                           e.stopPropagation();
-                          router.push({
+                          debouncedRouter.push({
                             pathname: '/secretariat-shop/edit-posted-item',
                             params: { productId: product.id }
                           });

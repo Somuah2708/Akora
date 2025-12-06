@@ -12,7 +12,9 @@ import {
 } from 'react-native';
 import { supabase } from '../../lib/supabase';
 import { Ionicons } from '@expo/vector-icons';
-import { useRouter } from 'expo-router';
+import { useRouter } from 'expo-router'
+import { DebouncedTouchable } from '@/components/DebouncedTouchable';
+import { debouncedRouter } from '@/utils/navigationDebounce';;
 import DateTimePicker from '@react-native-community/datetimepicker';
 
 export default function EventSearchScreen() {
@@ -127,7 +129,7 @@ export default function EventSearchScreen() {
     return (
       <TouchableOpacity
         style={styles.eventCard}
-        onPress={() => router.push(`/events/${item.id}`)}
+        onPress={() => debouncedRouter.push(`/events/${item.id}`)}
       >
         {/* Category Badge */}
         {item.category && (
@@ -205,7 +207,7 @@ export default function EventSearchScreen() {
     <View style={styles.container}>
       {/* Header */}
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
+        <TouchableOpacity onPress={() => debouncedRouter.back()} style={styles.backBtn}>
           <Ionicons name="arrow-back" size={24} color="#111827" />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Search Events</Text>

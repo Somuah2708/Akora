@@ -1,7 +1,9 @@
 import { View, Text, StyleSheet, TextInput, TouchableOpacity, ScrollView, Image, Alert, ActivityIndicator } from 'react-native';
 import { useFonts, Inter_400Regular, Inter_600SemiBold } from '@expo-google-fonts/inter';
 import { useEffect, useState } from 'react';
-import { SplashScreen, useRouter } from 'expo-router';
+import { SplashScreen, useRouter } from 'expo-router'
+import { DebouncedTouchable } from '@/components/DebouncedTouchable';
+import { debouncedRouter } from '@/utils/navigationDebounce';;
 import { Eye, EyeOff, Mail, Lock, User, GraduationCap, Calendar, Chrome as Home } from 'lucide-react-native';
 import { useAuth } from '@/hooks/useAuth';
 import { supabase } from '@/lib/supabase';
@@ -143,7 +145,7 @@ export default function SignUpScreen() {
       Alert.alert(
         'Sign Up Successful',
         'Your account has been created. Please check your email for verification.',
-        [{ text: 'OK', onPress: () => router.replace('/auth/sign-in') }]
+        [{ text: 'OK', onPress: () => debouncedRouter.replace('/auth/sign-in') }]
       );
     } catch (err) {
       console.error('Sign up error:', err);
@@ -162,7 +164,7 @@ export default function SignUpScreen() {
       <View style={styles.header}>
         <TouchableOpacity 
           style={styles.backButton}
-          onPress={() => router.back()}
+          onPress={() => debouncedRouter.back()}
         >
           <Text style={styles.backButtonText}>Back</Text>
         </TouchableOpacity>
@@ -337,7 +339,7 @@ export default function SignUpScreen() {
         <Text style={styles.footerText}>Already have an account?</Text>
         <TouchableOpacity 
           style={styles.signInButton}
-          onPress={() => router.push('/auth/sign-in')}
+          onPress={() => debouncedRouter.push('/auth/sign-in')}
         >
           <Text style={styles.signInButtonText}>Sign In</Text>
         </TouchableOpacity>

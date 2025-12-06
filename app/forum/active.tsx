@@ -1,6 +1,8 @@
 import { useEffect, useState, useCallback } from 'react';
 import { View, Text, StyleSheet, FlatList, TouchableOpacity, Image, ActivityIndicator, RefreshControl } from 'react-native';
-import { useRouter } from 'expo-router';
+import { useRouter } from 'expo-router'
+import { DebouncedTouchable } from '@/components/DebouncedTouchable';
+import { debouncedRouter } from '@/utils/navigationDebounce';;
 import { ArrowLeft } from 'lucide-react-native';
 import { fetchActiveUsers, ActiveUserRow } from '@/lib/forum/analytics';
 import { supabase } from '@/lib/supabase';
@@ -57,7 +59,7 @@ export default function ActiveMembersScreen() {
   return (
     <View style={styles.container}>
       <View style={styles.header}> 
-        <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
+        <TouchableOpacity onPress={() => debouncedRouter.back()} style={styles.backButton}>
           <ArrowLeft size={22} color="#111827" />
         </TouchableOpacity>
         <Text style={styles.title}>Active Members</Text>
@@ -75,7 +77,7 @@ export default function ActiveMembersScreen() {
           refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />} 
           contentContainerStyle={{ padding: 16, gap: 12 }}
           renderItem={({ item, index }) => (
-            <TouchableOpacity style={styles.card} onPress={() => router.push(`/user-profile/${item.user_id}` as any)}>
+            <TouchableOpacity style={styles.card} onPress={() => debouncedRouter.push(`/user-profile/${item.user_id}`)}>
               <View style={styles.topRow}>
                 <Text style={styles.rank}>#{index+1}</Text>
               </View>

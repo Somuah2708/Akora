@@ -11,7 +11,9 @@ import {
 import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../hooks/useAuth';
 import { Ionicons } from '@expo/vector-icons';
-import { useRouter } from 'expo-router';
+import { useRouter } from 'expo-router'
+import { DebouncedTouchable } from '@/components/DebouncedTouchable';
+import { debouncedRouter } from '@/utils/navigationDebounce';;
 
 const { width } = Dimensions.get('window');
 
@@ -104,7 +106,7 @@ export default function OrganizerDashboardScreen() {
     return (
       <TouchableOpacity
         style={styles.eventRow}
-        onPress={() => router.push(`/events/${event.id}`)}
+        onPress={() => debouncedRouter.push(`/events/${event.id}`)}
       >
         <View style={styles.eventRowHeader}>
           <Text style={styles.eventRowTitle} numberOfLines={1}>
@@ -136,7 +138,7 @@ export default function OrganizerDashboardScreen() {
     return (
       <View style={styles.container}>
         <View style={styles.header}>
-          <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
+          <TouchableOpacity onPress={() => debouncedRouter.back()} style={styles.backBtn}>
             <Ionicons name="arrow-back" size={24} color="#111827" />
           </TouchableOpacity>
           <Text style={styles.headerTitle}>Analytics</Text>
@@ -156,7 +158,7 @@ export default function OrganizerDashboardScreen() {
     >
       {/* Header */}
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
+        <TouchableOpacity onPress={() => debouncedRouter.back()} style={styles.backBtn}>
           <Ionicons name="arrow-back" size={24} color="#111827" />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Analytics Dashboard</Text>
@@ -252,7 +254,7 @@ export default function OrganizerDashboardScreen() {
         {/* Recent Events */}
         <View style={styles.recentHeader}>
           <Text style={styles.sectionTitle}>Recent Events</Text>
-          <TouchableOpacity onPress={() => router.push('/events/my-akora-events')}>
+          <TouchableOpacity onPress={() => debouncedRouter.push('/events/my-akora-events')}>
             <Text style={styles.viewAllText}>View All</Text>
           </TouchableOpacity>
         </View>
@@ -268,7 +270,7 @@ export default function OrganizerDashboardScreen() {
             <Text style={styles.emptyText}>No events yet</Text>
             <TouchableOpacity
               style={styles.createEventBtn}
-              onPress={() => router.push('/events')}
+              onPress={() => debouncedRouter.push('/events')}
             >
               <Text style={styles.createEventBtnText}>Create Your First Event</Text>
             </TouchableOpacity>

@@ -1,7 +1,9 @@
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, TextInput, Dimensions, Modal, Alert, ActivityIndicator } from 'react-native';
 import { useFonts, Inter_400Regular, Inter_600SemiBold } from '@expo-google-fonts/inter';
 import { useEffect, useState } from 'react';
-import { SplashScreen, useRouter } from 'expo-router';
+import { SplashScreen, useRouter } from 'expo-router'
+import { DebouncedTouchable } from '@/components/DebouncedTouchable';
+import { debouncedRouter } from '@/utils/navigationDebounce';;
 import { ArrowLeft, Plus, Bell, ChevronRight, BookOpen, PenLine, Star, Calendar, Clock, Tag, Search, Filter, Heart, Lightbulb, Target, X, CreditCard as Edit3, Trash2 } from 'lucide-react-native';
 
 SplashScreen.preventAutoHideAsync();
@@ -294,13 +296,13 @@ export default function PersonalReflectionScreen() {
     <View style={styles.container}>
       <ScrollView showsVerticalScrollIndicator={false}>
         <View style={styles.header}>
-          <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
+          <TouchableOpacity onPress={() => debouncedRouter.back()} style={styles.backButton}>
             <ArrowLeft size={24} color="#000000" />
           </TouchableOpacity>
           <Text style={styles.title}>Personal Reflection</Text>
           <TouchableOpacity 
             style={styles.notificationButton}
-            onPress={() => router.push('/notices')}
+            onPress={() => debouncedRouter.push('/notices')}
           >
             <Bell size={24} color="#000000" />
           </TouchableOpacity>

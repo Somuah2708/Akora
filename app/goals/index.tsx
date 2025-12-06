@@ -1,7 +1,9 @@
 import { View, Text, StyleSheet, ScrollView, Image, TouchableOpacity, TextInput, Dimensions, Modal } from 'react-native';
 import { useFonts, Inter_400Regular, Inter_600SemiBold } from '@expo-google-fonts/inter';
 import { useEffect, useState, useCallback } from 'react';
-import { SplashScreen, useRouter } from 'expo-router';
+import { SplashScreen, useRouter } from 'expo-router'
+import { DebouncedTouchable } from '@/components/DebouncedTouchable';
+import { debouncedRouter } from '@/utils/navigationDebounce';;
 import { ArrowLeft, Target, Star, Clock, Calendar, ChevronRight, Plus, Bell, CircleCheck as CheckCircle, ChartBar as BarChart3, Brain, Rocket, Trophy, Flag, Sparkles, ArrowUpRight, X } from 'lucide-react-native';
 import { supabase, type ProductService, type Profile } from '@/lib/supabase';
 import { useAuth } from '@/hooks/useAuth';
@@ -171,7 +173,7 @@ export default function GoalsScreen() {
   return (
     <ScrollView style={styles.container} showsVerticalScrollIndicator={false}>
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
+        <TouchableOpacity onPress={() => debouncedRouter.back()} style={styles.backButton}>
           <ArrowLeft size={24} color="#000000" />
         </TouchableOpacity>
         <Text style={styles.title}>Goals & Vision</Text>
@@ -378,7 +380,7 @@ export default function GoalsScreen() {
 
       <TouchableOpacity 
         style={styles.floatingButton}
-        onPress={() => router.push('/goals/create-goal')}
+        onPress={() => debouncedRouter.push('/goals/create-goal')}
       >
         <Plus size={24} color="#FFFFFF" />
         <Text style={styles.floatingButtonText}>New Goal</Text>

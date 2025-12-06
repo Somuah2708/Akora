@@ -1,7 +1,9 @@
 import { View, Text, StyleSheet, ScrollView, Image, TouchableOpacity, TextInput, Dimensions, Alert, ActivityIndicator, Modal } from 'react-native';
 import { useFonts, Inter_400Regular, Inter_600SemiBold } from '@expo-google-fonts/inter';
 import { useEffect, useState, useCallback } from 'react';
-import { SplashScreen, useRouter, Link, useLocalSearchParams } from 'expo-router';
+import { SplashScreen, useRouter, Link, useLocalSearchParams } from 'expo-router'
+import { DebouncedTouchable } from '@/components/DebouncedTouchable';
+import { debouncedRouter } from '@/utils/navigationDebounce';;
 import { Search, Filter, ArrowLeft, GraduationCap, MapPin, Globe, ChevronRight, Clock, Award, Wallet, BookOpen, Building2, Users, Plus, FileText, Bookmark, Settings, Star } from 'lucide-react-native';
 import { useAuth } from '@/hooks/useAuth';
 import { supabase } from '@/lib/supabase';
@@ -595,7 +597,7 @@ export default function EducationScreen() {
       {/* Hero Header */}
       <View style={styles.heroHeader}>
         <View style={styles.heroTopRow}>
-          <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
+          <TouchableOpacity onPress={() => debouncedRouter.back()} style={styles.backButton}>
             <ArrowLeft size={22} color="#0F172A" />
           </TouchableOpacity>
           {(profile?.is_admin || profile?.role === 'admin') ? (
@@ -641,7 +643,7 @@ export default function EducationScreen() {
               style={styles.bookmarkDropdownItem}
               onPress={() => {
                 setBookmarkMenuVisible(false);
-                router.push('/education/saved-opportunities?type=universities' as any);
+                debouncedRouter.push('/education/saved-opportunities?type=universities');
               }}
             >
               <Building2 size={18} color="#4169E1" />
@@ -652,7 +654,7 @@ export default function EducationScreen() {
               style={styles.bookmarkDropdownItem}
               onPress={() => {
                 setBookmarkMenuVisible(false);
-                router.push('/education/saved-opportunities?type=scholarships' as any);
+                debouncedRouter.push('/education/saved-opportunities?type=scholarships');
               }}
             >
               <Award size={18} color="#4169E1" />
@@ -663,7 +665,7 @@ export default function EducationScreen() {
               style={styles.bookmarkDropdownItem}
               onPress={() => {
                 setBookmarkMenuVisible(false);
-                router.push('/education/saved-mentors' as any);
+                debouncedRouter.push('/education/saved-mentors');
               }}
             >
               <Users size={18} color="#4169E1" />
@@ -746,7 +748,7 @@ export default function EducationScreen() {
                   <TouchableOpacity 
                     key={university.id} 
                     style={styles.modernUniversityCard}
-                    onPress={() => router.push(`/education/detail/${university.id}` as any)}
+                    onPress={() => debouncedRouter.push(`/education/detail/${university.id}`)}
                     activeOpacity={0.95}
                   >
                     <View style={styles.modernCardImageContainer}>
@@ -833,7 +835,7 @@ export default function EducationScreen() {
           {user && (
             <TouchableOpacity
               style={styles.submitScholarshipCTA}
-              onPress={() => router.push('/education/submit-scholarship' as any)}
+              onPress={() => debouncedRouter.push('/education/submit-scholarship')}
               activeOpacity={0.9}
             >
               <View style={styles.submitScholarshipContent}>
@@ -909,7 +911,7 @@ export default function EducationScreen() {
                   <TouchableOpacity 
                     key={scholarship.id} 
                     style={styles.modernScholarshipCard}
-                    onPress={() => router.push(`/education/detail/${scholarship.id}` as any)}
+                    onPress={() => debouncedRouter.push(`/education/detail/${scholarship.id}`)}
                     activeOpacity={0.95}
                   >
                     <View style={styles.modernCardImageContainer}>
@@ -1013,7 +1015,7 @@ export default function EducationScreen() {
               {/* My Requests Button */}
               <TouchableOpacity 
                 style={styles.myRequestsButton}
-                onPress={() => router.push('/my-mentorship-requests' as any)}
+                onPress={() => debouncedRouter.push('/my-mentorship-requests')}
               >
                 <FileText size={16} color="#4169E1" />
                 <Text style={styles.myRequestsButtonText}>My Requests</Text>
@@ -1037,7 +1039,7 @@ export default function EducationScreen() {
               {/* Mentor Dashboard Button (only show if user is a mentor) */}
               <TouchableOpacity 
                 style={styles.mentorDashboardButton}
-                onPress={() => router.push('/mentor-dashboard' as any)}
+                onPress={() => debouncedRouter.push('/mentor-dashboard')}
               >
                 <Users size={16} color="#8B5CF6" />
               </TouchableOpacity>
@@ -1045,7 +1047,7 @@ export default function EducationScreen() {
               {/* Volunteer Button */}
               <TouchableOpacity 
                 style={styles.volunteerButton}
-                onPress={() => router.push('/education/volunteer-mentor' as any)}
+                onPress={() => debouncedRouter.push('/education/volunteer-mentor')}
               >
                 <Plus size={16} color="#FFFFFF" />
                 <Text style={styles.volunteerButtonText}>Volunteer</Text>
@@ -1067,7 +1069,7 @@ export default function EducationScreen() {
               <TouchableOpacity 
                 key={mentor.id} 
                 style={styles.modernMentorCard}
-                onPress={() => router.push(`/education/mentor/${mentor.id}` as any)}
+                onPress={() => debouncedRouter.push(`/education/mentor/${mentor.id}`)}
                 activeOpacity={0.95}
               >
                 <Image 
@@ -1121,7 +1123,7 @@ export default function EducationScreen() {
                     </View>
                     <TouchableOpacity 
                       style={styles.mentorCTAButton}
-                      onPress={() => router.push(`/education/mentor/${mentor.id}` as any)}
+                      onPress={() => debouncedRouter.push(`/education/mentor/${mentor.id}`)}
                     >
                       <Text style={styles.mentorCTAButtonText}>Request Mentorship</Text>
                     </TouchableOpacity>
@@ -1136,7 +1138,7 @@ export default function EducationScreen() {
               <Text style={styles.emptySubtext}>Be the first to volunteer as a mentor!</Text>
               <TouchableOpacity 
                 style={styles.emptyButton}
-                onPress={() => router.push('/education/volunteer-mentor' as any)}
+                onPress={() => debouncedRouter.push('/education/volunteer-mentor')}
               >
                 <Text style={styles.emptyButtonText}>Volunteer as Mentor</Text>
               </TouchableOpacity>
@@ -1180,7 +1182,7 @@ export default function EducationScreen() {
               style={styles.adminMenuItem}
               onPress={() => {
                 setAdminMenuVisible(false);
-                router.push('/admin-education-universities' as any);
+                debouncedRouter.push('/admin-education-universities');
               }}
             >
               <GraduationCap size={20} color="#4169E1" />
@@ -1192,7 +1194,7 @@ export default function EducationScreen() {
               style={styles.adminMenuItem}
               onPress={() => {
                 setAdminMenuVisible(false);
-                router.push('/admin-education-scholarships' as any);
+                debouncedRouter.push('/admin-education-scholarships');
               }}
             >
               <Award size={20} color="#4169E1" />
@@ -1204,7 +1206,7 @@ export default function EducationScreen() {
               style={styles.adminMenuItem}
               onPress={() => {
                 setAdminMenuVisible(false);
-                router.push('/admin-alumni-mentors' as any);
+                debouncedRouter.push('/admin-alumni-mentors');
               }}
             >
               <Users size={20} color="#4169E1" />

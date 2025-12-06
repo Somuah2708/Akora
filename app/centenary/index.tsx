@@ -1,6 +1,8 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { View, Text, StyleSheet, ScrollView, Image, TouchableOpacity, Dimensions } from 'react-native';
-import { SplashScreen, useRouter } from 'expo-router';
+import { SplashScreen, useRouter } from 'expo-router'
+import { DebouncedTouchable } from '@/components/DebouncedTouchable';
+import { debouncedRouter } from '@/utils/navigationDebounce';;
 import { useFonts, Inter_400Regular, Inter_600SemiBold } from '@expo-google-fonts/inter';
 import { ArrowLeft, Calendar, Users, Star, Clock, HeartHandshake, ChevronRight, Map, Award } from 'lucide-react-native';
 
@@ -71,7 +73,7 @@ export default function CentenaryScreen() {
     <ScrollView style={styles.container} showsVerticalScrollIndicator={false}>
       {/* Header */}
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
+        <TouchableOpacity onPress={() => debouncedRouter.back()} style={styles.backBtn}>
           <ArrowLeft size={22} color="#111827" />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Achimota Centenary 2027</Text>
@@ -110,7 +112,7 @@ export default function CentenaryScreen() {
       <View style={styles.section}>
         <View style={styles.sectionHeader}>
           <Text style={styles.sectionTitle}>Centenary Committees</Text>
-          <TouchableOpacity onPress={() => router.push('/circles')} style={styles.seeAllBtn}>
+          <TouchableOpacity onPress={() => debouncedRouter.push('/circles')} style={styles.seeAllBtn}>
             <Text style={styles.seeAllText}>See Roles</Text>
             <ChevronRight size={16} color="#111827" />
           </TouchableOpacity>
@@ -119,7 +121,7 @@ export default function CentenaryScreen() {
           {COMMITTEES.map((c) => {
             const Icon = c.icon;
             return (
-              <TouchableOpacity key={c.id} onPress={() => router.push(`/centenary/committee/${c.id}`)} style={[styles.committeeCard, { backgroundColor: c.color }]}> 
+              <TouchableOpacity key={c.id} onPress={() => debouncedRouter.push(`/centenary/committee/${c.id}`)} style={[styles.committeeCard, { backgroundColor: c.color }]}> 
                 <Icon size={20} color="#111827" />
                 <Text style={styles.committeeName}>{c.name}</Text>
                 <Text style={styles.committeeDesc}>{c.desc}</Text>
@@ -133,7 +135,7 @@ export default function CentenaryScreen() {
       <View style={styles.section}>
         <View style={styles.sectionHeader}>
           <Text style={styles.sectionTitle}>Activities & Preparation</Text>
-          <TouchableOpacity onPress={() => router.push('/events')} style={styles.seeAllBtn}>
+          <TouchableOpacity onPress={() => debouncedRouter.push('/events')} style={styles.seeAllBtn}>
             <Text style={styles.seeAllText}>View Events</Text>
             <ChevronRight size={16} color="#111827" />
           </TouchableOpacity>
@@ -176,10 +178,10 @@ export default function CentenaryScreen() {
         <Text style={styles.ctaTitle}>Get Involved</Text>
         <Text style={styles.ctaText}>Join a committee, volunteer, or become a sponsor to make the centenary unforgettable.</Text>
         <View style={styles.ctaButtons}>
-          <TouchableOpacity style={[styles.ctaBtn, { backgroundColor: '#111827' }]} onPress={() => router.push('/create-group')}>
+          <TouchableOpacity style={[styles.ctaBtn, { backgroundColor: '#111827' }]} onPress={() => debouncedRouter.push('/create-group')}>
             <Text style={styles.ctaBtnTextLight}>Join Committee</Text>
           </TouchableOpacity>
-          <TouchableOpacity style={[styles.ctaBtn, { backgroundColor: '#F3F4F6' }]} onPress={() => router.push('/donation')}>
+          <TouchableOpacity style={[styles.ctaBtn, { backgroundColor: '#F3F4F6' }]} onPress={() => debouncedRouter.push('/donation')}>
             <Text style={styles.ctaBtnTextDark}>Sponsor</Text>
           </TouchableOpacity>
         </View>

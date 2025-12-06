@@ -12,7 +12,9 @@ import {
   Modal,
   KeyboardAvoidingView,
 } from 'react-native';
-import { useRouter } from 'expo-router';
+import { useRouter } from 'expo-router'
+import { DebouncedTouchable } from '@/components/DebouncedTouchable';
+import { debouncedRouter } from '@/utils/navigationDebounce';;
 import { useAuth } from '@/hooks/useAuth';
 import { supabase, type Region, type City } from '@/lib/supabase';
 import * as ImagePicker from 'expo-image-picker';
@@ -369,9 +371,9 @@ export default function CreateListingScreen() {
           text: 'View listing',
           onPress: () => {
             if (data?.id) {
-              router.replace(`/services/${data.id}`);
+              debouncedRouter.replace(`/services/${data.id}`);
             } else {
-              router.back();
+              debouncedRouter.back();
             }
           },
         },
@@ -591,7 +593,7 @@ export default function CreateListingScreen() {
         keyboardVerticalOffset={0}
       >
         <View style={styles.header}>
-        <TouchableOpacity style={styles.backButton} onPress={() => router.back()}>
+        <TouchableOpacity style={styles.backButton} onPress={() => debouncedRouter.back()}>
           <ArrowLeft size={20} color="#020617" />
         </TouchableOpacity>
         <View style={styles.headerTextContainer}>

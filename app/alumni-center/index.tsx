@@ -10,7 +10,9 @@ import {
   Alert,
   ActivityIndicator,
 } from 'react-native';
-import { useRouter } from 'expo-router';
+import { useRouter } from 'expo-router'
+import { DebouncedTouchable } from '@/components/DebouncedTouchable';
+import { debouncedRouter } from '@/utils/navigationDebounce';;
 import {
   ArrowLeft,
   FileText,
@@ -585,7 +587,7 @@ export default function AlumniCenterScreen() {
     <View style={styles.container}>
       {/* Premium Header */}
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
+        <TouchableOpacity onPress={() => debouncedRouter.back()} style={styles.backButton}>
           <View style={styles.backButtonCircle}>
             <ArrowLeft size={20} color="#1a1a1a" strokeWidth={2.5} />
           </View>

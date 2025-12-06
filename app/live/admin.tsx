@@ -13,7 +13,9 @@ import {
   Switch,
 } from 'react-native';
 import { Plus, ArrowLeft, Edit2, Trash2, Calendar, Upload, Save, X, Play } from 'lucide-react-native';
-import { useRouter } from 'expo-router';
+import { useRouter } from 'expo-router'
+import { DebouncedTouchable } from '@/components/DebouncedTouchable';
+import { debouncedRouter } from '@/utils/navigationDebounce';;
 import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../hooks/useAuth';
 import * as ImagePicker from 'expo-image-picker';
@@ -81,7 +83,7 @@ export default function AdminLiveStreamScreen() {
     if (!user || !profile) {
       console.log('[Admin] No user or profile found, redirecting...');
       Alert.alert('Access Denied', 'Please log in to access admin panel.');
-      router.back();
+      debouncedRouter.back();
       return;
     }
 
@@ -93,7 +95,7 @@ export default function AdminLiveStreamScreen() {
     if (!isAdmin) {
       console.log('[Admin] Access denied - not an admin');
       Alert.alert('Access Denied', 'You do not have admin privileges.');
-      router.back();
+      debouncedRouter.back();
     } else {
       console.log('[Admin] Access granted!');
     }
@@ -303,7 +305,7 @@ export default function AdminLiveStreamScreen() {
     <View style={styles.container}>
       {/* Header */}
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
+        <TouchableOpacity onPress={() => debouncedRouter.back()} style={styles.backButton}>
           <ArrowLeft size={24} color="#000000" strokeWidth={2} />
         </TouchableOpacity>
         <View style={styles.headerTextContainer}>

@@ -2,6 +2,8 @@ import React, { useCallback, useEffect, useMemo, useState, useRef } from 'react'
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Dimensions, ActivityIndicator, RefreshControl, Modal, TextInput } from 'react-native';
 import { useFonts, Inter_400Regular, Inter_600SemiBold } from '@expo-google-fonts/inter';
 import { useRouter, useLocalSearchParams, useFocusEffect } from 'expo-router';
+import { DebouncedTouchable } from '@/components/DebouncedTouchable';
+import { debouncedRouter } from '@/utils/navigationDebounce';
 import { HEADER_COLOR } from '@/constants/Colors';
 import { Compass, ThumbsUp, MessagesSquare, Lightbulb, SlidersHorizontal, Check, X, Users, Camera, Share2, Star } from 'lucide-react-native';
 import type { LucideIcon } from 'lucide-react-native';
@@ -1226,14 +1228,14 @@ export default function DiscoverScreen() {
             <View style={styles.headerTopRow}>
               <Text style={styles.headerTitle}>Discover</Text>
               <View style={styles.headerActions}>
-                <TouchableOpacity
+                <DebouncedTouchable
                   style={styles.headerIconButton}
-                  onPress={() => router.push('/create-post?autoPick=1' as any)}
+                  onPress={() => debouncedRouter.push('/create-post?autoPick=1')}
                   activeOpacity={0.9}
                   accessibilityLabel="Open camera to create a post"
                 >
                   <Camera size={18} color="#111827" strokeWidth={2} />
-                </TouchableOpacity>
+                </DebouncedTouchable>
                 <TouchableOpacity
                   style={styles.headerGhostButton}
                   onPress={openInterestModal}
@@ -1321,9 +1323,9 @@ export default function DiscoverScreen() {
                 >
                   {/* Post Header */}
                   <View style={styles.postHeader}>
-                <TouchableOpacity 
+                <DebouncedTouchable 
                   style={styles.postHeaderLeft}
-                  onPress={() => item.author?.id && router.push(`/user-profile/${item.author.id}` as any)}
+                  onPress={() => item.author?.id && debouncedRouter.push(`/user-profile/${item.author.id}`)}
                   activeOpacity={0.7}
                 >
                   <CachedImage 
@@ -1343,7 +1345,7 @@ export default function DiscoverScreen() {
                     </View>
                     <Text style={styles.postTime}>{timeAgo}</Text>
                   </View>
-                </TouchableOpacity>
+                </DebouncedTouchable>
               </View>
 
               {/* Post Media (Images/Videos/YouTube Carousel) */}
@@ -1418,9 +1420,9 @@ export default function DiscoverScreen() {
                               }}
                             />
                           ) : (
-                            <TouchableOpacity 
+                            <DebouncedTouchable 
                               activeOpacity={0.95}
-                              onPress={() => item.sourceId && router.push(`/post/${item.sourceId}`)}
+                              onPress={() => item.sourceId && debouncedRouter.push(`/post/${item.sourceId}`)}
                             >
                               <CachedImage
                                 uri={mediaItem.url}
@@ -1434,7 +1436,7 @@ export default function DiscoverScreen() {
                                   handleMediaLoad(`item_${item.id}_media_${index}`, width, height);
                                 }}
                               />
-                            </TouchableOpacity>
+                            </DebouncedTouchable>
                           )}
                         </View>
                       );
@@ -1550,7 +1552,7 @@ export default function DiscoverScreen() {
                         key={index} 
                         style={styles.mediaPage}
                         activeOpacity={0.95}
-                        onPress={() => item.sourceId && router.push(`/post/${item.sourceId}`)}
+                        onPress={() => item.sourceId && debouncedRouter.push(`/post/${item.sourceId}`)}
                       >
                         <CachedImage
                           uri={imageUrl}
@@ -1605,7 +1607,7 @@ export default function DiscoverScreen() {
                   />
                 </View>
               ) : item.image ? (
-                <TouchableOpacity activeOpacity={0.85} onPress={() => item.sourceId && router.push(`/post/${item.sourceId}`)}>
+                <TouchableOpacity activeOpacity={0.85} onPress={() => item.sourceId && debouncedRouter.push(`/post/${item.sourceId}`)}>
                   <View style={styles.mediaPage}>
                     <CachedImage 
                       uri={item.image} 
@@ -1642,7 +1644,7 @@ export default function DiscoverScreen() {
                   </TouchableOpacity>
                   <TouchableOpacity 
                     style={styles.actionButtonWithCount}
-                    onPress={() => item.sourceId && router.push(`/post-comments/${item.sourceId}`)}
+                    onPress={() => item.sourceId && debouncedRouter.push(`/post-comments/${item.sourceId}`)}
                   >
                     <MessagesSquare size={24} color="#000000" strokeWidth={2} />
                     {item.comments !== undefined && item.comments > 0 && (
@@ -1677,13 +1679,13 @@ export default function DiscoverScreen() {
 
               {/* Post Comments Count */}
               {item.comments !== undefined && item.comments > 0 ? (
-                <TouchableOpacity onPress={() => item.sourceId && router.push(`/post-comments/${item.sourceId}`)}>
+                <TouchableOpacity onPress={() => item.sourceId && debouncedRouter.push(`/post-comments/${item.sourceId}`)}>
                   <Text style={styles.viewComments}>
                     View all {item.comments} {item.comments === 1 ? 'comment' : 'comments'}
                   </Text>
                 </TouchableOpacity>
               ) : (
-                <TouchableOpacity onPress={() => item.sourceId && router.push(`/post-comments/${item.sourceId}`)}>
+                <TouchableOpacity onPress={() => item.sourceId && debouncedRouter.push(`/post-comments/${item.sourceId}`)}>
                   <Text style={styles.viewComments}>
                     Be the first to comment
                   </Text>

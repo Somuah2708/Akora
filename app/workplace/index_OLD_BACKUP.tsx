@@ -1,7 +1,9 @@
 import { View, Text, StyleSheet, ScrollView, Image, TouchableOpacity, TextInput, Dimensions, ActivityIndicator, RefreshControl } from 'react-native';
 import { useFonts, Inter_400Regular, Inter_600SemiBold } from '@expo-google-fonts/inter';
 import { useEffect, useState, useCallback } from 'react';
-import { SplashScreen, useRouter, useFocusEffect } from 'expo-router';
+import { SplashScreen, useRouter, useFocusEffect } from 'expo-router'
+import { DebouncedTouchable } from '@/components/DebouncedTouchable';
+import { debouncedRouter } from '@/utils/navigationDebounce';;
 import { Search, Filter, ArrowLeft, Briefcase, Clock, MapPin, Building2, GraduationCap, ChevronRight, BookOpen, Users, Wallet, Plus, Calendar } from 'lucide-react-native';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/hooks/useAuth';
@@ -210,13 +212,13 @@ export default function WorkplaceScreen() {
   const handleCategoryPress = (typeId: string) => {
     const jobType = JOB_TYPES.find(type => type.id === typeId);
     if (jobType) {
-      router.push(`/workplace/category/${encodeURIComponent(jobType.name)}`);
+      debouncedRouter.push(`/workplace/category/${encodeURIComponent(jobType.name)}`);
     }
   };
 
   const handleJobPress = (jobId: string) => {
     // Always navigate to job detail page
-    router.push(`/job-detail/${jobId}` as any);
+    debouncedRouter.push(`/job-detail/${jobId}`);
   };
 
   useEffect(() => {
@@ -233,7 +235,7 @@ export default function WorkplaceScreen() {
     <View style={styles.container}>
       <ScrollView style={styles.container} showsVerticalScrollIndicator={false}>
         <View style={styles.header}>
-          <TouchableOpacity onPress={() => router.push('/(tabs)/hub')} style={styles.backButton}>
+          <TouchableOpacity onPress={() => debouncedRouter.push('/(tabs)/hub')} style={styles.backButton}>
             <ArrowLeft size={24} color="#000000" />
           </TouchableOpacity>
           <Text style={styles.title}>Workplace</Text>
@@ -511,7 +513,7 @@ export default function WorkplaceScreen() {
             <Text style={styles.sectionTitle}>Recent Opportunities</Text>
             <TouchableOpacity 
               style={styles.seeAllButton}
-              onPress={() => router.push('/workplace/recent-opportunities' as any)}
+              onPress={() => debouncedRouter.push('/workplace/recent-opportunities')}
             >
               <Text style={styles.seeAllText}>See All</Text>
               <ChevronRight size={16} color="#666666" />
@@ -611,7 +613,7 @@ export default function WorkplaceScreen() {
       
       <TouchableOpacity 
         style={styles.floatingButton}
-        onPress={() => router.push('/create-job-listing')}
+        onPress={() => debouncedRouter.push('/create-job-listing')}
       >
         <Plus size={24} color="#FFFFFF" />
         <Text style={styles.floatingButtonText}>Post Job</Text>

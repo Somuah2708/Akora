@@ -14,7 +14,9 @@ import {
   Share,
   Platform,
 } from 'react-native';
-import { useRouter, useLocalSearchParams } from 'expo-router';
+import { useRouter, useLocalSearchParams } from 'expo-router'
+import { DebouncedTouchable } from '@/components/DebouncedTouchable';
+import { debouncedRouter } from '@/utils/navigationDebounce';;
 import { 
   ArrowLeft, 
   Calendar, 
@@ -918,7 +920,7 @@ export default function EventDetailScreen() {
                 <Text style={{ color: '#6B7280' }}>No media</Text>
               </View>
             )}
-            <TouchableOpacity style={styles.detailBack} onPress={() => router.back()}>
+            <TouchableOpacity style={styles.detailBack} onPress={() => debouncedRouter.back()}>
               <View style={styles.backButtonCircle}>
                 <ArrowLeft size={22} color="#333" />
               </View>
@@ -1049,7 +1051,7 @@ export default function EventDetailScreen() {
         <Text style={styles.notFoundText}>Event not found</Text>
         <TouchableOpacity 
           style={styles.backToEventsButton}
-          onPress={() => router.back()}
+          onPress={() => debouncedRouter.back()}
         >
           <Text style={styles.backToEventsText}>Go Back</Text>
         </TouchableOpacity>
@@ -1058,7 +1060,7 @@ export default function EventDetailScreen() {
   }
 
   const handleRegister = () => {
-    router.push({
+    debouncedRouter.push({
       pathname: '/event-registration/[id]',
       params: { id: eventId }
     });
@@ -1106,7 +1108,7 @@ export default function EventDetailScreen() {
           {/* Back Button */}
           <TouchableOpacity 
             style={styles.backButton}
-            onPress={() => router.back()}
+            onPress={() => debouncedRouter.back()}
           >
             <View style={styles.backButtonCircle}>
               <ArrowLeft size={24} color="#333" />

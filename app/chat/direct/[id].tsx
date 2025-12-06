@@ -16,7 +16,9 @@ import {
   Keyboard,
 } from 'react-native';
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { useLocalSearchParams, useRouter } from 'expo-router';
+import { useLocalSearchParams, useRouter } from 'expo-router'
+import { DebouncedTouchable } from '@/components/DebouncedTouchable';
+import { debouncedRouter } from '@/utils/navigationDebounce';;
 import * as Sentry from '@sentry/react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { ArrowLeft, Send, Smile, X, Play, Pause, Check, CheckCheck, FileText, Paperclip, Camera, Image as ImageIcon, File } from 'lucide-react-native';
@@ -467,7 +469,7 @@ export default function DirectMessageScreen() {
   };
 
   const navigateToPost = (postId: string) => {
-    router.push(`/post/${postId}`);
+    debouncedRouter.push(`/post/${postId}`);
   };
 
   const setupTypingIndicator = useCallback(() => {
@@ -1297,9 +1299,9 @@ export default function DirectMessageScreen() {
         <TouchableOpacity 
           onPress={() => {
             if (router.canGoBack()) {
-              router.back();
+              debouncedRouter.back();
             } else {
-              router.push('/(tabs)/chat');
+              debouncedRouter.push('/(tabs)/chat');
             }
           }} 
           style={styles.backButton}
@@ -1309,7 +1311,7 @@ export default function DirectMessageScreen() {
 
         <TouchableOpacity 
           style={styles.headerInfo}
-          onPress={() => router.push(`/user-profile/${friendId}`)}
+          onPress={() => debouncedRouter.push(`/user-profile/${friendId}`)}
           activeOpacity={0.7}
         >
           <View style={styles.headerAvatarContainer}>

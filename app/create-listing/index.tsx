@@ -2,7 +2,9 @@ import { View, Text, StyleSheet, TextInput, TouchableOpacity, ScrollView, Alert,
 import * as ImagePicker from 'expo-image-picker';
 import { useFonts, Inter_400Regular, Inter_600SemiBold, Inter_700Bold } from '@expo-google-fonts/inter';
 import { useEffect, useState } from 'react';
-import { SplashScreen, useRouter } from 'expo-router';
+import { SplashScreen, useRouter } from 'expo-router'
+import { DebouncedTouchable } from '@/components/DebouncedTouchable';
+import { debouncedRouter } from '@/utils/navigationDebounce';;
 import { ArrowLeft, Image as ImageIcon, Send, DollarSign, Tag, Info, CheckCircle, Sparkles } from 'lucide-react-native';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/hooks/useAuth';
@@ -88,7 +90,7 @@ export default function CreateListingScreen() {
     if (loading) return;
     if (!user) {
       Alert.alert('Authentication Required', 'Please sign in to create a listing.');
-      router.replace('/auth/sign-in');
+      debouncedRouter.replace('/auth/sign-in');
     }
   }, [user, loading, router]);
 
@@ -237,7 +239,7 @@ export default function CreateListingScreen() {
           {
             text: 'View Marketplace',
             onPress: () => {
-              router.push('/services');
+              debouncedRouter.push('/services');
             }
           },
           {
@@ -296,7 +298,7 @@ export default function CreateListingScreen() {
       >
         <View style={styles.header}>
             <TouchableOpacity
-              onPress={() => router.replace('/services')}
+              onPress={() => debouncedRouter.replace('/services')}
               style={styles.backButton}
             >
               <ArrowLeft size={24} color="#FFFFFF" />

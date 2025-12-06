@@ -2,7 +2,9 @@ import { View, Text, StyleSheet, ScrollView, TextInput, TouchableOpacity, Keyboa
 import { ArrowLeft, Send } from 'lucide-react-native';
 import { useFonts, Inter_400Regular, Inter_600SemiBold } from '@expo-google-fonts/inter';
 import { useEffect, useState, useRef } from 'react';
-import { SplashScreen, useRouter, useLocalSearchParams } from 'expo-router';
+import { SplashScreen, useRouter, useLocalSearchParams } from 'expo-router'
+import { DebouncedTouchable } from '@/components/DebouncedTouchable';
+import { debouncedRouter } from '@/utils/navigationDebounce';;
 import { fetchChatMessages, sendMessage as sendMessageHelper, subscribeToMessages as subscribeToMessagesHelper, getChatInfo, markChatAsRead } from '@/lib/chats';
 import { useAuth } from '@/hooks/useAuth';
 import type { Message, Profile } from '@/lib/supabase';
@@ -206,7 +208,7 @@ export default function ChatDetailScreen() {
     >
       {/* Header */}
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
+        <TouchableOpacity onPress={() => debouncedRouter.back()} style={styles.backButton}>
           <ArrowLeft size={24} color="#1A1A1A" />
         </TouchableOpacity>
         <View style={styles.headerInfo}>

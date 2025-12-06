@@ -1,7 +1,9 @@
 import { View, Text, StyleSheet, ScrollView, Image, TouchableOpacity, Dimensions, ActivityIndicator } from 'react-native';
 import { useFonts, Inter_400Regular, Inter_600SemiBold } from '@expo-google-fonts/inter';
 import { useEffect, useState, useCallback } from 'react';
-import { SplashScreen, useRouter, useLocalSearchParams } from 'expo-router';
+import { SplashScreen, useRouter, useLocalSearchParams } from 'expo-router'
+import { DebouncedTouchable } from '@/components/DebouncedTouchable';
+import { debouncedRouter } from '@/utils/navigationDebounce';;
 import { ArrowLeft, Briefcase, Clock, MapPin, Building2, Wallet } from 'lucide-react-native';
 import { supabase, type ProductService, type Profile } from '@/lib/supabase';
 import { useAuth } from '@/hooks/useAuth';
@@ -118,7 +120,7 @@ export default function CategoryScreen() {
 
   const handleJobPress = (jobId: string) => {
     // Navigate to job detail page (detail page shows edit button for owners)
-    router.push(`/job-detail/${jobId}` as any);
+    debouncedRouter.push(`/job-detail/${jobId}`);
   };
 
   if (!fontsLoaded) {
@@ -128,7 +130,7 @@ export default function CategoryScreen() {
   return (
     <View style={styles.container}>
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
+        <TouchableOpacity onPress={() => debouncedRouter.back()} style={styles.backButton}>
           <ArrowLeft size={24} color="#000000" />
         </TouchableOpacity>
         <Text style={styles.title}>{decodeURIComponent(categoryName || '')}</Text>
@@ -200,7 +202,7 @@ export default function CategoryScreen() {
                     style={styles.applyButton}
                     onPress={(e) => {
                       e.stopPropagation();
-                      router.push(`/job-application/${job.id}` as any);
+                      debouncedRouter.push(`/job-application/${job.id}`);
                     }}
                   >
                     <Text style={styles.applyButtonText}>Apply Now</Text>

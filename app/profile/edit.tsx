@@ -1,7 +1,9 @@
 import { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, TextInput, TouchableOpacity, ScrollView, Image, Alert, ActivityIndicator, Switch, Platform, Modal, Dimensions, KeyboardAvoidingView } from 'react-native';
 import { useFonts, Inter_400Regular, Inter_600SemiBold } from '@expo-google-fonts/inter';
-import { SplashScreen, useRouter } from 'expo-router';
+import { SplashScreen, useRouter } from 'expo-router'
+import { DebouncedTouchable } from '@/components/DebouncedTouchable';
+import { debouncedRouter } from '@/utils/navigationDebounce';;
 import { ArrowLeft, Camera, Trash2, User, GraduationCap, Calendar, Chrome as Home, MapPin, Phone, Mail, Link as LinkIcon } from 'lucide-react-native';
 import * as ImagePicker from 'expo-image-picker';
 import { supabase, AVATAR_BUCKET } from '@/lib/supabase';
@@ -356,7 +358,7 @@ export default function EditProfileScreen() {
         receivesNotifications,
       });
 
-      Alert.alert('Success', 'Profile updated successfully', [{ text: 'OK', onPress: () => router.push('/grow') }]);
+      Alert.alert('Success', 'Profile updated successfully', [{ text: 'OK', onPress: () => debouncedRouter.push('/grow') }]);
     } catch (error) {
       console.error('Error updating profile:', error);
       Alert.alert('Error', 'Failed to update profile');
@@ -403,11 +405,11 @@ export default function EditProfileScreen() {
     if (isDirty()) {
       Alert.alert('Discard changes?', 'You have unsaved changes. Do you want to discard them?', [
         { text: 'Cancel', style: 'cancel' },
-        { text: 'Discard', style: 'destructive', onPress: () => router.push('/grow') },
+        { text: 'Discard', style: 'destructive', onPress: () => debouncedRouter.push('/grow') },
       ]);
       return;
     }
-    router.push('/grow');
+    debouncedRouter.push('/grow');
   };
 
   const removeAvatar = () => {
@@ -814,7 +816,7 @@ export default function EditProfileScreen() {
             <Text style={styles.helperText}>Manage the topics that personalize your feed and profile chips.</Text>
             <TouchableOpacity
               style={styles.primaryButton}
-              onPress={() => router.push('/(tabs)/discover?openInterestModal=1')}
+              onPress={() => debouncedRouter.push('/(tabs)/discover?openInterestModal=1')}
             >
               <Text style={styles.primaryButtonText}>Edit Interests</Text>
             </TouchableOpacity>

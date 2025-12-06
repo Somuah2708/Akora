@@ -1,7 +1,9 @@
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, TextInput, Alert, Animated } from 'react-native';
 import { useFonts, Inter_400Regular, Inter_600SemiBold, Inter_700Bold } from '@expo-google-fonts/inter';
 import { useEffect, useState, useRef } from 'react';
-import { SplashScreen, useRouter, useLocalSearchParams } from 'expo-router';
+import { SplashScreen, useRouter, useLocalSearchParams } from 'expo-router'
+import { DebouncedTouchable } from '@/components/DebouncedTouchable';
+import { debouncedRouter } from '@/utils/navigationDebounce';;
 import { ArrowLeft, CreditCard, Smartphone, CheckCircle, Shield, Lock, Truck, Package } from 'lucide-react-native';
 import { useAuth } from '@/hooks/useAuth';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -86,7 +88,7 @@ export default function CheckoutScreen() {
                 [
                   {
                     text: 'Done',
-                    onPress: () => router.push('/(tabs)'),
+                    onPress: () => debouncedRouter.push('/(tabs)'),
                   },
                 ]
               );
@@ -98,7 +100,7 @@ export default function CheckoutScreen() {
                 [
                   {
                     text: 'OK',
-                    onPress: () => router.push('/(tabs)'),
+                    onPress: () => debouncedRouter.push('/(tabs)'),
                   },
                 ]
               );
@@ -123,7 +125,7 @@ export default function CheckoutScreen() {
         style={styles.headerGradient}
       >
         <View style={styles.header}>
-          <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
+          <TouchableOpacity onPress={() => debouncedRouter.back()} style={styles.backButton}>
             <ArrowLeft size={24} color="#FFFFFF" />
           </TouchableOpacity>
           <Text style={styles.title}>Secure Checkout</Text>
@@ -281,9 +283,9 @@ export default function CheckoutScreen() {
             style={styles.detailsLink}
             onPress={() => {
               if (deliveryMethod === 'delivery') {
-                router.push('/secretariat-shop/delivery');
+                debouncedRouter.push('/secretariat-shop/delivery');
               } else {
-                router.push('/secretariat-shop/pickup');
+                debouncedRouter.push('/secretariat-shop/pickup');
               }
             }}
           >

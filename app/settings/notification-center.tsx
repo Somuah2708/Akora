@@ -8,7 +8,9 @@ import {
   ActivityIndicator,
   RefreshControl,
 } from 'react-native';
-import { router } from 'expo-router';
+import { router } from 'expo-router'
+import { DebouncedTouchable } from '@/components/DebouncedTouchable';
+import { debouncedRouter } from '@/utils/navigationDebounce';;
 import { ArrowLeft, Bell, CheckCircle2, Circle } from 'lucide-react-native';
 import { supabase } from '../../lib/supabase';
 import { pushNotificationService } from '../../services/pushNotificationService';
@@ -113,7 +115,7 @@ export default function NotificationCenterScreen() {
     const data = notification.data;
     
     if (data.mentorId) {
-      router.push(`/education/mentor/${data.mentorId}` as any);
+      debouncedRouter.push(`/education/mentor/${data.mentorId}`);
     }
     // Add more navigation logic as needed when routes exist
   };
@@ -193,7 +195,7 @@ export default function NotificationCenterScreen() {
     <View style={styles.container}>
       {/* Header */}
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
+        <TouchableOpacity onPress={() => debouncedRouter.back()} style={styles.backButton}>
           <ArrowLeft size={24} color="#1e293b" />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Notifications</Text>

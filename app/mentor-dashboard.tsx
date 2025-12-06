@@ -10,7 +10,9 @@ import {
   ActivityIndicator,
   TextInput,
 } from 'react-native';
-import { useRouter } from 'expo-router';
+import { useRouter } from 'expo-router'
+import { DebouncedTouchable } from '@/components/DebouncedTouchable';
+import { debouncedRouter } from '@/utils/navigationDebounce';;
 import { Ionicons } from '@expo/vector-icons';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '@/hooks/useAuth';
@@ -98,7 +100,7 @@ export default function MentorDashboard() {
         Alert.alert(
           'Not a Mentor',
           'You are not registered as a mentor. Please contact admin to become a mentor.',
-          [{ text: 'Go Back', onPress: () => router.back() }]
+          [{ text: 'Go Back', onPress: () => debouncedRouter.back() }]
         );
         return;
       }
@@ -108,7 +110,7 @@ export default function MentorDashboard() {
         Alert.alert(
           'Not a Mentor',
           'You are not registered as a mentor. Please contact admin to become a mentor.',
-          [{ text: 'Go Back', onPress: () => router.back() }]
+          [{ text: 'Go Back', onPress: () => debouncedRouter.back() }]
         );
         return;
       }
@@ -118,7 +120,7 @@ export default function MentorDashboard() {
     } catch (error) {
       console.error('Error:', error);
       Alert.alert('Error', 'Failed to verify mentor status.');
-      router.back();
+      debouncedRouter.back();
     }
   }, [user, profile, router]);
 
@@ -380,7 +382,7 @@ export default function MentorDashboard() {
       >
         {/* Header */}
         <View style={styles.header}>
-          <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
+          <TouchableOpacity onPress={() => debouncedRouter.back()} style={styles.backButton}>
             <Ionicons name="arrow-back" size={24} color="#000" />
           </TouchableOpacity>
           <View style={styles.headerContent}>

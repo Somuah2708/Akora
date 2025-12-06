@@ -1,7 +1,9 @@
 import { View, Text, StyleSheet, ScrollView, Image, TouchableOpacity, ActivityIndicator, TextInput } from 'react-native';
 import { useFonts, Inter_400Regular, Inter_600SemiBold } from '@expo-google-fonts/inter';
 import { useEffect, useState } from 'react';
-import { SplashScreen, useRouter } from 'expo-router';
+import { SplashScreen, useRouter } from 'expo-router'
+import { DebouncedTouchable } from '@/components/DebouncedTouchable';
+import { debouncedRouter } from '@/utils/navigationDebounce';;
 import { ArrowLeft, Search, Building2, MapPin, Award, Bookmark, Globe } from 'lucide-react-native';
 import { supabase } from '../../../lib/supabase';
 import { useAuth } from '../../../hooks/useAuth';
@@ -69,7 +71,7 @@ export default function AllUniversitiesScreen() {
 
   const toggleBookmark = async (opportunityId: string) => {
     if (!user) {
-      router.push('/auth/sign-in' as any);
+      debouncedRouter.push('/auth/sign-in');
       return;
     }
 
@@ -109,7 +111,7 @@ export default function AllUniversitiesScreen() {
   return (
     <View style={styles.container}>
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
+        <TouchableOpacity onPress={() => debouncedRouter.back()} style={styles.backButton}>
           <ArrowLeft size={24} color="#000000" />
         </TouchableOpacity>
         <Text style={styles.title}>Universities</Text>
@@ -145,7 +147,7 @@ export default function AllUniversitiesScreen() {
               <TouchableOpacity 
                 key={university.id} 
                 style={styles.universityCard}
-                onPress={() => router.push(`/education/opportunity-detail?id=${university.id}` as any)}
+                onPress={() => debouncedRouter.push(`/education/opportunity-detail?id=${university.id}`)}
               >
                 <Image 
                   source={{ uri: university.image_url || 'https://images.unsplash.com/photo-1541339907198-e08756dedf3f?w=800' }} 

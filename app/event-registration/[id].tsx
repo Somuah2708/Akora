@@ -11,7 +11,9 @@ import {
   KeyboardAvoidingView,
   Platform,
 } from 'react-native';
-import { useRouter, useLocalSearchParams } from 'expo-router';
+import { useRouter, useLocalSearchParams } from 'expo-router'
+import { DebouncedTouchable } from '@/components/DebouncedTouchable';
+import { debouncedRouter } from '@/utils/navigationDebounce';;
 import { ArrowLeft, User, Mail, Phone, Users, Calendar, MapPin, Clock } from 'lucide-react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { supabase } from '@/lib/supabase';
@@ -235,7 +237,7 @@ export default function EventRegistrationScreen() {
           (creatorEmail ? `\nThe event organizer will be notified at ${creatorEmail}.` : '') +
           `\nTickets: ${ticketQuantity}`
         );
-        router.back();
+        debouncedRouter.back();
       } else {
         Alert.alert(
           'Registration Successful!',
@@ -246,7 +248,7 @@ export default function EventRegistrationScreen() {
           [
             {
               text: 'OK',
-              onPress: () => router.back(),
+              onPress: () => debouncedRouter.back(),
             },
           ]
         );
@@ -272,7 +274,7 @@ export default function EventRegistrationScreen() {
     return (
       <View style={[styles.container, styles.centered]}>
         <Text style={styles.errorText}>Event not found</Text>
-        <TouchableOpacity style={styles.backButton} onPress={() => router.back()}>
+        <TouchableOpacity style={styles.backButton} onPress={() => debouncedRouter.back()}>
           <Text style={styles.backButtonText}>Go Back</Text>
         </TouchableOpacity>
       </View>
@@ -286,7 +288,7 @@ export default function EventRegistrationScreen() {
     >
       {/* Header */}
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()} style={styles.backIconButton}>
+        <TouchableOpacity onPress={() => debouncedRouter.back()} style={styles.backIconButton}>
           <ArrowLeft size={24} color="#000" />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Event Registration</Text>

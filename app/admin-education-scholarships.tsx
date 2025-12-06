@@ -12,7 +12,9 @@ import {
   Modal,
   Image,
 } from 'react-native';
-import { useRouter } from 'expo-router';
+import { useRouter } from 'expo-router'
+import { DebouncedTouchable } from '@/components/DebouncedTouchable';
+import { debouncedRouter } from '@/utils/navigationDebounce';;
 import { ArrowLeft, Plus, Search, Edit, Trash2, Award, DollarSign, Calendar, Globe, ExternalLink, Upload, X, FileText, CheckCircle } from 'lucide-react-native';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/hooks/useAuth';
@@ -173,7 +175,7 @@ export default function AdminEducationScholarshipsScreen() {
     
     if (!profile?.is_admin) {
       Alert.alert('Access Denied', 'You do not have permission to access this page.');
-      router.back();
+      debouncedRouter.back();
     }
   }, [profile, router]);
 
@@ -534,7 +536,7 @@ export default function AdminEducationScholarshipsScreen() {
     <View style={styles.container}>
       {/* Header */}
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
+        <TouchableOpacity onPress={() => debouncedRouter.back()} style={styles.backButton}>
           <ArrowLeft size={24} color="#0F172A" />
         </TouchableOpacity>
         <View style={styles.headerCenter}>

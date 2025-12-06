@@ -1,7 +1,9 @@
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Dimensions, Modal } from 'react-native';
 import { useFonts, Inter_400Regular, Inter_600SemiBold } from '@expo-google-fonts/inter';
 import { useEffect, useState } from 'react';
-import { SplashScreen, useRouter } from 'expo-router';
+import { SplashScreen, useRouter } from 'expo-router'
+import { DebouncedTouchable } from '@/components/DebouncedTouchable';
+import { debouncedRouter } from '@/utils/navigationDebounce';;
 import { ArrowLeft, GraduationCap, Plus, Bell, ChevronRight, BookOpen, Star, Award, Brain, Target, Clock, CircleCheck as CheckCircle, ChartBar as BarChart3, ArrowUpRight, FileText, Calculator, Beaker, Globe, Palette } from 'lucide-react-native';
 
 SplashScreen.preventAutoHideAsync();
@@ -129,7 +131,7 @@ export default function AcademicScreen() {
     <View style={styles.container}>
       <ScrollView showsVerticalScrollIndicator={false}>
         <View style={styles.header}>
-          <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
+          <TouchableOpacity onPress={() => debouncedRouter.back()} style={styles.backButton}>
             <ArrowLeft size={24} color="#000000" />
           </TouchableOpacity>
           <Text style={styles.title}>Academic Excellence</Text>

@@ -11,7 +11,9 @@ import {
   Share,
   Dimensions,
 } from 'react-native';
-import { useRouter, useLocalSearchParams } from 'expo-router';
+import { useRouter, useLocalSearchParams } from 'expo-router'
+import { DebouncedTouchable } from '@/components/DebouncedTouchable';
+import { debouncedRouter } from '@/utils/navigationDebounce';;
 import {
   ArrowLeft,
   Download,
@@ -83,7 +85,7 @@ export default function DocumentViewerScreen() {
     } catch (error) {
       console.error('Error loading document:', error);
       Alert.alert('Error', 'Failed to load document');
-      router.back();
+      debouncedRouter.back();
     } finally {
       setLoading(false);
     }
@@ -211,7 +213,7 @@ export default function DocumentViewerScreen() {
     return (
       <View style={styles.loadingContainer}>
         <Text style={styles.errorText}>Document not found</Text>
-        <TouchableOpacity style={styles.backButton} onPress={() => router.back()}>
+        <TouchableOpacity style={styles.backButton} onPress={() => debouncedRouter.back()}>
           <Text style={styles.backButtonText}>Go Back</Text>
         </TouchableOpacity>
       </View>
@@ -228,7 +230,7 @@ export default function DocumentViewerScreen() {
         style={styles.headerGradient}
       >
         <View style={styles.header}>
-          <TouchableOpacity onPress={() => router.back()} style={styles.headerButton}>
+          <TouchableOpacity onPress={() => debouncedRouter.back()} style={styles.headerButton}>
             <ArrowLeft size={24} color="#FFFFFF" />
           </TouchableOpacity>
           <View style={styles.headerCenter}>

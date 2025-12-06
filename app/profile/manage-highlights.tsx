@@ -1,7 +1,9 @@
 import { useEffect, useMemo, useState } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, TextInput, Alert, ActivityIndicator, Modal, Pressable, Image, ScrollView, Platform } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
-import { useLocalSearchParams, useRouter } from 'expo-router';
+import { useLocalSearchParams, useRouter } from 'expo-router'
+import { DebouncedTouchable } from '@/components/DebouncedTouchable';
+import { debouncedRouter } from '@/utils/navigationDebounce';;
 import { useAuth } from '@/hooks/useAuth';
 import { supabase } from '@/lib/supabase';
 import { ArrowLeft, Trash, Eye, EyeOff, Pin, PinOff, Star } from 'lucide-react-native';
@@ -277,7 +279,7 @@ export default function ManageHighlightsScreen() {
   return (
     <View style={styles.container}>
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
+        <TouchableOpacity onPress={() => debouncedRouter.back()} style={styles.backButton}>
           <ArrowLeft size={22} color="#111827" />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>{groupTitle ? `Manage: ${groupTitle}` : 'Manage Highlights'}</Text>
@@ -365,9 +367,9 @@ export default function ManageHighlightsScreen() {
                     style={[styles.addButton, { flex: 1 }]}
                     onPress={() => {
                       if (groupTitle) {
-                        router.push(`/profile/add-from-library?t=${encodeURIComponent(groupTitle)}` as any);
+                        debouncedRouter.push(`/profile/add-from-library?t=${encodeURIComponent(groupTitle)}` as any);
                       } else {
-                        router.push(`/profile/add-from-library` as any);
+                        debouncedRouter.push(`/profile/add-from-library`);
                       }
                     }}
                   >
@@ -376,7 +378,7 @@ export default function ManageHighlightsScreen() {
                   {groupTitle ? (
                     <TouchableOpacity
                       style={[styles.addButton, { flex: 1, backgroundColor: '#0A84FF' }]}
-                      onPress={() => router.push(`/profile/add-to-highlight?t=${encodeURIComponent(groupTitle)}` as any)}
+                      onPress={() => debouncedRouter.push(`/profile/add-to-highlight?t=${encodeURIComponent(groupTitle)}` as any)}
                     >
                       <Text style={styles.addButtonText}>Add from posts</Text>
                     </TouchableOpacity>
@@ -510,7 +512,7 @@ export default function ManageHighlightsScreen() {
                     setShowRenameModal(false);
                     // reload and update route
                     await load();
-                    router.replace(`/profile/manage-highlights?t=${encodeURIComponent(renameTitle)}` as any);
+                    debouncedRouter.replace(`/profile/manage-highlights?t=${encodeURIComponent(renameTitle)}` as any);
                     toast.show('Group renamed', { type: 'success' });
                   } catch (e) {
                     Alert.alert('Error', 'Failed to rename group');

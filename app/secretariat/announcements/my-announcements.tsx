@@ -10,7 +10,9 @@ import {
   Platform,
   Alert,
 } from 'react-native';
-import { useRouter } from 'expo-router';
+import { useRouter } from 'expo-router'
+import { DebouncedTouchable } from '@/components/DebouncedTouchable';
+import { debouncedRouter } from '@/utils/navigationDebounce';;
 import { 
   ArrowLeft, 
   Calendar, 
@@ -134,7 +136,7 @@ export default function MyAnnouncementsScreen() {
   const handleEdit = (announcementId: string) => {
     console.log('[My Announcements] Navigating to edit page for:', announcementId);
     console.log('[My Announcements] Route:', `/secretariat/announcements/edit-announcement/${announcementId}`);
-    router.push(`/secretariat/announcements/edit-announcement/${announcementId}`);
+    debouncedRouter.push(`/secretariat/announcements/edit-announcement/${announcementId}`);
   };
 
   const formatDate = (dateString: string) => {
@@ -193,7 +195,7 @@ export default function MyAnnouncementsScreen() {
           <TouchableOpacity 
             onPress={() => {
               console.log('[My Announcements] Back button clicked - going to announcements index');
-              router.push('/secretariat/announcements');
+              debouncedRouter.push('/secretariat/announcements');
             }} 
             style={styles.backButton}
           >
@@ -218,7 +220,7 @@ export default function MyAnnouncementsScreen() {
             </Text>
             <TouchableOpacity
               style={styles.createButton}
-              onPress={() => router.push('/secretariat/announcements/create')}
+              onPress={() => debouncedRouter.push('/secretariat/announcements/create')}
             >
               <Text style={styles.createButtonText}>Create Announcement</Text>
             </TouchableOpacity>
@@ -231,7 +233,7 @@ export default function MyAnnouncementsScreen() {
             return (
               <View key={announcement.id} style={styles.announcementCard}>
                 <TouchableOpacity
-                  onPress={() => router.push(`/secretariat/announcements/${announcement.id}`)}
+                  onPress={() => debouncedRouter.push(`/secretariat/announcements/${announcement.id}`)}
                 >
                   {announcement.image_url && (
                     <Image

@@ -8,7 +8,9 @@ import {
   Alert,
   ActivityIndicator,
 } from 'react-native';
-import { useRouter, useLocalSearchParams } from 'expo-router';
+import { useRouter, useLocalSearchParams } from 'expo-router'
+import { DebouncedTouchable } from '@/components/DebouncedTouchable';
+import { debouncedRouter } from '@/utils/navigationDebounce';;
 import { ArrowLeft, User, MessageCircle, CheckCircle, XCircle } from 'lucide-react-native';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/hooks/useAuth';
@@ -144,7 +146,7 @@ export default function RequestDetailsScreen() {
         <Text style={styles.errorText}>Request not found</Text>
         <TouchableOpacity
           style={styles.backButton}
-          onPress={() => router.back()}
+          onPress={() => debouncedRouter.back()}
         >
           <Text style={styles.backButtonText}>Go Back</Text>
         </TouchableOpacity>
@@ -156,7 +158,7 @@ export default function RequestDetailsScreen() {
     <View style={styles.container}>
       {/* Header */}
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()} style={styles.headerBackButton}>
+        <TouchableOpacity onPress={() => debouncedRouter.back()} style={styles.headerBackButton}>
           <ArrowLeft size={24} color="#000000" />
         </TouchableOpacity>
         <View style={styles.headerContent}>

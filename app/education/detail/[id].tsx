@@ -1,7 +1,9 @@
 import { View, Text, StyleSheet, ScrollView, Image, TouchableOpacity, ActivityIndicator, Linking, Alert } from 'react-native';
 import { useFonts, Inter_400Regular, Inter_600SemiBold } from '@expo-google-fonts/inter';
 import { useEffect, useState } from 'react';
-import { SplashScreen, useRouter, useLocalSearchParams } from 'expo-router';
+import { SplashScreen, useRouter, useLocalSearchParams } from 'expo-router'
+import { DebouncedTouchable } from '@/components/DebouncedTouchable';
+import { debouncedRouter } from '@/utils/navigationDebounce';;
 import { ArrowLeft, MapPin, Globe, Mail, Phone, Award, Calendar, Wallet, BookOpen, Share2, Bookmark, ExternalLink, Users, Briefcase, GraduationCap } from 'lucide-react-native';
 import { supabase } from '../../../lib/supabase';
 import { useAuth } from '../../../hooks/useAuth';
@@ -209,7 +211,7 @@ export default function EducationDetailScreen() {
     return (
       <View style={styles.loadingContainer}>
         <Text style={styles.errorText}>Opportunity not found</Text>
-        <TouchableOpacity onPress={() => router.back()} style={styles.backButtonError}>
+        <TouchableOpacity onPress={() => debouncedRouter.back()} style={styles.backButtonError}>
           <Text style={styles.backButtonText}>Go Back</Text>
         </TouchableOpacity>
       </View>
@@ -235,7 +237,7 @@ export default function EducationDetailScreen() {
     <View style={styles.container}>
       {/* Header */}
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
+        <TouchableOpacity onPress={() => debouncedRouter.back()} style={styles.backButton}>
           <ArrowLeft size={24} color="#000000" />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Details</Text>
@@ -510,7 +512,7 @@ export default function EducationDetailScreen() {
                     <TouchableOpacity
                       key={mentor.id}
                       style={styles.mentorCard}
-                      onPress={() => router.push(`/education/mentor/${mentor.id}` as any)}
+                      onPress={() => debouncedRouter.push(`/education/mentor/${mentor.id}`)}
                       activeOpacity={0.7}
                     >
                       <Image
@@ -547,7 +549,7 @@ export default function EducationDetailScreen() {
                   {alumniMentors.length >= 10 && (
                     <TouchableOpacity 
                       style={styles.viewAllMentorsButton}
-                      onPress={() => router.push('/education?tab=mentors' as any)}
+                      onPress={() => debouncedRouter.push('/education?tab=mentors')}
                     >
                       <Text style={styles.viewAllMentorsText}>View All Mentors</Text>
                       <ExternalLink size={16} color="#4169E1" />
@@ -561,7 +563,7 @@ export default function EducationDetailScreen() {
                   <Text style={styles.noMentorsSubtext}>Check back soon or explore other mentors</Text>
                   <TouchableOpacity 
                     style={styles.browseMentorsButton}
-                    onPress={() => router.push('/education?tab=mentors' as any)}
+                    onPress={() => debouncedRouter.push('/education?tab=mentors')}
                   >
                     <Text style={styles.browseMentorsText}>Browse All Mentors</Text>
                   </TouchableOpacity>

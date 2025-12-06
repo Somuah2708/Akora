@@ -1,6 +1,8 @@
 import React, { useEffect } from 'react';
 import { View, Text, StyleSheet, ActivityIndicator } from 'react-native';
-import { useRouter } from 'expo-router';
+import { useRouter } from 'expo-router'
+import { DebouncedTouchable } from '@/components/DebouncedTouchable';
+import { debouncedRouter } from '@/utils/navigationDebounce';;
 
 /**
  * This screen redirects to the new Alumni Mentors Admin Panel
@@ -11,7 +13,7 @@ export default function EducationAdminScreen() {
 
   useEffect(() => {
     // Redirect to new dedicated alumni mentors admin panel
-    router.replace('/admin-alumni-mentors');
+    debouncedRouter.replace('/admin-alumni-mentors');
   }, [router]);
 
   return (

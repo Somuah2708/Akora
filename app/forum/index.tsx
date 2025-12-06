@@ -1,8 +1,10 @@
 import { View, Text, StyleSheet, ScrollView, Image, TouchableOpacity, TextInput, Dimensions, ActivityIndicator, Share, Alert, RefreshControl } from 'react-native';
 import { useFonts, Inter_400Regular, Inter_600SemiBold } from '@expo-google-fonts/inter';
 import { useEffect, useState, useCallback } from 'react';
-import { SplashScreen, useRouter, useFocusEffect } from 'expo-router';
-import { ArrowLeft, Search, Filter, MessageCircle, Users, ThumbsUp, Share2, Bookmark, Clock, Hash, Briefcase, Code, ChartLine as LineChart, Brain, Microscope, Palette, Building2, Globe, ChevronRight, Plus, Bell, TrendingUp, Activity, Star } from 'lucide-react-native';
+import { SplashScreen, useRouter, useFocusEffect } from 'expo-router'
+import { DebouncedTouchable } from '@/components/DebouncedTouchable';
+import { debouncedRouter } from '@/utils/navigationDebounce';;
+import { ArrowLeft, Search, Filter, MessageCircle, MessagesSquare, Users, ThumbsUp, Share2, Bookmark, Clock, Hash, Briefcase, Code, ChartLine as LineChart, Brain, Microscope, Palette, Building2, Globe, ChevronRight, Plus, Bell, TrendingUp, Activity, Star } from 'lucide-react-native';
 import { on } from '@/lib/eventBus';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/hooks/useAuth';
@@ -386,7 +388,7 @@ export default function ForumScreen() {
       {/* Header */}
       <View style={styles.header}>
         <View style={styles.headerSideLeft}>
-          <TouchableOpacity onPress={() => router.back()} style={styles.backButton} accessibilityLabel="Go back">
+          <TouchableOpacity onPress={() => debouncedRouter.back()} style={styles.backButton} accessibilityLabel="Go back">
             <ArrowLeft size={24} color="#111827" />
           </TouchableOpacity>
         </View>
@@ -398,10 +400,10 @@ export default function ForumScreen() {
           <TouchableOpacity style={styles.iconButton} accessibilityLabel="Notifications">
             <Bell size={20} color="#111827" />
           </TouchableOpacity>
-          <TouchableOpacity style={styles.iconButton} onPress={() => router.push('/forum/saved')} accessibilityLabel="View saved discussions">
+          <TouchableOpacity style={styles.iconButton} onPress={() => debouncedRouter.push('/forum/saved')} accessibilityLabel="View saved discussions">
             <Star size={20} color="#111827" />
           </TouchableOpacity>
-          <TouchableOpacity style={styles.iconButton} onPress={() => router.push('/forum/new')} accessibilityLabel="Create discussion">
+          <TouchableOpacity style={styles.iconButton} onPress={() => debouncedRouter.push('/forum/new')} accessibilityLabel="Create discussion">
             <Plus size={20} color="#111827" />
           </TouchableOpacity>
         </View>
@@ -456,7 +458,7 @@ export default function ForumScreen() {
       <View style={styles.section}>
         <View style={styles.sectionHeader}>
           <Text style={styles.sectionTitle}>Trending Discussions</Text>
-          <TouchableOpacity style={styles.seeAllButton} onPress={() => router.push('/forum/trending' as any)}>
+          <TouchableOpacity style={styles.seeAllButton} onPress={() => debouncedRouter.push('/forum/trending')}>
             <Text style={styles.seeAllText}>See All</Text>
             <ChevronRight size={16} color="#666666" />
           </TouchableOpacity>
@@ -469,7 +471,7 @@ export default function ForumScreen() {
             <Text style={styles.emptyText}>No trending data</Text>
           )}
           {trendingDiscussions.map((discussion, idx) => (
-            <TouchableOpacity key={discussion.id} style={styles.trendingCard} onPress={() => router.push(`/forum/${discussion.id}` as any)}>
+            <TouchableOpacity key={discussion.id} style={styles.trendingCard} onPress={() => debouncedRouter.push(`/forum/${discussion.id}`)}>
               {/* subtle rank accent */}
               <View style={[
                 styles.accentBar,
@@ -512,7 +514,7 @@ export default function ForumScreen() {
       )}
       <View style={styles.section}>
         {filteredDiscussions.map((discussion) => (
-          <TouchableOpacity key={discussion.id} style={styles.discussionCard} onPress={() => router.push(`/forum/${discussion.id}` as any)}>
+          <TouchableOpacity key={discussion.id} style={styles.discussionCard} onPress={() => debouncedRouter.push(`/forum/${discussion.id}`)}>
             <View style={styles.discussionHeader}>
               <Image source={{ uri: discussion.profiles?.avatar_url || 'https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?w=400&auto=format&fit=crop&q=60' }} style={styles.discussionAvatar} />
               <View style={styles.discussionAuthorInfo}>
@@ -572,7 +574,7 @@ export default function ForumScreen() {
       <View style={styles.section}>
         <View style={styles.sectionHeader}>
           <Text style={styles.sectionTitle}>Active Members</Text>
-          <TouchableOpacity style={styles.seeAllButton} onPress={() => router.push('/forum/active' as any)}>
+          <TouchableOpacity style={styles.seeAllButton} onPress={() => debouncedRouter.push('/forum/active')}>
             <Text style={styles.seeAllText}>See All</Text>
             <ChevronRight size={16} color="#666666" />
           </TouchableOpacity>
@@ -583,7 +585,7 @@ export default function ForumScreen() {
             <Text style={styles.emptyText}>No active users</Text>
           )}
           {activeUsers.map(u => (
-            <TouchableOpacity key={u.user_id} style={styles.memberCard} onPress={() => router.push(`/user-profile/${u.user_id}` as any)}>
+            <TouchableOpacity key={u.user_id} style={styles.memberCard} onPress={() => debouncedRouter.push(`/user-profile/${u.user_id}`)}>
               <Image source={{ uri: u.profile?.avatar_url || 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=400&auto=format&fit=crop&q=60' }} style={styles.memberAvatar} />
               <Text style={styles.memberName} numberOfLines={1}>{u.profile?.full_name || 'Member'}</Text>
               <Text style={styles.memberRole}>{getTimeAgo(u.last_activity_at)}</Text>

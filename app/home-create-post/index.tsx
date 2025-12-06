@@ -1,6 +1,8 @@
 import { View, Text, StyleSheet, TextInput, TouchableOpacity, ScrollView, Alert, ActivityIndicator, Image, KeyboardAvoidingView, Platform } from 'react-native';
 import { useState, useEffect, useRef } from 'react';
-import { useRouter } from 'expo-router';
+import { useRouter } from 'expo-router'
+import { DebouncedTouchable } from '@/components/DebouncedTouchable';
+import { debouncedRouter } from '@/utils/navigationDebounce';;
 import { ArrowLeft, Image as ImageIcon, Send, X, Edit3, Video as VideoIcon } from 'lucide-react-native';
 import * as ImagePicker from 'expo-image-picker';
 import { readAsStringAsync } from 'expo-file-system/legacy';
@@ -269,7 +271,7 @@ export default function HomeCreatePostScreen() {
       setUploadProgress(100);
       setUploadStatus('Complete!');
       
-      Alert.alert('Success', 'Post created!', [{ text: 'OK', onPress: () => router.back() }]);
+      Alert.alert('Success', 'Post created!', [{ text: 'OK', onPress: () => debouncedRouter.back() }]);
     } catch (e: any) {
       console.error('❌ Error:', e);
       setUploadStatus('Upload failed');
@@ -289,7 +291,7 @@ export default function HomeCreatePostScreen() {
       keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 20}
     >
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()} style={styles.backButton}> 
+        <TouchableOpacity onPress={() => debouncedRouter.back()} style={styles.backButton}> 
           <View style={styles.backButtonCircle}>
             <ArrowLeft size={22} color="#FFFFFF" />
           </View>

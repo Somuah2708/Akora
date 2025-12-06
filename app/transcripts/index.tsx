@@ -1,7 +1,9 @@
 import { useEffect, useState, useCallback } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator, Alert } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useRouter } from 'expo-router';
+import { useRouter } from 'expo-router'
+import { DebouncedTouchable } from '@/components/DebouncedTouchable';
+import { debouncedRouter } from '@/utils/navigationDebounce';;
 import { FileText, Plus, Clock, CheckCircle2 } from 'lucide-react-native';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/hooks/useAuth';
@@ -68,7 +70,7 @@ export default function TranscriptListScreen() {
         
         if (isUserAdmin) {
           // Redirect to admin panel
-          router.replace('/transcripts/admin');
+          debouncedRouter.replace('/transcripts/admin');
         }
       } catch (err) {
         console.error('Error checking admin status:', err);
@@ -137,7 +139,7 @@ export default function TranscriptListScreen() {
     <SafeAreaView style={styles.container} edges={['top']}>
       <View style={styles.header}>
         <Text style={styles.title}>Academic Requests</Text>
-        <TouchableOpacity style={styles.addButton} onPress={() => router.push('/transcripts/new')}>
+        <TouchableOpacity style={styles.addButton} onPress={() => debouncedRouter.push('/transcripts/new')}>
           <Plus size={20} color="#4169E1" />
           <Text style={styles.addText}>New</Text>
         </TouchableOpacity>
@@ -152,7 +154,7 @@ export default function TranscriptListScreen() {
           <FileText size={36} color="#999" />
           <Text style={styles.emptyTitle}>No transcript requests yet</Text>
           <Text style={styles.emptySub}>Create your first request to get started.</Text>
-          <TouchableOpacity style={styles.cta} onPress={() => router.push('/transcripts/new')}>
+          <TouchableOpacity style={styles.cta} onPress={() => debouncedRouter.push('/transcripts/new')}>
             <Plus size={18} color="#fff" />
             <Text style={styles.ctaText}>Request Transcript</Text>
           </TouchableOpacity>
@@ -171,7 +173,7 @@ export default function TranscriptListScreen() {
               ? `${it.price_currency} ${it.price_amount}`
               : null;
             return (
-              <TouchableOpacity key={it.id} style={styles.card} onPress={() => router.push(`/transcripts/${it.id}`)}>
+              <TouchableOpacity key={it.id} style={styles.card} onPress={() => debouncedRouter.push(`/transcripts/${it.id}`)}>
                 <View style={{ flex: 1 }}>
                   <Text style={styles.cardTitle}>{title}</Text>
                   <Text style={styles.cardSub}>{it.purpose}</Text>

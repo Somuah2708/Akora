@@ -9,7 +9,9 @@ import {
   ActivityIndicator,
   Alert,
 } from 'react-native';
-import { useRouter } from 'expo-router';
+import { useRouter } from 'expo-router'
+import { DebouncedTouchable } from '@/components/DebouncedTouchable';
+import { debouncedRouter } from '@/utils/navigationDebounce';;
 import {
   ArrowLeft,
   Search,
@@ -292,7 +294,7 @@ export default function DocumentCenterScreen() {
         style={styles.headerGradient}
       >
         <View style={styles.header}>
-          <TouchableOpacity onPress={() => router.push('/secretariat')} style={styles.backButton}>
+          <TouchableOpacity onPress={() => debouncedRouter.push('/secretariat')} style={styles.backButton}>
             <ArrowLeft size={24} color="#FFFFFF" />
           </TouchableOpacity>
           <View style={styles.headerCenter}>
@@ -302,13 +304,13 @@ export default function DocumentCenterScreen() {
           <View style={styles.headerActions}>
             <TouchableOpacity
               style={styles.myDocumentsButton}
-              onPress={() => router.push('/secretariat/documents/my-documents')}
+              onPress={() => debouncedRouter.push('/secretariat/documents/my-documents')}
             >
               <FolderOpen size={24} color="#FFFFFF" />
             </TouchableOpacity>
             <TouchableOpacity
               style={styles.addButton}
-              onPress={() => router.push('/secretariat/documents/upload')}
+              onPress={() => debouncedRouter.push('/secretariat/documents/upload')}
             >
               <Plus size={24} color="#FFFFFF" />
             </TouchableOpacity>
@@ -518,7 +520,7 @@ export default function DocumentCenterScreen() {
               <TouchableOpacity
                 key={document.id}
                 style={styles.documentCard}
-                onPress={() => router.push(`/secretariat/documents/${document.id}` as any)}
+                onPress={() => debouncedRouter.push(`/secretariat/documents/${document.id}`)}
               >
                 {/* Document Icon */}
                 <View style={styles.documentIcon}>

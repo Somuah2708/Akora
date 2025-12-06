@@ -11,7 +11,9 @@ import {
   KeyboardAvoidingView,
   Platform,
 } from 'react-native';
-import { useRouter } from 'expo-router';
+import { useRouter } from 'expo-router'
+import { DebouncedTouchable } from '@/components/DebouncedTouchable';
+import { debouncedRouter } from '@/utils/navigationDebounce';;
 import { ArrowLeft, Upload, File, X, Paperclip } from 'lucide-react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import * as DocumentPicker from 'expo-document-picker';
@@ -230,7 +232,7 @@ export default function UploadDocumentScreen() {
 
       if (Platform.OS === 'web') {
         window.alert('✓ Document uploaded successfully!');
-        router.push('/secretariat/documents/my-documents');
+        debouncedRouter.push('/secretariat/documents/my-documents');
       } else {
         Alert.alert(
           'Success',
@@ -238,7 +240,7 @@ export default function UploadDocumentScreen() {
           [
             {
               text: 'OK',
-              onPress: () => router.push('/secretariat/documents/my-documents'),
+              onPress: () => debouncedRouter.push('/secretariat/documents/my-documents'),
             },
           ]
         );
@@ -255,7 +257,7 @@ export default function UploadDocumentScreen() {
     if (Platform.OS === 'web') {
       const confirmed = window.confirm('Discard changes?\n\nAre you sure you want to discard this document?');
       if (confirmed) {
-        router.push('/secretariat/documents');
+        debouncedRouter.push('/secretariat/documents');
       }
     } else {
       Alert.alert(
@@ -266,7 +268,7 @@ export default function UploadDocumentScreen() {
           {
             text: 'Discard',
             style: 'destructive',
-            onPress: () => router.push('/secretariat/documents'),
+            onPress: () => debouncedRouter.push('/secretariat/documents'),
           },
         ]
       );

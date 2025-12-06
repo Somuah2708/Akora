@@ -3,7 +3,9 @@ import { Image } from 'expo-image';
 import * as ImagePicker from 'expo-image-picker';
 import { useFonts, Inter_400Regular, Inter_600SemiBold } from '@expo-google-fonts/inter';
 import { useEffect, useState } from 'react';
-import { SplashScreen, useRouter } from 'expo-router';
+import { SplashScreen, useRouter } from 'expo-router'
+import { DebouncedTouchable } from '@/components/DebouncedTouchable';
+import { debouncedRouter } from '@/utils/navigationDebounce';;
 import { ArrowLeft, Image as ImageIcon, Send, DollarSign, Tag, Info, Briefcase, Mail, Trash2, Upload } from 'lucide-react-native';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/hooks/useAuth';
@@ -51,7 +53,7 @@ export default function CreateJobListingScreen() {
     if (loading) return;
     if (!user) {
       Alert.alert('Authentication Required', 'Please sign in to submit job listings.');
-      router.replace('/auth/sign-in');
+      debouncedRouter.replace('/auth/sign-in');
       return;
     }
   }, [user, loading, router]);
@@ -160,7 +162,7 @@ export default function CreateJobListingScreen() {
       alert('✅ Success! Your job listing has been created successfully!');
       
       // Navigate to workplace
-      router.push('/workplace');
+      debouncedRouter.push('/workplace');
     } catch (error: any) {
       console.error('Error creating job listing:', error);
       alert(`Error: ${error.message || 'Failed to submit job listing'}`);
@@ -176,7 +178,7 @@ export default function CreateJobListingScreen() {
   return (
     <View style={styles.container}>
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
+        <TouchableOpacity onPress={() => debouncedRouter.back()} style={styles.backButton}>
           <ArrowLeft size={24} color="#000000" />
         </TouchableOpacity>
         <Text style={styles.title}>Submit Job Listing</Text>

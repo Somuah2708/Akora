@@ -1,6 +1,8 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, ActivityIndicator, FlatList, Image, Dimensions, Alert, TextInput, ScrollView } from 'react-native';
-import { useLocalSearchParams, useRouter } from 'expo-router';
+import { useLocalSearchParams, useRouter } from 'expo-router'
+import { DebouncedTouchable } from '@/components/DebouncedTouchable';
+import { debouncedRouter } from '@/utils/navigationDebounce';;
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/hooks/useAuth';
 import { ArrowLeft, Check } from 'lucide-react-native';
@@ -119,7 +121,7 @@ export default function AddFromPostSlides() {
       } else {
         toast.show('Highlight added successfully');
       }
-      router.back();
+      debouncedRouter.back();
     } catch (e) {
       console.error(e);
       Alert.alert('Error', 'Failed to add slides');
@@ -133,7 +135,7 @@ export default function AddFromPostSlides() {
   return (
     <View style={styles.container}>
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
+        <TouchableOpacity onPress={() => debouncedRouter.back()} style={styles.backBtn}>
           <ArrowLeft size={22} color="#111827" />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Select slides</Text>

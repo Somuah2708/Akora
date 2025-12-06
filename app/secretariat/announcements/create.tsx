@@ -12,7 +12,9 @@ import {
   Platform,
   Image,
 } from 'react-native';
-import { useRouter } from 'expo-router';
+import { useRouter } from 'expo-router'
+import { DebouncedTouchable } from '@/components/DebouncedTouchable';
+import { debouncedRouter } from '@/utils/navigationDebounce';;
 import { ArrowLeft, Upload, X, Plus, Image as ImageIcon, Link as LinkIcon, Paperclip, FileText, File } from 'lucide-react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import * as ImagePicker from 'expo-image-picker';
@@ -258,7 +260,7 @@ export default function CreateAnnouncementScreen() {
 
       // Redirect to My Announcements page
       setTimeout(() => {
-        router.replace('/secretariat/announcements/my-announcements');
+        debouncedRouter.replace('/secretariat/announcements/my-announcements');
       }, 100);
     } catch (error) {
       console.error('Error creating announcement:', error);
@@ -277,7 +279,7 @@ export default function CreateAnnouncementScreen() {
         {
           text: 'Discard',
           style: 'destructive',
-          onPress: () => router.back(),
+          onPress: () => debouncedRouter.back(),
         },
       ]
     );

@@ -1,7 +1,9 @@
 import { View, Text, StyleSheet, TextInput, TouchableOpacity, ScrollView, KeyboardAvoidingView, Platform, ActivityIndicator, Alert } from 'react-native';
 import { useFonts, Inter_400Regular, Inter_600SemiBold } from '@expo-google-fonts/inter';
 import { useEffect, useState, useCallback } from 'react';
-import { SplashScreen, useRouter, useLocalSearchParams } from 'expo-router';
+import { SplashScreen, useRouter, useLocalSearchParams } from 'expo-router'
+import { DebouncedTouchable } from '@/components/DebouncedTouchable';
+import { debouncedRouter } from '@/utils/navigationDebounce';;
 import { ArrowLeft, Share2, ThumbsUp, MoreVertical } from 'lucide-react-native';
 import { supabase, type PostComment, type Profile } from '@/lib/supabase';
 import { useAuth } from '@/hooks/useAuth';
@@ -373,9 +375,9 @@ export default function PostCommentsScreen() {
           onPress={() => {
             console.log('Back button pressed');
             if (router.canGoBack()) {
-              router.back();
+              debouncedRouter.back();
             } else {
-              router.push('/(tabs)');
+              debouncedRouter.push('/(tabs)');
             }
           }}
           style={styles.backButton}
@@ -404,7 +406,7 @@ export default function PostCommentsScreen() {
               {/* Parent Comment */}
               <View style={styles.commentCard}>
                 <TouchableOpacity
-                  onPress={() => router.push(`/user-profile/${comment.user_id}` as any)}
+                  onPress={() => debouncedRouter.push(`/user-profile/${comment.user_id}`)}
                   activeOpacity={0.7}
                 >
                   <Image
@@ -417,7 +419,7 @@ export default function PostCommentsScreen() {
                 <View style={styles.commentContent}>
                   <View style={styles.commentHeader}>
                     <TouchableOpacity
-                      onPress={() => router.push(`/user-profile/${comment.user_id}` as any)}
+                      onPress={() => debouncedRouter.push(`/user-profile/${comment.user_id}`)}
                       activeOpacity={0.7}
                       style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}
                     >
@@ -476,7 +478,7 @@ export default function PostCommentsScreen() {
                   {comment.replies.map((reply) => (
                     <View key={reply.id} style={styles.replyCard}>
                       <TouchableOpacity
-                        onPress={() => router.push(`/user-profile/${reply.user_id}` as any)}
+                        onPress={() => debouncedRouter.push(`/user-profile/${reply.user_id}`)}
                         activeOpacity={0.7}
                       >
                         <Image
@@ -489,7 +491,7 @@ export default function PostCommentsScreen() {
                       <View style={styles.commentContent}>
                         <View style={styles.commentHeader}>
                           <TouchableOpacity
-                            onPress={() => router.push(`/user-profile/${reply.user_id}` as any)}
+                            onPress={() => debouncedRouter.push(`/user-profile/${reply.user_id}`)}
                             activeOpacity={0.7}
                             style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}
                           >

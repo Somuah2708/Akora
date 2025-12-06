@@ -9,7 +9,9 @@ import {
   Alert,
   ActivityIndicator,
 } from 'react-native';
-import { useRouter } from 'expo-router';
+import { useRouter } from 'expo-router'
+import { DebouncedTouchable } from '@/components/DebouncedTouchable';
+import { debouncedRouter } from '@/utils/navigationDebounce';;
 import { ArrowLeft, Calendar, MapPin, Edit2, Trash2, Plus, Package, AlertCircle } from 'lucide-react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { supabase } from '@/lib/supabase';
@@ -167,7 +169,7 @@ export default function MyAkoraEventsScreen() {
         style={styles.headerGradient}
       >
         <View style={styles.header}>
-          <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
+          <TouchableOpacity onPress={() => debouncedRouter.back()} style={styles.backButton}>
             <ArrowLeft size={24} color="#FFFFFF" />
           </TouchableOpacity>
           <View style={styles.headerCenter}>
@@ -176,7 +178,7 @@ export default function MyAkoraEventsScreen() {
           </View>
           <TouchableOpacity 
             style={styles.addButton}
-            onPress={() => router.push('/events' as any)}
+            onPress={() => debouncedRouter.push('/events')}
           >
             <Plus size={24} color="#FFFFFF" />
           </TouchableOpacity>
@@ -191,7 +193,7 @@ export default function MyAkoraEventsScreen() {
             <Text style={styles.emptyText}>Submit your first Akora event to get started!</Text>
             <TouchableOpacity 
               style={styles.createButton}
-              onPress={() => router.push('/events' as any)}
+              onPress={() => debouncedRouter.push('/events')}
             >
               <LinearGradient
                 colors={['#4169E1', '#5B7FE8']}
@@ -289,7 +291,7 @@ export default function MyAkoraEventsScreen() {
                     <View style={styles.actions}>
                       <TouchableOpacity 
                         style={styles.viewButton}
-                        onPress={() => router.push(`/events/${event.id}` as any)}
+                        onPress={() => debouncedRouter.push(`/events/${event.id}`)}
                       >
                         <Text style={styles.viewButtonText}>View Details</Text>
                       </TouchableOpacity>

@@ -11,7 +11,9 @@ import {
   Image,
   KeyboardAvoidingView,
 } from 'react-native';
-import { useLocalSearchParams, useRouter } from 'expo-router';
+import { useLocalSearchParams, useRouter } from 'expo-router'
+import { DebouncedTouchable } from '@/components/DebouncedTouchable';
+import { debouncedRouter } from '@/utils/navigationDebounce';;
 import { useAuth } from '@/hooks/useAuth';
 import { supabase, type ProductService } from '@/lib/supabase';
 import * as ImagePicker from 'expo-image-picker';
@@ -82,13 +84,13 @@ export default function EditListingScreen() {
         if (error) throw error;
         if (!data) {
           Alert.alert('Not found', 'This listing could not be found.');
-          router.back();
+          debouncedRouter.back();
           return;
         }
 
         if (user && data.user_id !== user.id && !(user as any).is_admin) {
           Alert.alert('Not allowed', 'You cannot edit this listing.');
-          router.back();
+          debouncedRouter.back();
           return;
         }
 
@@ -111,7 +113,7 @@ export default function EditListingScreen() {
       } catch (err) {
         console.error('Error loading listing to edit', err);
         Alert.alert('Error', 'Could not load this listing.');
-        router.back();
+        debouncedRouter.back();
       } finally {
         setLoading(false);
       }
@@ -207,7 +209,7 @@ export default function EditListingScreen() {
       Alert.alert('Saved', 'Your changes have been saved.', [
         {
           text: 'View listing',
-          onPress: () => router.replace(`/services/${id}`),
+          onPress: () => debouncedRouter.replace(`/services/${id}`),
         },
       ]);
     } catch (err) {
@@ -234,7 +236,7 @@ export default function EditListingScreen() {
       keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 20}
     >
       <View style={styles.header}>
-        <TouchableOpacity style={styles.backButton} onPress={() => router.back()}>
+        <TouchableOpacity style={styles.backButton} onPress={() => debouncedRouter.back()}>
           <ArrowLeft size={20} color="#020617" />
         </TouchableOpacity>
         <View style={styles.headerTextContainer}>

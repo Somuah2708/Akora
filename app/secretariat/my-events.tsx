@@ -9,7 +9,9 @@ import {
   Alert,
   ActivityIndicator,
 } from 'react-native';
-import { useRouter } from 'expo-router';
+import { useRouter } from 'expo-router'
+import { DebouncedTouchable } from '@/components/DebouncedTouchable';
+import { debouncedRouter } from '@/utils/navigationDebounce';;
 import { ArrowLeft, Calendar, MapPin, Edit2, Trash2, Plus, Package, Clock, Users } from 'lucide-react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { supabase } from '@/lib/supabase';
@@ -156,7 +158,7 @@ export default function MyEventsScreen() {
         style={styles.headerGradient}
       >
         <View style={styles.header}>
-          <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
+          <TouchableOpacity onPress={() => debouncedRouter.back()} style={styles.backButton}>
             <ArrowLeft size={24} color="#FFFFFF" />
           </TouchableOpacity>
           <View style={styles.headerCenter}>
@@ -165,7 +167,7 @@ export default function MyEventsScreen() {
           </View>
           <TouchableOpacity 
             style={styles.addButton}
-            onPress={() => router.push('/create-event' as any)}
+            onPress={() => debouncedRouter.push('/create-event')}
           >
             <Plus size={24} color="#FFFFFF" />
           </TouchableOpacity>
@@ -180,7 +182,7 @@ export default function MyEventsScreen() {
             <Text style={styles.emptyText}>Start creating events to share with the community!</Text>
             <TouchableOpacity 
               style={styles.createButton}
-              onPress={() => router.push('/create-event' as any)}
+              onPress={() => debouncedRouter.push('/create-event')}
             >
               <LinearGradient
                 colors={['#4169E1', '#5B7FE8']}
@@ -261,7 +263,7 @@ export default function MyEventsScreen() {
                     <View style={styles.actions}>
                       <TouchableOpacity 
                         style={styles.viewButton}
-                        onPress={() => router.push(`/events/${event.id}` as any)}
+                        onPress={() => debouncedRouter.push(`/events/${event.id}`)}
                       >
                         <Text style={styles.viewButtonText}>View Details</Text>
                       </TouchableOpacity>
@@ -269,7 +271,7 @@ export default function MyEventsScreen() {
                       <View style={styles.actionButtons}>
                         <TouchableOpacity 
                           style={styles.editButton}
-                          onPress={() => router.push(`/edit-event/${event.id}` as any)}
+                          onPress={() => debouncedRouter.push(`/edit-event/${event.id}`)}
                         >
                           <Edit2 size={18} color="#4169E1" />
                         </TouchableOpacity>

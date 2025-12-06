@@ -2,7 +2,9 @@ import { View, Text, StyleSheet, ScrollView, Image, TouchableOpacity, TextInput,
 import { Search, Plus, MoveVertical as MoreVertical, X, MessageCircle, UserPlus, Check, CheckCheck, Users, ArrowLeft } from 'lucide-react-native';
 import { useFonts, Inter_400Regular, Inter_600SemiBold } from '@expo-google-fonts/inter';
 import { useEffect, useState } from 'react';
-import { SplashScreen, useRouter } from 'expo-router';
+import { SplashScreen, useRouter } from 'expo-router'
+import { DebouncedTouchable } from '@/components/DebouncedTouchable';
+import { debouncedRouter } from '@/utils/navigationDebounce';;
 import { HEADER_COLOR } from '@/constants/Colors';
 import { getConversationList, searchUsers as searchUsersHelper } from '@/lib/friends';
 import { pinChat, getSettingsForUser, markDirectConversationRead, markGroupConversationRead } from '@/lib/chatSettings';
@@ -541,7 +543,7 @@ export default function ChatScreen() {
     if (!user) return;
     try {
       // Navigate directly to the direct message screen with the friend's ID
-      router.push(`/chat/direct/${otherUserId}`);
+      debouncedRouter.push(`/chat/direct/${otherUserId}`);
       setSearchModalVisible(false);
       setSearchQuery('');
       setSearchResults([]);
@@ -570,9 +572,9 @@ export default function ChatScreen() {
 
     // Navigate
     if (type === 'direct') {
-      router.push(`/chat/direct/${id}`);
+      debouncedRouter.push(`/chat/direct/${id}`);
     } else {
-      router.push(`/chat/group/${id}`);
+      debouncedRouter.push(`/chat/group/${id}`);
     }
 
     // Unlock after 500ms (enough time for navigation)
@@ -703,7 +705,7 @@ export default function ChatScreen() {
               </Text>
               <TouchableOpacity 
                 style={styles.emptyActionButton}
-                onPress={() => router.push('/friends')}
+                onPress={() => debouncedRouter.push('/friends')}
               >
                 <UserPlus size={18} color="#FFFFFF" strokeWidth={2.5} />
                 <Text style={styles.emptyActionText}>Find Friends</Text>
@@ -726,7 +728,7 @@ export default function ChatScreen() {
                         onPress={() => {
                           if (navigationLock.has(`support-${friend?.id}`)) return;
                           setNavigationLock(prev => new Set(prev).add(`support-${friend?.id}`));
-                          router.push(`/admin/messages/${friend?.id}`);
+                          debouncedRouter.push(`/admin/messages/${friend?.id}`);
                           setTimeout(() => {
                             setNavigationLock(prev => {
                               const next = new Set(prev);
@@ -1115,7 +1117,7 @@ export default function ChatScreen() {
               style={styles.sheetAction}
               onPress={() => {
                 setNewMenuVisible(false);
-                router.push('/friends');
+                debouncedRouter.push('/friends');
               }}
             >
               <UserPlus size={20} color="#0F172A" strokeWidth={2} />
@@ -1129,7 +1131,7 @@ export default function ChatScreen() {
               style={styles.sheetAction}
               onPress={() => {
                 setNewMenuVisible(false);
-                router.push('/create-group' as any);
+                debouncedRouter.push('/create-group');
               }}
             >
               <Users size={20} color="#0F172A" strokeWidth={2} />

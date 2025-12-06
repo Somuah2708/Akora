@@ -17,7 +17,9 @@ import {
   UIManager,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useRouter } from 'expo-router';
+import { useRouter } from 'expo-router'
+import { DebouncedTouchable } from '@/components/DebouncedTouchable';
+import { debouncedRouter } from '@/utils/navigationDebounce';;
 import { ArrowLeft, Settings, Eye, CheckCircle2, XCircle, Calendar, Users, TrendingUp, DollarSign, FileText, Trash2 } from 'lucide-react-native';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/hooks/useAuth';
@@ -340,7 +342,7 @@ export default function EventsAdminScreen() {
     return (
       <SafeAreaView style={[styles.container, styles.centered]} edges={['top']}>
         <Text style={styles.errorText}>Admin access required</Text>
-        <TouchableOpacity onPress={() => router.back()} style={styles.button}>
+        <TouchableOpacity onPress={() => debouncedRouter.back()} style={styles.button}>
           <Text style={styles.buttonText}>Go Back</Text>
         </TouchableOpacity>
       </SafeAreaView>
@@ -351,13 +353,13 @@ export default function EventsAdminScreen() {
     <SafeAreaView style={styles.container} edges={['top']}>
       {/* Header */}
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
+        <TouchableOpacity onPress={() => debouncedRouter.back()} style={styles.backBtn}>
           <ArrowLeft size={22} color="#111" />
         </TouchableOpacity>
         <View style={styles.headerCenter}>
           <Text style={styles.headerTitle}>Events Admin</Text>
         </View>
-        <TouchableOpacity onPress={() => router.push('/events/admin-settings' as any)} style={styles.settingsBtn}>
+        <TouchableOpacity onPress={() => debouncedRouter.push('/events/admin-settings')} style={styles.settingsBtn}>
           <Settings size={20} color="#4169E1" />
         </TouchableOpacity>
         <View style={styles.badge}>
@@ -498,7 +500,7 @@ export default function EventsAdminScreen() {
                 )}
                 <TouchableOpacity
                   style={[styles.actionBtn, styles.viewBtn]}
-                  onPress={() => router.push(`/events/${event.id}`)}
+                  onPress={() => debouncedRouter.push(`/events/${event.id}`)}
                 >
                   <Eye size={16} color="#4169E1" />
                   <Text style={[styles.actionText, { color: '#4169E1' }]}>View</Text>

@@ -1,7 +1,9 @@
 import { View, Text, StyleSheet, ScrollView, Image, TouchableOpacity, Alert } from 'react-native';
 import { useFonts, Inter_400Regular, Inter_600SemiBold, Inter_700Bold } from '@expo-google-fonts/inter';
 import { useEffect, useState, useCallback } from 'react';
-import { SplashScreen, useRouter, useFocusEffect } from 'expo-router';
+import { SplashScreen, useRouter, useFocusEffect } from 'expo-router'
+import { DebouncedTouchable } from '@/components/DebouncedTouchable';
+import { debouncedRouter } from '@/utils/navigationDebounce';;
 import { ArrowLeft, Heart, ShoppingCart, Plus } from 'lucide-react-native';
 import { getFavorites, toggleFavorite, addToCart, resetCartViewedStatus, getCartCount, markCartAsViewed } from '@/lib/secretariatCart';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -142,7 +144,7 @@ export default function FavoritesScreen() {
             text: 'View Cart', 
             onPress: async () => {
               await markCartAsViewed();
-              router.push('/cart');
+              debouncedRouter.push('/cart');
             }
           },
         ]
@@ -161,7 +163,7 @@ export default function FavoritesScreen() {
         style={styles.headerGradient}
       >
         <View style={styles.header}>
-          <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
+          <TouchableOpacity onPress={() => debouncedRouter.back()} style={styles.backButton}>
             <ArrowLeft size={24} color="#FFFFFF" />
           </TouchableOpacity>
           <View style={styles.headerCenter}>
@@ -202,7 +204,7 @@ export default function FavoritesScreen() {
             </Text>
             <TouchableOpacity
               style={styles.shopButton}
-              onPress={() => router.push('/secretariat-shop')}
+              onPress={() => debouncedRouter.push('/secretariat-shop')}
             >
               <LinearGradient
                 colors={['#4169E1', '#5B7FE8']}
@@ -219,7 +221,7 @@ export default function FavoritesScreen() {
           favoriteProducts.map((product) => (
             <View key={product.id} style={styles.favoriteCard}>
               <TouchableOpacity 
-                onPress={() => router.push(`/secretariat-shop/${product.id}` as any)}
+                onPress={() => debouncedRouter.push(`/secretariat-shop/${product.id}`)}
                 style={styles.cardContent}
               >
                 <Image source={{ uri: product.image }} style={styles.productImage} />

@@ -1,6 +1,8 @@
 import { View, Text, StyleSheet, ScrollView, TextInput, TouchableOpacity, Image, Alert, ActivityIndicator, Platform } from 'react-native';
 import { useState } from 'react';
-import { useRouter } from 'expo-router';
+import { useRouter } from 'expo-router'
+import { DebouncedTouchable } from '@/components/DebouncedTouchable';
+import { debouncedRouter } from '@/utils/navigationDebounce';;
 import { ArrowLeft, Upload, Image as ImageIcon, X, Sparkles } from 'lucide-react-native';
 import * as ImagePicker from 'expo-image-picker';
 import { supabase } from '@/lib/supabase';
@@ -169,7 +171,7 @@ export default function TrendingCreateScreen() {
         [
           {
             text: 'OK',
-            onPress: () => router.back(),
+            onPress: () => debouncedRouter.back(),
           },
         ]
       );
@@ -196,7 +198,7 @@ export default function TrendingCreateScreen() {
     <View style={styles.container}>
       {/* Header */}
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
+        <TouchableOpacity onPress={() => debouncedRouter.back()} style={styles.backButton}>
           <ArrowLeft size={24} color="#111827" strokeWidth={2} />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Create Trending Article</Text>

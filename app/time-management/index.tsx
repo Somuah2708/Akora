@@ -1,7 +1,9 @@
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, TextInput, Dimensions, Modal, Alert, ActivityIndicator } from 'react-native';
 import { useFonts, Inter_400Regular, Inter_600SemiBold } from '@expo-google-fonts/inter';
 import { useEffect, useState } from 'react';
-import { SplashScreen, useRouter } from 'expo-router';
+import { SplashScreen, useRouter } from 'expo-router'
+import { DebouncedTouchable } from '@/components/DebouncedTouchable';
+import { debouncedRouter } from '@/utils/navigationDebounce';;
 import { ArrowLeft, Plus, Bell, ChevronRight, Clock, Calendar, Target, SquareCheck as CheckSquare, ChartBar as BarChart3, ArrowUpRight, X, AlarmClock, ListTodo, Briefcase, BookOpen, Coffee, Dumbbell, Heart, Users, Utensils, Tv, Smartphone, Zap, CreditCard as Edit3, Trash2 } from 'lucide-react-native';
 
 SplashScreen.preventAutoHideAsync();
@@ -353,7 +355,7 @@ export default function TimeManagementScreen() {
   return (
     <View style={styles.container}>
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
+        <TouchableOpacity onPress={() => debouncedRouter.back()} style={styles.backButton}>
           <ArrowLeft size={24} color="#000000" />
         </TouchableOpacity>
         <Text style={styles.title}>Time Management</Text>

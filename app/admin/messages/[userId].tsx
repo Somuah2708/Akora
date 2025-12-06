@@ -1,6 +1,8 @@
 import { View, Text, StyleSheet, FlatList, TextInput, TouchableOpacity, KeyboardAvoidingView, Platform, ActivityIndicator, Image, Modal, Linking, Alert } from 'react-native';
 import { useState, useEffect, useRef } from 'react';
-import { useRouter, useLocalSearchParams } from 'expo-router';
+import { useRouter, useLocalSearchParams } from 'expo-router'
+import { DebouncedTouchable } from '@/components/DebouncedTouchable';
+import { debouncedRouter } from '@/utils/navigationDebounce';;
 import { ArrowLeft, Send, Loader2, User, FileText, Paperclip, X, Image as ImageIcon } from 'lucide-react-native';
 import * as ImagePicker from 'expo-image-picker';
 import * as DocumentPicker from 'expo-document-picker';
@@ -45,12 +47,12 @@ export default function AdminChatWithUserScreen() {
     }
 
     if (profile && profile.role !== 'admin') {
-      router.back();
+      debouncedRouter.back();
       return;
     }
 
     if (!userId) {
-      router.back();
+      debouncedRouter.back();
       return;
     }
 
@@ -351,7 +353,7 @@ export default function AdminChatWithUserScreen() {
     >
       {/* Header */}
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
+        <TouchableOpacity onPress={() => debouncedRouter.back()} style={styles.backButton}>
           <ArrowLeft size={24} color="#1a1a1a" strokeWidth={2} />
         </TouchableOpacity>
         <View style={styles.headerContent}>

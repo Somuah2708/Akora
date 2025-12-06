@@ -1,7 +1,9 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { View, Text, StyleSheet, SectionList, TextInput, TouchableOpacity, ScrollView } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { useRouter } from 'expo-router';
+import { useRouter } from 'expo-router'
+import { DebouncedTouchable } from '@/components/DebouncedTouchable';
+import { debouncedRouter } from '@/utils/navigationDebounce';;
 import { useFocusEffect } from '@react-navigation/native';
 import { COUNTRY_OUTLETS } from '@/lib/constants/news-outlets';
 import { CountryOutlets, NewsOutlet } from '@/lib/types/outlets';
@@ -178,7 +180,7 @@ export default function NewsOutletsDirectory() {
           </View>
           {(profile?.is_admin || profile?.role === 'admin') && (
             <TouchableOpacity
-              onPress={() => router.push('/news/admin')}
+              onPress={() => debouncedRouter.push('/news/admin')}
               style={styles.addButton}
               accessibilityLabel="Add news outlet"
             >

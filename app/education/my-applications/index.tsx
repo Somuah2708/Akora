@@ -1,7 +1,9 @@
 import { View, Text, StyleSheet, ScrollView, Image, TouchableOpacity, ActivityIndicator, Alert } from 'react-native';
 import { useFonts, Inter_400Regular, Inter_600SemiBold } from '@expo-google-fonts/inter';
 import { useEffect, useState } from 'react';
-import { useRouter } from 'expo-router';
+import { useRouter } from 'expo-router'
+import { DebouncedTouchable } from '@/components/DebouncedTouchable';
+import { debouncedRouter } from '@/utils/navigationDebounce';;
 import { ArrowLeft, FileText, Clock, CheckCircle, XCircle, AlertCircle, Eye } from 'lucide-react-native';
 import { supabase } from '../../../lib/supabase';
 import { useAuth } from '../../../hooks/useAuth';
@@ -84,7 +86,7 @@ export default function MyApplicationsScreen() {
   return (
     <View style={styles.container}>
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
+        <TouchableOpacity onPress={() => debouncedRouter.back()} style={styles.backButton}>
           <ArrowLeft size={24} color="#000000" />
         </TouchableOpacity>
         <Text style={styles.title}>My Applications</Text>
@@ -103,7 +105,7 @@ export default function MyApplicationsScreen() {
           <Text style={styles.emptyText}>Start applying to scholarships and opportunities!</Text>
           <TouchableOpacity 
             style={styles.exploreButton}
-            onPress={() => router.push('/education' as any)}
+            onPress={() => debouncedRouter.push('/education')}
           >
             <Text style={styles.exploreButtonText}>Explore Opportunities</Text>
           </TouchableOpacity>
@@ -138,7 +140,7 @@ export default function MyApplicationsScreen() {
               <TouchableOpacity 
                 key={app.id} 
                 style={styles.applicationCard}
-                onPress={() => router.push(`/education/opportunity-detail?id=${opportunity.id}` as any)}
+                onPress={() => debouncedRouter.push(`/education/opportunity-detail?id=${opportunity.id}`)}
               >
                 <Image 
                   source={{ uri: opportunity.image_url || 'https://images.unsplash.com/photo-1523050854058-8df90110c9f1?w=800' }} 

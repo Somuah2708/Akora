@@ -1,7 +1,9 @@
 import { View, Text, StyleSheet, ScrollView, Image, TouchableOpacity, Alert, Modal } from 'react-native';
 import { useFonts, Inter_400Regular, Inter_600SemiBold, Inter_700Bold } from '@expo-google-fonts/inter';
 import { useEffect, useState } from 'react';
-import { SplashScreen, useRouter, useFocusEffect } from 'expo-router';
+import { SplashScreen, useRouter, useFocusEffect } from 'expo-router'
+import { DebouncedTouchable } from '@/components/DebouncedTouchable';
+import { debouncedRouter } from '@/utils/navigationDebounce';;
 import { ArrowLeft, Edit2, Trash2, Package, PlusCircle, AlertCircle, X } from 'lucide-react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -87,10 +89,10 @@ export default function MyPostedItemsScreen() {
   };
 
   const handleEdit = (item: any) => {
-    router.push({
+    debouncedRouter.push({
       pathname: '/secretariat-shop/edit-posted-item',
       params: { itemId: item.id },
-    } as any);
+    });
   };
 
   return (
@@ -142,7 +144,7 @@ export default function MyPostedItemsScreen() {
         style={styles.headerGradient}
       >
         <View style={styles.header}>
-          <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
+          <TouchableOpacity onPress={() => debouncedRouter.back()} style={styles.backButton}>
             <ArrowLeft size={24} color="#FFFFFF" />
           </TouchableOpacity>
           <View style={styles.headerCenter}>
@@ -151,7 +153,7 @@ export default function MyPostedItemsScreen() {
           </View>
           <TouchableOpacity 
             style={styles.addButton}
-            onPress={() => router.push('/secretariat-shop/post-item')}
+            onPress={() => debouncedRouter.push('/secretariat-shop/post-item')}
           >
             <PlusCircle size={24} color="#FFFFFF" />
           </TouchableOpacity>
@@ -186,7 +188,7 @@ export default function MyPostedItemsScreen() {
             <Text style={styles.emptyText}>Start sharing products with the community!</Text>
             <TouchableOpacity 
               style={styles.emptyButton}
-              onPress={() => router.push('/secretariat-shop/post-item')}
+              onPress={() => debouncedRouter.push('/secretariat-shop/post-item')}
             >
               <LinearGradient
                 colors={['#10B981', '#059669']}

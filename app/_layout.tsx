@@ -24,10 +24,11 @@ import { registerForPushNotificationsAsync } from '@/lib/pushNotifications';
 import { supabase } from '@/lib/supabase';
 import { Platform } from 'react-native';
 import * as Notifications from 'expo-notifications';
-import * as Sentry from '@sentry/react-native';
+// import * as Sentry from '@sentry/react-native';
 import ErrorBoundary from '@/lib/errorBoundary';
 import { setupGlobalErrorHandlers } from '@/lib/globalErrorHandler';
 
+/* SENTRY DISABLED
 Sentry.init({
   dsn: 'https://300dd3fe7142a2a34ca08cf77ce39769@o4510042293731328.ingest.de.sentry.io/4510459892531280',
 
@@ -106,11 +107,12 @@ Sentry.init({
 });
 
 console.log('✅ [SENTRY] Initialized successfully');
+*/
 
 // Setup global error handlers to catch ALL errors
 setupGlobalErrorHandlers();
 
-export default Sentry.wrap(function RootLayout() {
+function RootLayout() {
   useFrameworkReady();
   const { user, loading } = useAuth();
   const segments = useSegments();
@@ -122,6 +124,7 @@ export default Sentry.wrap(function RootLayout() {
   useEffect(() => {
     console.log('🔐 Push token registration effect triggered. User:', user?.id, 'Loading:', loading);
     
+    /* SENTRY DISABLED
     // Set Sentry user context
     if (user) {
       Sentry.setUser({
@@ -131,6 +134,7 @@ export default Sentry.wrap(function RootLayout() {
     } else {
       Sentry.setUser(null);
     }
+    */
     
     // Wait for auth to finish loading AND user to exist
     if (loading) {
@@ -309,4 +313,6 @@ export default Sentry.wrap(function RootLayout() {
       </SafeAreaProvider>
     </QueryClientProvider>
   );
-});
+}
+
+export default RootLayout;

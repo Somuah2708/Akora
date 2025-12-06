@@ -11,7 +11,9 @@ import {
 } from 'react-native';
 import { useFonts, Inter_400Regular, Inter_600SemiBold } from '@expo-google-fonts/inter';
 import { useEffect, useState, useCallback } from 'react';
-import { SplashScreen, useRouter } from 'expo-router';
+import { SplashScreen, useRouter } from 'expo-router'
+import { DebouncedTouchable } from '@/components/DebouncedTouchable';
+import { debouncedRouter } from '@/utils/navigationDebounce';;
 import { ArrowLeft, UserCheck, UserPlus, X, Check } from 'lucide-react-native';
 import { useAuth } from '@/hooks/useAuth';
 import {
@@ -232,7 +234,7 @@ export default function ConnectionsScreen() {
     <TouchableOpacity
       key={profile.id}
       style={styles.requestCard}
-      onPress={() => router.push(`/user-profile/${profile.id}` as any)}
+      onPress={() => debouncedRouter.push(`/user-profile/${profile.id}`)}
     >
       <Image
         source={{ uri: profile.avatar_url || 'https://i.pravatar.cc/150' }}
@@ -259,11 +261,11 @@ export default function ConnectionsScreen() {
     <View style={styles.container}>
       {/* Header */}
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
+        <TouchableOpacity onPress={() => debouncedRouter.back()} style={styles.backButton}>
           <ArrowLeft size={24} color="#000000" />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Connections</Text>
-        <TouchableOpacity onPress={() => router.push('/search' as any)}>
+        <TouchableOpacity onPress={() => debouncedRouter.push('/search')}>
           <UserPlus size={24} color="#4169E1" />
         </TouchableOpacity>
       </View>
@@ -351,7 +353,7 @@ export default function ConnectionsScreen() {
                     </Text>
                     <TouchableOpacity
                       style={styles.searchButton}
-                      onPress={() => router.push('/search' as any)}
+                      onPress={() => debouncedRouter.push('/search')}
                     >
                       <UserPlus size={20} color="#FFFFFF" />
                       <Text style={styles.searchButtonText}>Find People</Text>

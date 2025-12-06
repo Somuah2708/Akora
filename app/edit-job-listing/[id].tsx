@@ -3,7 +3,9 @@ import { Image } from 'expo-image';
 import * as ImagePicker from 'expo-image-picker';
 import { useFonts, Inter_400Regular, Inter_600SemiBold } from '@expo-google-fonts/inter';
 import { useEffect, useState } from 'react';
-import { SplashScreen, useRouter, useLocalSearchParams } from 'expo-router';
+import { SplashScreen, useRouter, useLocalSearchParams } from 'expo-router'
+import { DebouncedTouchable } from '@/components/DebouncedTouchable';
+import { debouncedRouter } from '@/utils/navigationDebounce';;
 import { ArrowLeft, Image as ImageIcon, DollarSign, Info, Briefcase, Mail, Trash2, Upload, Save } from 'lucide-react-native';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/hooks/useAuth';
@@ -52,7 +54,7 @@ export default function EditJobListingScreen() {
     if (authLoading) return;
     if (!user) {
       alert('Authentication Required. Please sign in.');
-      router.replace('/auth/sign-in');
+      debouncedRouter.replace('/auth/sign-in');
       return;
     }
     if (id) {
@@ -75,7 +77,7 @@ export default function EditJobListingScreen() {
         // Check if user owns this listing
         if (data.user_id !== user?.id) {
           alert('You can only edit your own job listings');
-          router.back();
+          debouncedRouter.back();
           return;
         }
 
@@ -193,7 +195,7 @@ export default function EditJobListingScreen() {
       if (error) throw error;
 
       alert('✅ Job listing updated successfully!');
-      router.push('/workplace');
+      debouncedRouter.push('/workplace');
     } catch (error: any) {
       console.error('Error updating job listing:', error);
       alert(`Error: ${error.message || 'Failed to update job listing'}`);
@@ -217,7 +219,7 @@ export default function EditJobListingScreen() {
         if (error) throw error;
 
         alert('Job listing deleted successfully');
-        router.push('/workplace');
+        debouncedRouter.push('/workplace');
       } catch (error: any) {
         console.error('Error deleting job listing:', error);
         alert(`Error: ${error.message || 'Failed to delete job listing'}`);
@@ -239,7 +241,7 @@ export default function EditJobListingScreen() {
   return (
     <View style={styles.container}>
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
+        <TouchableOpacity onPress={() => debouncedRouter.back()} style={styles.backButton}>
           <ArrowLeft size={24} color="#000000" />
         </TouchableOpacity>
         <Text style={styles.title}>Edit Job Listing</Text>

@@ -1,7 +1,9 @@
 import { View, Text, StyleSheet, ScrollView, Image, TouchableOpacity, TextInput, Dimensions, Alert, Modal } from 'react-native';
 import { useFonts, Inter_400Regular, Inter_600SemiBold } from '@expo-google-fonts/inter';
 import { useEffect, useState, useCallback } from 'react';
-import { SplashScreen, useRouter, useFocusEffect, Link } from 'expo-router';
+import { SplashScreen, useRouter, useFocusEffect, Link } from 'expo-router'
+import { DebouncedTouchable } from '@/components/DebouncedTouchable';
+import { debouncedRouter } from '@/utils/navigationDebounce';;
 import { ArrowLeft, ShoppingBag, Search, Filter, DollarSign, Truck, Package, Heart, Plus, Minus, ShoppingCart, X, PlusCircle } from 'lucide-react-native';
 import { addToCart, getCartCount, hasCartBeenViewed, resetCartViewedStatus, getFavorites, toggleFavorite, markCartAsViewed } from '@/lib/secretariatCart';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -272,7 +274,7 @@ export default function SecretariatShopScreen() {
             text: 'View Cart', 
             onPress: async () => {
               await markCartAsViewed();
-              router.push('/cart');
+              debouncedRouter.push('/cart');
             }
           },
         ]
@@ -291,14 +293,14 @@ export default function SecretariatShopScreen() {
   return (
     <View style={styles.container}>
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
+        <TouchableOpacity onPress={() => debouncedRouter.back()} style={styles.backButton}>
           <ArrowLeft size={24} color="#000000" />
         </TouchableOpacity>
         <Text style={styles.title}>Secretariat Shop</Text>
         <View style={styles.headerIcons}>
           <TouchableOpacity 
             style={styles.favoritesButton}
-            onPress={() => router.push('/secretariat-shop/favorites')}
+            onPress={() => debouncedRouter.push('/secretariat-shop/favorites')}
           >
             <Heart 
               size={24} 
@@ -311,7 +313,7 @@ export default function SecretariatShopScreen() {
             style={styles.cartButton}
             onPress={async () => {
               await markCartAsViewed();
-              router.push('/cart');
+              debouncedRouter.push('/cart');
             }}
           >
             <ShoppingBag size={24} color="#000000" />
@@ -381,7 +383,7 @@ export default function SecretariatShopScreen() {
             style={styles.postItemButton}
             onPress={() => {
               console.log('Navigating to post-item');
-              router.push('/secretariat-shop/post-item');
+              debouncedRouter.push('/secretariat-shop/post-item');
             }}
             activeOpacity={0.8}
           >
@@ -401,7 +403,7 @@ export default function SecretariatShopScreen() {
         <View style={styles.myItemsContainer}>
           <TouchableOpacity 
             style={styles.myItemsButton}
-            onPress={() => router.push('/secretariat-shop/my-posted-items')}
+            onPress={() => debouncedRouter.push('/secretariat-shop/my-posted-items')}
             activeOpacity={0.8}
           >
             <View style={styles.myItemsContent}>
@@ -449,7 +451,7 @@ export default function SecretariatShopScreen() {
               <TouchableOpacity 
                 key={product.id} 
                 style={styles.productCard}
-                onPress={() => router.push(`/secretariat-shop/${product.id}` as any)}
+                onPress={() => debouncedRouter.push(`/secretariat-shop/${product.id}`)}
               >
                 <Image 
                   source={{ uri: product.images ? product.images[0] : product.image }} 
@@ -504,9 +506,9 @@ export default function SecretariatShopScreen() {
                 style={styles.deliveryCard}
                 onPress={() => {
                   if (option.id === '1') {
-                    router.push('/secretariat-shop/delivery');
+                    debouncedRouter.push('/secretariat-shop/delivery');
                   } else if (option.id === '2') {
-                    router.push('/secretariat-shop/pickup');
+                    debouncedRouter.push('/secretariat-shop/pickup');
                   }
                 }}
               >

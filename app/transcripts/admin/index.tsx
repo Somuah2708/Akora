@@ -1,7 +1,9 @@
 import { useEffect, useState, useCallback } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator, Alert, TextInput, Linking } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useRouter } from 'expo-router';
+import { useRouter } from 'expo-router'
+import { DebouncedTouchable } from '@/components/DebouncedTouchable';
+import { debouncedRouter } from '@/utils/navigationDebounce';;
 import { CheckCircle2, Clock, XCircle, FileText, DollarSign, Settings } from 'lucide-react-native';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/hooks/useAuth';
@@ -250,7 +252,7 @@ export default function AdminTranscriptsScreen() {
         </View>
         <TouchableOpacity 
           style={styles.settingsButton}
-          onPress={() => router.push('/transcripts/admin/settings')}
+          onPress={() => debouncedRouter.push('/transcripts/admin/settings')}
         >
           <Settings size={20} color="#4169E1" />
         </TouchableOpacity>

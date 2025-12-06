@@ -1,7 +1,9 @@
 import { View, Text, StyleSheet, ScrollView, Image, TouchableOpacity, Alert, ActivityIndicator, TextInput, Dimensions, Linking, Modal } from 'react-native';
 import { useFonts, Inter_400Regular, Inter_600SemiBold } from '@expo-google-fonts/inter';
 import { useEffect, useState, useRef } from 'react';
-import { SplashScreen, useRouter, useLocalSearchParams } from 'expo-router';
+import { SplashScreen, useRouter, useLocalSearchParams } from 'expo-router'
+import { DebouncedTouchable } from '@/components/DebouncedTouchable';
+import { debouncedRouter } from '@/utils/navigationDebounce';;
 import { ArrowLeft, Star, MessageCircle, Share2, Edit, Trash2, Save, X, MapPin, Mail, Phone, Camera, Plus, ChevronDown, Bookmark } from 'lucide-react-native';
 import { supabase, type ProductService, type Profile, type Region, type City } from '@/lib/supabase';
 import { useAuth } from '@/hooks/useAuth';
@@ -425,7 +427,7 @@ export default function ListingDetailScreen() {
               if (error) throw error;
 
               Alert.alert('Success', 'Listing deleted successfully');
-              router.back();
+              debouncedRouter.back();
             } catch (error) {
               console.error('Error deleting listing:', error);
               Alert.alert('Error', 'Failed to delete listing');
@@ -474,7 +476,7 @@ export default function ListingDetailScreen() {
     return (
       <View style={[styles.container, styles.centerContent]}>
         <Text style={styles.errorText}>Listing not found</Text>
-        <TouchableOpacity onPress={() => router.back()} style={styles.backToMarketButton}>
+        <TouchableOpacity onPress={() => debouncedRouter.back()} style={styles.backToMarketButton}>
           <Text style={styles.backToMarketText}>Back to Marketplace</Text>
         </TouchableOpacity>
       </View>
@@ -486,7 +488,7 @@ export default function ListingDetailScreen() {
   return (
     <View style={styles.container}>
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
+        <TouchableOpacity onPress={() => debouncedRouter.back()} style={styles.backButton}>
           <ArrowLeft size={24} color="#000000" />
         </TouchableOpacity>
         <Text style={styles.title}>Listing Details</Text>

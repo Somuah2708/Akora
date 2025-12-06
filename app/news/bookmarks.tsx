@@ -8,7 +8,9 @@ import {
   RefreshControl,
   Alert,
 } from 'react-native';
-import { useRouter } from 'expo-router';
+import { useRouter } from 'expo-router'
+import { DebouncedTouchable } from '@/components/DebouncedTouchable';
+import { debouncedRouter } from '@/utils/navigationDebounce';;
 import { ArrowLeft, Trash2, Filter } from 'lucide-react-native';
 import { supabase } from '@/lib/supabase';
 import { NewsArticle, NewsCategory } from '@/lib/types/news';
@@ -77,7 +79,7 @@ export default function BookmarksScreen() {
   };
 
   const handleArticlePress = (article: NewsArticle) => {
-    router.push({
+    debouncedRouter.push({
       pathname: '/news/article-detail',
       params: { articleData: JSON.stringify(article) },
     });
@@ -91,7 +93,7 @@ export default function BookmarksScreen() {
     <View style={styles.container}>
       {/* Header */}
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
+        <TouchableOpacity onPress={() => debouncedRouter.back()} style={styles.backButton}>
           <ArrowLeft size={24} color="#000" />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Saved Articles</Text>

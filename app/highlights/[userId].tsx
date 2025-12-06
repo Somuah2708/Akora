@@ -1,4 +1,6 @@
-import { useLocalSearchParams, useRouter } from 'expo-router';
+import { useLocalSearchParams, useRouter } from 'expo-router'
+import { DebouncedTouchable } from '@/components/DebouncedTouchable';
+import { debouncedRouter } from '@/utils/navigationDebounce';;
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { View, Text, StyleSheet, ScrollView, Image, TouchableOpacity, Dimensions, ActivityIndicator, Alert } from 'react-native';
 import { ArrowLeft, X } from 'lucide-react-native';
@@ -140,7 +142,7 @@ export default function HighlightsViewer() {
       setCurrent(next);
       scrollRef.current?.scrollTo({ x: next * width, y: 0, animated: true });
     } else {
-      router.back();
+      debouncedRouter.back();
     }
   };
 
@@ -150,7 +152,7 @@ export default function HighlightsViewer() {
       setCurrent(prev);
       scrollRef.current?.scrollTo({ x: prev * width, y: 0, animated: true });
     } else {
-      router.back();
+      debouncedRouter.back();
     }
   };
 
@@ -165,7 +167,7 @@ export default function HighlightsViewer() {
   if (!items.length) {
     return (
       <View style={[styles.container, { justifyContent: 'center', alignItems: 'center' }]}>
-        <TouchableOpacity onPress={() => router.back()} style={styles.closeBtn}>
+        <TouchableOpacity onPress={() => debouncedRouter.back()} style={styles.closeBtn}>
           <X size={22} color="#111827" />
         </TouchableOpacity>
         <Text style={{ color: '#FFFFFF' }}>No items in this highlight</Text>
@@ -177,7 +179,7 @@ export default function HighlightsViewer() {
     <View style={styles.container}>
       {/* Header */}
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
+        <TouchableOpacity onPress={() => debouncedRouter.back()} style={styles.backBtn}>
           <ArrowLeft size={22} color="#111827" />
         </TouchableOpacity>
         <Text style={styles.headerTitle} numberOfLines={1}>{title || 'Highlight'}</Text>

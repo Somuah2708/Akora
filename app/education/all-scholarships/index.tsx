@@ -1,7 +1,9 @@
 import { View, Text, StyleSheet, ScrollView, Image, TouchableOpacity, ActivityIndicator, TextInput } from 'react-native';
 import { useFonts, Inter_400Regular, Inter_600SemiBold } from '@expo-google-fonts/inter';
 import { useEffect, useState } from 'react';
-import { SplashScreen, useRouter } from 'expo-router';
+import { SplashScreen, useRouter } from 'expo-router'
+import { DebouncedTouchable } from '@/components/DebouncedTouchable';
+import { debouncedRouter } from '@/utils/navigationDebounce';;
 import { ArrowLeft, Search, GraduationCap, Wallet, Clock, Heart, Award, Bookmark } from 'lucide-react-native';
 import { supabase } from '../../../lib/supabase';
 import { useAuth } from '../../../hooks/useAuth';
@@ -70,7 +72,7 @@ export default function AllScholarshipsScreen() {
 
   const toggleBookmark = async (opportunityId: string) => {
     if (!user) {
-      router.push('/auth/sign-in' as any);
+      debouncedRouter.push('/auth/sign-in');
       return;
     }
 
@@ -109,7 +111,7 @@ export default function AllScholarshipsScreen() {
   return (
     <View style={styles.container}>
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
+        <TouchableOpacity onPress={() => debouncedRouter.back()} style={styles.backButton}>
           <ArrowLeft size={24} color="#000000" />
         </TouchableOpacity>
         <Text style={styles.title}>All Scholarships</Text>
@@ -145,7 +147,7 @@ export default function AllScholarshipsScreen() {
               <TouchableOpacity 
                 key={scholarship.id} 
                 style={styles.scholarshipCard}
-                onPress={() => router.push(`/education/opportunity-detail?id=${scholarship.id}` as any)}
+                onPress={() => debouncedRouter.push(`/education/opportunity-detail?id=${scholarship.id}`)}
               >
                 <Image 
                   source={{ uri: scholarship.image_url || 'https://images.unsplash.com/photo-1523050854058-8df90110c9f1?w=800' }} 

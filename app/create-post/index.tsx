@@ -1,7 +1,9 @@
 import { View, Text, StyleSheet, TextInput, TouchableOpacity, ScrollView, Alert, ActivityIndicator, Image, Modal } from 'react-native';
 import { useFonts, Inter_400Regular, Inter_600SemiBold } from '@expo-google-fonts/inter';
 import { useEffect, useRef, useState } from 'react';
-import { SplashScreen, useLocalSearchParams, useRouter } from 'expo-router';
+import { SplashScreen, useLocalSearchParams, useRouter } from 'expo-router'
+import { DebouncedTouchable } from '@/components/DebouncedTouchable';
+import { debouncedRouter } from '@/utils/navigationDebounce';;
 import { ArrowLeft, Image as ImageIcon, Send, X, ChevronDown, Video as VideoIcon, Edit3, MessageSquare } from 'lucide-react-native';
 import MediaEditorModal from '@/components/MediaEditorModal';
 import * as ImagePicker from 'expo-image-picker';
@@ -405,7 +407,7 @@ export default function CreatePostScreen() {
       console.log('Post created successfully:', data);
 
       Alert.alert('Success', 'Post added successfully', [
-        { text: 'OK', onPress: () => router.back() }
+        { text: 'OK', onPress: () => debouncedRouter.back() }
       ]);
       setUploadProgress(100);
       setUploadStatus('Complete!');
@@ -434,7 +436,7 @@ export default function CreatePostScreen() {
         colors={['#FFFFFF', '#F8FAFC']}
         style={styles.header}
       >
-        <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
+        <TouchableOpacity onPress={() => debouncedRouter.back()} style={styles.backButton}>
           <View style={styles.backButtonCircle}>
             <ArrowLeft size={22} color="#1E293B" />
           </View>

@@ -1,6 +1,8 @@
 import { View, Text, StyleSheet, FlatList, TouchableOpacity, ActivityIndicator } from 'react-native';
 import { useState, useEffect } from 'react';
-import { useRouter } from 'expo-router';
+import { useRouter } from 'expo-router'
+import { DebouncedTouchable } from '@/components/DebouncedTouchable';
+import { debouncedRouter } from '@/utils/navigationDebounce';;
 import { ArrowLeft, MessageCircle, ChevronRight } from 'lucide-react-native';
 import { supabase } from '../../../lib/supabase';
 import { useAuth } from '../../../hooks/useAuth';
@@ -29,7 +31,7 @@ export default function AdminConversationsScreen() {
     }
 
     if (profile && profile.role !== 'admin') {
-      router.back();
+      debouncedRouter.back();
       return;
     }
 
@@ -112,7 +114,7 @@ export default function AdminConversationsScreen() {
     return (
       <TouchableOpacity
         style={styles.conversationCard}
-        onPress={() => router.push(`/admin/messages/${item.user_id}`)}
+        onPress={() => debouncedRouter.push(`/admin/messages/${item.user_id}`)}
         activeOpacity={0.7}
       >
         <View style={styles.avatarContainer}>
@@ -160,7 +162,7 @@ export default function AdminConversationsScreen() {
     <View style={styles.container}>
       {/* Header */}
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
+        <TouchableOpacity onPress={() => debouncedRouter.back()} style={styles.backButton}>
           <ArrowLeft size={24} color="#1a1a1a" strokeWidth={2} />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Support Messages</Text>

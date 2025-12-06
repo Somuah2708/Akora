@@ -1,6 +1,8 @@
 import { useState } from 'react';
 import { View, Text, TextInput, StyleSheet, TouchableOpacity, Alert, ActivityIndicator, KeyboardAvoidingView, Platform, ScrollView } from 'react-native';
-import { useRouter } from 'expo-router';
+import { useRouter } from 'expo-router'
+import { DebouncedTouchable } from '@/components/DebouncedTouchable';
+import { debouncedRouter } from '@/utils/navigationDebounce';;
 import { ArrowLeft, Send, Plus, X, Upload, DollarSign, Copy } from 'lucide-react-native';
 import * as Clipboard from 'expo-clipboard';
 import { supabase } from '@/lib/supabase';
@@ -103,7 +105,7 @@ export default function NewRecommendationScreen() {
         if (upErr) throw upErr;
       }
       Alert.alert('Requested', 'Your recommendation request has been created.', [
-        { text: 'OK', onPress: () => router.replace('/recommendations') }
+        { text: 'OK', onPress: () => debouncedRouter.replace('/recommendations') }
       ]);
     } catch (err: any) {
       console.error('Submit recommendation error', err);
@@ -137,7 +139,7 @@ export default function NewRecommendationScreen() {
   return (
     <KeyboardAvoidingView style={styles.container} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
+        <TouchableOpacity onPress={() => debouncedRouter.back()} style={styles.backButton}>
           <ArrowLeft size={22} color="#000" />
         </TouchableOpacity>
         <Text style={styles.title}>Request Recommendation</Text>

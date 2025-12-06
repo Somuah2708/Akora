@@ -2,7 +2,9 @@ import { View, Text, StyleSheet, ScrollView, Image, TouchableOpacity, FlatList, 
 import { useFonts, Inter_400Regular, Inter_600SemiBold } from '@expo-google-fonts/inter';
 import { useEffect, useState, useCallback, useRef } from 'react';
 import { HEADER_COLOR } from '@/constants/Colors';
-import { SplashScreen, useRouter, useFocusEffect } from 'expo-router';
+import { SplashScreen, useRouter, useFocusEffect } from 'expo-router'
+import { DebouncedTouchable } from '@/components/DebouncedTouchable';
+import { debouncedRouter } from '@/utils/navigationDebounce';;
 import { Bell, ThumbsUp, MessagesSquare, Share2, Star, MoreHorizontal, Plus, BookOpen, PartyPopper, Calendar, TrendingUp, Users, Newspaper, Search, User, Edit3, Trash2, Play, X } from 'lucide-react-native';
 import { supabase, type Post, type Profile, type HomeFeaturedItem, type HomeCategoryTab, type TrendingArticle } from '@/lib/supabase';
 import { useAuth } from '@/hooks/useAuth';
@@ -980,7 +982,7 @@ export default function HomeScreen() {
 
   const handleEditPost = (postId: string) => {
     console.log('Edit post clicked:', postId);
-    router.push(`/edit-post/${postId}`);
+    debouncedRouter.push(`/edit-post/${postId}`);
   };
 
   const handleDeletePost = (postId: string) => {
@@ -1077,7 +1079,7 @@ export default function HomeScreen() {
       [
         {
           text: 'Edit Article',
-          onPress: () => router.push(`/trending-edit/${articleId}` as any),
+          onPress: () => debouncedRouter.push(`/trending-edit/${articleId}`),
         },
         {
           text: 'Delete Article',
@@ -1311,7 +1313,7 @@ export default function HomeScreen() {
                           onPress={() => {
                             setSearchVisible(false);
                             setSearchQuery('');
-                            router.push(`/user-profile/${person.id}` as any);
+                            debouncedRouter.push(`/user-profile/${person.id}`);
                           }}
                           activeOpacity={0.7}
                         >
@@ -1346,7 +1348,7 @@ export default function HomeScreen() {
                           onPress={() => {
                             setSearchVisible(false);
                             setSearchQuery('');
-                            router.push(`/post-comments/${post.id}`);
+                            debouncedRouter.push(`/post-comments/${post.id}`);
                           }}
                           activeOpacity={0.7}
                         >
@@ -1387,7 +1389,7 @@ export default function HomeScreen() {
                           onPress={() => {
                             setSearchVisible(false);
                             setSearchQuery('');
-                            router.push(`/trending-article/${article.id}`);
+                            debouncedRouter.push(`/trending-article/${article.id}`);
                           }}
                           activeOpacity={0.7}
                         >
@@ -1449,7 +1451,7 @@ export default function HomeScreen() {
           {(profile?.role === 'admin' || profile?.is_admin) && (
             <TouchableOpacity 
               style={styles.trendingAdminButton}
-              onPress={() => router.push('/trending-create')}
+              onPress={() => debouncedRouter.push('/trending-create')}
               activeOpacity={0.7}
             >
               <Plus size={20} color="#0EA5E9" strokeWidth={2.5} />
@@ -1481,7 +1483,7 @@ export default function HomeScreen() {
             <TouchableOpacity 
               key={article.id} 
               style={styles.featuredItem}
-              onPress={() => router.push(`/trending-article/${article.id}` as any)}
+              onPress={() => debouncedRouter.push(`/trending-article/${article.id}`)}
               onLongPress={() => {
                 if (profile?.is_admin || profile?.role === 'admin') {
                   showTrendingMenu(article.id);
@@ -1520,7 +1522,7 @@ export default function HomeScreen() {
           {(profile?.role === 'admin' || profile?.is_admin) && (
             <TouchableOpacity 
               style={styles.categoryAdminButton}
-              onPress={() => router.push('/categories-manage' as any)}
+              onPress={() => debouncedRouter.push('/categories-manage')}
               activeOpacity={0.7}
             >
               <Edit3 size={18} color="#0EA5E9" strokeWidth={2.5} />
@@ -1561,7 +1563,7 @@ export default function HomeScreen() {
               onPress={() => {
                 setActiveCategoryId(category.id);
                 if ((category as any).route) {
-                  router.push(((category as any).route) as any);
+                  debouncedRouter.push(((category).route) as any);
                 }
               }}
             >
@@ -1611,7 +1613,7 @@ export default function HomeScreen() {
           {(profile?.role === 'admin' || profile?.is_admin) && (
             <TouchableOpacity 
               style={styles.createFirstPostButton}
-              onPress={() => router.push('/home-create-post')}
+              onPress={() => debouncedRouter.push('/home-create-post')}
             >
               <Text style={styles.createFirstPostText}>Create First Post</Text>
             </TouchableOpacity>
@@ -1642,7 +1644,7 @@ export default function HomeScreen() {
                 <View style={styles.postHeader}>
                 <TouchableOpacity 
                   style={styles.postHeaderLeft}
-                  onPress={() => router.push(`/user-profile/${post.user_id}` as any)}
+                  onPress={() => debouncedRouter.push(`/user-profile/${post.user_id}`)}
                   activeOpacity={0.7}
                 >
                   <Image 
@@ -1759,7 +1761,7 @@ export default function HomeScreen() {
                           ) : (
                             <TouchableOpacity 
                               activeOpacity={0.95}
-                              onPress={() => router.push(`/post/${post.id}`)}
+                              onPress={() => debouncedRouter.push(`/post/${post.id}`)}
                             >
                               <Image
                                 source={{ uri: mediaItem.url }}
@@ -1893,7 +1895,7 @@ export default function HomeScreen() {
                         key={index} 
                         style={styles.mediaPage}
                         activeOpacity={0.95}
-                        onPress={() => router.push(`/post/${post.id}`)}
+                        onPress={() => debouncedRouter.push(`/post/${post.id}`)}
                       >
                         <Image
                           source={{ uri: imageUrl }}
@@ -1945,7 +1947,7 @@ export default function HomeScreen() {
                   onError={(err) => console.warn('Video play error (single)', err)}
                 />
               ) : post.image_url ? (
-                <TouchableOpacity activeOpacity={0.85} onPress={() => router.push(`/post/${post.id}`)}>
+                <TouchableOpacity activeOpacity={0.85} onPress={() => debouncedRouter.push(`/post/${post.id}`)}>
                   <Image 
                     source={{ uri: post.image_url }} 
                     style={[
@@ -1980,7 +1982,7 @@ export default function HomeScreen() {
                   </TouchableOpacity>
                   <TouchableOpacity 
                     style={styles.actionButtonWithCount}
-                    onPress={() => router.push(`/post-comments/${post.id}`)}
+                    onPress={() => debouncedRouter.push(`/post-comments/${post.id}`)}
                   >
                     <MessagesSquare size={24} color="#000000" strokeWidth={2} />
                     {post.comments_count !== undefined && post.comments_count > 0 && (
@@ -2015,13 +2017,13 @@ export default function HomeScreen() {
 
               {/* Post Comments Count */}
               {post.comments_count !== undefined && post.comments_count > 0 ? (
-                <TouchableOpacity onPress={() => router.push(`/post-comments/${post.id}`)}>
+                <TouchableOpacity onPress={() => debouncedRouter.push(`/post-comments/${post.id}`)}>
                   <Text style={styles.viewComments}>
                     View all {post.comments_count} {post.comments_count === 1 ? 'comment' : 'comments'}
                   </Text>
                 </TouchableOpacity>
               ) : (
-                <TouchableOpacity onPress={() => router.push(`/post-comments/${post.id}`)}>
+                <TouchableOpacity onPress={() => debouncedRouter.push(`/post-comments/${post.id}`)}>
                   <Text style={styles.viewComments}>
                     Be the first to comment
                   </Text>
@@ -2038,7 +2040,7 @@ export default function HomeScreen() {
       {(profile?.role === 'admin' || profile?.is_admin) && (
         <TouchableOpacity 
           style={styles.fabButton}
-          onPress={() => router.push('/home-create-post')}
+          onPress={() => debouncedRouter.push('/home-create-post')}
           activeOpacity={0.8}
         >
           <Plus size={28} color="#FFFFFF" strokeWidth={2.5} />

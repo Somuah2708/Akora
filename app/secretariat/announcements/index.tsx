@@ -9,7 +9,9 @@ import {
   ActivityIndicator,
   TextInput,
 } from 'react-native';
-import { useRouter } from 'expo-router';
+import { useRouter } from 'expo-router'
+import { DebouncedTouchable } from '@/components/DebouncedTouchable';
+import { debouncedRouter } from '@/utils/navigationDebounce';;
 import { 
   ArrowLeft, 
   Calendar, 
@@ -218,7 +220,7 @@ export default function AllAnnouncementsScreen() {
         style={styles.headerGradient}
       >
         <View style={styles.header}>
-          <TouchableOpacity onPress={() => router.push('/secretariat')} style={styles.backButton}>
+          <TouchableOpacity onPress={() => debouncedRouter.push('/secretariat')} style={styles.backButton}>
             <ArrowLeft size={24} color="#FFFFFF" />
           </TouchableOpacity>
           <View style={styles.headerCenter}>
@@ -228,19 +230,19 @@ export default function AllAnnouncementsScreen() {
           <View style={styles.headerButtons}>
             <TouchableOpacity 
               style={styles.myAnnouncementsButton}
-              onPress={() => router.push('/secretariat/announcements/my-announcements')}
+              onPress={() => debouncedRouter.push('/secretariat/announcements/my-announcements')}
             >
               <FileText size={22} color="#FFFFFF" />
             </TouchableOpacity>
             <TouchableOpacity 
               style={styles.bookmarkButton}
-              onPress={() => router.push('/secretariat/announcements/saved')}
+              onPress={() => debouncedRouter.push('/secretariat/announcements/saved')}
             >
               <Star size={22} color="#FFFFFF" />
             </TouchableOpacity>
             <TouchableOpacity 
               style={styles.addButton}
-              onPress={() => router.push('/secretariat/announcements/create')}
+              onPress={() => debouncedRouter.push('/secretariat/announcements/create')}
             >
               <Plus size={24} color="#FFFFFF" />
             </TouchableOpacity>
@@ -386,7 +388,7 @@ export default function AllAnnouncementsScreen() {
                   styles.announcementCard,
                   priorityColor && { borderLeftWidth: 4, borderLeftColor: priorityColor },
                 ]}
-                onPress={() => router.push(`/secretariat/announcements/${announcement.id}` as any)}
+                onPress={() => debouncedRouter.push(`/secretariat/announcements/${announcement.id}`)}
               >
                 {announcement.image_url && (
                   <Image

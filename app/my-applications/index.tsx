@@ -3,7 +3,9 @@ import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useFonts, Inter_400Regular, Inter_600SemiBold, Inter_700Bold } from '@expo-google-fonts/inter';
 import { useEffect, useState, useCallback } from 'react';
-import { SplashScreen, useRouter, useFocusEffect } from 'expo-router';
+import { SplashScreen, useRouter, useFocusEffect } from 'expo-router'
+import { DebouncedTouchable } from '@/components/DebouncedTouchable';
+import { debouncedRouter } from '@/utils/navigationDebounce';;
 import { ArrowLeft, FileText, Clock, CheckCircle, XCircle, Eye, AlertCircle, MapPin, Building2 } from 'lucide-react-native';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/hooks/useAuth';
@@ -124,7 +126,7 @@ export default function MyApplicationsScreen() {
         end={{ x: 1, y: 1 }}
         style={styles.header}
       >
-        <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
+        <TouchableOpacity onPress={() => debouncedRouter.back()} style={styles.backButton}>
           <ArrowLeft size={24} color="#FFFFFF" />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>My Applications</Text>
@@ -219,7 +221,7 @@ export default function MyApplicationsScreen() {
             </Text>
             <TouchableOpacity 
               style={styles.browseButton}
-              onPress={() => router.push('/workplace')}
+              onPress={() => debouncedRouter.push('/workplace')}
             >
               <Text style={styles.browseButtonText}>Browse Jobs</Text>
             </TouchableOpacity>
@@ -249,7 +251,7 @@ export default function MyApplicationsScreen() {
               <TouchableOpacity
                 key={application.id}
                 style={styles.applicationCard}
-                onPress={() => router.push(`/job-detail/${job.id}` as any)}
+                onPress={() => debouncedRouter.push(`/job-detail/${job.id}`)}
               >
                 <View style={styles.cardTop}>
                   {logo && (

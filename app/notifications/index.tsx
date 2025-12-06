@@ -12,7 +12,9 @@ import {
   Alert
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { router, useFocusEffect } from 'expo-router';
+import { router, useFocusEffect } from 'expo-router'
+import { DebouncedTouchable } from '@/components/DebouncedTouchable';
+import { debouncedRouter } from '@/utils/navigationDebounce';;
 import { ThumbsUp, MessagesSquare, UserPlus, AtSign, Share2, UserCheck, ArrowLeft, Briefcase, FileText, CheckCircle } from 'lucide-react-native';
 import {
   getNotifications,
@@ -175,9 +177,9 @@ export default function NotificationsScreen() {
 
       // Navigate based on type
       if (notification.type === 'friend_request' || notification.type === 'friend_accept' || notification.type === 'follow') {
-        router.push(`/user-profile/${notification.actor_id}`);
+        debouncedRouter.push(`/user-profile/${notification.actor_id}`);
       } else if (notification.post_id) {
-        router.push(`/post/${notification.post_id}`);
+        debouncedRouter.push(`/post/${notification.post_id}`);
       }
     } catch (error) {
       console.error('Error handling notification:', error);
@@ -241,9 +243,9 @@ export default function NotificationsScreen() {
 
         // Navigate based on notification type
         if (item.notification_type === 'new_application' && application?.job_id) {
-          router.push(`/job-applications-review/${application.job_id}`);
+          debouncedRouter.push(`/job-applications-review/${application.job_id}`);
         } else if (item.notification_type === 'status_changed' && application?.job_id) {
-          router.push(`/job-detail/${application.job_id}`);
+          debouncedRouter.push(`/job-detail/${application.job_id}`);
         }
       } catch (error) {
         console.error('Error handling job notification:', error);
@@ -325,7 +327,7 @@ export default function NotificationsScreen() {
     <SafeAreaView style={styles.container} edges={['top']}>
       {/* Header */}
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
+        <TouchableOpacity onPress={() => debouncedRouter.back()} style={styles.backButton}>
           <ArrowLeft size={24} color="#000" strokeWidth={2} />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Notifications</Text>

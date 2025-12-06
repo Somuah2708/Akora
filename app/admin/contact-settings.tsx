@@ -1,6 +1,8 @@
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, TextInput, Alert, ActivityIndicator } from 'react-native';
 import { useState, useEffect } from 'react';
-import { useRouter } from 'expo-router';
+import { useRouter } from 'expo-router'
+import { DebouncedTouchable } from '@/components/DebouncedTouchable';
+import { debouncedRouter } from '@/utils/navigationDebounce';;
 import { ArrowLeft, Save, MapPin, Mail, Phone, Clock, Loader2 } from 'lucide-react-native';
 import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../hooks/useAuth';
@@ -47,7 +49,7 @@ export default function ContactSettingsScreen() {
     // Check if user is admin
     if (profile && profile.role !== 'admin') {
       Alert.alert('Access Denied', 'Only admins can access this page');
-      router.back();
+      debouncedRouter.back();
       return;
     }
     
@@ -123,7 +125,7 @@ export default function ContactSettingsScreen() {
       Alert.alert('Success', 'Contact settings updated successfully', [
         {
           text: 'OK',
-          onPress: () => router.back(),
+          onPress: () => debouncedRouter.back(),
         },
       ]);
     } catch (error: any) {
@@ -156,7 +158,7 @@ export default function ContactSettingsScreen() {
     <View style={styles.container}>
       {/* Header */}
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
+        <TouchableOpacity onPress={() => debouncedRouter.back()} style={styles.backButton}>
           <ArrowLeft size={24} color="#1a1a1a" strokeWidth={2} />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Contact Settings</Text>

@@ -1,7 +1,9 @@
 import { View, Text, StyleSheet, ScrollView, Image, TouchableOpacity, TextInput, Dimensions, ActivityIndicator, RefreshControl, FlatList, Modal, Animated, Alert } from 'react-native';
 import { useFonts, Inter_400Regular, Inter_500Medium, Inter_600SemiBold, Inter_700Bold } from '@expo-google-fonts/inter';
 import { useEffect, useState, useCallback, useRef } from 'react';
-import { SplashScreen, useRouter, useFocusEffect } from 'expo-router';
+import { SplashScreen, useRouter, useFocusEffect } from 'expo-router'
+import { DebouncedTouchable } from '@/components/DebouncedTouchable';
+import { debouncedRouter } from '@/utils/navigationDebounce';;
 import { Search, Filter, ArrowLeft, Briefcase, Clock, MapPin, Building2, GraduationCap, ChevronRight, BookOpen, Users, Wallet, Plus, Calendar, Bookmark, TrendingUp, DollarSign, X, Check } from 'lucide-react-native';
 import { supabase, Job } from '@/lib/supabase';
 import { useAuth } from '@/hooks/useAuth';
@@ -304,7 +306,7 @@ export default function WorkplaceScreen() {
   );
 
   const handleJobPress = (jobId: string) => {
-    router.push(`/job-detail/${jobId}` as any);
+    debouncedRouter.push(`/job-detail/${jobId}`);
   };
 
   useEffect(() => {
@@ -339,7 +341,7 @@ export default function WorkplaceScreen() {
       {/* Modern Header */}
       <View style={styles.modernHeader}>
         <View style={styles.headerTop}>
-          <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
+          <TouchableOpacity onPress={() => debouncedRouter.back()} style={styles.backButton}>
             <ArrowLeft size={24} color="#1F2937" />
           </TouchableOpacity>
           <Text style={styles.headerTitle}>Internships & Jobs</Text>
@@ -686,7 +688,7 @@ export default function WorkplaceScreen() {
       {user && (
         <TouchableOpacity
           style={styles.fab}
-          onPress={() => router.push('/create-job-listing')}
+          onPress={() => debouncedRouter.push('/create-job-listing')}
           activeOpacity={0.9}
         >
           <LinearGradient

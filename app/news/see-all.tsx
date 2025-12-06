@@ -1,5 +1,7 @@
 import { View, Text, ScrollView, Image, TouchableOpacity, StyleSheet } from 'react-native';
-import { useLocalSearchParams, useRouter } from 'expo-router';
+import { useLocalSearchParams, useRouter } from 'expo-router'
+import { DebouncedTouchable } from '@/components/DebouncedTouchable';
+import { debouncedRouter } from '@/utils/navigationDebounce';;
 import { useEffect, useState } from 'react';
 import { ChevronLeft } from 'lucide-react-native';
 import { supabase } from '@/lib/supabase';
@@ -114,7 +116,7 @@ export default function SeeAllNewsScreen() {
   return (
     <View style={styles.container}>
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()}>
+        <TouchableOpacity onPress={() => debouncedRouter.back()}>
           <ChevronLeft size={24} color="#000" />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>All News</Text>

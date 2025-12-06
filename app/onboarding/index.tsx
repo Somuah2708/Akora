@@ -1,7 +1,9 @@
 import { View, Text, StyleSheet, Image } from 'react-native';
 import { useFonts, Inter_400Regular, Inter_600SemiBold } from '@expo-google-fonts/inter';
 import { useEffect } from 'react';
-import { SplashScreen, useRouter } from 'expo-router';
+import { SplashScreen, useRouter } from 'expo-router'
+import { DebouncedTouchable } from '@/components/DebouncedTouchable';
+import { debouncedRouter } from '@/utils/navigationDebounce';;
 
 SplashScreen.preventAutoHideAsync();
 
@@ -21,7 +23,7 @@ export default function OnboardingScreen() {
   // Navigate to sign-in after 2 seconds
   useEffect(() => {
     const timer = setTimeout(() => {
-      router.replace('/auth/sign-in');
+      debouncedRouter.replace('/auth/sign-in');
     }, 2000);
 
     return () => clearTimeout(timer);

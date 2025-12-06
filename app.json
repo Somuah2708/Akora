@@ -46,14 +46,6 @@
       [
         "expo-document-picker",
         {}
-      ],
-      [
-        "@sentry/react-native/expo",
-        {
-          "url": "https://sentry.io/",
-          "organization": "ceit",
-          "project": "akora"
-        }
       ]
     ],
     "experiments": {

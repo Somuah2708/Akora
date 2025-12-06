@@ -1,7 +1,9 @@
 import { View, Text, StyleSheet, TextInput, TouchableOpacity, ScrollView, Alert, ActivityIndicator, Image } from 'react-native';
 import { useFonts, Inter_400Regular, Inter_600SemiBold } from '@expo-google-fonts/inter';
 import { useEffect, useState } from 'react';
-import { SplashScreen, useRouter } from 'expo-router';
+import { SplashScreen, useRouter } from 'expo-router'
+import { DebouncedTouchable } from '@/components/DebouncedTouchable';
+import { debouncedRouter } from '@/utils/navigationDebounce';;
 import { ArrowLeft, Image as ImageIcon, Send, Target, Info, Calendar } from 'lucide-react-native';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/hooks/useAuth';
@@ -41,7 +43,7 @@ export default function CreateGoalScreen() {
   useEffect(() => {
     if (!user) {
       Alert.alert('Authentication Required', 'Please sign in to create goals.');
-      router.replace('/');
+      debouncedRouter.replace('/');
       return;
     }
   }, [user, router]);
@@ -93,7 +95,7 @@ export default function CreateGoalScreen() {
       Alert.alert(
         'Success', 
         isVisionBoard ? 'Vision board item created successfully!' : 'Goal created successfully!',
-        [{ text: 'OK', onPress: () => router.back() }]
+        [{ text: 'OK', onPress: () => debouncedRouter.back() }]
       );
     } catch (error: any) {
       console.error('Error creating goal:', error);
@@ -110,7 +112,7 @@ export default function CreateGoalScreen() {
   return (
     <View style={styles.container}>
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
+        <TouchableOpacity onPress={() => debouncedRouter.back()} style={styles.backButton}>
           <ArrowLeft size={24} color="#000000" />
         </TouchableOpacity>
         <Text style={styles.title}>{isVisionBoard ? 'Add to Vision Board' : 'Create New Goal'}</Text>

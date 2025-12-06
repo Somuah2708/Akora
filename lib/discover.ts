@@ -70,7 +70,8 @@ export async function fetchDiscoverFeed(
         const { data: postsWithProfiles } = await supabase
           .from('posts')
           .select('*, user:profiles(id, username, full_name, avatar_url, is_admin, role), media_items')
-          .in('id', postIds);
+          .in('id', postIds)
+          .eq('is_highlight_only', false);
 
         if (postsWithProfiles) {
           console.log('✅ [DISCOVER] Fetched profiles for posts');
@@ -168,6 +169,7 @@ export async function fetchDiscoverFeed(
         .from('posts')
         .select('*, user:profiles(id, username, full_name, avatar_url, is_admin, role)')
         .eq('visibility', 'public')
+        .eq('is_highlight_only', false)
         .order('created_at', { ascending: false })
         .limit(10);
 

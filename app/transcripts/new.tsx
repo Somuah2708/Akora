@@ -1,7 +1,9 @@
 import { useState, useMemo } from 'react';
 import { View, Text, TextInput, StyleSheet, TouchableOpacity, Alert, ActivityIndicator, KeyboardAvoidingView, Platform, ScrollView } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useRouter } from 'expo-router';
+import { useRouter } from 'expo-router'
+import { DebouncedTouchable } from '@/components/DebouncedTouchable';
+import { debouncedRouter } from '@/utils/navigationDebounce';;
 import { ArrowLeft, FilePlus2, Upload, DollarSign, Copy } from 'lucide-react-native';
 import * as Clipboard from 'expo-clipboard';
 import { supabase } from '@/lib/supabase';
@@ -164,7 +166,7 @@ export default function NewTranscriptScreen() {
       }
 
       Alert.alert('Submitted', 'Your academic request has been submitted.', [
-        { text: 'View', onPress: () => router.replace(`/transcripts/${id}`) },
+        { text: 'View', onPress: () => debouncedRouter.replace(`/transcripts/${id}`) },
       ]);
     } catch (err: any) {
       console.error('Submit transcript error', err);
@@ -178,7 +180,7 @@ export default function NewTranscriptScreen() {
     <SafeAreaView style={styles.container} edges={['top']}>
       <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
         <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
+        <TouchableOpacity onPress={() => debouncedRouter.back()} style={styles.backButton}>
           <ArrowLeft size={22} color="#000" />
         </TouchableOpacity>
         <Text style={styles.title}>Academic Request</Text>
@@ -212,7 +214,7 @@ export default function NewTranscriptScreen() {
               <Text style={[styles.segmentText, requestKind==='proficiency' && styles.segmentTextActive]}>Proficiency Test</Text>
             </TouchableOpacity>
             <TouchableOpacity 
-              onPress={() => router.push('/recommendations/new')} 
+              onPress={() => debouncedRouter.push('/recommendations/new')} 
               style={styles.segmentBtn}
             >          
               <Text style={styles.segmentText}>Recommendations</Text>

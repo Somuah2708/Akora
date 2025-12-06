@@ -1,7 +1,9 @@
 import { View, Text, StyleSheet, ScrollView, TextInput, TouchableOpacity, Image, ActivityIndicator, Linking, Alert } from 'react-native';
 import { useFonts, Inter_400Regular, Inter_600SemiBold } from '@expo-google-fonts/inter';
 import { useEffect, useState } from 'react';
-import { SplashScreen, useRouter, useLocalSearchParams } from 'expo-router';
+import { SplashScreen, useRouter, useLocalSearchParams } from 'expo-router'
+import { DebouncedTouchable } from '@/components/DebouncedTouchable';
+import { debouncedRouter } from '@/utils/navigationDebounce';;
 import { ArrowLeft, Briefcase, MapPin, Building2, Wallet, Clock, Mail, Phone, FileText, Upload, Send, User, Link as LinkIcon, Calendar, DollarSign } from 'lucide-react-native';
 import { supabase, Job, JobApplication } from '@/lib/supabase';
 import { useAuth } from '@/hooks/useAuth';
@@ -160,7 +162,7 @@ export default function JobApplicationScreen() {
 
     if (!user) {
       Alert.alert('Authentication Required', 'Please sign in to apply for jobs');
-      router.replace('/auth/sign-in');
+      debouncedRouter.replace('/auth/sign-in');
       return;
     }
 
@@ -229,7 +231,7 @@ export default function JobApplicationScreen() {
         [
           {
             text: 'OK',
-            onPress: () => router.back(),
+            onPress: () => debouncedRouter.back(),
           },
         ]
       );
@@ -254,7 +256,7 @@ export default function JobApplicationScreen() {
     return (
       <View style={[styles.container, styles.centerContent]}>
         <Text style={styles.errorText}>Job not found</Text>
-        <TouchableOpacity style={styles.backButton} onPress={() => router.back()}>
+        <TouchableOpacity style={styles.backButton} onPress={() => debouncedRouter.back()}>
           <Text style={styles.backButtonText}>Go Back</Text>
         </TouchableOpacity>
       </View>
@@ -264,7 +266,7 @@ export default function JobApplicationScreen() {
   return (
     <View style={styles.container}>
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()} style={styles.headerBackButton}>
+        <TouchableOpacity onPress={() => debouncedRouter.back()} style={styles.headerBackButton}>
           <ArrowLeft size={24} color="#000000" />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Apply for Job</Text>

@@ -19,7 +19,9 @@ import {
   Linking,
   Animated,
 } from 'react-native';
-import { useRouter, useLocalSearchParams } from 'expo-router';
+import { useRouter, useLocalSearchParams } from 'expo-router'
+import { DebouncedTouchable } from '@/components/DebouncedTouchable';
+import { debouncedRouter } from '@/utils/navigationDebounce';;
 import * as WebBrowser from 'expo-web-browser';
 import * as ImagePicker from 'expo-image-picker';
 import * as DocumentPicker from 'expo-document-picker';
@@ -609,7 +611,7 @@ export default function DiscussionDetailScreen() {
           <View style={styles.commentHeader}>
             <TouchableOpacity
               accessibilityLabel={`View ${comment.profiles?.full_name || 'user'} profile`}
-              onPress={() => comment.profiles?.id && router.push({ pathname: '/user-profile/[id]', params: { id: comment.profiles.id } })}
+              onPress={() => comment.profiles?.id && debouncedRouter.push({ pathname: '/user-profile/[id]', params: { id: comment.profiles.id } })}
               style={{ flexDirection: 'row', alignItems: 'center', flex: 1 }}
               hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
             >
@@ -1185,7 +1187,7 @@ export default function DiscussionDetailScreen() {
         <Text style={styles.loadingText}>Discussion not found</Text>
         <TouchableOpacity
           style={styles.backToForumButton}
-          onPress={() => router.back()}
+          onPress={() => debouncedRouter.back()}
         >
           <Text style={styles.backToForumText}>Back to Forum</Text>
         </TouchableOpacity>
@@ -1204,7 +1206,7 @@ export default function DiscussionDetailScreen() {
     >
       {/* Header */}
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
+        <TouchableOpacity onPress={() => debouncedRouter.back()} style={styles.backButton}>
           <ArrowLeft size={24} color="#111827" />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Discussion</Text>
@@ -1237,7 +1239,7 @@ export default function DiscussionDetailScreen() {
           <View style={styles.postHeader}>
             <TouchableOpacity
               accessibilityLabel={`View ${discussion.profiles?.full_name || 'user'} profile`}
-              onPress={() => discussion.profiles?.id && router.push({ pathname: '/user-profile/[id]', params: { id: discussion.profiles.id } })}
+              onPress={() => discussion.profiles?.id && debouncedRouter.push({ pathname: '/user-profile/[id]', params: { id: discussion.profiles.id } })}
               style={{ flexDirection: 'row', alignItems: 'center', flex: 1 }}
               hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
             >

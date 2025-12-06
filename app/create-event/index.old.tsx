@@ -1,7 +1,9 @@
 import { View, Text, StyleSheet, TextInput, TouchableOpacity, ScrollView, Alert, ActivityIndicator, Image } from 'react-native';
 import { useFonts, Inter_400Regular, Inter_600SemiBold } from '@expo-google-fonts/inter';
 import { useEffect, useState } from 'react';
-import { SplashScreen, useRouter } from 'expo-router';
+import { SplashScreen, useRouter } from 'expo-router'
+import { DebouncedTouchable } from '@/components/DebouncedTouchable';
+import { debouncedRouter } from '@/utils/navigationDebounce';;
 import { ArrowLeft, Image as ImageIcon, Send, Calendar, Clock, MapPin, Tag, Info, Plus, X, DollarSign, Users, Phone, Mail, Package } from 'lucide-react-native';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/hooks/useAuth';
@@ -370,7 +372,7 @@ export default function CreateEventScreen() {
       if (typeof window !== 'undefined') {
         // Web environment - redirect immediately
         console.log('Web environment detected, redirecting...');
-        router.push('/secretariat/event-calendar' as any);
+        debouncedRouter.push('/secretariat/event-calendar');
       } else {
         // Mobile environment - show alert
         Alert.alert(
@@ -381,7 +383,7 @@ export default function CreateEventScreen() {
               text: 'OK',
               onPress: () => {
                 console.log('Redirecting to event calendar...');
-                router.push('/secretariat/event-calendar' as any);
+                debouncedRouter.push('/secretariat/event-calendar');
               }
             }
           ]
@@ -408,7 +410,7 @@ export default function CreateEventScreen() {
   return (
     <View style={styles.container}>
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.push('/secretariat/event-calendar' as any)} style={styles.backButton}>
+        <TouchableOpacity onPress={() => debouncedRouter.push('/secretariat/event-calendar')} style={styles.backButton}>
           <ArrowLeft size={24} color="#000000" />
         </TouchableOpacity>
         <Text style={styles.title}>Submit Event</Text>

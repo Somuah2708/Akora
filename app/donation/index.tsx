@@ -1,7 +1,9 @@
 import { View, Text, StyleSheet, ScrollView, Image, TouchableOpacity, TextInput, Dimensions, Modal, Alert, ActivityIndicator } from 'react-native';
 import { useFonts, Inter_400Regular, Inter_600SemiBold } from '@expo-google-fonts/inter';
 import { useEffect, useState, useRef } from 'react';
-import { SplashScreen, useRouter } from 'expo-router';
+import { SplashScreen, useRouter } from 'expo-router'
+import { DebouncedTouchable } from '@/components/DebouncedTouchable';
+import { debouncedRouter } from '@/utils/navigationDebounce';;
 import { ArrowLeft, Heart, Target, GraduationCap, Building2, Users, Wallet, ChevronRight, Bell, Gift, Sparkles, Trophy, Clock, Star, Check, X, Trash2, DollarSign, Plus, Upload, Calendar } from 'lucide-react-native';
 import { supabase } from '../../lib/supabase';
 import * as ImagePicker from 'expo-image-picker';
@@ -550,7 +552,7 @@ export default function DonationScreen() {
           { text: 'Cancel', style: 'cancel' },
           { 
             text: 'Sign In', 
-            onPress: () => router.push('/auth/sign-in' as any)
+            onPress: () => debouncedRouter.push('/auth/sign-in')
           }
         ]
       );
@@ -1112,7 +1114,7 @@ export default function DonationScreen() {
   return (
     <ScrollView style={styles.container} showsVerticalScrollIndicator={false}>
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
+        <TouchableOpacity onPress={() => debouncedRouter.back()} style={styles.backButton}>
           <ArrowLeft size={24} color="#000000" />
         </TouchableOpacity>
         <Text style={styles.title}>Make a Difference</Text>
@@ -1133,7 +1135,7 @@ export default function DonationScreen() {
       <View style={styles.quickActions}>
         <TouchableOpacity 
           style={styles.quickActionButton}
-          onPress={() => router.push('/donation/my-donations' as any)}
+          onPress={() => debouncedRouter.push('/donation/my-donations')}
         >
           <Heart size={18} color="#4169E1" />
           <Text style={styles.quickActionText}>My Donations</Text>
@@ -1251,7 +1253,7 @@ export default function DonationScreen() {
           <Text style={styles.sectionTitle}>Featured Campaigns</Text>
           <TouchableOpacity 
             style={styles.seeAllButton}
-            onPress={() => router.push('/donation/all-campaigns' as any)}
+            onPress={() => debouncedRouter.push('/donation/all-campaigns')}
           >
             <Text style={styles.seeAllText}>See All</Text>
             <ChevronRight size={16} color="#666666" />
@@ -1326,7 +1328,7 @@ export default function DonationScreen() {
                 styles.categoryCard,
                 { backgroundColor: category.color },
               ]}
-              onPress={() => router.push(`/donation/category/${category.title.toLowerCase()}` as any)}
+              onPress={() => debouncedRouter.push(`/donation/category/${category.title.toLowerCase()}` as any)}
             >
               {category.icon && <category.icon size={24} color="#000000" />}
               <Text style={styles.categoryTitle}>{category.title}</Text>
@@ -1341,7 +1343,7 @@ export default function DonationScreen() {
           <Text style={styles.sectionTitle}>Recent Donors</Text>
           <TouchableOpacity 
             style={styles.seeAllButton}
-            onPress={() => router.push('/donation/all-donors' as any)}
+            onPress={() => debouncedRouter.push('/donation/all-donors')}
           >
             <Text style={styles.seeAllText}>See All</Text>
             <ChevronRight size={16} color="#666666" />

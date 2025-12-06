@@ -1,7 +1,9 @@
 import { View, Text, StyleSheet, ScrollView, Image, TouchableOpacity, Dimensions, ActivityIndicator, FlatList, Linking } from 'react-native';
 import { useFonts, Inter_400Regular, Inter_600SemiBold } from '@expo-google-fonts/inter';
 import { useEffect, useState, useCallback } from 'react';
-import { SplashScreen, useRouter, useFocusEffect } from 'expo-router';
+import { SplashScreen, useRouter, useFocusEffect } from 'expo-router'
+import { DebouncedTouchable } from '@/components/DebouncedTouchable';
+import { debouncedRouter } from '@/utils/navigationDebounce';;
 import { ArrowLeft, History, Book, GraduationCap, Globe, Users, Star, ChevronRight, Flag, Award, Building2, Plus } from 'lucide-react-native';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/hooks/useAuth';
@@ -217,12 +219,12 @@ export default function HeritageScreen() {
   return (
     <ScrollView style={styles.container} showsVerticalScrollIndicator={false}>
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
+        <TouchableOpacity onPress={() => debouncedRouter.back()} style={styles.backButton}>
           <ArrowLeft size={24} color="#000000" />
         </TouchableOpacity>
         <Text style={styles.title}>Our Heritage</Text>
         {user && (
-          <TouchableOpacity onPress={() => router.push('/heritage/add')} style={{ position: 'absolute', right: 16, top: 64 }}>
+          <TouchableOpacity onPress={() => debouncedRouter.push('/heritage/add')} style={{ position: 'absolute', right: 16, top: 64 }}>
             <View style={styles.addBtn}>
               <Plus size={18} color="#FFFFFF" />
             </View>

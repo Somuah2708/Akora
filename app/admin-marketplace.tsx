@@ -1,6 +1,8 @@
 import React, { useEffect, useState } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Alert, RefreshControl } from 'react-native';
-import { useRouter } from 'expo-router';
+import { useRouter } from 'expo-router'
+import { DebouncedTouchable } from '@/components/DebouncedTouchable';
+import { debouncedRouter } from '@/utils/navigationDebounce';;
 import { useAuth } from '@/hooks/useAuth';
 import { useRefresh } from '@/hooks/useRefresh';
 import { supabase, type ProductService } from '@/lib/supabase';
@@ -43,7 +45,7 @@ export default function AdminMarketplaceScreen() {
     if (!user) return;
     if (!isAdmin) {
       Alert.alert('Access denied', 'You must be an admin to view this screen.');
-      router.back();
+      debouncedRouter.back();
       return;
     }
 
@@ -117,7 +119,7 @@ export default function AdminMarketplaceScreen() {
   return (
     <View style={styles.container}>
       <View style={styles.header}>
-        <TouchableOpacity style={styles.backButton} onPress={() => router.back()}>
+        <TouchableOpacity style={styles.backButton} onPress={() => debouncedRouter.back()}>
           <ArrowLeft size={20} color="#020617" />
         </TouchableOpacity>
         <View style={styles.headerTextContainer}>

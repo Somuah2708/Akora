@@ -1,7 +1,9 @@
 import { View, Text, StyleSheet, ScrollView, Image, TouchableOpacity, Alert, Animated, Dimensions } from 'react-native';
 import { useFonts, Inter_400Regular, Inter_600SemiBold, Inter_700Bold } from '@expo-google-fonts/inter';
 import { useEffect, useState, useRef, useCallback } from 'react';
-import { SplashScreen, useRouter, useFocusEffect } from 'expo-router';
+import { SplashScreen, useRouter, useFocusEffect } from 'expo-router'
+import { DebouncedTouchable } from '@/components/DebouncedTouchable';
+import { debouncedRouter } from '@/utils/navigationDebounce';;
 import { ArrowLeft, Trash2, Plus, Minus, ShoppingBag, ShoppingCart, Sparkles, Lock, Heart, Share2, Tag } from 'lucide-react-native';
 import { useAuth } from '@/hooks/useAuth';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -165,7 +167,7 @@ export default function CartScreen() {
     }
 
     // Navigate to checkout page with cart totals in display currency
-    router.push({
+    debouncedRouter.push({
       pathname: '/checkout' as any,
       params: {
         subtotal: calculateSubtotalInDisplayCurrency().toFixed(2),
@@ -190,7 +192,7 @@ export default function CartScreen() {
         style={styles.headerGradient}
       >
         <View style={styles.header}>
-          <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
+          <TouchableOpacity onPress={() => debouncedRouter.back()} style={styles.backButton}>
             <ArrowLeft size={24} color="#FFFFFF" />
           </TouchableOpacity>
           <View style={styles.headerCenter}>
@@ -237,7 +239,7 @@ export default function CartScreen() {
           <Text style={styles.emptyText}>Browse the marketplace and add items to your cart</Text>
           <TouchableOpacity
             style={styles.shopButton}
-            onPress={() => router.push('/services')}
+            onPress={() => debouncedRouter.push('/services')}
             activeOpacity={0.9}
           >
             <LinearGradient

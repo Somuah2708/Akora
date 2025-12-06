@@ -2,7 +2,9 @@ import { View, Text, StyleSheet, ScrollView, Image, TouchableOpacity, Dimensions
 import { useFonts, Inter_400Regular, Inter_600SemiBold } from '@expo-google-fonts/inter';
 import { useEffect } from 'react';
 import { useRefresh } from '@/hooks/useRefresh';
-import { SplashScreen, useRouter } from 'expo-router';
+import { SplashScreen, useRouter } from 'expo-router'
+import { DebouncedTouchable } from '@/components/DebouncedTouchable';
+import { debouncedRouter } from '@/utils/navigationDebounce';;
 import { ArrowLeft, MapPin, Building2, Navigation, Car, Bus, Brain as Train, Phone, Mail, Globe, ChevronRight, Trees, School, Users, BookOpen } from 'lucide-react-native';
 
 SplashScreen.preventAutoHideAsync();
@@ -147,7 +149,7 @@ export default function OutlookScreen() {
       }
     >
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
+        <TouchableOpacity onPress={() => debouncedRouter.back()} style={styles.backButton}>
           <ArrowLeft size={24} color="#000000" />
         </TouchableOpacity>
         <Text style={styles.title}>School Outlook</Text>

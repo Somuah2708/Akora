@@ -2,7 +2,9 @@ import React, { useMemo, useState } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, TextInput, Alert, ActivityIndicator, Switch } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
 import * as DocumentPicker from 'expo-document-picker';
-import { useRouter } from 'expo-router';
+import { useRouter } from 'expo-router'
+import { DebouncedTouchable } from '@/components/DebouncedTouchable';
+import { debouncedRouter } from '@/utils/navigationDebounce';;
 import { ArrowLeft } from 'lucide-react-native';
 import { useAuth } from '@/hooks/useAuth';
 import { supabase } from '@/lib/supabase';
@@ -113,7 +115,7 @@ export default function AddHistoryItem() {
         if (dbErr) throw dbErr;
       }
       Alert.alert('Success', `${childRows.length} file${childRows.length > 1 ? 's' : ''} uploaded`);
-      router.back();
+      debouncedRouter.back();
     } catch (e) {
       console.error('Upload failed', e);
       Alert.alert('Error', 'Upload failed');
@@ -129,7 +131,7 @@ export default function AddHistoryItem() {
     return (
       <View style={styles.container}>
         <View style={styles.header}>
-          <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
+          <TouchableOpacity onPress={() => debouncedRouter.back()} style={styles.backBtn}>
             <ArrowLeft size={22} color="#111827" />
           </TouchableOpacity>
           <Text style={styles.headerTitle}>Add History Item</Text>
@@ -145,7 +147,7 @@ export default function AddHistoryItem() {
   return (
     <View style={styles.container}>
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
+        <TouchableOpacity onPress={() => debouncedRouter.back()} style={styles.backBtn}>
           <ArrowLeft size={22} color="#111827" />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Add History Item</Text>

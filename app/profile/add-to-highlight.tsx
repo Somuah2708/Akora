@@ -1,6 +1,8 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, ActivityIndicator, FlatList, Image, Dimensions, Alert } from 'react-native';
-import { useLocalSearchParams, useRouter } from 'expo-router';
+import { useLocalSearchParams, useRouter } from 'expo-router'
+import { DebouncedTouchable } from '@/components/DebouncedTouchable';
+import { debouncedRouter } from '@/utils/navigationDebounce';;
 import { useAuth } from '@/hooks/useAuth';
 import { supabase } from '@/lib/supabase';
 import { ArrowLeft, Check } from 'lucide-react-native';
@@ -104,7 +106,7 @@ export default function AddToHighlight() {
       } else {
         toast.show(`Highlight added successfully`);
       }
-      router.back();
+      debouncedRouter.back();
     } catch (e) {
       console.error(e);
       Alert.alert('Error', 'Failed to add items');
@@ -116,7 +118,7 @@ export default function AddToHighlight() {
   return (
     <View style={styles.container}>
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
+        <TouchableOpacity onPress={() => debouncedRouter.back()} style={styles.backBtn}>
           <ArrowLeft size={22} color="#111827" />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Add to {groupTitle}</Text>
@@ -149,7 +151,7 @@ export default function AddToHighlight() {
                   const slides = Array.isArray(item.image_urls) ? item.image_urls.length : 0;
                   if (slides > 1) {
                     // Navigate to slide picker for this post
-                    router.push(`/profile/add-from-post-slides?t=${encodeURIComponent(groupTitle)}&postId=${item.id}` as any);
+                    debouncedRouter.push(`/profile/add-from-post-slides?t=${encodeURIComponent(groupTitle)}&postId=${item.id}` as any);
                   } else {
                     toggle(item.id);
                   }

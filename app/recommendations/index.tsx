@@ -1,6 +1,8 @@
 import { useEffect, useState, useCallback } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator, Alert } from 'react-native';
-import { useRouter } from 'expo-router';
+import { useRouter } from 'expo-router'
+import { DebouncedTouchable } from '@/components/DebouncedTouchable';
+import { debouncedRouter } from '@/utils/navigationDebounce';;
 import { Users, Plus, Clock, CheckCircle2 } from 'lucide-react-native';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/hooks/useAuth';
@@ -69,7 +71,7 @@ export default function RecommendationListScreen() {
     <View style={styles.container}>
       <View style={styles.header}>
         <Text style={styles.title}>Recommendation Requests</Text>
-        <TouchableOpacity style={styles.addButton} onPress={() => router.push('/recommendations/new')}>
+        <TouchableOpacity style={styles.addButton} onPress={() => debouncedRouter.push('/recommendations/new')}>
           <Plus size={20} color="#4169E1" />
           <Text style={styles.addText}>New</Text>
         </TouchableOpacity>
@@ -82,7 +84,7 @@ export default function RecommendationListScreen() {
           <Users size={36} color="#999" />
           <Text style={styles.emptyTitle}>No recommendation requests yet</Text>
           <Text style={styles.emptySub}>Create a request to invite a recommender.</Text>
-          <TouchableOpacity style={styles.cta} onPress={() => router.push('/recommendations/new')}>
+          <TouchableOpacity style={styles.cta} onPress={() => debouncedRouter.push('/recommendations/new')}>
             <Plus size={18} color="#fff" />
             <Text style={styles.ctaText}>Request Recommendation</Text>
           </TouchableOpacity>

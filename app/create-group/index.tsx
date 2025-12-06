@@ -1,6 +1,8 @@
 import React, { useCallback, useEffect, useState } from "react";
 import { View, Text, TextInput, TouchableOpacity, Image, FlatList, ActivityIndicator } from "react-native";
 import { useRouter } from "expo-router";
+import { DebouncedTouchable } from '@/components/DebouncedTouchable';
+import { debouncedRouter } from '@/utils/navigationDebounce';
 import { supabase } from "../../lib/supabase";
 import { useAuth } from "../../hooks/useAuth";
 import { pickMedia, uploadMedia } from "../../lib/media";
@@ -79,14 +81,14 @@ export default function CreateGroupScreen() {
     }
     
     setSubmitting(false);
-    router.replace(`/chat/group/${groupId}`);
+    debouncedRouter.replace(`/chat/group/${groupId}`);
   }, [meId, name, avatarUrl, selected, router]);
 
   return (
     <View style={{ flex: 1, backgroundColor: "#fff" }}>
       {/* Header */}
       <View style={{ paddingTop: 52, paddingHorizontal: 12, paddingBottom: 12, borderBottomWidth: 0.5, borderBottomColor: "#eee", flexDirection: "row", alignItems: "center" }}>
-        <TouchableOpacity onPress={() => router.back()} style={{ padding: 8, marginRight: 8 }}>
+        <TouchableOpacity onPress={() => debouncedRouter.back()} style={{ padding: 8, marginRight: 8 }}>
           <Text style={{ fontSize: 16 }}>‹</Text>
         </TouchableOpacity>
         <Text style={{ fontSize: 18, fontWeight: "600" }}>New Group</Text>

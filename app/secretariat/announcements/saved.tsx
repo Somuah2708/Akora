@@ -9,7 +9,9 @@ import {
   ActivityIndicator,
   Platform,
 } from 'react-native';
-import { useRouter } from 'expo-router';
+import { useRouter } from 'expo-router'
+import { DebouncedTouchable } from '@/components/DebouncedTouchable';
+import { debouncedRouter } from '@/utils/navigationDebounce';;
 import { 
   ArrowLeft, 
   Calendar, 
@@ -165,7 +167,7 @@ export default function SavedAnnouncementsScreen() {
         <View style={styles.header}>
           <TouchableOpacity 
             onPress={() => {
-              router.push('/secretariat/announcements');
+              debouncedRouter.push('/secretariat/announcements');
             }} 
             style={styles.backButton}
           >
@@ -194,7 +196,7 @@ export default function SavedAnnouncementsScreen() {
             <TouchableOpacity
               key={announcement.id}
               style={styles.announcementCard}
-              onPress={() => router.push(`/secretariat/announcements/${announcement.id}`)}
+              onPress={() => debouncedRouter.push(`/secretariat/announcements/${announcement.id}`)}
             >
               {announcement.image_url && (
                 <Image

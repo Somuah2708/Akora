@@ -13,7 +13,9 @@ import {
   TextInput,
   KeyboardAvoidingView,
 } from 'react-native';
-import { useRouter, useLocalSearchParams } from 'expo-router';
+import { useRouter, useLocalSearchParams } from 'expo-router'
+import { DebouncedTouchable } from '@/components/DebouncedTouchable';
+import { debouncedRouter } from '@/utils/navigationDebounce';;
 import { 
   ArrowLeft, 
   Calendar, 
@@ -487,7 +489,7 @@ export default function AnnouncementDetailScreen() {
           style={styles.backButton} 
           onPress={() => {
             console.log('[Announcement Detail] Error page - going to Secretariat');
-            router.push('/secretariat');
+            debouncedRouter.push('/secretariat');
           }}
         >
           <Text style={styles.backButtonText}>Go Back</Text>
@@ -509,7 +511,7 @@ export default function AnnouncementDetailScreen() {
           <TouchableOpacity 
             onPress={() => {
               console.log('[Announcement Detail] Back button pressed - going to Secretariat');
-              router.push('/secretariat');
+              debouncedRouter.push('/secretariat');
             }} 
             style={styles.backBtn}
           >

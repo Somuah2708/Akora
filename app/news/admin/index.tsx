@@ -1,6 +1,8 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { View, Text, StyleSheet, FlatList, TextInput, TouchableOpacity, Alert, Modal, Image } from 'react-native';
-import { useRouter } from 'expo-router';
+import { useRouter } from 'expo-router'
+import { DebouncedTouchable } from '@/components/DebouncedTouchable';
+import { debouncedRouter } from '@/utils/navigationDebounce';;
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAuth } from '@/hooks/useAuth';
 import { supabase } from '@/lib/supabase';
@@ -218,7 +220,7 @@ export default function NewsOutletsAdmin() {
     return (
       <View style={[styles.container, { paddingTop: insets.top + 12 }]}> 
         <View style={styles.headerRow}>
-          <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
+          <TouchableOpacity onPress={() => debouncedRouter.back()} style={styles.backBtn}>
             <ArrowLeft size={22} color="#1C1C1E" />
           </TouchableOpacity>
           <Text style={styles.title}>News Outlets Admin</Text>
@@ -232,7 +234,7 @@ export default function NewsOutletsAdmin() {
   return (
     <View style={[styles.container, { paddingTop: insets.top + 12 }]}> 
       <View style={styles.headerRow}>
-        <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
+        <TouchableOpacity onPress={() => debouncedRouter.back()} style={styles.backBtn}>
           <ArrowLeft size={22} color="#1C1C1E" />
         </TouchableOpacity>
         <Text style={styles.title}>News Outlets Admin</Text>

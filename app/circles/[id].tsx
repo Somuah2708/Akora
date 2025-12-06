@@ -11,7 +11,9 @@ import {
 import { ArrowLeft, Users, Lock, Globe, Calendar, MessageCircle, UserPlus, X } from 'lucide-react-native';
 import { useAuth } from '@/hooks/useAuth';
 import { supabase } from '@/lib/supabase';
-import { useRouter, useLocalSearchParams } from 'expo-router';
+import { useRouter, useLocalSearchParams } from 'expo-router'
+import { DebouncedTouchable } from '@/components/DebouncedTouchable';
+import { debouncedRouter } from '@/utils/navigationDebounce';;
 
 interface Circle {
   id: string;
@@ -100,7 +102,7 @@ export default function CircleDetailScreen() {
     } catch (error: any) {
       console.error('Error fetching circle:', error);
       Alert.alert('Error', 'Failed to load circle details');
-      router.back();
+      debouncedRouter.back();
     } finally {
       setLoading(false);
     }
@@ -167,7 +169,7 @@ export default function CircleDetailScreen() {
               if (error) throw error;
 
               Alert.alert('Success', 'You have left the circle');
-              router.back();
+              debouncedRouter.back();
             } catch (error: any) {
               console.error('Error leaving circle:', error);
               Alert.alert('Error', 'Failed to leave circle');
@@ -183,7 +185,7 @@ export default function CircleDetailScreen() {
       Alert.alert('No Chat', 'This circle does not have a group chat yet');
       return;
     }
-    router.push(`/group-chat/${circle.group_chat_id}` as any);
+    debouncedRouter.push(`/group-chat/${circle.group_chat_id}`);
   };
 
   if (loading) {
@@ -203,7 +205,7 @@ export default function CircleDetailScreen() {
     <View style={styles.container}>
       {/* Header */}
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
+        <TouchableOpacity onPress={() => debouncedRouter.back()} style={styles.backButton}>
           <ArrowLeft size={24} color="#333" />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Circle Details</Text>

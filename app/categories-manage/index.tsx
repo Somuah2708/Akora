@@ -1,6 +1,8 @@
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Image, Alert, ActivityIndicator, TextInput } from 'react-native';
 import { useState, useEffect } from 'react';
-import { useRouter } from 'expo-router';
+import { useRouter } from 'expo-router'
+import { DebouncedTouchable } from '@/components/DebouncedTouchable';
+import { debouncedRouter } from '@/utils/navigationDebounce';;
 import { ArrowLeft, Upload, Save, RefreshCw } from 'lucide-react-native';
 import * as ImagePicker from 'expo-image-picker';
 import { supabase, type HomeCategoryTab } from '@/lib/supabase';
@@ -158,7 +160,7 @@ export default function CategoriesManageScreen() {
     return (
       <View style={styles.container}>
         <View style={styles.header}>
-          <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
+          <TouchableOpacity onPress={() => debouncedRouter.back()} style={styles.backButton}>
             <ArrowLeft size={24} color="#111827" strokeWidth={2} />
           </TouchableOpacity>
           <Text style={styles.headerTitle}>Manage Categories</Text>
@@ -176,7 +178,7 @@ export default function CategoriesManageScreen() {
     <View style={styles.container}>
       {/* Header */}
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
+        <TouchableOpacity onPress={() => debouncedRouter.back()} style={styles.backButton}>
           <ArrowLeft size={24} color="#111827" strokeWidth={2} />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Manage Categories</Text>

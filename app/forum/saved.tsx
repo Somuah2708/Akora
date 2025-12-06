@@ -1,6 +1,8 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Image, ActivityIndicator, RefreshControl, Alert } from 'react-native';
-import { useRouter, useFocusEffect } from 'expo-router';
+import { useRouter, useFocusEffect } from 'expo-router'
+import { DebouncedTouchable } from '@/components/DebouncedTouchable';
+import { debouncedRouter } from '@/utils/navigationDebounce';;
 import { ArrowLeft, Bookmark, MessageCircle, ThumbsUp } from 'lucide-react-native';
 import { useAuth } from '@/hooks/useAuth';
 import { supabase } from '@/lib/supabase';
@@ -142,7 +144,7 @@ export default function SavedDiscussionsScreen() {
     <View style={styles.container}>
       {/* Header */}
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
+        <TouchableOpacity onPress={() => debouncedRouter.back()} style={styles.backButton}>
           <ArrowLeft size={24} color="#000000" />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Saved Discussions</Text>
@@ -161,7 +163,7 @@ export default function SavedDiscussionsScreen() {
           </View>
         ) : (
           items.map(d => (
-            <TouchableOpacity key={d.id} style={styles.card} onPress={() => router.push(`/forum/${d.id}`)}>
+            <TouchableOpacity key={d.id} style={styles.card} onPress={() => debouncedRouter.push(`/forum/${d.id}`)}>
               <View style={styles.cardHeader}>
                 <Image source={{ uri: d.profiles?.avatar_url || 'https://via.placeholder.com/40' }} style={styles.avatar} />
                 <View style={{ flex: 1 }}>

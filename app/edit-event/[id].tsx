@@ -1,6 +1,8 @@
 import React, { useEffect, useState } from 'react';
 import { View, Text, StyleSheet, ScrollView, TextInput, TouchableOpacity, Alert, Image, ActivityIndicator } from 'react-native';
-import { useRouter, useLocalSearchParams } from 'expo-router';
+import { useRouter, useLocalSearchParams } from 'expo-router'
+import { DebouncedTouchable } from '@/components/DebouncedTouchable';
+import { debouncedRouter } from '@/utils/navigationDebounce';;
 import { ArrowLeft, Plus, XCircle, Upload, Calendar } from 'lucide-react-native';
 import { Video } from 'expo-av';
 import { supabase } from '@/lib/supabase';
@@ -54,7 +56,7 @@ export default function EditEventScreen() {
 
       if (!data) {
         Alert.alert('Error', 'Event not found');
-        router.back();
+        debouncedRouter.back();
         return;
       }
 
@@ -87,7 +89,7 @@ export default function EditEventScreen() {
     } catch (error: any) {
       console.error('Error loading event:', error);
       Alert.alert('Error', 'Failed to load event');
-      router.back();
+      debouncedRouter.back();
     } finally {
       setLoading(false);
     }
@@ -187,7 +189,7 @@ export default function EditEventScreen() {
       Alert.alert('Success', 'Event updated successfully!', [
         {
           text: 'OK',
-          onPress: () => router.push('/secretariat/my-events' as any),
+          onPress: () => debouncedRouter.push('/secretariat/my-events'),
         },
       ]);
     } catch (error: any) {
@@ -212,7 +214,7 @@ export default function EditEventScreen() {
     <View style={styles.container}>
       {/* Header */}
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
+        <TouchableOpacity onPress={() => debouncedRouter.back()} style={styles.backButton}>
           <ArrowLeft size={24} color="#000" />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Edit Event</Text>

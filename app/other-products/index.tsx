@@ -1,7 +1,9 @@
 import { View, Text, StyleSheet, ScrollView, Image, TouchableOpacity, Dimensions, ActivityIndicator, Alert } from 'react-native';
 import { useFonts, Inter_400Regular, Inter_600SemiBold, Inter_700Bold } from '@expo-google-fonts/inter';
 import { useEffect, useState, useCallback } from 'react';
-import { SplashScreen, useRouter } from 'expo-router';
+import { SplashScreen, useRouter } from 'expo-router'
+import { DebouncedTouchable } from '@/components/DebouncedTouchable';
+import { debouncedRouter } from '@/utils/navigationDebounce';;
 import { ArrowLeft, Star, Heart, Package } from 'lucide-react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { supabase, type ProductService, type Profile } from '@/lib/supabase';
@@ -217,7 +219,7 @@ export default function OtherProductsScreen() {
       >
         <View style={styles.headerContent}>
           <TouchableOpacity 
-            onPress={() => router.back()} 
+            onPress={() => debouncedRouter.back()} 
             style={styles.backButton}
           >
             <ArrowLeft size={24} color="#FFFFFF" />
@@ -257,7 +259,7 @@ export default function OtherProductsScreen() {
               <TouchableOpacity 
                 key={product.id} 
                 style={styles.productCard}
-                onPress={() => router.push(`/services/${product.id}` as any)}
+                onPress={() => debouncedRouter.push(`/services/${product.id}`)}
                 activeOpacity={0.9}
               >
                 <Image 
@@ -298,7 +300,7 @@ export default function OtherProductsScreen() {
                       style={styles.viewButton}
                       onPress={(e) => {
                         e.stopPropagation();
-                        router.push(`/services/${product.id}` as any);
+                        debouncedRouter.push(`/services/${product.id}`);
                       }}
                       activeOpacity={0.7}
                     >

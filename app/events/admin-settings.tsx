@@ -9,7 +9,9 @@ import {
   Alert,
   ActivityIndicator,
 } from 'react-native';
-import { useRouter, useLocalSearchParams } from 'expo-router';
+import { useRouter, useLocalSearchParams } from 'expo-router'
+import { DebouncedTouchable } from '@/components/DebouncedTouchable';
+import { debouncedRouter } from '@/utils/navigationDebounce';;
 import { ArrowLeft, Save, DollarSign, CreditCard, Smartphone } from 'lucide-react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { supabase } from '@/lib/supabase';
@@ -328,7 +330,7 @@ export default function AdminSettingsScreen() {
           style={styles.headerGradient}
         >
           <View style={styles.header}>
-            <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
+            <TouchableOpacity onPress={() => debouncedRouter.back()} style={styles.backButton}>
               <ArrowLeft size={24} color="#FFFFFF" />
             </TouchableOpacity>
             <View style={styles.headerCenter}>
@@ -351,7 +353,7 @@ export default function AdminSettingsScreen() {
           </Text>
           <TouchableOpacity
             style={styles.backToHomeButton}
-            onPress={() => router.back()}
+            onPress={() => debouncedRouter.back()}
           >
             <Text style={styles.backToHomeButtonText}>Go Back</Text>
           </TouchableOpacity>
@@ -370,7 +372,7 @@ export default function AdminSettingsScreen() {
         style={styles.headerGradient}
       >
         <View style={styles.header}>
-          <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
+          <TouchableOpacity onPress={() => debouncedRouter.back()} style={styles.backButton}>
             <ArrowLeft size={24} color="#FFFFFF" />
           </TouchableOpacity>
           <View style={styles.headerCenter}>

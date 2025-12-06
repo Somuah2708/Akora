@@ -10,7 +10,9 @@ import {
   ActivityIndicator,
   Switch,
 } from 'react-native';
-import { router } from 'expo-router';
+import { router } from 'expo-router'
+import { DebouncedTouchable } from '@/components/DebouncedTouchable';
+import { debouncedRouter } from '@/utils/navigationDebounce';;
 import { ArrowLeft, Save } from 'lucide-react-native';
 import { supabase } from '../../lib/supabase';
 
@@ -130,7 +132,7 @@ export default function MatchingPreferencesScreen() {
       Alert.alert('Success', 'Preferences saved successfully', [
         {
           text: 'OK',
-          onPress: () => router.back(),
+          onPress: () => debouncedRouter.back(),
         },
       ]);
     } catch (error) {
@@ -177,7 +179,7 @@ export default function MatchingPreferencesScreen() {
     <View style={styles.container}>
       {/* Header */}
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
+        <TouchableOpacity onPress={() => debouncedRouter.back()} style={styles.backButton}>
           <ArrowLeft size={24} color="#1e293b" />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Matching Preferences</Text>

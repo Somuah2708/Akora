@@ -1,7 +1,9 @@
 import { View, Text, StyleSheet, TextInput, TouchableOpacity, ScrollView, Alert, ActivityIndicator, Image } from 'react-native';
 import { useFonts, Inter_400Regular, Inter_600SemiBold } from '@expo-google-fonts/inter';
 import { useEffect, useState } from 'react';
-import { SplashScreen, useRouter, useLocalSearchParams } from 'expo-router';
+import { SplashScreen, useRouter, useLocalSearchParams } from 'expo-router'
+import { DebouncedTouchable } from '@/components/DebouncedTouchable';
+import { debouncedRouter } from '@/utils/navigationDebounce';;
 import { ArrowLeft, Image as ImageIcon, Send, DollarSign, Tag, Info, GraduationCap } from 'lucide-react-native';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/hooks/useAuth';
@@ -88,14 +90,14 @@ export default function CreateEducationalListingScreen() {
         [
           {
             text: 'OK',
-            onPress: () => router.back()
+            onPress: () => debouncedRouter.back()
           }
         ]
       );
       
       // Auto-navigate after 1 second
       setTimeout(() => {
-        router.back();
+        debouncedRouter.back();
       }, 1000);
     } catch (error: any) {
       console.error('Error creating educational listing:', error);
@@ -116,7 +118,7 @@ export default function CreateEducationalListingScreen() {
   return (
     <View style={styles.container}>
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
+        <TouchableOpacity onPress={() => debouncedRouter.back()} style={styles.backButton}>
           <ArrowLeft size={24} color="#000000" />
         </TouchableOpacity>
         <Text style={styles.title}>Submit Educational Opportunity</Text>

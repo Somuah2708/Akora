@@ -6,7 +6,9 @@ import * as Linking from 'expo-linking';
 import * as Clipboard from 'expo-clipboard';
 import { useFonts, Inter_400Regular, Inter_600SemiBold } from '@expo-google-fonts/inter';
 import { useState, useEffect, useMemo } from 'react';
-import { useRouter, useLocalSearchParams } from 'expo-router';
+import { useRouter, useLocalSearchParams } from 'expo-router'
+import { DebouncedTouchable } from '@/components/DebouncedTouchable';
+import { debouncedRouter } from '@/utils/navigationDebounce';;
 import { 
   Grid3x3,
   Bookmark,
@@ -306,7 +308,7 @@ const ProfileScreen = React.memo(function ProfileScreen() {
 
   const viewAsGuest = () => {
     if (!user?.id) return;
-    router.push(`/user-profile/${user.id}?guest=1`);
+    debouncedRouter.push(`/user-profile/${user.id}?guest=1`);
     setShareSheetVisible(false);
   };
 
@@ -509,7 +511,7 @@ const ProfileScreen = React.memo(function ProfileScreen() {
             </TouchableOpacity>
             <TouchableOpacity 
               style={styles.statItem}
-              onPress={() => router.push('/friends')}
+              onPress={() => debouncedRouter.push('/friends')}
             >
               <Text style={styles.statNumber}>{stats.friends}</Text>
               <Text style={styles.statLabel}>Friends</Text>
@@ -685,7 +687,7 @@ const ProfileScreen = React.memo(function ProfileScreen() {
                 <>
                   <Text style={styles.cardBodyText}>No interests yet</Text>
                   {isSelf && (
-                    <TouchableOpacity style={styles.pickButton} onPress={() => router.push('/(tabs)/discover?showInterests=1' as any)}>
+                    <TouchableOpacity style={styles.pickButton} onPress={() => debouncedRouter.push('/(tabs)/discover?showInterests=1' as any)}>
                       <Text style={styles.pickButtonText}>Pick interests</Text>
                     </TouchableOpacity>
                   )}
@@ -733,7 +735,7 @@ const ProfileScreen = React.memo(function ProfileScreen() {
           <View style={styles.actionButtons}>
             <TouchableOpacity 
               style={styles.editButton}
-              onPress={() => router.push('/profile/edit')}
+              onPress={() => debouncedRouter.push('/profile/edit')}
             >
               <Text style={styles.editButtonText}>Edit Profile</Text>
             </TouchableOpacity>
@@ -743,7 +745,7 @@ const ProfileScreen = React.memo(function ProfileScreen() {
           </View>
         ) : (
           <VisitorActions 
-            onMessage={() => router.push(`/chat/${viewingUserId}` as any)}
+            onMessage={() => debouncedRouter.push(`/chat/${viewingUserId}`)}
           />
         )}
       </View>
@@ -782,7 +784,7 @@ const ProfileScreen = React.memo(function ProfileScreen() {
 
               return (
                 <View key={post.id} style={styles.gridItem}>
-                  <TouchableOpacity style={{ flex: 1 }} onPress={() => router.push(`/post/${post.id}`)}>
+                  <TouchableOpacity style={{ flex: 1 }} onPress={() => debouncedRouter.push(`/post/${post.id}`)}>
                     {thumbnail ? (
                       <View style={styles.gridMediaContainer}>
                         <Image source={{ uri: thumbnail }} style={styles.gridImage} />
@@ -850,7 +852,7 @@ const ProfileScreen = React.memo(function ProfileScreen() {
 
               return (
                 <View key={post.id} style={styles.gridItem}>
-                  <TouchableOpacity style={{ flex: 1 }} onPress={() => router.push(`/post/${post.id}`)}>
+                  <TouchableOpacity style={{ flex: 1 }} onPress={() => debouncedRouter.push(`/post/${post.id}`)}>
                     {thumbnail ? (
                       <View style={styles.gridMediaContainer}>
                         <Image source={{ uri: thumbnail }} style={styles.gridImage} />
@@ -919,7 +921,7 @@ const ProfileScreen = React.memo(function ProfileScreen() {
               onPress={() => {
                 if (!selectedPostId) return;
                 setPostSheetOpen(false);
-                router.push(`/post/${selectedPostId}`);
+                debouncedRouter.push(`/post/${selectedPostId}`);
               }}
             >
               <Text style={styles.sheetActionText}>View post</Text>

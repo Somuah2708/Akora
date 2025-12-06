@@ -13,7 +13,9 @@ import {
 import { useFonts, Inter_400Regular, Inter_600SemiBold } from '@expo-google-fonts/inter';
 import { useEffect, useState, useCallback } from 'react';
 import { useRefresh } from '@/hooks/useRefresh';
-import { SplashScreen, useRouter } from 'expo-router';
+import { SplashScreen, useRouter } from 'expo-router'
+import { DebouncedTouchable } from '@/components/DebouncedTouchable';
+import { debouncedRouter } from '@/utils/navigationDebounce';;
 import { Search, UserPlus, UserCheck, Clock, X, ArrowLeft } from 'lucide-react-native';
 import { useAuth } from '@/hooks/useAuth';
 import {
@@ -125,14 +127,14 @@ export default function SearchScreen() {
 
     try {
       // Navigate directly to the direct message screen
-      router.push(`/chat/direct/${targetUser.id}` as any);
+      debouncedRouter.push(`/chat/direct/${targetUser.id}`);
     } catch (error) {
       Alert.alert('Error', 'Failed to open chat');
     }
   };
 
   const handleViewProfile = (targetUser: UserWithFriendshipStatus) => {
-    router.push(`/user-profile/${targetUser.id}` as any);
+    debouncedRouter.push(`/user-profile/${targetUser.id}`);
   };
 
   const renderConnectionButton = (targetUser: UserWithFriendshipStatus) => {
@@ -216,7 +218,7 @@ export default function SearchScreen() {
     <View style={styles.container}>
       {/* Header */}
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
+        <TouchableOpacity onPress={() => debouncedRouter.back()} style={styles.backButton}>
           <ArrowLeft size={24} color="#000000" />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Find People</Text>

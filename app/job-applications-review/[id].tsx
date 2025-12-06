@@ -1,7 +1,9 @@
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator, Alert, RefreshControl, Linking } from 'react-native';
 import { useFonts, Inter_400Regular, Inter_600SemiBold, Inter_700Bold } from '@expo-google-fonts/inter';
 import { useEffect, useState, useCallback } from 'react';
-import { SplashScreen, useRouter, useLocalSearchParams } from 'expo-router';
+import { SplashScreen, useRouter, useLocalSearchParams } from 'expo-router'
+import { DebouncedTouchable } from '@/components/DebouncedTouchable';
+import { debouncedRouter } from '@/utils/navigationDebounce';;
 import { ArrowLeft, CheckCircle, XCircle, Clock, Eye, FileText, Mail, Phone, Briefcase, Calendar, DollarSign, Link as LinkIcon, Download } from 'lucide-react-native';
 import { supabase, JobApplication, Job } from '@/lib/supabase';
 import { useAuth } from '@/hooks/useAuth';
@@ -66,7 +68,7 @@ export default function JobApplicationsReviewScreen() {
       // Check if user is the job owner
       if (user && jobData.user_id !== user.id) {
         Alert.alert('Access Denied', 'You can only view applications for your own job postings');
-        router.back();
+        debouncedRouter.back();
         return;
       }
 
@@ -485,7 +487,7 @@ export default function JobApplicationsReviewScreen() {
   return (
     <View style={styles.container}>
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
+        <TouchableOpacity onPress={() => debouncedRouter.back()} style={styles.backButton}>
           <ArrowLeft size={24} color="#000000" />
         </TouchableOpacity>
         <View style={styles.headerTextContainer}>

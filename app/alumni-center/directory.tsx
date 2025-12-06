@@ -10,7 +10,9 @@ import {
   ActivityIndicator,
   Platform,
 } from 'react-native';
-import { useRouter } from 'expo-router';
+import { useRouter } from 'expo-router'
+import { DebouncedTouchable } from '@/components/DebouncedTouchable';
+import { debouncedRouter } from '@/utils/navigationDebounce';;
 import {
   ArrowLeft,
   Search,
@@ -143,7 +145,7 @@ export default function AlumniDirectoryScreen() {
           style={styles.headerGradient}
         >
           <View style={styles.header}>
-            <TouchableOpacity onPress={() => router.push('/alumni-center')} style={styles.backButton}>
+            <TouchableOpacity onPress={() => debouncedRouter.push('/alumni-center')} style={styles.backButton}>
               <ArrowLeft size={24} color="#FFFFFF" />
             </TouchableOpacity>
             <View style={styles.headerCenter}>
@@ -170,7 +172,7 @@ export default function AlumniDirectoryScreen() {
         style={styles.headerGradient}
       >
         <View style={styles.header}>
-          <TouchableOpacity onPress={() => router.push('/alumni-center')} style={styles.backButton}>
+          <TouchableOpacity onPress={() => debouncedRouter.push('/alumni-center')} style={styles.backButton}>
             <ArrowLeft size={24} color="#FFFFFF" />
           </TouchableOpacity>
           <View style={styles.headerCenter}>
@@ -279,7 +281,7 @@ function AlumniCard({ alumni, router }: { alumni: AlumniProfile; router: any }) 
   return (
     <TouchableOpacity
       style={styles.alumniCard}
-      onPress={() => router.push(`/alumni-center/profile/${alumni.id}` as any)}
+      onPress={() => debouncedRouter.push(`/alumni-center/profile/${alumni.id}`)}
     >
       <Image
         source={{

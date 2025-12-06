@@ -2,7 +2,9 @@ import React, { useEffect, useMemo, useState, useCallback, useRef } from 'react'
 import { View, Text, StyleSheet, TouchableOpacity, TextInput, Alert, Image, ActivityIndicator, ScrollView, Linking, Modal, Dimensions, RefreshControl } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Video } from 'expo-av';
-import { useRouter } from 'expo-router';
+import { useRouter } from 'expo-router'
+import { DebouncedTouchable } from '@/components/DebouncedTouchable';
+import { debouncedRouter } from '@/utils/navigationDebounce';;
 import { ArrowLeft, Plus, Calendar, MapPin, Upload, CheckCircle2, XCircle, Play, Settings } from 'lucide-react-native';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/hooks/useAuth';
@@ -406,7 +408,7 @@ export default function AkoraEventsScreen() {
   };
 
   const renderCard = (ev: AkoraEvent) => (
-    <TouchableOpacity key={ev.id} activeOpacity={0.9} onPress={() => router.push(`/events/${ev.id}`)} style={styles.card}>
+    <TouchableOpacity key={ev.id} activeOpacity={0.9} onPress={() => debouncedRouter.push(`/events/${ev.id}`)} style={styles.card}>
       {ev.video_url ? (
         <View style={styles.mediaWrapper}>
           <Video
@@ -459,7 +461,7 @@ export default function AkoraEventsScreen() {
     <SafeAreaView style={styles.container} edges={['top']}>
       {/* Header */}
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}><ArrowLeft size={22} color="#111" /></TouchableOpacity>
+        <TouchableOpacity onPress={() => debouncedRouter.back()} style={styles.backBtn}><ArrowLeft size={22} color="#111" /></TouchableOpacity>
         <View style={{ flex: 1, alignItems: 'center' }}>
           <Text style={styles.headerTitle}>Akora Events</Text>
           {isAdmin && (
@@ -468,11 +470,11 @@ export default function AkoraEventsScreen() {
         </View>
         <View style={styles.headerRight}>
           {isAdmin && user && (
-            <TouchableOpacity onPress={() => router.push('/events/admin' as any)} style={styles.adminBtn}>
+            <TouchableOpacity onPress={() => debouncedRouter.push('/events/admin')} style={styles.adminBtn}>
               <Settings size={20} color="#4169E1" />
             </TouchableOpacity>
           )}
-          <TouchableOpacity onPress={() => router.push('/events/my-akora-events' as any)} style={styles.myEventsBtn}>
+          <TouchableOpacity onPress={() => debouncedRouter.push('/events/my-akora-events')} style={styles.myEventsBtn}>
             <Calendar size={20} color="#4169E1" />
           </TouchableOpacity>
         </View>

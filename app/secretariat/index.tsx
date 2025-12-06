@@ -1,7 +1,9 @@
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Dimensions, Linking, Alert, Platform, ActivityIndicator } from 'react-native';
 import { useFonts, Inter_400Regular, Inter_600SemiBold, Inter_700Bold } from '@expo-google-fonts/inter';
 import { useEffect, useState } from 'react';
-import { SplashScreen, useRouter } from 'expo-router';
+import { SplashScreen, useRouter } from 'expo-router'
+import { DebouncedTouchable } from '@/components/DebouncedTouchable';
+import { debouncedRouter } from '@/utils/navigationDebounce';;
 import { ArrowLeft, Building2, ShoppingBag, Calendar, FileText, Mail, Phone, Globe, MessageCircle, ChevronRight, History, Award, HeadphonesIcon, Clock, MapPin, Settings } from 'lucide-react-native';
 import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../hooks/useAuth';
@@ -149,14 +151,14 @@ export default function SecretariatScreen() {
 
   const handleMessage = () => {
     console.log('📨 Navigating to admin chat...');
-    router.push('/admin-chat' as any);
+    debouncedRouter.push('/admin-chat');
   };
 
   return (
     <ScrollView style={styles.container} showsVerticalScrollIndicator={false}>
       {/* Premium Header */}
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.push('/hub')} style={styles.backButton}>
+        <TouchableOpacity onPress={() => debouncedRouter.push('/hub')} style={styles.backButton}>
           <View style={styles.backButtonCircle}>
             <ArrowLeft size={20} color="#1a1a1a" strokeWidth={2.5} />
           </View>
@@ -186,7 +188,7 @@ export default function SecretariatScreen() {
               <TouchableOpacity
                 key={action.id}
                 style={styles.serviceCard}
-                onPress={() => action.route && router.push(action.route as any)}
+                onPress={() => action.route && debouncedRouter.push(action.route)}
                 activeOpacity={0.8}
               >
                 <View style={styles.serviceIconContainer}>
@@ -215,7 +217,7 @@ export default function SecretariatScreen() {
           </View>
           {profile?.role === 'admin' && (
             <TouchableOpacity 
-              onPress={() => router.push('/admin/contact-settings')}
+              onPress={() => debouncedRouter.push('/admin/contact-settings')}
               style={styles.adminSettingsButton}
               activeOpacity={0.7}
             >

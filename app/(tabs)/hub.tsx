@@ -1,7 +1,9 @@
 import { View, Text, StyleSheet, ScrollView, Image, TouchableOpacity, TextInput, Dimensions, RefreshControl, ActivityIndicator } from 'react-native';
 import { useFonts, Inter_400Regular, Inter_600SemiBold } from '@expo-google-fonts/inter';
 import { useEffect, useState, useCallback } from 'react';
-import { SplashScreen, useRouter } from 'expo-router';
+import { SplashScreen, useRouter } from 'expo-router'
+import { DebouncedTouchable } from '@/components/DebouncedTouchable';
+import { debouncedRouter } from '@/utils/navigationDebounce';;
 import { HEADER_COLOR } from '@/constants/Colors';
 import { Search, Plus, MoveVertical as MoreVertical, Bell, Moon, Lock, CircleHelp as HelpCircle, LogOut, Shield, Languages, MessageSquare, Bookmark, ShoppingBag, GraduationCap, Briefcase, MessageCircle, Building2, Calendar, Heart, FileText, Users, Newspaper, Globe, Video } from 'lucide-react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -182,7 +184,7 @@ export default function HubScreen() {
                 <TouchableOpacity 
                   key={item.id}
                   style={styles.gridItem}
-                  onPress={() => item.route && router.push(item.route as any)}
+                  onPress={() => item.route && debouncedRouter.push(item.route)}
                 >
                   <Image source={{ uri: item.image }} style={styles.itemImage} />
                   <View style={styles.itemContent}>
@@ -207,7 +209,7 @@ export default function HubScreen() {
                 <TouchableOpacity 
                   key={item.id}
                   style={styles.gridItem}
-                  onPress={() => item.route && router.push(item.route as any)}
+                  onPress={() => item.route && debouncedRouter.push(item.route)}
                 >
                   <Image source={{ uri: item.image }} style={styles.itemImage} />
                   <View style={styles.itemContent}>

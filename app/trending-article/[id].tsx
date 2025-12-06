@@ -1,5 +1,7 @@
 import { View, Text, StyleSheet, ScrollView, Image, TouchableOpacity, Share, ActivityIndicator, Dimensions, Linking } from 'react-native';
-import { useLocalSearchParams, useRouter } from 'expo-router';
+import { useLocalSearchParams, useRouter } from 'expo-router'
+import { DebouncedTouchable } from '@/components/DebouncedTouchable';
+import { debouncedRouter } from '@/utils/navigationDebounce';;
 import { ArrowLeft, Share2, ExternalLink, Eye, Calendar, User as UserIcon } from 'lucide-react-native';
 import { useEffect, useState } from 'react';
 import { supabase, type TrendingArticle, type Profile } from '@/lib/supabase';
@@ -114,7 +116,7 @@ export default function TrendingArticleScreen() {
     return (
       <View style={styles.container}>
         <View style={styles.header}>
-          <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
+          <TouchableOpacity onPress={() => debouncedRouter.back()} style={styles.backButton}>
             <ArrowLeft size={24} color="#111827" strokeWidth={2} />
           </TouchableOpacity>
         </View>
@@ -130,7 +132,7 @@ export default function TrendingArticleScreen() {
     return (
       <View style={styles.container}>
         <View style={styles.header}>
-          <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
+          <TouchableOpacity onPress={() => debouncedRouter.back()} style={styles.backButton}>
             <ArrowLeft size={24} color="#111827" strokeWidth={2} />
           </TouchableOpacity>
         </View>
@@ -147,7 +149,7 @@ export default function TrendingArticleScreen() {
     <View style={styles.container}>
       {/* Header */}
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
+        <TouchableOpacity onPress={() => debouncedRouter.back()} style={styles.backButton}>
           <ArrowLeft size={24} color="#111827" strokeWidth={2} />
         </TouchableOpacity>
         <TouchableOpacity onPress={handleShare} style={styles.shareButton}>

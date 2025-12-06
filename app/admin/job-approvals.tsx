@@ -13,7 +13,9 @@ import {
   Modal,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { router } from 'expo-router';
+import { router } from 'expo-router'
+import { DebouncedTouchable } from '@/components/DebouncedTouchable';
+import { debouncedRouter } from '@/utils/navigationDebounce';;
 import { supabase } from '../../lib/supabase';
 import { CheckCircle, XCircle, Eye, ArrowLeft, Clock } from 'lucide-react-native';
 
@@ -48,7 +50,7 @@ export default function JobApprovalsScreen() {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) {
         Alert.alert('Error', 'Please log in to access this page');
-        router.back();
+        debouncedRouter.back();
         return;
       }
 
@@ -62,7 +64,7 @@ export default function JobApprovalsScreen() {
 
       if (error || !adminRole) {
         Alert.alert('Access Denied', 'You do not have permission to approve jobs');
-        router.back();
+        debouncedRouter.back();
         return;
       }
 
@@ -71,7 +73,7 @@ export default function JobApprovalsScreen() {
     } catch (error) {
       console.error('Error checking admin status:', error);
       Alert.alert('Error', 'Failed to verify admin permissions');
-      router.back();
+      debouncedRouter.back();
     }
   };
 
@@ -209,7 +211,7 @@ export default function JobApprovalsScreen() {
         <View style={styles.actions}>
           <TouchableOpacity
             style={styles.viewButton}
-            onPress={() => router.push(`/workplace/${item.id}` as any)}
+            onPress={() => debouncedRouter.push(`/workplace/${item.id}`)}
           >
             <Eye size={18} color="#4169E1" />
             <Text style={styles.viewButtonText}>View Details</Text>
@@ -251,7 +253,7 @@ export default function JobApprovalsScreen() {
   return (
     <SafeAreaView style={styles.container}>
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
+        <TouchableOpacity onPress={() => debouncedRouter.back()} style={styles.backButton}>
           <ArrowLeft size={24} color="#000000" />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Job Approvals</Text>

@@ -1,5 +1,7 @@
 import { View, Text, StyleSheet, ScrollView, Image, TouchableOpacity, Alert, ActivityIndicator } from 'react-native';
-import { useRouter, useFocusEffect } from 'expo-router';
+import { useRouter, useFocusEffect } from 'expo-router'
+import { DebouncedTouchable } from '@/components/DebouncedTouchable';
+import { debouncedRouter } from '@/utils/navigationDebounce';;
 import { useState, useEffect, useCallback } from 'react';
 import { ArrowLeft, Edit, Trash2, Star, Plus } from 'lucide-react-native';
 import { supabase } from '@/lib/supabase';
@@ -109,9 +111,9 @@ export default function MyListingsScreen() {
     
     // Navigate to appropriate edit page
     if (isJobListing) {
-      router.push(`/edit-job-listing/${listingId}` as any);
+      debouncedRouter.push(`/edit-job-listing/${listingId}`);
     } else {
-      router.push(`/edit-listing/${listingId}` as any);
+      debouncedRouter.push(`/edit-listing/${listingId}`);
     }
   };
 
@@ -129,7 +131,7 @@ export default function MyListingsScreen() {
     return (
       <View style={styles.container}>
         <View style={styles.header}>
-          <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
+          <TouchableOpacity onPress={() => debouncedRouter.back()} style={styles.backButton}>
             <ArrowLeft size={24} color="#000000" />
           </TouchableOpacity>
           <Text style={styles.title}>My Listings</Text>
@@ -145,12 +147,12 @@ export default function MyListingsScreen() {
   return (
     <View style={styles.container}>
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
+        <TouchableOpacity onPress={() => debouncedRouter.back()} style={styles.backButton}>
           <ArrowLeft size={24} color="#000000" />
         </TouchableOpacity>
         <Text style={styles.title}>My Listings</Text>
         <TouchableOpacity 
-          onPress={() => router.push('/create-listing' as any)}
+          onPress={() => debouncedRouter.push('/create-listing')}
           style={styles.addButton}
         >
           <Plus size={24} color="#4169E1" />
@@ -168,7 +170,7 @@ export default function MyListingsScreen() {
             <Text style={styles.emptyText}>You haven't created any listings yet</Text>
             <TouchableOpacity 
               style={styles.createButton}
-              onPress={() => router.push('/create-listing' as any)}
+              onPress={() => debouncedRouter.push('/create-listing')}
             >
               <Text style={styles.createButtonText}>Create Your First Listing</Text>
             </TouchableOpacity>
@@ -179,7 +181,7 @@ export default function MyListingsScreen() {
               <TouchableOpacity 
                 key={listing.id}
                 style={styles.listingCard}
-                onPress={() => router.push(`/services/${listing.id}` as any)}
+                onPress={() => debouncedRouter.push(`/services/${listing.id}`)}
                 activeOpacity={0.9}
               >
                 <Image 
