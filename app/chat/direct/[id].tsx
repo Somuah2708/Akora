@@ -14,6 +14,7 @@ import {
   Animated,
   Linking,
   Keyboard,
+  Image,
 } from 'react-native';
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { useLocalSearchParams, useRouter } from 'expo-router'
@@ -22,6 +23,11 @@ import { debouncedRouter } from '@/utils/navigationDebounce';;
 import * as Sentry from '@sentry/react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { ArrowLeft, Send, Smile, X, Play, Pause, Check, CheckCheck, FileText, Paperclip, Camera, Image as ImageIcon, File } from 'lucide-react-native';
+import * as ImagePicker from 'expo-image-picker';
+import * as DocumentPicker from 'expo-document-picker';
+import * as MediaLibrary from 'expo-media-library';
+import * as FileSystem from 'expo-file-system/legacy';
+import * as Sharing from 'expo-sharing';
 import { useAuth } from '@/hooks/useAuth';
 import CachedImage from '@/components/CachedImage';
 import {
@@ -55,6 +61,8 @@ export default function DirectMessageScreen() {
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
   const [recording, setRecording] = useState(false);
   const [showAttachMenu, setShowAttachMenu] = useState(false);
+  const [attachment, setAttachment] = useState<{ uri: string; type: 'image' | 'document'; name: string; mimeType?: string } | null>(null);
+  const [uploading, setUploading] = useState(false);
   const [uploadingMedia, setUploadingMedia] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0); // WhatsApp-style progress
   const [imageViewerVisible, setImageViewerVisible] = useState(false);
@@ -342,8 +350,6 @@ export default function DirectMessageScreen() {
           console.log('📡 [REALTIME] Subscription status:', status);
           if (status === 'SUBSCRIBED') {
             console.log('✅ [REALTIME] Successfully subscribed to messages');
-          } else if (status === 'CHANNEL_ERROR') {
-            console.error('❌ [REALTIME] Subscription error');
           }
         });
 
@@ -515,8 +521,210 @@ export default function DirectMessageScreen() {
     }, 2000);
   }, [user]);
 
+  const saveImageToGallery = async (imageUrl: string) => {
+    try {
+      // Request permissions
+      const { status } = await MediaLibrary.requestPermissionsAsync();
+      if (status !== 'granted') {
+        Alert.alert('Permission needed', 'Please grant photo library permissions to save images');
+        return;
+      }
+
+      // Download image (no alert, just silent download)
+      const fileUri = FileSystem.documentDirectory + `image_${Date.now()}.jpg`;
+      const downloadResult = await FileSystem.downloadAsync(imageUrl, fileUri);
+
+      if (downloadResult.status !== 200) {
+        throw new Error('Download failed');
+      }
+
+      // Save to media library
+      const asset = await MediaLibrary.createAssetAsync(downloadResult.uri);
+      await MediaLibrary.createAlbumAsync('Akora', asset, false);
+
+      Alert.alert('Success', 'Image saved to gallery');
+    } catch (error) {
+      console.error('Error saving image:', error);
+      Alert.alert('Error', 'Failed to save image to gallery');
+    }
+  };
+
+  const saveDocumentToFiles = async (documentUrl: string, documentName?: string) => {
+    try {
+      const fileName = documentName || `document_${Date.now()}.pdf`;
+      
+      // Check if sharing is available
+      const isAvailable = await Sharing.isAvailableAsync();
+      if (!isAvailable) {
+        Alert.alert('Error', 'Sharing is not available on this device');
+        return;
+      }
+
+      // Download document (no alert, just silent download)
+      const fileUri = FileSystem.documentDirectory + fileName;
+      const downloadResult = await FileSystem.downloadAsync(documentUrl, fileUri);
+
+      if (downloadResult.status !== 200) {
+        throw new Error('Download failed');
+      }
+
+      // Share/Save document
+      await Sharing.shareAsync(downloadResult.uri, {
+        mimeType: 'application/pdf',
+        dialogTitle: 'Save Document',
+        UTI: 'public.item',
+      });
+    } catch (error) {
+      console.error('Error saving document:', error);
+      Alert.alert('Error', 'Failed to save document');
+    }
+  };
+
+  const showMediaOptions = (mediaUrl: string, mediaType: 'image' | 'document', fileName?: string) => {
+    const options = mediaType === 'image' 
+      ? ['Save to Gallery', 'Share', 'Cancel']
+      : ['Save to Files', 'Share', 'Cancel'];
+
+    Alert.alert(
+      'Media Options',
+      'What would you like to do?',
+      [
+        {
+          text: options[0],
+          onPress: () => {
+            if (mediaType === 'image') {
+              saveImageToGallery(mediaUrl);
+            } else {
+              saveDocumentToFiles(mediaUrl, fileName);
+            }
+          },
+        },
+        {
+          text: options[1],
+          onPress: async () => {
+            try {
+              const isAvailable = await Sharing.isAvailableAsync();
+              if (!isAvailable) {
+                Alert.alert('Error', 'Sharing is not available');
+                return;
+              }
+
+              const fileUri = FileSystem.documentDirectory + (fileName || `file_${Date.now()}`);
+              const downloadResult = await FileSystem.downloadAsync(mediaUrl, fileUri);
+              
+              if (downloadResult.status === 200) {
+                await Sharing.shareAsync(downloadResult.uri);
+              }
+            } catch (error) {
+              console.error('Error sharing:', error);
+              Alert.alert('Error', 'Failed to share file');
+            }
+          },
+        },
+        {
+          text: options[2],
+          style: 'cancel',
+        },
+      ]
+    );
+  };
+
+  const pickImage = async () => {
+    setShowAttachMenu(false);
+    
+    const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (status !== 'granted') {
+      Alert.alert('Permission needed', 'Please grant camera roll permissions');
+      return;
+    }
+
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ['images'],
+      allowsEditing: false,
+      quality: 0.8,
+    });
+
+    if (!result.canceled && result.assets[0]) {
+      const asset = result.assets[0];
+      setAttachment({
+        uri: asset.uri,
+        type: 'image',
+        name: asset.fileName || `image_${Date.now()}.jpg`,
+        mimeType: 'image/jpeg',
+      });
+    }
+  };
+
+  const pickDocument = async () => {
+    setShowAttachMenu(false);
+    
+    try {
+      const result = await DocumentPicker.getDocumentAsync({
+        type: ['application/pdf', 'application/msword', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'],
+        copyToCacheDirectory: true,
+      });
+
+      if (result.canceled === false && result.assets[0]) {
+        const asset = result.assets[0];
+        setAttachment({
+          uri: asset.uri,
+          type: 'document',
+          name: asset.name,
+          mimeType: asset.mimeType,
+        });
+      }
+    } catch (error) {
+      console.error('Error picking document:', error);
+      Alert.alert('Error', 'Failed to pick document');
+    }
+  };
+
+  const uploadMediaFile = async (file: { uri: string; type: 'image' | 'document'; name: string; mimeType?: string }): Promise<string | null> => {
+    try {
+      setUploading(true);
+      
+      const fileExt = file.name.split('.').pop();
+      const fileName = `${user!.id}_${Date.now()}.${fileExt}`;
+      const filePath = `direct-chat/${fileName}`;
+
+      // Read file as array buffer for upload
+      const response = await fetch(file.uri);
+      const arrayBuffer = await response.arrayBuffer();
+      const fileBuffer = new Uint8Array(arrayBuffer);
+
+      const { error } = await supabase.storage
+        .from('chat-media')
+        .upload(filePath, fileBuffer, {
+          contentType: file.mimeType || (file.type === 'image' ? 'image/jpeg' : 'application/pdf'),
+        });
+
+      if (error) throw error;
+
+      const { data: urlData } = supabase.storage
+        .from('chat-media')
+        .getPublicUrl(filePath);
+
+      return urlData.publicUrl;
+
+      return publicUrl;
+    } catch (error) {
+      console.error('Error uploading media:', error);
+      Alert.alert('Upload Error', 'Failed to upload file');
+      return null;
+    } finally {
+      setUploading(false);
+    }
+  };
+
   const handleSend = async () => {
-    if (!user || !friendId || !messageText.trim()) return;
+    if (!user || !friendId) return;
+    if (!messageText.trim() && !attachment) return;
+    
+    // Prevent double-send
+    if (sending || uploading) {
+      console.log('⚠️ [SEND] Already sending, ignoring duplicate tap');
+      return;
+    }
 
     console.log('📤 [SEND] Starting to send message...');
     console.log('📤 [SEND] User:', user.id, 'Friend:', friendId);
@@ -527,7 +735,23 @@ export default function DirectMessageScreen() {
       return;
     }
 
-    const messageToSend = messageText.trim();
+    let mediaUrl: string | null = null;
+    let mediaType: string | null = null;
+
+    // Upload attachment if present
+    if (attachment) {
+      setUploadingMedia(true); // Show uploading overlay
+      mediaUrl = await uploadMediaFile(attachment);
+      setUploadingMedia(false); // Hide uploading overlay
+      
+      if (!mediaUrl) {
+        Alert.alert('Upload Failed', 'Could not upload the file. Please try again.');
+        return;
+      }
+      mediaType = attachment.type;
+    }
+
+    const messageToSend = messageText.trim() || (attachment ? `Sent a ${attachment.type}` : '');
     const tempId = `temp-${Date.now()}`;
     console.log('📤 [SEND] Temp ID:', tempId);
 
@@ -538,7 +762,9 @@ export default function DirectMessageScreen() {
         sender_id: user.id,
         receiver_id: friendId,
         message: messageToSend,
-        message_type: 'text',
+        message_type: mediaType === 'image' ? 'image' : mediaType === 'document' ? 'document' : 'text',
+        media_url: mediaUrl,
+        media_type: mediaType,
         created_at: new Date().toISOString(),
         is_read: false,
         sender: {
@@ -547,7 +773,7 @@ export default function DirectMessageScreen() {
           full_name: user.user_metadata?.full_name || '',
           avatar_url: user.user_metadata?.avatar_url,
         },
-      };
+      } as DirectMessage;
 
       console.log('📤 [SEND] Adding optimistic message to UI');
       setMessages((prev) => {
@@ -558,6 +784,7 @@ export default function DirectMessageScreen() {
         return next;
       });
       setMessageText('');
+      setAttachment(null);
       setShowEmojiPicker(false);
       setSending(true);
 
@@ -580,7 +807,14 @@ export default function DirectMessageScreen() {
 
       // Send to server
       console.log('📤 [SEND] Sending to server...');
-      const newMessage = await sendDirectMessage(user.id, friendId, messageToSend);
+      const messageTypeToSend = mediaType === 'image' ? 'image' : mediaType === 'document' ? 'document' : 'text';
+      const newMessage = await sendDirectMessage(
+        user.id, 
+        friendId, 
+        messageToSend,
+        messageTypeToSend as 'text' | 'image' | 'video' | 'voice' | 'document',
+        mediaUrl || undefined
+      );
       console.log('✅ [SEND] Server returned message:', newMessage.id);
       console.log('✅ [SEND] Message has sender?', !!newMessage.sender);
 
@@ -1069,6 +1303,8 @@ export default function DirectMessageScreen() {
               <TouchableOpacity 
                 activeOpacity={0.9}
                 onPress={() => openImageViewer(item.media_url!)}
+                onLongPress={() => showMediaOptions(item.media_url!, 'image')}
+                delayLongPress={500}
               >
                 <CachedImage 
                   uri={item.media_url} 
@@ -1134,6 +1370,11 @@ export default function DirectMessageScreen() {
                     });
                   }
                 }}
+                onLongPress={() => {
+                  const fileName = item.message?.replace('📄 ', '') || 'document.pdf';
+                  showMediaOptions(item.media_url!, 'document', fileName);
+                }}
+                delayLongPress={500}
                 activeOpacity={0.7}
               >
                 <View style={styles.documentIcon}>
@@ -1155,7 +1396,7 @@ export default function DirectMessageScreen() {
                       { color: isMyMessage ? 'rgba(255, 255, 255, 0.7)' : '#6B7280' }
                     ]}
                   >
-                    Tap to open
+                    Tap to open • Long press to save
                   </Text>
                 </View>
               </TouchableOpacity>
@@ -1370,9 +1611,44 @@ export default function DirectMessageScreen() {
 
       {/* Input Wrapper - ensures background color covers bottom area */}
       <View style={{ 
-        backgroundColor: '#0F172A',
+        backgroundColor: '#FFFFFF',
         paddingBottom: isKeyboardVisible ? (Platform.OS === 'android' ? 8 : 0) : (Platform.OS === 'android' ? 20 : 10)
       }}>
+        {/* Attachment Preview */}
+        {attachment && (
+          <View style={styles.attachmentPreview}>
+            {attachment.type === 'image' ? (
+              <Image source={{ uri: attachment.uri }} style={styles.previewImage} />
+            ) : (
+              <View style={styles.previewDocument}>
+                <FileText size={24} color="#4169E1" strokeWidth={2} />
+                <Text style={styles.previewDocumentText} numberOfLines={1}>{attachment.name}</Text>
+              </View>
+            )}
+            <TouchableOpacity onPress={() => setAttachment(null)} style={styles.removeAttachment}>
+              <X size={18} color="#FFFFFF" strokeWidth={2.5} />
+            </TouchableOpacity>
+          </View>
+        )}
+
+        {/* Attach Menu */}
+        {showAttachMenu && (
+          <View style={styles.attachMenu}>
+            <TouchableOpacity style={styles.attachOption} onPress={pickImage}>
+              <View style={[styles.attachOptionIcon, { backgroundColor: '#DBEAFE' }]}>
+                <ImageIcon size={20} color="#1E40AF" strokeWidth={2} />
+              </View>
+              <Text style={styles.attachOptionText}>Photo</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.attachOption} onPress={pickDocument}>
+              <View style={[styles.attachOptionIcon, { backgroundColor: '#FEE2E2' }]}>
+                <FileText size={20} color="#991B1B" strokeWidth={2} />
+              </View>
+              <Text style={styles.attachOptionText}>Document</Text>
+            </TouchableOpacity>
+          </View>
+        )}
+        
         <View style={[
           styles.inputContainer,
           { paddingBottom: isKeyboardVisible ? 12 : (Platform.OS === 'android' ? 16 : 16) }
@@ -1380,10 +1656,10 @@ export default function DirectMessageScreen() {
           {/* Paperclip Attachment Button */}
           <TouchableOpacity
             style={styles.iconButton}
-            onPress={() => setShowAttachMenu(true)}
+            onPress={() => setShowAttachMenu(!showAttachMenu)}
             activeOpacity={0.7}
           >
-            <Paperclip size={22} color="#737373" />
+            <Paperclip size={22} color="#6b7280" strokeWidth={2} />
           </TouchableOpacity>
 
           {/* Emoji Button */}
@@ -1392,7 +1668,7 @@ export default function DirectMessageScreen() {
             onPress={() => setShowEmojiPicker(!showEmojiPicker)}
             activeOpacity={0.7}
           >
-            <Smile size={22} color="#737373" />
+            <Smile size={22} color="#6b7280" strokeWidth={2} />
           </TouchableOpacity>
 
           {/* Text Input */}
@@ -1407,14 +1683,16 @@ export default function DirectMessageScreen() {
             }}
             multiline
             maxLength={1000}
+            cursorColor="#ffc857"
+            selectionColor="#ffc857"
           />
 
           {/* Send Button */}
-          {messageText.trim() && (
+          {(messageText.trim() || attachment) && (
             <TouchableOpacity
               style={[styles.sendButton, sending && styles.sendButtonDisabled]}
               onPress={handleSend}
-              disabled={!messageText.trim() || sending}
+              disabled={(!messageText.trim() && !attachment) || sending}
             >
               {sending ? (
                 <ActivityIndicator size="small" color="#FFFFFF" />
@@ -1426,67 +1704,12 @@ export default function DirectMessageScreen() {
         </View>
       </View>
 
-      {/* Attachment Menu Modal - WhatsApp Style */}
-      <Modal
-        visible={showAttachMenu}
-        animationType="fade"
-        transparent={true}
-        onRequestClose={() => setShowAttachMenu(false)}
-      >
-        <Pressable 
-          style={styles.attachMenuOverlay}
-          onPress={() => setShowAttachMenu(false)}
-        >
-          <View style={styles.attachMenuContainer}>
-            {/* Camera Option */}
-            <TouchableOpacity
-              style={styles.attachOption}
-              onPress={handleTakeCamera}
-              activeOpacity={0.7}
-            >
-              <View style={[styles.attachIconCircle, { backgroundColor: '#FF6B9D' }]}>
-                <Camera size={24} color="#FFFFFF" />
-              </View>
-              <Text style={styles.attachOptionText}>Camera</Text>
-            </TouchableOpacity>
-
-            {/* Photos Option */}
-            <TouchableOpacity
-              style={styles.attachOption}
-              onPress={handlePickPhotos}
-              activeOpacity={0.7}
-            >
-              <View style={[styles.attachIconCircle, { backgroundColor: '#8B5CF6' }]}>
-                <ImageIcon size={24} color="#FFFFFF" />
-              </View>
-              <Text style={styles.attachOptionText}>Photos</Text>
-            </TouchableOpacity>
-
-            {/* Document Option */}
-            <TouchableOpacity
-              style={styles.attachOption}
-              onPress={handlePickDocument}
-              activeOpacity={0.7}
-            >
-              <View style={[styles.attachIconCircle, { backgroundColor: '#3B82F6' }]}>
-                <File size={24} color="#FFFFFF" />
-              </View>
-              <Text style={styles.attachOptionText}>Document</Text>
-            </TouchableOpacity>
-          </View>
-        </Pressable>
-      </Modal>
-
-      {/* WhatsApp-Style Upload Progress */}
+      {/* Upload Progress Overlay */}
       {uploadingMedia && (
         <View style={styles.uploadingOverlay}>
           <View style={styles.uploadingContainer}>
-            <View style={styles.progressCircleContainer}>
-              <Text style={styles.uploadPercentage}>{Math.round(uploadProgress)}%</Text>
-            </View>
-            <Text style={styles.uploadingText}>
-              {uploadProgress < 20 ? 'Preparing...' : uploadProgress < 95 ? 'Uploading...' : 'Finishing...'}
-            </Text>
+            <ActivityIndicator size="large" color="#4169E1" />
+            <Text style={styles.uploadingText}>Sending...</Text>
           </View>
         </View>
       )}
@@ -1847,20 +2070,19 @@ const styles = StyleSheet.create({
   inputContainer: {
     flexDirection: 'row',
     alignItems: 'flex-end',
-    paddingHorizontal: 14,
-    paddingTop: 10,
-    backgroundColor: '#0F172A',
+    paddingHorizontal: 20,
+    paddingVertical: 16,
+    backgroundColor: '#FFFFFF',
     borderTopWidth: 1,
-    borderTopColor: '#1E293B',
-    gap: 8,
+    borderTopColor: '#E5E7EB',
   },
   iconButton: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: '#F3F4F6',
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: 'transparent',
   },
   recordingButton: {
     backgroundColor: '#FEE2E2',
@@ -1869,25 +2091,27 @@ const styles = StyleSheet.create({
     flex: 1,
     minHeight: 36,
     maxHeight: 100,
-    backgroundColor: '#F5F5F5',
-    borderRadius: 20,
-    paddingHorizontal: 16,
-    paddingVertical: 9,
+    backgroundColor: '#F9FAFB',
+    borderRadius: 24,
+    paddingHorizontal: 20,
+    paddingVertical: 12,
     fontSize: 15,
+    fontFamily: 'Inter-Regular',
     color: '#1a1a1a',
+    marginRight: 12,
     borderWidth: 0,
   },
   sendButton: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    backgroundColor: '#1a1a1a',
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    backgroundColor: '#ffc857',
     justifyContent: 'center',
     alignItems: 'center',
   },
   sendButtonDisabled: {
-    opacity: 0.4,
-    shadowOpacity: 0,
+    backgroundColor: '#9CA3AF',
+    opacity: 0.5,
   },
   messageImage: {
     width: 220,
@@ -2191,5 +2415,95 @@ const styles = StyleSheet.create({
     fontSize: 13,
     color: '#6B7280',
     lineHeight: 18,
+  },
+  // Attachment Preview Styles
+  attachmentPreview: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#FFFFFF',
+    marginHorizontal: 20,
+    marginBottom: 8,
+    padding: 12,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+  },
+  previewImage: {
+    width: 60,
+    height: 60,
+    borderRadius: 8,
+    marginRight: 12,
+  },
+  previewDocument: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
+  },
+  previewDocumentText: {
+    flex: 1,
+    fontSize: 14,
+    color: '#1a1a1a',
+    marginLeft: 12,
+  },
+  removeAttachment: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: '#EF4444',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  attachMenu: {
+    flexDirection: 'row',
+    backgroundColor: '#FFFFFF',
+    paddingHorizontal: 20,
+    paddingVertical: 16,
+    borderTopWidth: 1,
+    borderTopColor: '#E5E7EB',
+    gap: 16,
+  },
+  attachOption: {
+    alignItems: 'center',
+    gap: 8,
+  },
+  attachOptionIcon: {
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  attachOptionText: {
+    fontSize: 13,
+    color: '#374151',
+    fontWeight: '500',
+  },
+  uploadingOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    zIndex: 1000,
+  },
+  uploadingContainer: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 16,
+    padding: 32,
+    alignItems: 'center',
+    gap: 16,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 8,
+  },
+  uploadingText: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#1F2937',
   },
 });

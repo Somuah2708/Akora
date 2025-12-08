@@ -221,9 +221,13 @@ export default function DiscoverScreen() {
   );
 
   const interestFilters = useMemo(() => {
-    // Show user's selected interests (main categories only)
+    // Show user's selected interests (main categories only - NO subcategories)
     const baseSelection = userInterests.size > 0
-      ? Array.from(userInterests)
+      ? Array.from(userInterests).filter(id => {
+          // Filter out subcategories (they contain underscores like 'education_scholarships')
+          // Keep only main categories like 'education', 'career', 'technology'
+          return !id.includes('_');
+        })
       : [];
 
     const rankedFilters = baseSelection

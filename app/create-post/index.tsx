@@ -270,6 +270,36 @@ export default function CreatePostScreen() {
     setMedia(media.filter((_, i) => i !== index));
   };
 
+  const reorderMedia = (currentIndex: number) => {
+    // Prompt user to enter new position
+    Alert.prompt(
+      'Change Position',
+      `Current position: ${currentIndex + 1} of ${media.length}\nEnter new position (1-${media.length}):`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Move',
+          onPress: (newPosStr) => {
+            if (!newPosStr) return;
+            const newPos = parseInt(newPosStr, 10);
+            if (isNaN(newPos) || newPos < 1 || newPos > media.length) {
+              Alert.alert('Invalid Position', `Please enter a number between 1 and ${media.length}`);
+              return;
+            }
+            const newIndex = newPos - 1;
+            if (newIndex === currentIndex) return;
+            
+            const newMedia = [...media];
+            const [movedItem] = newMedia.splice(currentIndex, 1);
+            newMedia.splice(newIndex, 0, movedItem);
+            setMedia(newMedia);
+          },
+        },
+      ],
+      'plain-text'
+    );
+  };
+
   const uploadMediaWithProgress = async (uri: string, type: 'image' | 'video', index: number, total: number): Promise<string | null> => {
     try {
       const fileExt = uri.split('.').pop() || (type === 'video' ? 'mp4' : 'jpg');
@@ -306,8 +336,9 @@ export default function CreatePostScreen() {
     console.log('Media:', media.length);
     console.log('Category:', category);
 
-    if (!content.trim()) {
-      Alert.alert('Error', 'Post content cannot be empty');
+    // Allow posting if either content or media is present
+    if (!content.trim() && media.length === 0) {
+      Alert.alert('Error', 'Please add a caption or media to your post');
       return;
     }
 
@@ -438,7 +469,7 @@ export default function CreatePostScreen() {
       >
         <TouchableOpacity onPress={() => debouncedRouter.back()} style={styles.backButton}>
           <View style={styles.backButtonCircle}>
-            <ArrowLeft size={22} color="#1E293B" />
+            <ArrowLeft size={22} color="#FFFFFF" />
           </View>
         </TouchableOpacity>
         <View style={styles.headerCenter}>
@@ -446,9 +477,9 @@ export default function CreatePostScreen() {
           <Text style={styles.subtitle}>Share a moment with your community</Text>
         </View>
         <TouchableOpacity 
-          style={[styles.submitButton, (!content.trim() || isSubmitting) && styles.submitButtonDisabled]}
+          style={[styles.submitButton, ((content.trim() === '' && media.length === 0) || isSubmitting) && styles.submitButtonDisabled]}
           onPress={handleSubmit}
-          disabled={!content.trim() || isSubmitting}
+          disabled={(content.trim() === '' && media.length === 0) || isSubmitting}
         >
           {isSubmitting ? (
             <ActivityIndicator color="#FFFFFF" size="small" />
@@ -556,9 +587,12 @@ export default function CreatePostScreen() {
                     </TouchableOpacity>
                   </LinearGradient>
 
-                  <View style={styles.imageCounter}>
+                  <TouchableOpacity 
+                    style={styles.imageCounter}
+                    onPress={() => reorderMedia(index)}
+                  >
                     <Text style={styles.imageCounterText}>{index + 1}</Text>
-                  </View>
+                  </TouchableOpacity>
                   
                   {mediaItem.type === 'video' && (
                     <View style={styles.videoIndicator}>
@@ -595,8 +629,6 @@ export default function CreatePostScreen() {
         <View style={styles.settingsSection}>
           {/* Category Selection */}
           <View style={styles.card}>
-            <Text style={styles.settingSectionTitle}>Post Settings</Text>
-            
             <TouchableOpacity 
               style={styles.settingItem}
               onPress={() => setShowCategoryPicker(true)}
@@ -638,7 +670,6 @@ export default function CreatePostScreen() {
             <ScrollView style={styles.modalScroll}>
               {CATEGORY_GROUPS.map((group) => {
                 const groupSelected = category === group.id;
-                const subcategories = group.subcategories ?? [];
                 return (
                   <View key={group.id} style={styles.publishCategoryGroup}>
                     <TouchableOpacity
@@ -660,36 +691,6 @@ export default function CreatePostScreen() {
                         {group.label}
                       </Text>
                     </TouchableOpacity>
-
-                    {subcategories.length > 0 && (
-                      <View style={styles.publishCategoryChildren}>
-                        {subcategories.map((sub) => {
-                          const isSelected = category === sub.id;
-                          return (
-                            <TouchableOpacity
-                              key={sub.id}
-                              style={[
-                                styles.publishCategorySubOption,
-                                isSelected && styles.publishCategoryOptionSelected,
-                              ]}
-                              onPress={() => {
-                                setCategory(sub.id);
-                                setShowCategoryPicker(false);
-                              }}
-                            >
-                              <Text
-                                style={[
-                                  styles.publishCategorySubOptionText,
-                                  isSelected && styles.publishCategoryOptionTextSelected,
-                                ]}
-                              >
-                                {sub.label}
-                              </Text>
-                            </TouchableOpacity>
-                          );
-                        })}
-                      </View>
-                    )}
                   </View>
                 );
               })}

@@ -219,7 +219,7 @@ export default function LiveStreamScreen() {
 
       {/* Stream Info */}
       <View style={styles.streamInfo}>
-        <Text style={styles.streamTitle} numberOfLines={2}>{stream.title}</Text>
+        <Text style={styles.streamTitle}>{stream.title}</Text>
         {/* Expandable description */}
         {(() => {
           const full = stream.description || '';
@@ -260,69 +260,6 @@ export default function LiveStreamScreen() {
 
   return (
     <View style={styles.container}>
-      {/* Header */}
-      <View style={styles.header}>
-        <TouchableOpacity onPress={() => debouncedRouter.back()} style={styles.backButton}>
-          <ArrowLeft size={24} color="#000000" strokeWidth={2} />
-        </TouchableOpacity>
-        <View style={styles.headerTextContainer}>
-          <Text style={styles.headerTitle}>Live Streams</Text>
-          <Text style={styles.headerSubtitle}>
-            {activeTab === 'live' 
-              ? `${liveStreams.length} live now` 
-              : `${pastStreams.length} past streams`}
-          </Text>
-        </View>
-        {(profile?.role === 'admin' || profile?.is_admin) && (
-          <TouchableOpacity 
-            style={styles.adminButton}
-            onPress={() => debouncedRouter.push('/live/admin')}
-          >
-            <Settings size={20} color="#8B0000" strokeWidth={2} />
-          </TouchableOpacity>
-        )}
-      </View>
-
-      {/* Search Bar */}
-      <View style={styles.searchContainer}>
-        <Search size={20} color="#999999" strokeWidth={2} />
-        <TextInput
-          style={styles.searchInput}
-          placeholder="Search streams..."
-          value={searchQuery}
-          onChangeText={setSearchQuery}
-          placeholderTextColor="#999999"
-        />
-      </View>
-
-      {/* Tabs */}
-      <View style={styles.tabContainer}>
-        <TouchableOpacity
-          style={[styles.tab, activeTab === 'live' && styles.activeTab]}
-          onPress={() => setActiveTab('live')}
-        >
-          <Text style={[styles.tabText, activeTab === 'live' && styles.activeTabText]}>
-            Live Now
-          </Text>
-          {liveStreams.length > 0 && (
-            <View style={styles.badge}>
-              <Text style={styles.badgeText}>{liveStreams.length}</Text>
-            </View>
-          )}
-        </TouchableOpacity>
-
-        <TouchableOpacity
-          style={[styles.tab, activeTab === 'past' && styles.activeTab]}
-          onPress={() => setActiveTab('past')}
-        >
-          <Calendar size={16} color={activeTab === 'past' ? '#8B0000' : '#666666'} strokeWidth={2} />
-          <Text style={[styles.tabText, activeTab === 'past' && styles.activeTabText]}>
-            Past Streams
-          </Text>
-        </TouchableOpacity>
-      </View>
-
-      {/* Stream List */}
       <ScrollView
         style={styles.scrollView}
         showsVerticalScrollIndicator={false}
@@ -334,6 +271,69 @@ export default function LiveStreamScreen() {
           />
         }
       >
+        {/* Header */}
+        <View style={styles.header}>
+          <TouchableOpacity onPress={() => debouncedRouter.back()} style={styles.backButton}>
+            <ArrowLeft size={24} color="#000000" strokeWidth={2} />
+          </TouchableOpacity>
+          <View style={styles.headerTextContainer}>
+            <Text style={styles.headerTitle} numberOfLines={2}>Live Streams</Text>
+            <Text style={styles.headerSubtitle}>
+              {activeTab === 'live' 
+                ? `${liveStreams.length} live now` 
+                : `${pastStreams.length} past streams`}
+            </Text>
+          </View>
+          {(profile?.role === 'admin' || profile?.is_admin) && (
+            <TouchableOpacity 
+              style={styles.adminButton}
+              onPress={() => debouncedRouter.push('/live/admin')}
+            >
+              <Settings size={20} color="#8B0000" strokeWidth={2} />
+            </TouchableOpacity>
+          )}
+        </View>
+
+        {/* Search Bar */}
+        <View style={styles.searchContainer}>
+          <Search size={20} color="#999999" strokeWidth={2} />
+          <TextInput
+            style={styles.searchInput}
+            placeholder="Search streams..."
+            value={searchQuery}
+            onChangeText={setSearchQuery}
+            placeholderTextColor="#999999"
+          />
+        </View>
+
+        {/* Tabs */}
+        <View style={styles.tabContainer}>
+          <TouchableOpacity
+            style={[styles.tab, activeTab === 'live' && styles.activeTab]}
+            onPress={() => setActiveTab('live')}
+          >
+            <Text style={[styles.tabText, activeTab === 'live' && styles.activeTabText]}>
+              Live Now
+            </Text>
+            {liveStreams.length > 0 && (
+              <View style={styles.badge}>
+                <Text style={styles.badgeText}>{liveStreams.length}</Text>
+              </View>
+            )}
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={[styles.tab, activeTab === 'past' && styles.activeTab]}
+            onPress={() => setActiveTab('past')}
+          >
+            <Calendar size={16} color={activeTab === 'past' ? '#8B0000' : '#666666'} strokeWidth={2} />
+            <Text style={[styles.tabText, activeTab === 'past' && styles.activeTabText]}>
+              Past Streams
+            </Text>
+          </TouchableOpacity>
+        </View>
+
+        {/* Stream List */}
         {filteredStreams.length === 0 ? (
           <View style={styles.emptyState}>
             <View style={styles.emptyIcon}>
@@ -397,8 +397,6 @@ const styles = StyleSheet.create({
     paddingTop: 60,
     paddingBottom: 16,
     backgroundColor: '#FFFFFF',
-    borderBottomWidth: 1,
-    borderBottomColor: '#F0F0F0',
   },
   backButton: {
     marginRight: 16,
@@ -416,9 +414,10 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   headerTitle: {
-    fontSize: 24,
+    fontSize: 20,
     fontFamily: 'Inter-SemiBold',
     color: '#000000',
+    lineHeight: 26,
   },
   headerSubtitle: {
     fontSize: 14,
@@ -585,10 +584,10 @@ const styles = StyleSheet.create({
     padding: 16,
   },
   streamTitle: {
-    fontSize: 18,
+    fontSize: 16,
     fontFamily: 'Inter-SemiBold',
     color: '#000000',
-    lineHeight: 24,
+    lineHeight: 22,
     marginBottom: 8,
   },
   streamDescription: {

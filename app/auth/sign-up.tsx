@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react';
 import { SplashScreen, useRouter } from 'expo-router'
 import { DebouncedTouchable } from '@/components/DebouncedTouchable';
 import { debouncedRouter } from '@/utils/navigationDebounce';;
-import { Eye, EyeOff, Mail, Lock, User, GraduationCap, Calendar, Chrome as Home } from 'lucide-react-native';
+import { Eye, EyeOff, Mail, Lock, User, GraduationCap, Calendar, Chrome as Home, MapPin, Phone, Briefcase, Building, ArrowLeft } from 'lucide-react-native';
 import { useAuth } from '@/hooks/useAuth';
 import { supabase } from '@/lib/supabase';
 
@@ -34,11 +34,20 @@ const HOUSES = [
   'Other'
 ];
 
+// Occupation status options
+const OCCUPATION_STATUS_OPTIONS = [
+  { value: 'student', label: 'Student' },
+  { value: 'employed', label: 'Employed' },
+  { value: 'self_employed', label: 'Self-Employed' },
+  { value: 'unemployed', label: 'Unemployed' },
+  { value: 'other', label: 'Other' },
+];
+
 export default function SignUpScreen() {
   const router = useRouter();
   const { signUp } = useAuth();
   
-  // Form state
+  // Required Form state
   const [firstName, setFirstName] = useState('');
   const [surname, setSurname] = useState('');
   const [classGroup, setClassGroup] = useState('');
@@ -48,12 +57,25 @@ export default function SignUpScreen() {
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   
+  // Optional Form state
+  const [occupationStatus, setOccupationStatus] = useState('student');
+  const [jobTitle, setJobTitle] = useState('');
+  const [companyName, setCompanyName] = useState('');
+  const [institutionName, setInstitutionName] = useState('');
+  const [programOfStudy, setProgramOfStudy] = useState('');
+  const [graduationYear, setGraduationYear] = useState('');
+  const [currentStudyYear, setCurrentStudyYear] = useState('');
+  const [location, setLocation] = useState('');
+  const [phone, setPhone] = useState('');
+  const [bio, setBio] = useState('');
+  
   // UI state
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState('');
   const [showHouseDropdown, setShowHouseDropdown] = useState(false);
+  const [showOccupationDropdown, setShowOccupationDropdown] = useState(false);
   
   const [fontsLoaded] = useFonts({
     'Inter-Regular': Inter_400Regular,
@@ -137,7 +159,18 @@ export default function SignUpScreen() {
         surname.trim(),
         classGroup.trim(),
         yearGroup.trim(),
-        house
+        house,
+        // Optional fields
+        occupationStatus,
+        jobTitle.trim(),
+        companyName.trim(),
+        institutionName.trim(),
+        programOfStudy.trim(),
+        graduationYear.trim(),
+        currentStudyYear.trim(),
+        location.trim(),
+        phone.trim(),
+        bio.trim()
       );
       
       if (error) throw error;
@@ -166,7 +199,7 @@ export default function SignUpScreen() {
           style={styles.backButton}
           onPress={() => debouncedRouter.back()}
         >
-          <Text style={styles.backButtonText}>Back</Text>
+          <ArrowLeft size={24} color="#0F172A" strokeWidth={2} />
         </TouchableOpacity>
         <Text style={styles.title}>Create Account</Text>
         <Text style={styles.subtitle}>Join the Akora community</Text>
@@ -257,6 +290,155 @@ export default function SignUpScreen() {
             ))}
           </View>
         )}
+        
+        <Text style={styles.sectionHeader}>Optional Information</Text>
+        
+        <View style={styles.inputContainer}>
+          <Briefcase size={20} color="#666666" />
+          <TouchableOpacity 
+            style={styles.dropdownButton}
+            onPress={() => setShowOccupationDropdown(!showOccupationDropdown)}
+          >
+            <Text style={occupationStatus ? styles.dropdownSelectedText : styles.dropdownPlaceholder}>
+              {OCCUPATION_STATUS_OPTIONS.find(opt => opt.value === occupationStatus)?.label || 'Select Status'}
+            </Text>
+          </TouchableOpacity>
+        </View>
+        
+        {showOccupationDropdown && (
+          <View style={styles.dropdown}>
+            {OCCUPATION_STATUS_OPTIONS.map((item) => (
+              <TouchableOpacity
+                key={item.value}
+                style={styles.dropdownItem}
+                onPress={() => {
+                  setOccupationStatus(item.value);
+                  setShowOccupationDropdown(false);
+                }}
+              >
+                <Text style={[
+                  styles.dropdownItemText,
+                  occupationStatus === item.value && styles.dropdownItemTextSelected
+                ]}>
+                  {item.label}
+                </Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+        )}
+        
+        {(occupationStatus === 'employed' || occupationStatus === 'self_employed') && (
+          <>
+            <View style={styles.inputContainer}>
+              <Briefcase size={20} color="#666666" />
+              <TextInput
+                style={styles.input}
+                placeholder="Job Title (Optional)"
+                placeholderTextColor="#666666"
+                value={jobTitle}
+                onChangeText={setJobTitle}
+              />
+            </View>
+            
+            <View style={styles.inputContainer}>
+              <Building size={20} color="#666666" />
+              <TextInput
+                style={styles.input}
+                placeholder="Company Name (Optional)"
+                placeholderTextColor="#666666"
+                value={companyName}
+                onChangeText={setCompanyName}
+              />
+            </View>
+          </>
+        )}
+        
+        {occupationStatus === 'student' && (
+          <>
+            <View style={styles.inputContainer}>
+              <GraduationCap size={20} color="#666666" />
+              <TextInput
+                style={styles.input}
+                placeholder="Institution Name (Optional)"
+                placeholderTextColor="#666666"
+                value={institutionName}
+                onChangeText={setInstitutionName}
+              />
+            </View>
+            
+            <View style={styles.inputContainer}>
+              <GraduationCap size={20} color="#666666" />
+              <TextInput
+                style={styles.input}
+                placeholder="Program of Study (Optional)"
+                placeholderTextColor="#666666"
+                value={programOfStudy}
+                onChangeText={setProgramOfStudy}
+              />
+            </View>
+            
+            <View style={styles.inputContainer}>
+              <Calendar size={20} color="#666666" />
+              <TextInput
+                style={styles.input}
+                placeholder="Current Study Year (Optional)"
+                placeholderTextColor="#666666"
+                keyboardType="numeric"
+                value={currentStudyYear}
+                onChangeText={setCurrentStudyYear}
+              />
+            </View>
+            
+            <View style={styles.inputContainer}>
+              <Calendar size={20} color="#666666" />
+              <TextInput
+                style={styles.input}
+                placeholder="Expected Graduation Year (Optional)"
+                placeholderTextColor="#666666"
+                keyboardType="numeric"
+                value={graduationYear}
+                onChangeText={setGraduationYear}
+              />
+            </View>
+          </>
+        )}
+        
+        <View style={styles.inputContainer}>
+          <MapPin size={20} color="#666666" />
+          <TextInput
+            style={styles.input}
+            placeholder="Location (Optional)"
+            placeholderTextColor="#666666"
+            value={location}
+            onChangeText={setLocation}
+          />
+        </View>
+        
+        <View style={styles.inputContainer}>
+          <Phone size={20} color="#666666" />
+          <TextInput
+            style={styles.input}
+            placeholder="Phone Number (Optional)"
+            placeholderTextColor="#666666"
+            keyboardType="phone-pad"
+            value={phone}
+            onChangeText={setPhone}
+          />
+        </View>
+        
+        <View style={[styles.inputContainer, styles.bioContainer]}>
+          <TextInput
+            style={[styles.input, styles.bioInput]}
+            placeholder="Bio (Optional)"
+            placeholderTextColor="#666666"
+            multiline
+            numberOfLines={3}
+            value={bio}
+            onChangeText={setBio}
+          />
+        </View>
+        
+        <Text style={styles.sectionHeader}>Account Details</Text>
         
         <View style={styles.inputContainer}>
           <Mail size={20} color="#666666" />
@@ -366,8 +548,8 @@ const styles = StyleSheet.create({
   },
   backButtonText: {
     fontSize: 16,
-    fontFamily: 'Inter-Regular',
-    color: '#4169E1',
+    fontFamily: 'Inter-SemiBold',
+    color: '#0F172A',
   },
   title: {
     fontSize: 28,
@@ -448,8 +630,25 @@ const styles = StyleSheet.create({
     color: '#000000',
   },
   dropdownItemTextSelected: {
-    color: '#4169E1',
+    color: '#0F172A',
     fontFamily: 'Inter-SemiBold',
+  },
+  sectionHeader: {
+    fontSize: 16,
+    fontFamily: 'Inter-SemiBold',
+    color: '#000000',
+    marginTop: 16,
+    marginBottom: 12,
+  },
+  bioContainer: {
+    alignItems: 'flex-start',
+    minHeight: 100,
+    paddingTop: 16,
+    paddingBottom: 16,
+  },
+  bioInput: {
+    height: 80,
+    textAlignVertical: 'top',
   },
   termsText: {
     fontSize: 14,
@@ -459,7 +658,7 @@ const styles = StyleSheet.create({
     marginBottom: 24,
   },
   signUpButton: {
-    backgroundColor: '#4169E1',
+    backgroundColor: '#0F172A',
     borderRadius: 12,
     height: 56,
     justifyContent: 'center',
@@ -489,6 +688,6 @@ const styles = StyleSheet.create({
   signInButtonText: {
     fontSize: 14,
     fontFamily: 'Inter-SemiBold',
-    color: '#4169E1',
+    color: '#0F172A',
   },
 });

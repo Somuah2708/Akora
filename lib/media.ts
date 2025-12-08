@@ -364,33 +364,15 @@ export async function uploadMedia(
     const safeFileName = `${userId}_${timestamp}.${finalExt}`;
     const filePath = `messages/media/${userId}/${safeFileName}`;
 
-    // Fetch file data in a way that works in Expo Go / React Native
+    // Fetch file data and convert to uploadable format
     const response = await fetch(processedUri as any);
-    const anyResponse = response as any;
-    let blob: Blob | null = null;
-    
-    if (typeof anyResponse.blob === 'function') {
-      // Web-style blob API (may be polyfilled)
-      blob = await anyResponse.blob();
-    } else if (typeof anyResponse.arrayBuffer === 'function') {
-      // Fallback for environments without response.blob()
-      const buffer = await anyResponse.arrayBuffer();
-      // Blob is available in React Native via the global polyfill
-      blob = new Blob([buffer], {
-        type: mimeType || (type === 'image' ? 'image/jpeg' : 'video/mp4'),
-      });
-    } else {
-      throw new Error('Unable to read file data for upload (no blob/arrayBuffer on response)');
-    }
-    
-    if (!blob) {
-      throw new Error('Failed to create blob from file data');
-    }
+    const arrayBuffer = await response.arrayBuffer();
+    const fileBuffer = new Uint8Array(arrayBuffer);
     
     onProgress?.(20);
 
     // Size check
-    const size = blob.size;
+    const size = arrayBuffer.byteLength;
     const max = type === 'image' ? IMAGE_MAX_BYTES : VIDEO_MAX_BYTES;
     if (size > max) {
       Alert.alert(
@@ -411,7 +393,7 @@ export async function uploadMedia(
 
     const { data, error } = await supabase.storage
       .from('chat-media')
-      .upload(filePath, blob, {
+      .upload(filePath, fileBuffer, {
         contentType: mimeType || (type === 'image' ? 'image/jpeg' : 'video/mp4'),
         upsert: false,
       });
@@ -464,20 +446,12 @@ export async function uploadDocument(
     onProgress?.(15);
     
     const response = await fetch(uri as any);
-    const anyResponse = response as any;
-    let blob: Blob;
-    if (typeof anyResponse.blob === 'function') {
-      blob = await anyResponse.blob();
-    } else if (typeof anyResponse.arrayBuffer === 'function') {
-      const buffer = await anyResponse.arrayBuffer();
-      blob = new Blob([buffer], { type: mimeType });
-    } else {
-      throw new Error('Unable to read document data for upload (no blob/arrayBuffer on response)');
-    }
+    const arrayBuffer = await response.arrayBuffer();
+    const fileBuffer = new Uint8Array(arrayBuffer);
     
     onProgress?.(20);
 
-    const size = blob.size;
+    const size = arrayBuffer.byteLength;
     if (size > DOCUMENT_MAX_BYTES) {
       Alert.alert('File too large', `Maximum ${Math.round(DOCUMENT_MAX_BYTES / (1024*1024))}MB`);
       return null;
@@ -493,7 +467,7 @@ export async function uploadDocument(
 
     const { data, error } = await supabase.storage
       .from('chat-media')
-      .upload(filePath, blob, {
+      .upload(filePath, fileBuffer, {
         contentType: mimeType,
         upsert: false,
       });

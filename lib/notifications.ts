@@ -204,10 +204,6 @@ export function subscribeToNotifications(
       console.log('🔔 [LIB] Subscription status:', status);
       if (status === 'SUBSCRIBED') {
         console.log('✅ [LIB] Successfully subscribed to real-time notifications!');
-      } else if (status === 'CHANNEL_ERROR') {
-        console.error('❌ [LIB] Channel error - real-time notifications may not work');
-      } else if (status === 'TIMED_OUT') {
-        console.error('⏱️ [LIB] Subscription timed out');
       }
     });
 

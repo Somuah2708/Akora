@@ -8,7 +8,11 @@ import dayjs from "dayjs";
 import EmojiSelector from 'react-native-emoji-selector';
 import { ArrowLeft, Send, Smile, X, Play, Pause, FileText, Camera, Paperclip, Image as ImageIcon, File } from 'lucide-react-native';
 import { Audio } from 'expo-av';
-import { pickMedia, takeMedia, pickDocument, uploadMedia, uploadDocument } from '../../../lib/media';
+import * as ImagePicker from 'expo-image-picker';
+import * as DocumentPicker from 'expo-document-picker';
+import * as MediaLibrary from 'expo-media-library';
+import * as FileSystem from 'expo-file-system/legacy';
+import * as Sharing from 'expo-sharing';
 
 type Profile = { id: string; full_name?: string | null; avatar_url?: string | null };
 type Group = { id: string; name: string; avatar_url?: string | null };
@@ -40,6 +44,8 @@ export default function GroupChatScreen() {
   const [mentionResults, setMentionResults] = useState<Profile[]>([]);
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
   const [showAttachMenu, setShowAttachMenu] = useState(false);
+  const [attachment, setAttachment] = useState<{ uri: string; type: 'image' | 'document'; name: string; mimeType?: string } | null>(null);
+  const [uploading, setUploading] = useState(false);
   const [uploadingMedia, setUploadingMedia] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
   const [playingSound, setPlayingSound] = useState<{ [key: string]: boolean }>({});
@@ -206,21 +212,253 @@ export default function GroupChatScreen() {
     [groupId, meId]
   );
 
+  const saveImageToGallery = async (imageUrl: string) => {
+    try {
+      const { status } = await MediaLibrary.requestPermissionsAsync();
+      if (status !== 'granted') {
+        Alert.alert('Permission needed', 'Please grant photo library permissions');
+        return;
+      }
+
+      // Download image silently (no alert)
+      const fileUri = FileSystem.documentDirectory + `image_${Date.now()}.jpg`;
+      const downloadResult = await FileSystem.downloadAsync(imageUrl, fileUri);
+
+      if (downloadResult.status !== 200) {
+        throw new Error('Download failed');
+      }
+
+      // Save to gallery in "Akora" album
+      const asset = await MediaLibrary.createAssetAsync(downloadResult.uri);
+      
+      // Create album if doesn't exist
+      const album = await MediaLibrary.getAlbumAsync('Akora');
+      if (album == null) {
+        await MediaLibrary.createAlbumAsync('Akora', asset, false);
+      } else {
+        await MediaLibrary.addAssetsToAlbumAsync([asset], album, false);
+      }
+
+      Alert.alert('Success', 'Image saved to gallery in "Akora" album');
+    } catch (error) {
+      console.error('Error saving image:', error);
+      Alert.alert('Error', 'Failed to save image');
+    }
+  };
+
+  const saveDocumentToFiles = async (documentUrl: string, documentName?: string) => {
+    try {
+      const fileName = documentName || `document_${Date.now()}.pdf`;
+      
+      const isAvailable = await Sharing.isAvailableAsync();
+      if (!isAvailable) {
+        Alert.alert('Error', 'Sharing is not available on this device');
+        return;
+      }
+
+      // Download document silently
+      const fileUri = FileSystem.documentDirectory + fileName;
+      const downloadResult = await FileSystem.downloadAsync(documentUrl, fileUri);
+
+      if (downloadResult.status !== 200) {
+        throw new Error('Download failed');
+      }
+
+      // Share/Save document
+      await Sharing.shareAsync(downloadResult.uri, {
+        mimeType: 'application/pdf',
+        dialogTitle: 'Save Document',
+        UTI: 'public.item',
+      });
+    } catch (error) {
+      console.error('Error saving document:', error);
+      Alert.alert('Error', 'Failed to save document');
+    }
+  };
+
+  const showMediaOptions = (mediaUrl: string, mediaType: 'image' | 'document', fileName?: string) => {
+    const options = mediaType === 'image' 
+      ? ['Save to Gallery', 'Share', 'Cancel']
+      : ['Save to Files', 'Share', 'Cancel'];
+
+    Alert.alert(
+      'Media Options',
+      'What would you like to do?',
+      [
+        {
+          text: options[0],
+          onPress: () => {
+            if (mediaType === 'image') {
+              saveImageToGallery(mediaUrl);
+            } else {
+              saveDocumentToFiles(mediaUrl, fileName);
+            }
+          },
+        },
+        {
+          text: options[1],
+          onPress: async () => {
+            try {
+              const isAvailable = await Sharing.isAvailableAsync();
+              if (!isAvailable) {
+                Alert.alert('Error', 'Sharing is not available');
+                return;
+              }
+
+              const fileUri = FileSystem.documentDirectory + (fileName || `file_${Date.now()}`);
+              const downloadResult = await FileSystem.downloadAsync(mediaUrl, fileUri);
+              
+              if (downloadResult.status === 200) {
+                await Sharing.shareAsync(downloadResult.uri);
+              }
+            } catch (error) {
+              console.error('Error sharing:', error);
+              Alert.alert('Error', 'Failed to share file');
+            }
+          },
+        },
+        {
+          text: options[2],
+          style: 'cancel',
+        },
+      ]
+    );
+  };
+
+  const pickImage = async () => {
+    setShowAttachMenu(false);
+    
+    const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (status !== 'granted') {
+      Alert.alert('Permission needed', 'Please grant camera roll permissions');
+      return;
+    }
+
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ['images'],
+      allowsEditing: false,
+      quality: 0.8,
+    });
+
+    if (!result.canceled && result.assets[0]) {
+      const asset = result.assets[0];
+      setAttachment({
+        uri: asset.uri,
+        type: 'image',
+        name: asset.fileName || `image_${Date.now()}.jpg`,
+        mimeType: 'image/jpeg',
+      });
+    }
+  };
+
+  const pickDocument = async () => {
+    setShowAttachMenu(false);
+    
+    try {
+      const result = await DocumentPicker.getDocumentAsync({
+        type: ['application/pdf', 'application/msword', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'],
+        copyToCacheDirectory: true,
+      });
+
+      if (result.canceled === false && result.assets[0]) {
+        const asset = result.assets[0];
+        setAttachment({
+          uri: asset.uri,
+          type: 'document',
+          name: asset.name,
+          mimeType: asset.mimeType,
+        });
+      }
+    } catch (error) {
+      console.error('Error picking document:', error);
+      Alert.alert('Error', 'Failed to pick document');
+    }
+  };
+
+  const uploadMediaFile = async (file: { uri: string; type: 'image' | 'document'; name: string; mimeType?: string }): Promise<string | null> => {
+    try {
+      setUploading(true);
+      
+      const fileExt = file.name.split('.').pop();
+      const fileName = `${meId}_${Date.now()}.${fileExt}`;
+      const filePath = `group-chat/${fileName}`;
+
+      // Read file as array buffer for upload
+      const response = await fetch(file.uri);
+      const arrayBuffer = await response.arrayBuffer();
+      const fileBuffer = new Uint8Array(arrayBuffer);
+
+      const { error } = await supabase.storage
+        .from('chat-media')
+        .upload(filePath, fileBuffer, {
+          contentType: file.mimeType || (file.type === 'image' ? 'image/jpeg' : 'application/pdf'),
+        });
+
+      if (error) throw error;
+
+      const { data: urlData } = supabase.storage
+        .from('chat-media')
+        .getPublicUrl(filePath);
+
+      return urlData.publicUrl;
+    } catch (error) {
+      console.error('Error uploading media:', error);
+      Alert.alert('Upload Error', 'Failed to upload file');
+      return null;
+    } finally {
+      setUploading(false);
+    }
+  };
+
   const sendText = useCallback(async () => {
     if (!meId || !groupId) return;
-    const content = input.trim();
-    if (!content) return;
+    if (!input.trim() && !attachment) return;
+    
+    // Prevent double-send
+    if (sending || uploading) {
+      console.log('⚠️ Already sending, ignoring duplicate tap');
+      return;
+    }
+
+    let mediaUrl: string | null = null;
+    let messageType: 'text' | 'image' | 'document' = 'text';
+
+    // Upload attachment if present
+    if (attachment) {
+      setUploadingMedia(true);
+      mediaUrl = await uploadMediaFile(attachment);
+      setUploadingMedia(false);
+      
+      if (!mediaUrl) {
+        Alert.alert('Upload Failed', 'Could not upload the file. Please try again.');
+        return;
+      }
+      messageType = attachment.type;
+    }
+
+    const content = input.trim() || (attachment ? `Sent a ${attachment.type}` : '');
+    
     setSending(true);
     setInput("");
+    setAttachment(null);
+    
     const { error } = await supabase
       .from("group_messages")
-      .insert({ group_id: groupId, sender_id: meId, content, message_type: "text" });
+      .insert({ 
+        group_id: groupId, 
+        sender_id: meId, 
+        content, 
+        message_type: messageType,
+        media_url: mediaUrl 
+      });
+    
     setSending(false);
     if (error) {
       console.error("Error sending message:", error);
+      Alert.alert('Send Failed', 'Could not send message. Please try again.');
     }
     // Message will arrive via realtime
-  }, [groupId, meId, input]);
+  }, [groupId, meId, input, attachment, sending, uploading]);
 
   // Recording functionality disabled - state variable not defined
   // const handleStartRecording = async () => {
@@ -502,7 +740,12 @@ export default function GroupChatScreen() {
             
             {/* Image Message */}
             {item.message_type === "image" && item.media_url ? (
-              <Image source={{ uri: item.media_url }} style={{ width: 220, height: 220, borderRadius: 8 }} />
+              <TouchableOpacity 
+                onLongPress={() => showMediaOptions(item.media_url!, 'image')}
+                activeOpacity={0.9}
+              >
+                <Image source={{ uri: item.media_url }} style={{ width: 220, height: 220, borderRadius: 8 }} />
+              </TouchableOpacity>
             ) : null}
             
             {/* Video Message */}
@@ -564,6 +807,7 @@ export default function GroupChatScreen() {
                     });
                   }
                 }}
+                onLongPress={() => showMediaOptions(item.media_url!, 'document', item.content?.replace('📄 ', '') || 'document.pdf')}
                 activeOpacity={0.7}
               >
                 <View style={{ 
@@ -588,7 +832,7 @@ export default function GroupChatScreen() {
             ) : null}
             
             <Text style={{ fontSize: 10, color: "#888", marginTop: 6 }}>
-              {dayjs(item.created_at).format("h:mm A")} • Seen by {item.read_by?.length || 0}
+              {dayjs(item.created_at).format("h:mm A")}
             </Text>
           </View>
         </View>
@@ -649,9 +893,44 @@ export default function GroupChatScreen() {
 
       {/* Input Wrapper - ensures background color covers bottom area */}
       <View style={{ 
-        backgroundColor: '#0F172A',
+        backgroundColor: '#FFFFFF',
         paddingBottom: isKeyboardVisible ? (Platform.OS === 'android' ? 8 : 0) : (Platform.OS === 'android' ? 20 : 10)
       }}>
+        {/* Attachment Preview */}
+        {attachment && (
+          <View style={styles.attachmentPreview}>
+            {attachment.type === 'image' ? (
+              <Image source={{ uri: attachment.uri }} style={styles.previewImage} />
+            ) : (
+              <View style={styles.previewDocument}>
+                <FileText size={24} color="#4169E1" strokeWidth={2} />
+                <Text style={styles.previewDocumentText} numberOfLines={1}>{attachment.name}</Text>
+              </View>
+            )}
+            <TouchableOpacity onPress={() => setAttachment(null)} style={styles.removeAttachment}>
+              <X size={18} color="#FFFFFF" strokeWidth={2.5} />
+            </TouchableOpacity>
+          </View>
+        )}
+
+        {/* Inline Attach Menu */}
+        {showAttachMenu && (
+          <View style={styles.attachMenu}>
+            <TouchableOpacity style={styles.attachOption} onPress={pickImage}>
+              <View style={[styles.attachOptionIcon, { backgroundColor: '#DBEAFE' }]}>
+                <ImageIcon size={20} color="#1E40AF" strokeWidth={2} />
+              </View>
+              <Text style={styles.attachOptionText}>Photo</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.attachOption} onPress={pickDocument}>
+              <View style={[styles.attachOptionIcon, { backgroundColor: '#FEE2E2' }]}>
+                <FileText size={20} color="#991B1B" strokeWidth={2} />
+              </View>
+              <Text style={styles.attachOptionText}>Document</Text>
+            </TouchableOpacity>
+          </View>
+        )}
+        
         <View style={[
           styles.inputContainer,
           { paddingBottom: isKeyboardVisible ? 12 : (Platform.OS === 'android' ? 16 : 16) }
@@ -659,10 +938,10 @@ export default function GroupChatScreen() {
           {/* Paperclip Attachment Button */}
           <TouchableOpacity
             style={styles.iconButton}
-            onPress={() => setShowAttachMenu(true)}
+            onPress={() => setShowAttachMenu(!showAttachMenu)}
             activeOpacity={0.7}
           >
-            <Paperclip size={22} color="#737373" />
+            <Paperclip size={22} color="#6b7280" strokeWidth={2} />
           </TouchableOpacity>
 
           {/* Emoji Button */}
@@ -671,7 +950,7 @@ export default function GroupChatScreen() {
             onPress={() => setShowEmojiPicker(!showEmojiPicker)}
             activeOpacity={0.7}
           >
-            <Smile size={22} color="#737373" />
+            <Smile size={22} color="#6b7280" strokeWidth={2} />
           </TouchableOpacity>
 
           {/* Text Input */}
@@ -683,14 +962,16 @@ export default function GroupChatScreen() {
             onChangeText={onChangeText}
             multiline
             maxLength={1000}
+            cursorColor="#ffc857"
+            selectionColor="#ffc857"
           />
 
           {/* Send Button */}
-          {input.trim() && (
+          {(input.trim() || attachment) && (
             <TouchableOpacity
               style={[styles.sendButton, sending && styles.sendButtonDisabled]}
               onPress={sendText}
-              disabled={!input.trim() || sending}
+              disabled={(!input.trim() && !attachment) || sending}
             >
               {sending ? (
                 <ActivityIndicator size="small" color="#FFFFFF" />
@@ -702,70 +983,16 @@ export default function GroupChatScreen() {
         </View>
       </View>
 
-      {/* Attachment Menu Modal - WhatsApp Style */}
-      <Modal
-        visible={showAttachMenu}
-        animationType="fade"
-        transparent={true}
-        onRequestClose={() => setShowAttachMenu(false)}
-      >
-        <Pressable 
-          style={styles.attachMenuOverlay}
-          onPress={() => setShowAttachMenu(false)}
-        >
-          <View style={styles.attachMenuContainer}>
-            {/* Camera Option */}
-            <TouchableOpacity
-              style={styles.attachOption}
-              onPress={handleTakeCamera}
-              activeOpacity={0.7}
-            >
-              <View style={[styles.attachIconCircle, { backgroundColor: '#FF6B9D' }]}>
-                <Camera size={24} color="#FFFFFF" />
-              </View>
-              <Text style={styles.attachOptionText}>Camera</Text>
-            </TouchableOpacity>
-
-            {/* Photos Option */}
-            <TouchableOpacity
-              style={styles.attachOption}
-              onPress={handlePickPhotos}
-              activeOpacity={0.7}
-            >
-              <View style={[styles.attachIconCircle, { backgroundColor: '#8B5CF6' }]}>
-                <ImageIcon size={24} color="#FFFFFF" />
-              </View>
-              <Text style={styles.attachOptionText}>Photos</Text>
-            </TouchableOpacity>
-
-            {/* Document Option */}
-            <TouchableOpacity
-              style={styles.attachOption}
-              onPress={handlePickDocument}
-              activeOpacity={0.7}
-            >
-              <View style={[styles.attachIconCircle, { backgroundColor: '#3B82F6' }]}>
-                <File size={24} color="#FFFFFF" />
-              </View>
-              <Text style={styles.attachOptionText}>Document</Text>
-            </TouchableOpacity>
-          </View>
-        </Pressable>
-      </Modal>
-
-      {/* Uploading Indicator */}
+      {/* Upload Progress Overlay */}
       {uploadingMedia && (
         <View style={styles.uploadingOverlay}>
           <View style={styles.uploadingContainer}>
-            <View style={styles.progressCircleContainer}>
-              <Text style={styles.uploadPercentage}>{uploadProgress}%</Text>
-            </View>
-            <Text style={styles.uploadingText}>
-              {uploadProgress < 20 ? 'Preparing...' : uploadProgress < 90 ? 'Uploading...' : 'Finishing...'}
-            </Text>
+            <ActivityIndicator size="large" color="#4169E1" />
+            <Text style={styles.uploadingText}>Sending...</Text>
           </View>
         </View>
       )}
+
 
       {/* Emoji Picker Modal */}
       <Modal
@@ -823,23 +1050,22 @@ const styles = StyleSheet.create({
   inputContainer: {
     flexDirection: 'row',
     alignItems: 'flex-end',
-    paddingHorizontal: 14,
-    paddingTop: 10,
-    backgroundColor: '#0F172A',
+    paddingHorizontal: 20,
+    paddingVertical: 16,
+    backgroundColor: '#FFFFFF',
     borderTopWidth: 1,
-    borderTopColor: '#1E293B',
-    gap: 8,
+    borderTopColor: '#E5E7EB',
   },
   safeBottom: {
     paddingBottom: Platform.OS === 'ios' ? 34 : 14,
   },
   iconButton: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: '#F3F4F6',
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: 'transparent',
   },
   recordingButton: {
     backgroundColor: '#FEE2E2',
@@ -848,25 +1074,27 @@ const styles = StyleSheet.create({
     flex: 1,
     minHeight: 36,
     maxHeight: 100,
-    backgroundColor: '#F5F5F5',
-    borderRadius: 20,
-    paddingHorizontal: 16,
-    paddingVertical: 9,
+    backgroundColor: '#F9FAFB',
+    borderRadius: 24,
+    paddingHorizontal: 20,
+    paddingVertical: 12,
     fontSize: 15,
+    fontFamily: 'Inter-Regular',
     color: '#1a1a1a',
+    marginRight: 12,
     borderWidth: 0,
   },
   sendButton: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    backgroundColor: '#1a1a1a',
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    backgroundColor: '#ffc857',
     justifyContent: 'center',
     alignItems: 'center',
   },
   sendButtonDisabled: {
-    opacity: 0.4,
-    shadowOpacity: 0,
+    backgroundColor: '#9CA3AF',
+    opacity: 0.5,
   },
   modalContainer: {
     flex: 1,
@@ -933,48 +1161,68 @@ const styles = StyleSheet.create({
     color: '#1F2937',
     letterSpacing: -0.2,
   },
-  // Attachment Menu Styles (WhatsApp-style)
-  attachMenuOverlay: {
-    flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.5)',
-    justifyContent: 'flex-end',
-  },
-  attachMenuContainer: {
-    backgroundColor: '#FFFFFF',
-    borderTopLeftRadius: 20,
-    borderTopRightRadius: 20,
-    paddingVertical: 30,
-    paddingHorizontal: 20,
+  // Attachment Menu Styles (Inline - like Direct Chat)
+  attachMenu: {
     flexDirection: 'row',
-    justifyContent: 'space-around',
-    alignItems: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: -2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 8,
-    elevation: 10,
+    backgroundColor: '#FFFFFF',
+    paddingHorizontal: 20,
+    paddingVertical: 16,
+    borderTopWidth: 1,
+    borderTopColor: '#E5E7EB',
+    gap: 16,
   },
   attachOption: {
     alignItems: 'center',
-    justifyContent: 'center',
+    gap: 8,
   },
-  attachIconCircle: {
+  attachOptionIcon: {
     width: 56,
     height: 56,
     borderRadius: 28,
     justifyContent: 'center',
     alignItems: 'center',
-    marginBottom: 8,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.15,
-    shadowRadius: 4,
-    elevation: 4,
   },
   attachOptionText: {
     fontSize: 13,
     color: '#374151',
     fontWeight: '500',
+  },
+  // Attachment Preview Styles
+  attachmentPreview: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#FFFFFF',
+    marginHorizontal: 20,
+    marginBottom: 8,
+    padding: 12,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+  },
+  previewImage: {
+    width: 60,
+    height: 60,
+    borderRadius: 8,
+    marginRight: 12,
+  },
+  previewDocument: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
+  },
+  previewDocumentText: {
+    flex: 1,
+    fontSize: 14,
+    color: '#1a1a1a',
+    marginLeft: 12,
+  },
+  removeAttachment: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: '#EF4444',
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   uploadingOverlay: {
     position: 'absolute',
@@ -982,42 +1230,26 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
     bottom: 0,
-    backgroundColor: 'rgba(255, 255, 255, 0.9)',
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
     justifyContent: 'center',
     alignItems: 'center',
     zIndex: 1000,
   },
   uploadingContainer: {
-    alignItems: 'center',
     backgroundColor: '#FFFFFF',
-    padding: 24,
     borderRadius: 16,
+    padding: 32,
+    alignItems: 'center',
+    gap: 16,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.15,
-    shadowRadius: 12,
-    elevation: 10,
-  },
-  progressCircleContainer: {
-    width: 80,
-    height: 80,
-    borderRadius: 40,
-    borderWidth: 4,
-    borderColor: '#6366F1',
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginBottom: 12,
-  },
-  uploadPercentage: {
-    fontSize: 24,
-    fontWeight: '700',
-    color: '#6366F1',
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 8,
   },
   uploadingText: {
     fontSize: 16,
-    color: '#1F2937',
     fontWeight: '600',
-    letterSpacing: -0.2,
-    marginTop: 12,
+    color: '#1F2937',
   },
 });

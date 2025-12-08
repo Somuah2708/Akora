@@ -188,6 +188,36 @@ export default function HomeCreatePostScreen() {
     setMedia((prev) => prev.filter((_, i) => i !== index));
   };
 
+  const reorderMedia = (currentIndex: number) => {
+    // Prompt user to enter new position
+    Alert.prompt(
+      'Change Position',
+      `Current position: ${currentIndex + 1} of ${media.length}\nEnter new position (1-${media.length}):`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Move',
+          onPress: (newPosStr) => {
+            if (!newPosStr) return;
+            const newPos = parseInt(newPosStr, 10);
+            if (isNaN(newPos) || newPos < 1 || newPos > media.length) {
+              Alert.alert('Invalid Position', `Please enter a number between 1 and ${media.length}`);
+              return;
+            }
+            const newIndex = newPos - 1;
+            if (newIndex === currentIndex) return;
+            
+            const newMedia = [...media];
+            const [movedItem] = newMedia.splice(currentIndex, 1);
+            newMedia.splice(newIndex, 0, movedItem);
+            setMedia(newMedia);
+          },
+        },
+      ],
+      'plain-text'
+    );
+  };
+
   const uploadMediaWithProgress = async (uri: string, type: 'image' | 'video', index: number, total: number): Promise<string | null> => {
     try {
       const fileExt = type === 'image' ? 'jpg' : 'mp4';
@@ -221,8 +251,9 @@ export default function HomeCreatePostScreen() {
       Alert.alert('Login Required', 'Please log in to create a post.');
       return;
     }
-    if (!content.trim()) {
-      Alert.alert('Empty Post', 'Write something before posting.');
+    // Allow posting if either content or media is present
+    if (!content.trim() && media.length === 0) {
+      Alert.alert('Empty Post', 'Please add a caption or media to your post.');
       return;
     }
     setIsSubmitting(true);
@@ -301,9 +332,9 @@ export default function HomeCreatePostScreen() {
           <Text style={styles.subtitle}>Share with everyone</Text>
         </View>
         <TouchableOpacity 
-          style={[styles.submitButton, (!content.trim() || isSubmitting) && styles.submitButtonDisabled]}
+          style={[styles.submitButton, ((content.trim() === '' && media.length === 0) || isSubmitting) && styles.submitButtonDisabled]}
           onPress={handleSubmit}
-          disabled={!content.trim() || isSubmitting}
+          disabled={(content.trim() === '' && media.length === 0) || isSubmitting}
         >
           {isSubmitting ? <ActivityIndicator color="#FFFFFF" size="small" /> : <Send size={18} color="#FFFFFF" />}
         </TouchableOpacity>
@@ -368,7 +399,12 @@ export default function HomeCreatePostScreen() {
                       <Edit3 size={18} color="#FFFFFF" />
                     </TouchableOpacity>
                   </View>
-                  <View style={styles.imageCounter}><Text style={styles.imageCounterText}>{index + 1}</Text></View>
+                  <TouchableOpacity 
+                    style={styles.imageCounter}
+                    onPress={() => reorderMedia(index)}
+                  >
+                    <Text style={styles.imageCounterText}>{index + 1}</Text>
+                  </TouchableOpacity>
                   {item.type === 'video' && <View style={styles.videoIndicator}><VideoIcon size={14} color="#FFFFFF" /><Text style={styles.videoIndicatorText}>Video</Text></View>}
                 </View>
               ))}

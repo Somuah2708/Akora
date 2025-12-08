@@ -150,7 +150,17 @@ export function useAuth() {
     surname?: string,
     classGroup?: string,
     yearGroup?: string,
-    house?: string
+    house?: string,
+    occupationStatus?: string,
+    jobTitle?: string,
+    companyName?: string,
+    institutionName?: string,
+    programOfStudy?: string,
+    graduationYear?: string,
+    currentStudyYear?: string,
+    location?: string,
+    phone?: string,
+    bio?: string
   ) => {
     // Sign up the user
     const { data: authData, error: authError } = await supabase.auth.signUp({
@@ -163,17 +173,31 @@ export function useAuth() {
     // Profile will be created automatically by the auth trigger
     // But we can update it with additional info
     if (authData.user) {
+      const updateData: any = {
+        username,
+        full_name: fullName,
+        first_name: firstName,
+        surname,
+        class: classGroup,
+        year_group: yearGroup,
+        house,
+      };
+      
+      // Add optional fields only if they have values
+      if (occupationStatus) updateData.occupation_status = occupationStatus;
+      if (jobTitle) updateData.job_title = jobTitle;
+      if (companyName) updateData.company_name = companyName;
+      if (institutionName) updateData.institution_name = institutionName;
+      if (programOfStudy) updateData.program_of_study = programOfStudy;
+      if (graduationYear) updateData.graduation_year = parseInt(graduationYear);
+      if (currentStudyYear) updateData.current_study_year = parseInt(currentStudyYear);
+      if (location) updateData.location = location;
+      if (phone) updateData.phone = phone;
+      if (bio) updateData.bio = bio;
+      
       const { error: profileError } = await supabase
         .from('profiles')
-        .update({
-          username,
-          full_name: fullName,
-          first_name: firstName,
-          surname,
-          class: classGroup,
-          year_group: yearGroup,
-          house,
-        })
+        .update(updateData)
         .eq('id', authData.user.id);
 
       if (profileError) {

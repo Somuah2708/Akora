@@ -172,52 +172,54 @@ export default function NewsOutletsDirectory() {
 
   return (
     <View style={styles.container}>
-      <View style={[styles.header, { paddingTop: Math.max(insets.top + 8, 12) }]}> 
-        <View style={styles.headerRow}>
-          <View>
-            <Text style={styles.title}>News Outlets Directory</Text>
-            <Text style={styles.subtitle}>Tap a publisher to open their official site</Text>
-          </View>
-          {(profile?.is_admin || profile?.role === 'admin') && (
-            <TouchableOpacity
-              onPress={() => debouncedRouter.push('/news/admin')}
-              style={styles.addButton}
-              accessibilityLabel="Add news outlet"
-            >
-              <Plus size={22} color="#FFFFFF" />
-            </TouchableOpacity>
-          )}
-        </View>
-        <TextInput
-          value={query}
-          onChangeText={setQuery}
-          placeholder="Search outlets or URLs"
-          placeholderTextColor="#8E8E93"
-          style={styles.search}
-          returnKeyType="search"
-        />
-        {favorites.size > 0 && (
-          <View style={styles.favRow}>
-            <Text style={styles.favLabel}>Favorite countries</Text>
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.favChips}>
-              {Array.from(favorites).map((cc) => {
-                const info = COUNTRY_OUTLETS.find((c) => c.countryCode === cc);
-                if (!info) return null;
-                return (
-                  <TouchableOpacity key={cc} style={styles.chip} onPress={() => scrollToCountry(cc)}>
-                    <Text style={styles.chipText}>{`${flagEmoji(cc)} ${info.countryName}`}</Text>
-                  </TouchableOpacity>
-                );
-              })}
-            </ScrollView>
-          </View>
-        )}
-      </View>
       <SectionList
         ref={listRef}
         sections={sections as any}
         keyExtractor={(item: NewsOutlet) => item.id}
         renderItem={({ item }) => <OutletCard outlet={item} />}
+        ListHeaderComponent={
+          <View style={[styles.header, { paddingTop: Math.max(insets.top + 8, 12) }]}> 
+            <View style={styles.headerRow}>
+              <View>
+                <Text style={styles.title}>News Outlets Directory</Text>
+                <Text style={styles.subtitle}>Tap a publisher to open their official site</Text>
+              </View>
+              {(profile?.is_admin || profile?.role === 'admin') && (
+                <TouchableOpacity
+                  onPress={() => debouncedRouter.push('/news/admin')}
+                  style={styles.addButton}
+                  accessibilityLabel="Add news outlet"
+                >
+                  <Plus size={22} color="#FFFFFF" />
+                </TouchableOpacity>
+              )}
+            </View>
+            <TextInput
+              value={query}
+              onChangeText={setQuery}
+              placeholder="Search outlets or URLs"
+              placeholderTextColor="#8E8E93"
+              style={styles.search}
+              returnKeyType="search"
+            />
+            {favorites.size > 0 && (
+              <View style={styles.favRow}>
+                <Text style={styles.favLabel}>Favorite countries</Text>
+                <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.favChips}>
+                  {Array.from(favorites).map((cc) => {
+                    const info = COUNTRY_OUTLETS.find((c) => c.countryCode === cc);
+                    if (!info) return null;
+                    return (
+                      <TouchableOpacity key={cc} style={styles.chip} onPress={() => scrollToCountry(cc)}>
+                        <Text style={styles.chipText}>{`${flagEmoji(cc)} ${info.countryName}`}</Text>
+                      </TouchableOpacity>
+                    );
+                  })}
+                </ScrollView>
+              </View>
+            )}
+          </View>
+        }
         renderSectionHeader={({ section }) => {
           const isFav = favorites.has(section.countryCode as string);
           const isOpen = (expanded as any)[section.countryCode];

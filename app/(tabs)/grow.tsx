@@ -370,8 +370,14 @@ const ProfileScreen = React.memo(function ProfileScreen() {
 
   const visibleInterestIds = (() => {
     const selected = Array.from(userInterests);
+    
+    // FILTER 1: Remove subcategories (they have underscores)
+    // Only show main parent categories like 'education', 'career', not 'education_scholarships'
+    const mainCategoriesOnly = selected.filter(id => !id.includes('_'));
+    
+    // FILTER 2: Remove parents if any child is selected (original logic)
     const selectedSet = new Set(selected);
-    return selected.filter((id) => {
+    return mainCategoriesOnly.filter((id) => {
       const subs = SUBCATEGORY_IDS_BY_PARENT.get(id) || [];
       const hasSelectedChild = subs.some((sid) => selectedSet.has(sid));
       if (hasSelectedChild) return false; // hide parent if any child selected
@@ -521,37 +527,6 @@ const ProfileScreen = React.memo(function ProfileScreen() {
 
         <View style={styles.bioSection}>
           <Text style={styles.displayName}>{profile.full_name || 'User'}</Text>
-
-          {/* Completeness Card with hide/show (auto-hidden at 100%) */}
-          {completeness.percent < 100 && (showCompleteness ? (
-            <View style={styles.card}>
-              <View style={styles.cardHeaderRow}>
-                <Text style={styles.cardTitle}>Profile completeness</Text>
-                <TouchableOpacity onPress={toggleCompletenessVisibility}>
-                  <Text style={styles.linkText}>Hide</Text>
-                </TouchableOpacity>
-              </View>
-              <View style={styles.progressBarBg}>
-                <View style={[styles.progressBarFill, { width: `${completeness.percent}%` }]} />
-              </View>
-              {completeness.todos.length > 0 && (
-                <Text style={styles.cardBodyText}>
-                  {completeness.todos.slice(0, 2).join(' • ')}
-                  {completeness.todos.length > 2 ? ' • …' : ''}
-                </Text>
-              )}
-            </View>
-          ) : (
-            <TouchableOpacity style={[styles.card, styles.collapsedCard]} onPress={toggleCompletenessVisibility}>
-              <View style={styles.collapsedRow}>
-                <Text style={styles.cardTitle}>Profile tips hidden</Text>
-                <Text style={styles.linkText}>Show</Text>
-              </View>
-              <View style={styles.progressBarBg}>
-                <View style={[styles.progressBarFill, { width: `${completeness.percent}%` }]} />
-              </View>
-            </TouchableOpacity>
-          ))}
 
           {/* Bio Card (collapsible) */}
           <View style={styles.card}>
@@ -1008,7 +983,7 @@ const styles = StyleSheet.create({
   headerTop: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    alignItems: 'center',
+    alignItems: 'flex-start',
     paddingHorizontal: 20,
     paddingBottom: 12,
   },
@@ -1017,10 +992,12 @@ const styles = StyleSheet.create({
     fontFamily: 'Inter-SemiBold',
     color: '#000000',
     letterSpacing: -0.5,
+    flexShrink: 1,
   },
   headerIcons: {
     flexDirection: 'row',
     gap: 16,
+    flexShrink: 0,
   },
   headerIcon: {
     padding: 4,
@@ -1463,7 +1440,10 @@ const styles = StyleSheet.create({
   nameRow: {
     flexDirection: 'row',
     alignItems: 'center',
+    flexWrap: 'wrap',
     gap: 8,
+    flex: 1,
+    marginRight: 12,
   },
   adminBadge: {
     marginLeft: 6,

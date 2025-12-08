@@ -226,7 +226,7 @@ const styles = StyleSheet.create({
   forgotPasswordText: {
     fontSize: 14,
     fontFamily: 'Inter-Regular',
-    color: '#4169E1',
+    color: '#0F172A',
   },
   signInButton: {
     backgroundColor: '#0F172A',
@@ -259,6 +259,6 @@ const styles = StyleSheet.create({
   signUpButtonText: {
     fontSize: 14,
     fontFamily: 'Inter-SemiBold',
-    color: '#4169E1',
+    color: '#0F172A',
   },
 });
