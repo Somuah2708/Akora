@@ -29,7 +29,7 @@ type TranscriptRequest = {
 
 const statusColors: Record<TranscriptRequest['status'], string> = {
   pending: '#999999',
-  payment_provided: '#4169E1',
+  payment_provided: '#0F172A',
   processing: '#A66BFF',
   ready: '#1E90FF',
   delivered: '#2E8B57',
@@ -140,7 +140,7 @@ export default function TranscriptListScreen() {
       <View style={styles.header}>
         <Text style={styles.title}>Academic Requests</Text>
         <TouchableOpacity style={styles.addButton} onPress={() => debouncedRouter.push('/transcripts/new')}>
-          <Plus size={20} color="#4169E1" />
+          <Plus size={20} color="#fff" />
           <Text style={styles.addText}>New</Text>
         </TouchableOpacity>
       </View>
@@ -199,13 +199,13 @@ const styles = StyleSheet.create({
   header: { paddingHorizontal: 16, paddingTop: 16, paddingBottom: 8, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   title: { fontSize: 18, fontWeight: '600' },
   subtitle: { fontSize: 14, color: '#666' },
-  addButton: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 6, paddingHorizontal: 10, borderRadius: 8, borderWidth: 1, borderColor: '#4169E1' },
-  addText: { color: '#4169E1', fontWeight: '600' },
+  addButton: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 6, paddingHorizontal: 10, borderRadius: 8, backgroundColor: '#0F172A' },
+  addText: { color: '#fff', fontWeight: '600' },
   center: { flex: 1, alignItems: 'center', justifyContent: 'center' },
   empty: { alignItems: 'center', marginTop: 64, paddingHorizontal: 24 },
   emptyTitle: { marginTop: 12, fontSize: 16, fontWeight: '600' },
   emptySub: { marginTop: 4, fontSize: 13, color: '#666', textAlign: 'center' },
-  cta: { marginTop: 16, backgroundColor: '#4169E1', paddingVertical: 10, paddingHorizontal: 14, borderRadius: 8, flexDirection: 'row', alignItems: 'center', gap: 8 },
+  cta: { marginTop: 16, backgroundColor: '#0F172A', paddingVertical: 10, paddingHorizontal: 14, borderRadius: 8, flexDirection: 'row', alignItems: 'center', gap: 8 },
   ctaText: { color: '#fff', fontWeight: '600' },
   card: { backgroundColor: '#F8FAFF', borderRadius: 12, padding: 16, marginBottom: 12, flexDirection: 'row', alignItems: 'center', gap: 12, borderWidth: 1, borderColor: '#E2E8F0' },
   cardTitle: { fontSize: 16, fontWeight: '600' },

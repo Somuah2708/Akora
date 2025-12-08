@@ -120,7 +120,7 @@ export default function TranscriptDetailScreen() {
       </View>
 
       {loading ? (
-        <View style={styles.center}><ActivityIndicator color="#4169E1" /></View>
+        <View style={styles.center}><ActivityIndicator color="#0F172A" /></View>
       ) : !req ? (
         <View style={styles.center}><Text>Not found</Text></View>
       ) : (
@@ -128,7 +128,7 @@ export default function TranscriptDetailScreen() {
           <View style={styles.content}>
           {/* Status Banner */}
           {req.status === 'pending' && (
-            <View style={[styles.statusBanner, { backgroundColor: '#FFF4E6' }]}>
+            <View style={[styles.statusBanner, { backgroundColor: '#FFF4E6', borderColor: '#FCD34D' }]}>
               <Clock size={20} color="#F59E0B" />
               <View style={{ flex: 1, marginLeft: 12 }}>
                 <Text style={[styles.statusTitle, { color: '#F59E0B' }]}>Payment Verification Pending</Text>
@@ -140,7 +140,7 @@ export default function TranscriptDetailScreen() {
           )}
           
           {req.status === 'payment_provided' && (
-            <View style={[styles.statusBanner, { backgroundColor: '#FFF4E6' }]}>
+            <View style={[styles.statusBanner, { backgroundColor: '#FFF4E6', borderColor: '#FCD34D' }]}>
               <Clock size={20} color="#F59E0B" />
               <View style={{ flex: 1, marginLeft: 12 }}>
                 <Text style={[styles.statusTitle, { color: '#F59E0B' }]}>Payment Verification Pending</Text>
@@ -152,7 +152,7 @@ export default function TranscriptDetailScreen() {
           )}
 
           {req.status === 'processing' && (
-            <View style={[styles.statusBanner, { backgroundColor: '#EFF6FF' }]}>
+            <View style={[styles.statusBanner, { backgroundColor: '#EFF6FF', borderColor: '#93C5FD' }]}>
               <Clock size={20} color="#3B82F6" />
               <View style={{ flex: 1, marginLeft: 12 }}>
                 <Text style={[styles.statusTitle, { color: '#3B82F6' }]}>Request Being Processed</Text>
@@ -164,7 +164,7 @@ export default function TranscriptDetailScreen() {
           )}
 
           {req.status === 'ready' && (
-            <View style={[styles.statusBanner, { backgroundColor: '#F0FDF4' }]}>
+            <View style={[styles.statusBanner, { backgroundColor: '#F0FDF4', borderColor: '#86EFAC' }]}>
               <CheckCircle2 size={20} color="#10B981" />
               <View style={{ flex: 1, marginLeft: 12 }}>
                 <Text style={[styles.statusTitle, { color: '#10B981' }]}>Ready for Collection</Text>
@@ -176,7 +176,7 @@ export default function TranscriptDetailScreen() {
           )}
 
           {req.status === 'delivered' && (
-            <View style={[styles.statusBanner, { backgroundColor: '#F0FDF4' }]}>
+            <View style={[styles.statusBanner, { backgroundColor: '#F0FDF4', borderColor: '#86EFAC' }]}>
               <CheckCircle2 size={20} color="#10B981" />
               <View style={{ flex: 1, marginLeft: 12 }}>
                 <Text style={[styles.statusTitle, { color: '#10B981' }]}>Delivered</Text>
@@ -188,7 +188,7 @@ export default function TranscriptDetailScreen() {
           )}
 
           {req.status === 'rejected' && (
-            <View style={[styles.statusBanner, { backgroundColor: '#FEF2F2' }]}>
+            <View style={[styles.statusBanner, { backgroundColor: '#FEF2F2', borderColor: '#FCA5A5' }]}>
               <XCircle size={20} color="#EF4444" />
               <View style={{ flex: 1, marginLeft: 12 }}>
                 <Text style={[styles.statusTitle, { color: '#EF4444' }]}>Request Rejected</Text>
@@ -245,11 +245,11 @@ export default function TranscriptDetailScreen() {
                 return order.map((s) => (
                   <View key={s} style={styles.timelineItem}>
                     {reached(req.status, s) ? (
-                      <CheckCircle2 size={16} color={s === req.status ? '#4169E1' : '#10B981'} />
+                      <CheckCircle2 size={16} color={s === req.status ? '#0F172A' : '#10B981'} />
                     ) : (
                       <Clock size={16} color="#999" />
                     )}
-                    <Text style={[styles.timelineText, s === req.status && { color: '#4169E1', fontWeight: '700' }]}>{s.replace('_',' ')}</Text>
+                    <Text style={[styles.timelineText, s === req.status && { color: '#0F172A', fontWeight: '700' }]}>{s.replace('_',' ')}</Text>
                   </View>
                 ));
               })()}
@@ -273,7 +273,7 @@ export default function TranscriptDetailScreen() {
                 const url = signedProofUrl || req.payment_proof_url!;
                 Linking.openURL(url);
               }}>
-                <Upload size={16} color="#4169E1" />
+                <Upload size={16} color="#0F172A" />
                 <Text style={styles.linkText}>View uploaded proof</Text>
               </TouchableOpacity>
             </View>
@@ -283,7 +283,7 @@ export default function TranscriptDetailScreen() {
             <View style={styles.section}>
               <Text style={styles.label}>Transcript Document</Text>
               <TouchableOpacity style={styles.linkBtn} onPress={() => Linking.openURL(req.document_url!)}>
-                <FileText size={16} color="#4169E1" />
+                <FileText size={16} color="#0F172A" />
                 <Text style={styles.linkText}>Open transcript</Text>
               </TouchableOpacity>
             </View>
@@ -303,27 +303,27 @@ export default function TranscriptDetailScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#fff' },
-  header: { paddingHorizontal: 16, paddingVertical: 12, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', borderBottomWidth: 1, borderBottomColor: '#EEE' },
+  container: { flex: 1, backgroundColor: '#F8F9FA' },
+  header: { paddingHorizontal: 16, paddingVertical: 12, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', borderBottomWidth: 1, borderBottomColor: '#EEE', backgroundColor: '#fff' },
   backButton: { padding: 6 },
   title: { fontSize: 18, fontWeight: '600' },
   scrollContent: { flex: 1 },
   content: { padding: 16, paddingBottom: 40 },
   center: { flex: 1, alignItems: 'center', justifyContent: 'center' },
-  h1: { fontSize: 18, fontWeight: '700' },
-  mono: { marginTop: 4, fontSize: 12, color: '#666' },
-  section: { marginTop: 16 },
-  label: { fontSize: 13, color: '#666', marginBottom: 4 },
-  value: { fontSize: 14 },
-  meta: { marginTop: 4, fontSize: 11, color: '#555' },
-  timeline: { marginTop: 8, gap: 8 },
-  timelineItem: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  timelineText: { fontSize: 13, color: '#333', textTransform: 'capitalize' },
-  linkBtn: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 8 },
-  linkText: { color: '#4169E1', fontWeight: '600' },
-  primaryBtn: { marginTop: 24, backgroundColor: '#4169E1', paddingVertical: 12, borderRadius: 10, alignItems: 'center', flexDirection: 'row', justifyContent: 'center', gap: 8 },
-  primaryText: { color: '#fff', fontWeight: '700' },
-  statusBanner: { marginBottom: 20, padding: 16, borderRadius: 12, flexDirection: 'row', alignItems: 'flex-start' },
+  h1: { fontSize: 20, fontWeight: '700', color: '#0F172A' },
+  mono: { marginTop: 6, fontSize: 12, color: '#64748B', fontWeight: '500' },
+  section: { marginTop: 16, backgroundColor: '#fff', padding: 14, borderRadius: 12, borderWidth: 1, borderColor: '#E2E8F0' },
+  label: { fontSize: 12, color: '#64748B', marginBottom: 6, fontWeight: '600', textTransform: 'uppercase', letterSpacing: 0.5 },
+  value: { fontSize: 15, color: '#1E293B', lineHeight: 22 },
+  meta: { marginTop: 6, fontSize: 12, color: '#64748B', fontWeight: '500' },
+  timeline: { marginTop: 10, gap: 10 },
+  timelineItem: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  timelineText: { fontSize: 13, color: '#475569', textTransform: 'capitalize', fontWeight: '500' },
+  linkBtn: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 10, paddingHorizontal: 12, backgroundColor: '#F1F5F9', borderRadius: 8, marginTop: 4 },
+  linkText: { color: '#0F172A', fontWeight: '600', fontSize: 14 },
+  primaryBtn: { marginTop: 24, backgroundColor: '#0F172A', paddingVertical: 14, borderRadius: 12, alignItems: 'center', flexDirection: 'row', justifyContent: 'center', gap: 8, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.1, shadowRadius: 4, elevation: 3 },
+  primaryText: { color: '#fff', fontWeight: '700', fontSize: 15 },
+  statusBanner: { marginBottom: 20, padding: 16, borderRadius: 12, flexDirection: 'row', alignItems: 'flex-start', borderWidth: 1 },
   statusTitle: { fontSize: 15, fontWeight: '700', marginBottom: 4 },
-  statusDesc: { fontSize: 13, color: '#666', lineHeight: 18 },
+  statusDesc: { fontSize: 13, color: '#64748B', lineHeight: 19 },
 });

@@ -240,6 +240,7 @@ export default function NewTranscriptScreen() {
           value={fullName}
           onChangeText={setFullName}
           placeholder="Your full legal name"
+          placeholderTextColor="#94A3B8"
           style={styles.input}
         />
 
@@ -248,6 +249,7 @@ export default function NewTranscriptScreen() {
           value={className}
           onChangeText={setClassName}
           placeholder="e.g., Science A"
+          placeholderTextColor="#94A3B8"
           style={styles.input}
         />
 
@@ -256,6 +258,7 @@ export default function NewTranscriptScreen() {
           value={graduationYear}
           onChangeText={setGraduationYear}
           placeholder="e.g., 2024"
+          placeholderTextColor="#94A3B8"
           keyboardType="number-pad"
           style={styles.input}
         />
@@ -265,6 +268,7 @@ export default function NewTranscriptScreen() {
           value={indexNumber}
           onChangeText={setIndexNumber}
           placeholder="Index number if available"
+          placeholderTextColor="#94A3B8"
           style={styles.input}
         />
 
@@ -273,6 +277,7 @@ export default function NewTranscriptScreen() {
           value={phoneNumber}
           onChangeText={setPhoneNumber}
           placeholder="e.g., 0241234567"
+          placeholderTextColor="#94A3B8"
           keyboardType="phone-pad"
           style={styles.input}
         />
@@ -284,6 +289,7 @@ export default function NewTranscriptScreen() {
               value={testSubject}
               onChangeText={setTestSubject}
               placeholder="e.g., English Language, Mathematics, Science"
+              placeholderTextColor="#94A3B8"
               style={styles.input}
             />
 
@@ -314,6 +320,7 @@ export default function NewTranscriptScreen() {
               value={preferredTestDate}
               onChangeText={setPreferredTestDate}
               placeholder="e.g., December 2025 or ASAP"
+              placeholderTextColor="#94A3B8"
               style={styles.input}
             />
           </>
@@ -324,6 +331,7 @@ export default function NewTranscriptScreen() {
           value={purpose}
           onChangeText={setPurpose}
           placeholder="e.g., Job application, Graduate school"
+          placeholderTextColor="#94A3B8"
           style={styles.input}
         />
 
@@ -332,6 +340,7 @@ export default function NewTranscriptScreen() {
           value={recipientEmail}
           onChangeText={setRecipientEmail}
           placeholder="recipient@example.com"
+          placeholderTextColor="#94A3B8"
           autoCapitalize="none"
           keyboardType="email-address"
           style={styles.input}
@@ -405,21 +414,21 @@ const styles = StyleSheet.create({
   segmentBtn: { paddingVertical: 10, paddingHorizontal: 20, borderWidth: 1, borderColor: '#E2E8F0', borderRadius: 10, alignItems: 'center', minWidth: 140 },
   typeSegment: { flexDirection: 'row', gap: 8, marginTop: 8 },
   typeSegmentBtn: { flex: 1, paddingVertical: 10, borderWidth: 1, borderColor: '#E2E8F0', borderRadius: 10, alignItems: 'center' },
-  segmentBtnActive: { backgroundColor: '#4169E1', borderColor: '#4169E1' },
+  segmentBtnActive: { backgroundColor: '#0F172A', borderColor: '#0F172A' },
   segmentText: { color: '#111', fontWeight: '600', fontSize: 14 },
   segmentTextActive: { color: '#fff' },
-  priceBox: { marginTop: 20, backgroundColor: '#EBF3FF', borderWidth: 1.5, borderColor: '#B6D3FF', borderRadius: 14, padding: 16 },
-  priceMain: { fontSize: 20, fontWeight: '700', color: '#1F3B7A' },
-  priceSub: { marginTop: 8, fontSize: 12, color: '#1F3B7A' },
-  methodBox: { marginTop: 14, backgroundColor: '#F8FAFF', borderWidth: 1, borderColor: '#E0E7FF', borderRadius: 12, padding: 12, gap: 4 },
-  methodTitle: { fontSize: 14, fontWeight: '700', color: '#1F3B7A' },
-  methodLine: { fontSize: 12, color: '#1F3B7A' },
+  priceBox: { marginTop: 20, backgroundColor: '#FFFBF0', borderWidth: 1.5, borderColor: '#FFD700', borderRadius: 14, padding: 16 },
+  priceMain: { fontSize: 20, fontWeight: '700', color: '#0F172A' },
+  priceSub: { marginTop: 8, fontSize: 12, color: '#0F172A' },
+  methodBox: { marginTop: 14, backgroundColor: '#F8FAFC', borderWidth: 1, borderColor: '#E2E8F0', borderRadius: 12, padding: 12, gap: 4 },
+  methodTitle: { fontSize: 14, fontWeight: '700', color: '#0F172A' },
+  methodLine: { fontSize: 12, color: '#0F172A' },
   methodNotes: { fontSize: 11, color: '#374151', marginTop: 4 },
-  copyBtn: { marginTop: 8, alignSelf: 'flex-start', flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: '#4169E1', paddingVertical: 6, paddingHorizontal: 10, borderRadius: 8 },
+  copyBtn: { marginTop: 8, alignSelf: 'flex-start', flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: '#0F172A', paddingVertical: 6, paddingHorizontal: 10, borderRadius: 8 },
   copyText: { color: '#fff', fontWeight: '600', fontSize: 12 },
-  pickBtn: { marginTop: 8, borderWidth: 1, borderColor: '#4169E1', borderRadius: 10, paddingVertical: 10, paddingHorizontal: 12, flexDirection: 'row', gap: 8, alignItems: 'center' },
-  pickText: { color: '#4169E1', fontWeight: '600' },
-  submitBtn: { marginTop: 20, backgroundColor: '#4169E1', paddingVertical: 12, borderRadius: 10, alignItems: 'center', flexDirection: 'row', justifyContent: 'center', gap: 8 },
+  pickBtn: { marginTop: 8, borderWidth: 1, borderColor: '#0F172A', borderRadius: 10, paddingVertical: 10, paddingHorizontal: 12, flexDirection: 'row', gap: 8, alignItems: 'center' },
+  pickText: { color: '#0F172A', fontWeight: '600' },
+  submitBtn: { marginTop: 20, backgroundColor: '#0F172A', paddingVertical: 12, borderRadius: 10, alignItems: 'center', flexDirection: 'row', justifyContent: 'center', gap: 8 },
   submitText: { color: '#fff', fontWeight: '700' },
   center: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 24 },
 });

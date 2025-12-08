@@ -459,7 +459,7 @@ export default function AkoraEventsScreen() {
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
-      {/* Header */}
+      {/* Fixed Header - Only back button and title */}
       <View style={styles.header}>
         <TouchableOpacity onPress={() => debouncedRouter.back()} style={styles.backBtn}><ArrowLeft size={22} color="#111" /></TouchableOpacity>
         <View style={{ flex: 1, alignItems: 'center' }}>
@@ -471,35 +471,53 @@ export default function AkoraEventsScreen() {
         <View style={styles.headerRight}>
           {isAdmin && user && (
             <TouchableOpacity onPress={() => debouncedRouter.push('/events/admin')} style={styles.adminBtn}>
-              <Settings size={20} color="#4169E1" />
+              <Settings size={20} color="#0F172A" />
             </TouchableOpacity>
           )}
-          <TouchableOpacity onPress={() => debouncedRouter.push('/events/my-akora-events')} style={styles.myEventsBtn}>
-            <Calendar size={20} color="#4169E1" />
+          <TouchableOpacity onPress={() => debouncedRouter.push('/events/calendar')} style={styles.myEventsBtn}>
+            <Calendar size={20} color="#0F172A" />
           </TouchableOpacity>
         </View>
       </View>
 
-      {/* Tabs */}
-      <View style={styles.tabs}>
-        <TouchableOpacity onPress={() => setActiveTab('oaa')} style={[styles.tab, activeTab === 'oaa' && styles.activeTab]}>
-          <Text style={[styles.tabText, activeTab === 'oaa' && styles.activeTabText]}>OAA Events</Text>
-        </TouchableOpacity>
-        <TouchableOpacity onPress={() => setActiveTab('akora')} style={[styles.tab, activeTab === 'akora' && styles.activeTab]}>
-          <Text style={[styles.tabText, activeTab === 'akora' && styles.activeTabText]}>Akora Events</Text>
-        </TouchableOpacity>
-      </View>
+      <ScrollView 
+        style={{ flex: 1 }} 
+        contentContainerStyle={{ paddingBottom: 32 }}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={onRefresh}
+            tintColor="#000000"
+          />
+        }
+        showsVerticalScrollIndicator={false}
+      >
+        {/* Tabs - Now scrollable */}
+        <View style={styles.tabs}>
+          <TouchableOpacity onPress={() => {
+            setActiveTab('oaa');
+            // Close form when switching to OAA tab if not admin
+            if (!isAdmin) setShowForm(false);
+          }} style={[styles.tab, activeTab === 'oaa' && styles.activeTab]}>
+            <Text style={[styles.tabText, activeTab === 'oaa' && styles.activeTabText]}>OAA Events</Text>
+          </TouchableOpacity>
+          <TouchableOpacity onPress={() => {
+            setActiveTab('akora');
+          }} style={[styles.tab, activeTab === 'akora' && styles.activeTab]}>
+            <Text style={[styles.tabText, activeTab === 'akora' && styles.activeTabText]}>Akora Events</Text>
+          </TouchableOpacity>
+        </View>
 
-      {/* Search Bar */}
-      <View style={styles.searchContainer}>
-        <TextInput
-          style={styles.searchInput}
-          placeholder="Search events by title, location, or category..."
-          placeholderTextColor="#9CA3AF"
-          value={searchQuery}
-          onChangeText={setSearchQuery}
-        />
-      </View>
+        {/* Search Bar - Now scrollable */}
+        <View style={styles.searchContainer}>
+          <TextInput
+            style={styles.searchInput}
+            placeholder="Search events by title, location, or category..."
+            placeholderTextColor="#9CA3AF"
+            value={searchQuery}
+            onChangeText={setSearchQuery}
+          />
+        </View>
 
       {/* Admin tools for OAA tab: quick add */}
       {activeTab === 'oaa' && isAdmin && (
@@ -522,8 +540,7 @@ export default function AkoraEventsScreen() {
       )}
 
       {/* Submission form (used for Akora; admins can also add OAA by flipping tab) */}
-      {showForm && (
-        <ScrollView style={styles.formScroll} contentContainerStyle={styles.formScrollContent} showsVerticalScrollIndicator={false}>
+      {showForm && (activeTab === 'akora' || (activeTab === 'oaa' && isAdmin)) && (
           <View style={styles.formBox}>
             <Text style={styles.formTitle}>{activeTab === 'oaa' ? 'Create OAA Event' : 'Submit Akora Event'}</Text>
             
@@ -543,10 +560,7 @@ export default function AkoraEventsScreen() {
             
             {/* Event Details */}
             <Text style={styles.sectionLabel}>Event Details</Text>
-            <TextInput value={category} onChangeText={setCategory} placeholder="Category (e.g., Gala, Workshop, Sports)" placeholderTextColor="#9CA3AF" style={styles.input} />
-            <TextInput value={tags} onChangeText={setTags} placeholder="Tags (e.g., networking, alumni, fundraiser)" placeholderTextColor="#9CA3AF" style={styles.input} />
-            <TextInput value={capacity} onChangeText={setCapacity} placeholder="Maximum capacity (leave empty for unlimited)" placeholderTextColor="#9CA3AF" keyboardType="number-pad" style={styles.input} />
-            <Text style={styles.hintText}>Leave capacity empty for unlimited attendees, or enter 0 for no capacity limit</Text>
+            <TextInput value={capacity} onChangeText={setCapacity} placeholder="Max capacity (optional)" placeholderTextColor="#9CA3AF" keyboardType="number-pad" style={styles.input} />
             <TextInput value={registrationUrl} onChangeText={setRegistrationUrl} placeholder="Registration/Ticket URL (optional)" placeholderTextColor="#9CA3AF" autoCapitalize="none" style={styles.input} />
             
             {/* Event Banner */}
@@ -564,7 +578,7 @@ export default function AkoraEventsScreen() {
               </View>
             ) : (
               <TouchableOpacity onPress={onPickBanner} style={styles.uploadBtn}>
-                <Plus size={16} color="#4169E1" />
+                <Plus size={16} color="#FFD700" />
                 <Text style={styles.uploadBtnText}>Upload Banner Image</Text>
               </TouchableOpacity>
             )}
@@ -584,7 +598,7 @@ export default function AkoraEventsScreen() {
               </View>
             ) : (
               <TouchableOpacity onPress={onPickVideo} style={styles.uploadBtn}>
-                <Plus size={16} color="#4169E1" />
+                <Plus size={16} color="#FFD700" />
                 <Text style={styles.uploadBtnText}>Upload Promo Video</Text>
               </TouchableOpacity>
             )}
@@ -593,7 +607,7 @@ export default function AkoraEventsScreen() {
             <Text style={styles.sectionLabel}>Media Gallery (Images & Videos)</Text>
             <Text style={styles.hintText}>Add multiple images or videos to showcase your event.</Text>
             <TouchableOpacity onPress={onAddGalleryImage} style={styles.uploadBtn}>
-              <Plus size={16} color="#4169E1" />
+              <Plus size={16} color="#FFD700" />
               <Text style={styles.uploadBtnText}>Add Image or Video</Text>
             </TouchableOpacity>
             
@@ -698,7 +712,7 @@ export default function AkoraEventsScreen() {
                     onPress={pickProof}
                   >
                     <View style={styles.uploadProofIconCircle}>
-                      <Upload size={20} color={pickedProof ? "#10B981" : "#4169E1"} />
+                      <Upload size={20} color={pickedProof ? "#10B981" : "#0F172A"} />
                     </View>
                     <View style={styles.uploadProofContent}>
                       <Text style={[styles.uploadProofTitle, pickedProof && styles.uploadProofTitleActive]}>
@@ -758,7 +772,6 @@ export default function AkoraEventsScreen() {
             <Text style={styles.primaryText}>{activeTab === 'oaa' ? 'Publish Event' : 'Submit for Approval'}</Text>
           </TouchableOpacity>
           </View>
-        </ScrollView>
       )}
 
       {/* Pending approvals for admins (Akora tab) */}
@@ -784,7 +797,7 @@ export default function AkoraEventsScreen() {
                     }}
                     style={styles.linkBtn}
                   >
-                    <Upload size={14} color="#4169E1" />
+                    <Upload size={14} color="#FFD700" />
                     <Text style={styles.linkText}>View Payment Proof</Text>
                   </TouchableOpacity>
                 ) : null}
@@ -811,20 +824,9 @@ export default function AkoraEventsScreen() {
       )}
 
       {/* Published list */}
-      <ScrollView 
-        style={{ flex: 1 }} 
-        contentContainerStyle={{ paddingBottom: 32 }}
-        refreshControl={
-          <RefreshControl
-            refreshing={refreshing}
-            onRefresh={onRefresh}
-            tintColor="#000000"
-          />
-        }
-      >
         <Text style={styles.sectionTitle}>{activeTab === 'oaa' ? 'School Events' : 'Alumni Events'}</Text>
         {loading ? (
-          <View style={styles.center}><ActivityIndicator color="#4169E1" /></View>
+          <View style={styles.center}><ActivityIndicator color="#0F172A" /></View>
         ) : items.length === 0 ? (
           <View style={styles.empty}><Text style={styles.emptyText}>No events yet.</Text></View>
         ) : (
@@ -884,7 +886,7 @@ const styles = StyleSheet.create({
   headerTitle: { fontSize: 18, fontWeight: '700' },
   tabs: { flexDirection: 'row', gap: 8, padding: 12 },
   tab: { flex: 1, paddingVertical: 10, borderWidth: 1, borderColor: '#E5E7EB', borderRadius: 10, alignItems: 'center' },
-  activeTab: { backgroundColor: '#4169E1', borderColor: '#4169E1' },
+  activeTab: { backgroundColor: '#0F172A', borderColor: '#0F172A' },
   tabText: { fontWeight: '700', color: '#111' },
   activeTabText: { color: '#fff' },
   adminHint: { paddingHorizontal: 16, paddingBottom: 8, gap: 8 },
@@ -896,22 +898,22 @@ const styles = StyleSheet.create({
   formTitle: { fontSize: 16, fontWeight: '700', marginBottom: 8 },
   sectionLabel: { fontSize: 13, fontWeight: '700', color: '#374151', marginTop: 12, marginBottom: 4 },
   input: { borderWidth: 1, borderColor: '#E5E7EB', borderRadius: 10, paddingHorizontal: 12, paddingVertical: 10, fontSize: 14, backgroundColor: '#fff' },
-  feeBox: { marginTop: 12, padding: 12, backgroundColor: '#EFF6FF', borderRadius: 8, gap: 6 },
-  feeText: { fontSize: 14, fontWeight: '700', color: '#1E40AF' },
-  feeSubtext: { fontSize: 11, color: '#3B82F6' },
-  paymentTitle: { fontSize: 13, fontWeight: '700', color: '#1E40AF', marginTop: 12, marginBottom: 8 },
-  paymentOption: { backgroundColor: '#fff', padding: 12, borderRadius: 8, marginBottom: 10, borderWidth: 1, borderColor: '#BFDBFE' },
-  paymentMethod: { fontSize: 13, fontWeight: '700', color: '#1E40AF', marginBottom: 8 },
+  feeBox: { marginTop: 12, padding: 12, backgroundColor: '#FFFBF0', borderRadius: 8, gap: 6, borderWidth: 1, borderColor: '#FFD700' },
+  feeText: { fontSize: 14, fontWeight: '700', color: '#92400E' },
+  feeSubtext: { fontSize: 11, color: '#78350F' },
+  paymentTitle: { fontSize: 13, fontWeight: '700', color: '#0F172A', marginTop: 12, marginBottom: 8 },
+  paymentOption: { backgroundColor: '#fff', padding: 12, borderRadius: 8, marginBottom: 10, borderWidth: 1, borderColor: '#E2E8F0' },
+  paymentMethod: { fontSize: 13, fontWeight: '700', color: '#0F172A', marginBottom: 8 },
   paymentDetails: { gap: 6 },
   detailRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   detailLabel: { fontSize: 12, color: '#64748B', fontWeight: '600' },
   detailValue: { fontSize: 12, color: '#1E293B', fontWeight: '700' },
   uploadProofSection: { marginTop: 16 },
-  uploadProofLabel: { fontSize: 13, fontWeight: '700', color: '#1E40AF', marginBottom: 8 },
+  uploadProofLabel: { fontSize: 13, fontWeight: '700', color: '#0F172A', marginBottom: 8 },
   uploadProofBtn: { 
     backgroundColor: '#fff', 
     borderWidth: 2, 
-    borderColor: '#4169E1', 
+    borderColor: '#0F172A', 
     borderRadius: 12, 
     padding: 16, 
     flexDirection: 'row', 
@@ -954,25 +956,25 @@ const styles = StyleSheet.create({
   },
   uploadProofArrowText: { 
     fontSize: 18, 
-    color: '#4169E1',
+    color: '#FFD700',
     fontWeight: '700',
   },
   proofBtn: { flexDirection: 'row', gap: 6, alignItems: 'center', paddingVertical: 8 },
-  proofText: { color: '#4169E1', fontWeight: '600', fontSize: 13 },
+  proofText: { color: '#FFD700', fontWeight: '600', fontSize: 13 },
   tagBtn: { paddingHorizontal: 12, paddingVertical: 8, borderWidth: 1, borderColor: '#E5E7EB', borderRadius: 20, backgroundColor: '#fff' },
-  tagBtnActive: { backgroundColor: '#4169E1', borderColor: '#4169E1' },
+  tagBtnActive: { backgroundColor: '#0F172A', borderColor: '#0F172A' },
   tagText: { fontSize: 12, fontWeight: '700', color: '#111' },
   tagTextActive: { color: '#fff' },
   rowBetween: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  smallBtn: { marginLeft: 8, backgroundColor: '#EEF2FF', borderWidth: 1, borderColor: '#C7D2FE', paddingHorizontal: 10, paddingVertical: 10, borderRadius: 8 },
-  smallBtnText: { color: '#3730A3', fontWeight: '700', fontSize: 12 },
-  uploadBtn: { flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: '#EFF6FF', borderWidth: 1, borderColor: '#BFDBFE', paddingVertical: 12, paddingHorizontal: 16, borderRadius: 10, marginTop: 8 },
-  uploadBtnText: { color: '#1E40AF', fontWeight: '700', fontSize: 14 },
+  smallBtn: { marginLeft: 8, backgroundColor: '#F1F5F9', borderWidth: 1, borderColor: '#CBD5E1', paddingHorizontal: 10, paddingVertical: 10, borderRadius: 8 },
+  smallBtnText: { color: '#0F172A', fontWeight: '700', fontSize: 12 },
+  uploadBtn: { flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: '#FFFBF0', borderWidth: 1, borderColor: '#FFD700', paddingVertical: 12, paddingHorizontal: 16, borderRadius: 10, marginTop: 8 },
+  uploadBtnText: { color: '#92400E', fontWeight: '700', fontSize: 14 },
   pkgGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
   pkgCard: { flexBasis: '48%', borderWidth: 1, borderColor: '#E5E7EB', borderRadius: 12, backgroundColor: '#fff', padding: 12 },
-  pkgCardActive: { borderColor: '#4169E1', backgroundColor: '#EEF2FF' },
+  pkgCardActive: { borderColor: '#FFD700', backgroundColor: '#FFFBF0' },
   pkgName: { fontSize: 14, fontWeight: '800', color: '#111827' },
-  pkgPrice: { fontSize: 13, fontWeight: '700', color: '#1E40AF', marginTop: 2 },
+  pkgPrice: { fontSize: 13, fontWeight: '700', color: '#92400E', marginTop: 2 },
   pkgPerk: { fontSize: 11, color: '#374151' },
   mediaItem: { flexDirection: 'row', alignItems: 'center', gap: 10, backgroundColor: '#fff', padding: 10, borderRadius: 10, borderWidth: 1, borderColor: '#E5E7EB', marginTop: 8 },
   mediaPreview: { width: 80, height: 80, borderRadius: 8, overflow: 'hidden', backgroundColor: '#F3F4F6' },
@@ -987,7 +989,7 @@ const styles = StyleSheet.create({
   galleryItemType: { fontSize: 12, fontWeight: '700', color: '#374151' },
   galleryItemUrl: { fontSize: 11, color: '#6B7280' },
   removeBtn: { padding: 4 },
-  primaryBtn: { marginTop: 16, backgroundColor: '#4169E1', paddingVertical: 14, borderRadius: 10, alignItems: 'center', flexDirection: 'row', justifyContent: 'center', gap: 8 },
+  primaryBtn: { marginTop: 16, backgroundColor: '#0F172A', paddingVertical: 14, borderRadius: 10, alignItems: 'center', flexDirection: 'row', justifyContent: 'center', gap: 8 },
   primaryText: { color: '#fff', fontWeight: '700', fontSize: 15 },
   section: { paddingHorizontal: 16, paddingTop: 10 },
   sectionTitle: { fontSize: 18, fontWeight: '700', paddingHorizontal: 16, paddingTop: 12, paddingBottom: 8 },
@@ -1012,7 +1014,7 @@ const styles = StyleSheet.create({
   actBtn: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingVertical: 8, paddingHorizontal: 10, borderRadius: 8 },
   actText: { color: '#fff', fontWeight: '700', fontSize: 12 },
   linkBtn: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingVertical: 6 },
-  linkText: { color: '#4169E1', fontWeight: '700', fontSize: 12 },
+  linkText: { color: '#0F172A', fontWeight: '700', fontSize: 12 },
   center: { padding: 24, alignItems: 'center' },
   empty: { padding: 24, alignItems: 'center' },
   emptyText: { color: '#6B7280' },

@@ -123,7 +123,7 @@ export default function MyAkoraEventsScreen() {
   const getTierBadge = (tier: PackageTier) => {
     const badges = {
       premium: { color: '#FFD700', label: 'Premium' },
-      priority: { color: '#4169E1', label: 'Priority' },
+      priority: { color: '#FFD700', label: 'Priority' },
       standard: { color: '#10B981', label: 'Standard' },
       basic: { color: '#6B7280', label: 'Basic' },
     };
@@ -153,7 +153,7 @@ export default function MyAkoraEventsScreen() {
   if (loading) {
     return (
       <View style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color="#4169E1" />
+        <ActivityIndicator size="large" color="#0F172A" />
         <Text style={styles.loadingText}>Loading your events...</Text>
       </View>
     );
@@ -163,7 +163,7 @@ export default function MyAkoraEventsScreen() {
     <View style={styles.container}>
       {/* Header */}
       <LinearGradient
-        colors={['#4169E1', '#5B7FE8']}
+        colors={['#0F172A', '#1E293B']}
         start={{ x: 0, y: 0 }}
         end={{ x: 1, y: 0 }}
         style={styles.headerGradient}
@@ -196,7 +196,7 @@ export default function MyAkoraEventsScreen() {
               onPress={() => debouncedRouter.push('/events')}
             >
               <LinearGradient
-                colors={['#4169E1', '#5B7FE8']}
+                colors={['#0F172A', '#1E293B']}
                 start={{ x: 0, y: 0 }}
                 end={{ x: 1, y: 0 }}
                 style={styles.createButtonGradient}
@@ -302,7 +302,7 @@ export default function MyAkoraEventsScreen() {
                             style={styles.editButton}
                             onPress={() => handleEdit(event.id, event.status)}
                           >
-                            <Edit2 size={18} color="#4169E1" />
+                            <Edit2 size={18} color="#0F172A" />
                           </TouchableOpacity>
                           
                           <TouchableOpacity 
@@ -495,13 +495,13 @@ const styles = StyleSheet.create({
     marginBottom: 8,
   },
   categoryBadge: {
-    backgroundColor: '#EBF0FF',
+    backgroundColor: '#FFFBF0',
     paddingHorizontal: 10,
     paddingVertical: 4,
     borderRadius: 8,
     fontSize: 12,
     fontWeight: '600',
-    color: '#4169E1',
+    color: '#92400E',
   },
   featuredText: {
     fontSize: 12,
@@ -557,7 +557,7 @@ const styles = StyleSheet.create({
   },
   viewButton: {
     flex: 1,
-    backgroundColor: '#EBF0FF',
+    backgroundColor: '#F1F5F9',
     paddingVertical: 12,
     borderRadius: 8,
     alignItems: 'center',
@@ -565,14 +565,14 @@ const styles = StyleSheet.create({
   viewButtonText: {
     fontSize: 14,
     fontWeight: '600',
-    color: '#4169E1',
+    color: '#0F172A',
   },
   actionButtons: {
     flexDirection: 'row',
     gap: 8,
   },
   editButton: {
-    backgroundColor: '#EBF0FF',
+    backgroundColor: '#F1F5F9',
     width: 44,
     height: 44,
     borderRadius: 8,

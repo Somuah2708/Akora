@@ -148,22 +148,22 @@ export default function NewRecommendationScreen() {
 
       <ScrollView style={styles.scrollContainer} contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
         <Text style={styles.label}>Full Name</Text>
-        <TextInput value={fullName} onChangeText={setFullName} placeholder="Your full name" style={styles.input} />
+        <TextInput value={fullName} onChangeText={setFullName} placeholder="Your full name" placeholderTextColor="#94A3B8" style={styles.input} />
 
         <Text style={styles.label}>Class</Text>
-        <TextInput value={className} onChangeText={setClassName} placeholder="e.g., Science A" style={styles.input} />
+        <TextInput value={className} onChangeText={setClassName} placeholder="e.g., Science A" placeholderTextColor="#94A3B8" style={styles.input} />
 
         <Text style={styles.label}>Graduation Year</Text>
-        <TextInput value={graduationYear} onChangeText={setGraduationYear} placeholder="YYYY" keyboardType="number-pad" style={styles.input} />
+        <TextInput value={graduationYear} onChangeText={setGraduationYear} placeholder="YYYY" placeholderTextColor="#94A3B8" keyboardType="number-pad" style={styles.input} />
 
   <Text style={styles.label}>Index Number (optional)</Text>
-        <TextInput value={indexNumber} onChangeText={setIndexNumber} placeholder="Index number" style={styles.input} />
+        <TextInput value={indexNumber} onChangeText={setIndexNumber} placeholder="Index number" placeholderTextColor="#94A3B8" style={styles.input} />
 
   <Text style={styles.label}>Phone Number</Text>
-  <TextInput value={phoneNumber} onChangeText={setPhoneNumber} placeholder="e.g., 0241234567" keyboardType="phone-pad" style={styles.input} />
+  <TextInput value={phoneNumber} onChangeText={setPhoneNumber} placeholder="e.g., 0241234567" placeholderTextColor="#94A3B8" keyboardType="phone-pad" style={styles.input} />
 
         <Text style={styles.label}>Recommender Email</Text>
-        <TextInput value={recommenderEmail} onChangeText={setRecommenderEmail} placeholder="recommender@example.com" autoCapitalize="none" keyboardType="email-address" style={styles.input} />
+        <TextInput value={recommenderEmail} onChangeText={setRecommenderEmail} placeholder="recommender@example.com" placeholderTextColor="#94A3B8" autoCapitalize="none" keyboardType="email-address" style={styles.input} />
 
         <Text style={styles.label}>Purpose</Text>
         <View style={styles.segment}>
@@ -175,17 +175,17 @@ export default function NewRecommendationScreen() {
         </View>
 
         <Text style={styles.label}>Organization (optional)</Text>
-        <TextInput value={organization} onChangeText={setOrganization} placeholder="Company/School" style={styles.input} />
+        <TextInput value={organization} onChangeText={setOrganization} placeholder="Company/School" placeholderTextColor="#94A3B8" style={styles.input} />
 
         <Text style={styles.label}>Deadline (optional)</Text>
-        <TextInput value={deadline} onChangeText={setDeadline} placeholder="YYYY-MM-DD" autoCapitalize="none" style={styles.input} />
+        <TextInput value={deadline} onChangeText={setDeadline} placeholder="YYYY-MM-DD" placeholderTextColor="#94A3B8" autoCapitalize="none" style={styles.input} />
 
         <Text style={styles.label}>Context for Recommender (optional)</Text>
-        <TextInput value={context} onChangeText={setContext} placeholder="What should they highlight?" style={[styles.input, { minHeight: 80 }]} multiline />
+        <TextInput value={context} onChangeText={setContext} placeholder="What should they highlight?" placeholderTextColor="#94A3B8" style={[styles.input, { minHeight: 80 }]} multiline />
 
         <Text style={styles.label}>Teachers (add multiple)</Text>
         <View style={styles.row}>          
-          <TextInput value={teacherInput} onChangeText={setTeacherInput} placeholder="Teacher name" style={[styles.input, { flex: 1 }]} />
+          <TextInput value={teacherInput} onChangeText={setTeacherInput} placeholder="Teacher name" placeholderTextColor="#94A3B8" style={[styles.input, { flex: 1 }]} />
           <TouchableOpacity onPress={addTeacher} style={styles.smallBtn}>
             <Plus size={16} color="#fff" />
           </TouchableOpacity>
@@ -204,7 +204,7 @@ export default function NewRecommendationScreen() {
         ) : null}
 
         <Text style={styles.label}>Activities / Achievements</Text>
-        <TextInput value={activities} onChangeText={setActivities} placeholder="Clubs, leadership, awards..." style={[styles.input, { minHeight: 80 }]} multiline />
+        <TextInput value={activities} onChangeText={setActivities} placeholder="Clubs, leadership, awards..." placeholderTextColor="#94A3B8" style={[styles.input, { minHeight: 80 }]} multiline />
 
         <Text style={styles.label}>Evidence Documents (optional)</Text>
         <TouchableOpacity onPress={handlePickEvidence} style={styles.pickBtn}>          
@@ -266,27 +266,27 @@ const styles = StyleSheet.create({
   input: { marginTop: 6, borderWidth: 1, borderColor: '#E2E8F0', borderRadius: 10, paddingHorizontal: 12, paddingVertical: 10, fontSize: 14 },
   segment: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 8 },
   segmentBtn: { paddingVertical: 8, paddingHorizontal: 10, borderWidth: 1, borderColor: '#E2E8F0', borderRadius: 10 },
-  segmentBtnActive: { backgroundColor: '#4169E1', borderColor: '#4169E1' },
+  segmentBtnActive: { backgroundColor: '#0F172A', borderColor: '#0F172A' },
   segmentText: { color: '#111', fontWeight: '600' },
   segmentTextActive: { color: '#fff' },
   row: { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 8 },
-  smallBtn: { backgroundColor: '#4169E1', padding: 10, borderRadius: 10, alignItems: 'center', justifyContent: 'center' },
+  smallBtn: { backgroundColor: '#0F172A', padding: 10, borderRadius: 10, alignItems: 'center', justifyContent: 'center' },
   chipsWrap: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 8 },
-  chip: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#4169E1', borderRadius: 999, paddingHorizontal: 12, paddingVertical: 6, gap: 8 },
+  chip: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#0F172A', borderRadius: 999, paddingHorizontal: 12, paddingVertical: 6, gap: 8 },
   chipText: { color: '#fff', fontSize: 12, fontWeight: '600' },
   chipRemove: { padding: 4 },
-  pickBtn: { marginTop: 8, borderWidth: 1, borderColor: '#4169E1', borderRadius: 10, paddingVertical: 10, paddingHorizontal: 12, flexDirection: 'row', gap: 8, alignItems: 'center' },
-  pickText: { color: '#4169E1', fontWeight: '600' },
+  pickBtn: { marginTop: 8, borderWidth: 1, borderColor: '#0F172A', borderRadius: 10, paddingVertical: 10, paddingHorizontal: 12, flexDirection: 'row', gap: 8, alignItems: 'center' },
+  pickText: { color: '#0F172A', fontWeight: '600' },
   filesList: { marginTop: 8, gap: 8 },
-  fileRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', backgroundColor: '#F0F5FF', paddingHorizontal: 12, paddingVertical: 8, borderRadius: 8 },
-  fileName: { fontSize: 12, color: '#1F3B7A', flex: 1, marginRight: 8 },
+  fileRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', backgroundColor: '#F1F5F9', paddingHorizontal: 12, paddingVertical: 8, borderRadius: 8 },
+  fileName: { fontSize: 12, color: '#0F172A', flex: 1, marginRight: 8 },
   removeFileBtn: { backgroundColor: '#CC3333', padding: 6, borderRadius: 8 },
-  priceBox: { marginTop: 20, backgroundColor: '#EBF3FF', borderWidth: 1.5, borderColor: '#B6D3FF', borderRadius: 14, padding: 16 },
-  priceMain: { fontSize: 20, fontWeight: '700', color: '#1F3B7A' },
-  priceSub: { marginTop: 8, fontSize: 12, color: '#1F3B7A' },
-  copyBtn: { marginTop: 12, alignSelf: 'flex-start', flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: '#4169E1', paddingVertical: 6, paddingHorizontal: 10, borderRadius: 8 },
+  priceBox: { marginTop: 20, backgroundColor: '#FFFBF0', borderWidth: 1.5, borderColor: '#FFD700', borderRadius: 14, padding: 16 },
+  priceMain: { fontSize: 20, fontWeight: '700', color: '#0F172A' },
+  priceSub: { marginTop: 8, fontSize: 12, color: '#0F172A' },
+  copyBtn: { marginTop: 12, alignSelf: 'flex-start', flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: '#0F172A', paddingVertical: 6, paddingHorizontal: 10, borderRadius: 8 },
   copyText: { color: '#fff', fontWeight: '600', fontSize: 12 },
-  submitBtn: { marginTop: 20, backgroundColor: '#4169E1', paddingVertical: 12, borderRadius: 10, alignItems: 'center', flexDirection: 'row', justifyContent: 'center', gap: 8 },
+  submitBtn: { marginTop: 20, backgroundColor: '#0F172A', paddingVertical: 12, borderRadius: 10, alignItems: 'center', flexDirection: 'row', justifyContent: 'center', gap: 8 },
   submitText: { color: '#fff', fontWeight: '700' },
   center: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 24 },
 });
