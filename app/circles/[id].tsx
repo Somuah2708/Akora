@@ -250,7 +250,6 @@ export default function CircleDetailScreen() {
             <Text style={styles.sectionTitle}>Created By</Text>
             <View style={styles.creatorCard}>
               <Text style={styles.creatorName}>{circle.creator_profile.full_name}</Text>
-              <Text style={styles.creatorUsername}>@{circle.creator_profile.username}</Text>
             </View>
           </View>
         )}

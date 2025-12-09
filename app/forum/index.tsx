@@ -15,15 +15,15 @@ const { width } = Dimensions.get('window');
 const CARD_WIDTH = width - 48;
 
 const CATEGORIES = [
-  { id: 'all', name: 'All', icon: Hash, color: '#F1F5F9' },
-  { id: 'technology', name: 'Technology', icon: Code, color: '#E4EAFF' },
-  { id: 'business', name: 'Business', icon: Briefcase, color: '#FFE4E4' },
-  { id: 'finance', name: 'Finance', icon: LineChart, color: '#E4FFF4' },
-  { id: 'science', name: 'Science', icon: Microscope, color: '#FFF4E4' },
-  { id: 'arts', name: 'Arts', icon: Palette, color: '#FFE4F4' },
-  { id: 'engineering', name: 'Engineering', icon: Brain, color: '#E4F4FF' },
-  { id: 'architecture', name: 'Architecture', icon: Building2, color: '#F4E4FF' },
-  { id: 'international', name: 'International', icon: Globe, color: '#E4FFEA' },
+  { id: 'all', name: 'All', icon: Hash },
+  { id: 'technology', name: 'Technology', icon: Code },
+  { id: 'business', name: 'Business', icon: Briefcase },
+  { id: 'finance', name: 'Finance', icon: LineChart },
+  { id: 'science', name: 'Science', icon: Microscope },
+  { id: 'arts', name: 'Arts', icon: Palette },
+  { id: 'engineering', name: 'Engineering', icon: Brain },
+  { id: 'architecture', name: 'Architecture', icon: Building2 },
+  { id: 'international', name: 'International', icon: Globe },
 ];
 
 // Real analytics fetchers
@@ -367,7 +367,7 @@ export default function ForumScreen() {
   if (loading) {
     return (
       <ScrollView style={styles.container} contentContainerStyle={{ flexGrow: 1, justifyContent: 'center', alignItems: 'center' }}>
-        <ActivityIndicator size="large" color="#4169E1" />
+        <ActivityIndicator size="large" color="#0F172A" />
         <Text style={styles.loadingText}>Loading discussions...</Text>
       </ScrollView>
     );
@@ -389,7 +389,7 @@ export default function ForumScreen() {
       <View style={styles.header}>
         <View style={styles.headerSideLeft}>
           <TouchableOpacity onPress={() => debouncedRouter.back()} style={styles.backButton} accessibilityLabel="Go back">
-            <ArrowLeft size={24} color="#111827" />
+            <ArrowLeft size={24} color="#FFFFFF" />
           </TouchableOpacity>
         </View>
         <View style={styles.headerCenter}>
@@ -397,33 +397,27 @@ export default function ForumScreen() {
           <Text style={styles.headerSubtitle}>Ideas, help, and discussions</Text>
         </View>
         <View style={[styles.headerSideRight, styles.headerActions]}>
-          <TouchableOpacity style={styles.iconButton} accessibilityLabel="Notifications">
-            <Bell size={20} color="#111827" />
-          </TouchableOpacity>
           <TouchableOpacity style={styles.iconButton} onPress={() => debouncedRouter.push('/forum/saved')} accessibilityLabel="View saved discussions">
-            <Star size={20} color="#111827" />
+            <Star size={20} color="#FFFFFF" />
           </TouchableOpacity>
           <TouchableOpacity style={styles.iconButton} onPress={() => debouncedRouter.push('/forum/new')} accessibilityLabel="Create discussion">
-            <Plus size={20} color="#111827" />
+            <Plus size={20} color="#FFFFFF" />
           </TouchableOpacity>
         </View>
       </View>
 
-      {/* Search and Filter */}
+      {/* Search */}
       <View style={styles.searchContainer}>
         <View style={styles.searchInputContainer}>
-          <Search size={20} color="#666666" />
+          <Search size={20} color="#64748B" />
           <TextInput
             style={styles.searchInput}
             placeholder="Search discussions..."
-            placeholderTextColor="#666666"
+            placeholderTextColor="#94A3B8"
             value={searchQuery}
             onChangeText={setSearchQuery}
           />
         </View>
-        <TouchableOpacity style={styles.filterButton}>
-          <Filter size={20} color="#666666" />
-        </TouchableOpacity>
       </View>
 
       {/* Categories */}
@@ -441,11 +435,11 @@ export default function ForumScreen() {
               key={category.id}
               style={[
                 styles.categoryButton,
-                { backgroundColor: isActive ? '#4169E1' : category.color },
+                { backgroundColor: isActive ? '#ffc857' : '#1E293B' },
               ]}
               onPress={() => setActiveCategory(category.name)}
             >
-              <IconComponent size={20} color={isActive ? '#FFFFFF' : '#000000'} />
+              <IconComponent size={20} color={isActive ? '#0F172A' : '#94A3B8'} />
               <Text style={[styles.categoryText, isActive && styles.activeCategoryText]}>
                 {category.name}
               </Text>
@@ -460,12 +454,12 @@ export default function ForumScreen() {
           <Text style={styles.sectionTitle}>Trending Discussions</Text>
           <TouchableOpacity style={styles.seeAllButton} onPress={() => debouncedRouter.push('/forum/trending')}>
             <Text style={styles.seeAllText}>See All</Text>
-            <ChevronRight size={16} color="#666666" />
+            <ChevronRight size={16} color="#64748B" />
           </TouchableOpacity>
         </View>
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.trendingContent}>
           {trendingLoading && (
-            <ActivityIndicator style={{ marginLeft:16 }} size="small" color="#4169E1" />
+            <ActivityIndicator style={{ marginLeft:16 }} size="small" color="#0F172A" />
           )}
           {!trendingLoading && trendingDiscussions.length === 0 && (
             <Text style={styles.emptyText}>No trending data</Text>
@@ -522,7 +516,7 @@ export default function ForumScreen() {
                 <Text style={styles.discussionAuthorRole}>Member</Text>
               </View>
               <View style={styles.discussionCategory}>
-                <Hash size={12} color="#4169E1" />
+                <Hash size={12} color="#92400E" />
                 <Text style={styles.discussionCategoryText}>{discussion.category}</Text>
               </View>
             </View>
@@ -531,23 +525,23 @@ export default function ForumScreen() {
             <View style={styles.discussionFooter}>
               <View style={styles.discussionEngagement}>
                 <View style={styles.engagementItem}>
-                  <ThumbsUp size={14} color={likedMap[discussion.id] ? '#4169E1' : '#666666'} fill={likedMap[discussion.id] ? '#4169E1' : 'none'} />
+                  <ThumbsUp size={14} color={likedMap[discussion.id] ? '#ffc857' : '#64748B'} fill={likedMap[discussion.id] ? '#ffc857' : 'none'} />
                   <Text style={styles.engagementCount}>{discussion.likes_count}</Text>
                 </View>
                 <View style={styles.engagementItem}>
-                  <MessagesSquare size={14} color="#666666" />
+                  <MessagesSquare size={14} color="#64748B" />
                   <Text style={styles.engagementCount}>{discussion.comments_count}</Text>
                 </View>
               </View>
               <View style={styles.discussionActions}>
                 <TouchableOpacity style={styles.actionButton} onPress={() => handleToggleLike(discussion)}>
-                  <ThumbsUp size={20} color={likedMap[discussion.id] ? '#4169E1' : '#666666'} fill={likedMap[discussion.id] ? '#4169E1' : 'none'} />
+                  <ThumbsUp size={20} color={likedMap[discussion.id] ? '#ffc857' : '#64748B'} fill={likedMap[discussion.id] ? '#ffc857' : 'none'} />
                 </TouchableOpacity>
                 <TouchableOpacity style={styles.actionButton} onPress={() => handleShare(discussion)}>
-                  <Share2 size={20} color="#666666" />
+                  <Share2 size={20} color="#64748B" />
                 </TouchableOpacity>
                 <TouchableOpacity style={styles.actionButton} onPress={() => handleToggleSave(discussion)}>
-                  <Star size={20} color={savedMap[discussion.id] ? '#14B8A6' : '#666666'} fill={savedMap[discussion.id] ? '#14B8A6' : 'none'} />
+                  <Star size={20} color={savedMap[discussion.id] ? '#ffc857' : '#64748B'} fill={savedMap[discussion.id] ? '#ffc857' : 'none'} />
                 </TouchableOpacity>
               </View>
             </View>
@@ -558,11 +552,11 @@ export default function ForumScreen() {
           <View style={{ paddingHorizontal: 16, paddingVertical: 8 }}>
             <TouchableOpacity style={[styles.seeAllButton, { alignSelf: 'center' }]} onPress={() => loadDiscussions(false)} disabled={loadingMore}>
               {loadingMore ? (
-                <ActivityIndicator size="small" color="#4169E1" />
+                <ActivityIndicator size="small" color="#0F172A" />
               ) : (
                 <>
                   <Text style={styles.seeAllText}>Load more</Text>
-                  <ChevronRight size={16} color="#666666" />
+                  <ChevronRight size={16} color="#64748B" />
                 </>
               )}
             </TouchableOpacity>
@@ -576,11 +570,11 @@ export default function ForumScreen() {
           <Text style={styles.sectionTitle}>Active Members</Text>
           <TouchableOpacity style={styles.seeAllButton} onPress={() => debouncedRouter.push('/forum/active')}>
             <Text style={styles.seeAllText}>See All</Text>
-            <ChevronRight size={16} color="#666666" />
+            <ChevronRight size={16} color="#64748B" />
           </TouchableOpacity>
         </View>
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.membersContent}>
-          {activeLoading && <ActivityIndicator style={{ marginLeft:16 }} size="small" color="#4169E1" />}
+          {activeLoading && <ActivityIndicator style={{ marginLeft:16 }} size="small" color="#0F172A" />}
           {!activeLoading && activeUsers.length === 0 && (
             <Text style={styles.emptyText}>No active users</Text>
           )}
@@ -670,7 +664,7 @@ async function handleToggleSaveInternal(
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#FFFFFF',
+    backgroundColor: '#F8F9FA',
   },
   header: {
     flexDirection: 'row',
@@ -679,9 +673,9 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingTop: 60,
     paddingBottom: 16,
-    backgroundColor: '#FFFFFF',
-    borderBottomWidth: 1,
-    borderBottomColor: '#E5E7EB',
+    backgroundColor: '#0F172A',
+    borderBottomWidth: 0,
+    borderBottomColor: '#1E293B',
     marginTop: -800,
     paddingTop: 860,
   },
@@ -689,14 +683,14 @@ const styles = StyleSheet.create({
   headerSideRight: { width: 120, alignItems: 'flex-end' },
   backButton: { padding: 8 },
   headerCenter: { flex: 1, alignItems: 'center' },
-  headerTitle: { fontSize: 20, fontFamily: 'Inter-SemiBold', color: '#111827' },
-  headerSubtitle: { marginTop: 2, fontSize: 12, color: '#6B7280', fontFamily: 'Inter-Regular' },
+  headerTitle: { fontSize: 20, fontFamily: 'Inter-SemiBold', color: '#FFFFFF' },
+  headerSubtitle: { marginTop: 2, fontSize: 12, color: '#94A3B8', fontFamily: 'Inter-Regular' },
   headerActions: { flexDirection: 'row', gap: 8, justifyContent: 'flex-end' },
   iconButton: {
     width: 36,
     height: 36,
     borderRadius: 18,
-    backgroundColor: '#F3F4F6',
+    backgroundColor: '#1E293B',
     justifyContent: 'center',
     alignItems: 'center',
   },
@@ -704,22 +698,25 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     padding: 16,
     gap: 12,
+    backgroundColor: '#F8F9FA',
   },
   searchInputContainer: {
     flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#F8F9FA',
+    backgroundColor: '#FFFFFF',
     borderRadius: 12,
     paddingHorizontal: 16,
     height: 48,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
   },
   searchInput: {
     flex: 1,
     marginLeft: 12,
     fontSize: 16,
     fontFamily: 'Inter-Regular',
-    color: '#000000',
+    color: '#0F172A',
   },
   filterButton: {
     width: 48,
@@ -750,10 +747,10 @@ const styles = StyleSheet.create({
   categoryText: {
     fontSize: 14,
     fontFamily: 'Inter-Regular',
-    color: '#000000',
+    color: '#94A3B8',
   },
   activeCategoryText: {
-    color: '#FFFFFF',
+    color: '#0F172A',
     fontFamily: 'Inter-SemiBold',
   },
   section: {
@@ -769,7 +766,7 @@ const styles = StyleSheet.create({
   sectionTitle: {
     fontSize: 18,
     fontFamily: 'Inter-SemiBold',
-    color: '#000000',
+    color: '#0F172A',
   },
   seeAllButton: {
     flexDirection: 'row',
@@ -779,7 +776,7 @@ const styles = StyleSheet.create({
   seeAllText: {
     fontSize: 14,
     fontFamily: 'Inter-Regular',
-    color: '#666666',
+    color: '#64748B',
   },
   trendingContent: {
     paddingHorizontal: 16,
@@ -792,15 +789,15 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
     backgroundColor: '#FFFFFF',
     borderWidth: 1,
-    borderColor: '#F3F4F6',
-    shadowColor: '#000000',
+    borderColor: '#E2E8F0',
+    shadowColor: '#0F172A',
     shadowOffset: {
       width: 0,
-      height: 2,
+      height: 4,
     },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
+    shadowOpacity: 0.08,
+    shadowRadius: 12,
+    elevation: 4,
     padding: 16,
   },
   accentBar: { height: 4, borderTopLeftRadius: 16, borderTopRightRadius: 16, marginHorizontal: -16, marginTop: -16, marginBottom: 12 },
@@ -815,20 +812,22 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   rankBadge: {
-    backgroundColor: '#EEF2FF',
+    backgroundColor: '#FFFBF0',
     paddingHorizontal: 8,
     paddingVertical: 4,
     borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#FFD700',
   },
   rankText: {
     fontSize: 12,
     fontFamily: 'Inter-SemiBold',
-    color: '#3730A3',
+    color: '#92400E',
   },
   chip: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#EBF0FF',
+    backgroundColor: '#F1F5F9',
     paddingHorizontal: 8,
     paddingVertical: 4,
     borderRadius: 12,
@@ -837,12 +836,12 @@ const styles = StyleSheet.create({
   chipText: {
     fontSize: 12,
     fontFamily: 'Inter-SemiBold',
-    color: '#111827',
+    color: '#0F172A',
   },
   trendingTitle: {
     fontSize: 18,
     fontFamily: 'Inter-SemiBold',
-    color: '#111827',
+    color: '#0F172A',
     marginBottom: 8,
   },
   authorRow: {
@@ -859,11 +858,11 @@ const styles = StyleSheet.create({
   authorNameDark: {
     fontSize: 14,
     fontFamily: 'Inter-SemiBold',
-    color: '#111827',
+    color: '#0F172A',
     maxWidth: 180,
   },
-  dot: { marginHorizontal: 6, color: '#9CA3AF' },
-  timeText: { fontSize: 12, color: '#6B7280', fontFamily: 'Inter-Regular' },
+  dot: { marginHorizontal: 6, color: '#94A3B8' },
+  timeText: { fontSize: 12, color: '#64748B', fontFamily: 'Inter-Regular' },
   metricRow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -873,7 +872,7 @@ const styles = StyleSheet.create({
   metricPill: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#F3F4F6',
+    backgroundColor: '#F8F9FA',
     paddingHorizontal: 10,
     paddingVertical: 6,
     borderRadius: 999,
@@ -882,7 +881,7 @@ const styles = StyleSheet.create({
   metricText: {
     fontSize: 12,
     fontFamily: 'Inter-SemiBold',
-    color: '#1F2937',
+    color: '#0F172A',
   },
   engagementItem: {
     flexDirection: 'row',
@@ -926,38 +925,42 @@ const styles = StyleSheet.create({
   discussionAuthorName: {
     fontSize: 14,
     fontFamily: 'Inter-SemiBold',
-    color: '#000000',
+    color: '#0F172A',
   },
   discussionAuthorRole: {
     fontSize: 12,
     fontFamily: 'Inter-Regular',
-    color: '#666666',
+    color: '#64748B',
   },
   discussionCategory: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#EBF0FF',
+    backgroundColor: '#FFFBF0',
     paddingHorizontal: 8,
     paddingVertical: 4,
     borderRadius: 12,
     gap: 4,
+    borderWidth: 1,
+    borderColor: '#FFD700',
   },
   discussionCategoryText: {
     fontSize: 12,
     fontFamily: 'Inter-SemiBold',
-    color: '#4169E1',
+    color: '#92400E',
   },
   discussionTitle: {
     fontSize: 16,
     fontFamily: 'Inter-SemiBold',
-    color: '#000000',
+    color: '#0F172A',
     marginBottom: 8,
+    lineHeight: 24,
   },
   discussionPreview: {
     fontSize: 14,
     fontFamily: 'Inter-Regular',
-    color: '#666666',
+    color: '#64748B',
     marginBottom: 12,
+    lineHeight: 20,
   },
   discussionFooter: {
     flexDirection: 'row',
@@ -971,7 +974,7 @@ const styles = StyleSheet.create({
   engagementCount: {
     fontSize: 14,
     fontFamily: 'Inter-Regular',
-    color: '#666666',
+    color: '#64748B',
   },
   discussionActions: {
     flexDirection: 'row',
@@ -987,17 +990,19 @@ const styles = StyleSheet.create({
   memberCard: {
     alignItems: 'center',
     backgroundColor: '#FFFFFF',
-    borderRadius: 12,
+    borderRadius: 16,
     padding: 16,
     width: 140,
-    shadowColor: '#000000',
+    shadowColor: '#0F172A',
     shadowOffset: {
       width: 0,
-      height: 2,
+      height: 4,
     },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
+    shadowOpacity: 0.08,
+    shadowRadius: 12,
+    elevation: 4,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
   },
   memberAvatar: {
     width: 64,
@@ -1008,47 +1013,49 @@ const styles = StyleSheet.create({
   memberName: {
     fontSize: 14,
     fontFamily: 'Inter-SemiBold',
-    color: '#000000',
+    color: '#0F172A',
     textAlign: 'center',
     marginBottom: 4,
   },
   memberRole: {
     fontSize: 12,
     fontFamily: 'Inter-Regular',
-    color: '#666666',
+    color: '#64748B',
     textAlign: 'center',
     marginBottom: 8,
   },
   contributionBadge: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#EBF0FF',
+    backgroundColor: '#FFFBF0',
     paddingHorizontal: 8,
     paddingVertical: 4,
     borderRadius: 12,
     gap: 4,
+    borderWidth: 1,
+    borderColor: '#FFD700',
   },
   contributionText: {
     fontSize: 12,
     fontFamily: 'Inter-SemiBold',
-    color: '#4169E1',
+    color: '#92400E',
   },
   loadingContainer: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: '#FFFFFF',
+    backgroundColor: '#F8F9FA',
   },
   loadingText: {
     marginTop: 16,
     fontSize: 16,
     fontFamily: 'Inter-Regular',
-    color: '#666666',
+    color: '#64748B',
   },
   emptyText: {
     fontSize: 14,
     fontFamily: 'Inter-Regular',
-    color: '#666666',
+    color: '#64748B',
     textAlign: 'center',
     paddingVertical: 20,
   },

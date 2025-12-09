@@ -25,6 +25,8 @@ import { debouncedRouter } from '@/utils/navigationDebounce';;
 import * as WebBrowser from 'expo-web-browser';
 import * as ImagePicker from 'expo-image-picker';
 import * as DocumentPicker from 'expo-document-picker';
+import * as MediaLibrary from 'expo-media-library';
+import * as Sharing from 'expo-sharing';
 // Use legacy FileSystem import to avoid deprecated getInfoAsync warning until full migration to new File/Directory API
 import * as FileSystem from 'expo-file-system/legacy';
 import * as LinkingExpo from 'expo-linking';
@@ -113,6 +115,7 @@ export default function DiscussionDetailScreen() {
   const [replyTo, setReplyTo] = useState<Comment | null>(null);
   const inputRef = useRef<TextInput>(null);
   const [expandedThreads, setExpandedThreads] = useState<Set<string>>(new Set());
+  const [expandedComments, setExpandedComments] = useState<Set<string>>(new Set());
   const MAX_FILE_BYTES = 10 * 1024 * 1024; // 10MB
 
   // Pagination state for comments
@@ -605,6 +608,20 @@ export default function DiscussionDetailScreen() {
     const children = childrenByParent.get(comment.id) || [];
     const hasChildren = children.length > 0;
     const isExpanded = expandedThreads.has(comment.id);
+    const isCommentExpanded = expandedComments.has(comment.id);
+    const commentLines = comment.content.split('\n');
+    const isLongComment = commentLines.length > 5 || comment.content.length > 300;
+    const shouldTruncate = isLongComment && !isCommentExpanded;
+    
+    let displayContent = comment.content;
+    if (shouldTruncate) {
+      // Show first 5 lines or ~300 characters
+      const truncatedLines = commentLines.slice(0, 5).join('\n');
+      displayContent = truncatedLines.length > 300 
+        ? truncatedLines.substring(0, 300) + '...' 
+        : truncatedLines + (commentLines.length > 5 ? '...' : '');
+    }
+    
     return (
       <View key={comment.id} style={{ paddingLeft: depth > 0 ? depth * 24 : 0 }}>
         <View style={[styles.commentCard]}>
@@ -631,7 +648,29 @@ export default function DiscussionDetailScreen() {
             </View>
           </View>
 
-          <Text style={styles.commentContent}>{comment.content}</Text>
+          <Text style={styles.commentContent}>{displayContent}</Text>
+          
+          {/* Show More/Less Button */}
+          {isLongComment && (
+            <TouchableOpacity
+              onPress={() => setExpandedComments(prev => {
+                const next = new Set(prev);
+                if (next.has(comment.id)) {
+                  next.delete(comment.id);
+                } else {
+                  next.add(comment.id);
+                }
+                return next;
+              })}
+              style={styles.showMoreButton}
+              accessibilityLabel={isCommentExpanded ? 'Show less' : 'Show more'}
+              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+            >
+              <Text style={styles.showMoreText}>
+                {isCommentExpanded ? 'Show less' : 'Show more'}
+              </Text>
+            </TouchableOpacity>
+          )}
 
           {/* Attachments */}
           {comment.forum_attachments && comment.forum_attachments.length > 0 && (
@@ -641,6 +680,8 @@ export default function DiscussionDetailScreen() {
                   {isImageType(attachment.file_type) ? (
                     <TouchableOpacity
                       onPress={() => openImageViewerFromComment(comment.id, attachment.id)}
+                      onLongPress={() => showMediaOptions(attachment.file_url, 'image', attachment.file_name)}
+                      delayLongPress={500}
                       activeOpacity={0.8}
                       accessibilityLabel={`Open image attachment ${attachment.file_name} in viewer`}
                       accessible
@@ -652,6 +693,8 @@ export default function DiscussionDetailScreen() {
                   ) : (
                     <TouchableOpacity
                       onPress={() => openDocument(attachment.file_url)}
+                      onLongPress={() => showMediaOptions(attachment.file_url, 'document', attachment.file_name)}
+                      delayLongPress={500}
                       activeOpacity={0.8}
                       accessibilityLabel={`Open document attachment ${attachment.file_name}`}
                       accessible
@@ -660,7 +703,7 @@ export default function DiscussionDetailScreen() {
                         <View style={[styles.docBadge, { backgroundColor: badgeColorForExt(getExt(attachment.file_name)) }] }>
                           <Text style={styles.docBadgeText}>{getExt(attachment.file_name).toUpperCase()}</Text>
                         </View>
-                        <FileText size={20} color="#4169E1" />
+                        <FileText size={20} color="#0F172A" />
                         <Text style={styles.documentName} numberOfLines={1}>
                           {attachment.file_name}
                         </Text>
@@ -682,8 +725,8 @@ export default function DiscussionDetailScreen() {
             >
               <ThumbsUp
                 size={16}
-                color={likedComments.has(comment.id) ? '#4169E1' : '#666666'}
-                fill={likedComments.has(comment.id) ? '#4169E1' : 'none'}
+                color={likedComments.has(comment.id) ? '#ffc857' : '#666666'}
+                fill={likedComments.has(comment.id) ? '#ffc857' : 'none'}
               />
               <Text style={[styles.commentLikeText, likedComments.has(comment.id) && styles.commentLikeTextActive]}>
                 {comment.likes_count || 0}
@@ -1172,10 +1215,90 @@ export default function DiscussionDetailScreen() {
     }
   };
 
+  const showMediaOptions = (mediaUrl: string, type: 'image' | 'document', fileName?: string) => {
+    const options = type === 'image' 
+      ? ['Save to Gallery', 'Share', 'Cancel']
+      : ['Save to Files', 'Share', 'Cancel'];
+
+    Alert.alert(
+      type === 'image' ? 'Image Options' : 'Document Options',
+      'Choose an action',
+      [
+        {
+          text: options[0],
+          onPress: async () => {
+            try {
+              if (type === 'image') {
+                const { status } = await MediaLibrary.requestPermissionsAsync();
+                if (status !== 'granted') {
+                  Alert.alert('Permission needed', 'Please grant media library permissions');
+                  return;
+                }
+
+                const fileUri = FileSystem.documentDirectory + (fileName || `image_${Date.now()}.jpg`);
+                const downloadResult = await FileSystem.downloadAsync(mediaUrl, fileUri);
+                
+                if (downloadResult.status === 200) {
+                  await MediaLibrary.saveToLibraryAsync(downloadResult.uri);
+                  Alert.alert('Success', 'Image saved to gallery');
+                }
+              } else {
+                const fileUri = FileSystem.documentDirectory + (fileName || `document_${Date.now()}.pdf`);
+                const downloadResult = await FileSystem.downloadAsync(mediaUrl, fileUri);
+                
+                if (downloadResult.status === 200) {
+                  const isAvailable = await Sharing.isAvailableAsync();
+                  if (isAvailable) {
+                    await Sharing.shareAsync(downloadResult.uri, {
+                      mimeType: 'application/pdf',
+                      dialogTitle: 'Save Document',
+                      UTI: 'public.item'
+                    });
+                  } else {
+                    Alert.alert('Success', 'Document downloaded');
+                  }
+                }
+              }
+            } catch (error) {
+              console.error('Error saving:', error);
+              Alert.alert('Error', `Failed to save ${type}`);
+            }
+          },
+        },
+        {
+          text: options[1],
+          onPress: async () => {
+            try {
+              const isAvailable = await Sharing.isAvailableAsync();
+              if (!isAvailable) {
+                Alert.alert('Error', 'Sharing is not available');
+                return;
+              }
+
+              const fileUri = FileSystem.documentDirectory + (fileName || `file_${Date.now()}`);
+              const downloadResult = await FileSystem.downloadAsync(mediaUrl, fileUri);
+              
+              if (downloadResult.status === 200) {
+                await Sharing.shareAsync(downloadResult.uri);
+              }
+            } catch (error) {
+              console.error('Error sharing:', error);
+              Alert.alert('Error', 'Failed to share file');
+            }
+          },
+        },
+        {
+          text: options[2],
+          style: 'cancel',
+        },
+      ]
+    );
+  };
+
   if (loading) {
     return (
       <View style={[styles.container, styles.loadingContainer]}>
-        <ActivityIndicator size="large" color="#4169E1" />
+        <ActivityIndicator size="large" color="#0F172A" />
         <Text style={styles.loadingText}>Loading discussion...</Text>
       </View>
     );
@@ -1207,15 +1330,15 @@ export default function DiscussionDetailScreen() {
       {/* Header */}
       <View style={styles.header}>
         <TouchableOpacity onPress={() => debouncedRouter.back()} style={styles.backButton}>
-          <ArrowLeft size={24} color="#111827" />
+          <ArrowLeft size={24} color="#FFFFFF" />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Discussion</Text>
         <View style={styles.headerActionsRight}>
           <TouchableOpacity onPress={handleShare} style={styles.iconButton} accessibilityLabel="Share discussion">
-            <Share2 size={20} color="#111827" />
+            <Share2 size={20} color="#FFFFFF" />
           </TouchableOpacity>
           <TouchableOpacity onPress={queueBookmarkToggle} style={styles.iconButton} accessibilityLabel={isBookmarked ? 'Remove bookmark' : 'Bookmark discussion'}>
-            <Star size={20} color={isBookmarked ? '#14B8A6' : '#111827'} fill={isBookmarked ? '#14B8A6' : 'none'} />
+            <Star size={20} color={isBookmarked ? '#ffc857' : '#FFFFFF'} fill={isBookmarked ? '#ffc857' : 'none'} />
           </TouchableOpacity>
         </View>
       </View>
@@ -1229,8 +1352,8 @@ export default function DiscussionDetailScreen() {
           <RefreshControl
             refreshing={refreshing}
             onRefresh={onRefresh}
-            colors={["#4169E1"]}
-            tintColor="#4169E1"
+            colors={["#0F172A"]}
+            tintColor="#0F172A"
           />
         }
       >
@@ -1246,7 +1369,7 @@ export default function DiscussionDetailScreen() {
               <Image source={{ uri: discussion.profiles?.avatar_url || 'https://via.placeholder.com/40' }} style={styles.authorAvatar} />
               <View style={styles.authorInfo}>
                 <Text style={styles.authorName}>{discussion.profiles?.full_name || 'Anonymous'}</Text>
-                <Text style={styles.authorRole}>@{discussion.profiles?.username || 'user'}</Text>
+                <Text style={styles.authorRole}>Member</Text>
               </View>
             </TouchableOpacity>
             <View style={styles.categoryTag}>
@@ -1266,6 +1389,8 @@ export default function DiscussionDetailScreen() {
                   {isImageType(att.file_type) ? (
                     <TouchableOpacity
                       onPress={() => openImageViewerFromDiscussion(att.id)}
+                      onLongPress={() => showMediaOptions(att.file_url, 'image', att.file_name)}
+                      delayLongPress={500}
                       activeOpacity={0.8}
                       accessibilityLabel={`Open image attachment ${att.file_name} in viewer`}
                       accessible
@@ -1275,6 +1400,8 @@ export default function DiscussionDetailScreen() {
                   ) : (
                     <TouchableOpacity
                       onPress={() => openDocument(att.file_url)}
+                      onLongPress={() => showMediaOptions(att.file_url, 'document', att.file_name)}
+                      delayLongPress={500}
                       activeOpacity={0.8}
                       accessibilityLabel={`Open document attachment ${att.file_name}`}
                       accessible
@@ -1303,8 +1430,8 @@ export default function DiscussionDetailScreen() {
             >
               <ThumbsUp
                 size={20}
-                color={isLiked ? '#4169E1' : '#666666'}
-                fill={isLiked ? '#4169E1' : 'none'}
+                color={isLiked ? '#ffc857' : '#666666'}
+                fill={isLiked ? '#ffc857' : 'none'}
               />
               <Text style={[styles.actionText, isLiked && styles.actionTextActive]}>
                 {discussion.likes_count || 0}
@@ -1340,8 +1467,8 @@ export default function DiscussionDetailScreen() {
             >
               <Star
                 size={20}
-                color={isBookmarked ? '#14B8A6' : '#666666'}
-                fill={isBookmarked ? '#14B8A6' : 'none'}
+                color={isBookmarked ? '#ffc857' : '#666666'}
+                fill={isBookmarked ? '#ffc857' : 'none'}
               />
             </TouchableOpacity>
           </View>
@@ -1378,7 +1505,7 @@ export default function DiscussionDetailScreen() {
                 accessible
               >
                 {loadingMore ? (
-                  <ActivityIndicator size="small" color="#4169E1" />
+                  <ActivityIndicator size="small" color="#0F172A" />
                 ) : (
                   <Text style={styles.loadMoreText}>Load more</Text>
                 )}
@@ -1466,39 +1593,54 @@ export default function DiscussionDetailScreen() {
           </TouchableOpacity>
         </View>
       </View>
-      {/* Image Viewer Modal */}
+      {/* Image Viewer Modal - Fullscreen */}
       <Modal
         visible={imageViewerVisible}
-        transparent
+        transparent={false}
         animationType="fade"
         onRequestClose={() => setImageViewerVisible(false)}
+        statusBarTranslucent
       >
-        <View style={styles.viewerBackdrop}>
-          <View style={styles.viewerContent}>
+        <View style={styles.fullscreenViewerContainer}>
+          <TouchableOpacity
+            activeOpacity={0.9}
+            onLongPress={() => {
+              const currentImage = imageViewerImages[imageViewerIndex];
+              showMediaOptions(currentImage, 'image', `image_${Date.now()}.jpg`);
+            }}
+            delayLongPress={500}
+            style={styles.fullscreenImageWrapper}
+          >
             <Image
               source={{ uri: imageViewerImages[imageViewerIndex] }}
-              style={styles.viewerImage}
+              style={styles.fullscreenImage}
+              resizeMode="contain"
             />
-            <View style={styles.viewerControls}>
-              <TouchableOpacity
-                style={[styles.viewerNavButton, imageViewerIndex === 0 && styles.viewerNavButtonDisabled]}
-                disabled={imageViewerIndex === 0}
-                onPress={() => setImageViewerIndex(i => Math.max(0, i - 1))}
-              >
-                <Text style={styles.viewerNavText}>{'<'} Prev</Text>
-              </TouchableOpacity>
-              <Text style={styles.viewerCounter}>{imageViewerIndex + 1} / {imageViewerImages.length}</Text>
-              <TouchableOpacity
-                style={[styles.viewerNavButton, imageViewerIndex === imageViewerImages.length - 1 && styles.viewerNavButtonDisabled]}
-                disabled={imageViewerIndex === imageViewerImages.length - 1}
-                onPress={() => setImageViewerIndex(i => Math.min(imageViewerImages.length - 1, i + 1))}
-              >
-                <Text style={styles.viewerNavText}>Next {'>'}</Text>
-              </TouchableOpacity>
-            </View>
-            <TouchableOpacity style={styles.viewerClose} onPress={() => setImageViewerVisible(false)}>
-              <Text style={styles.viewerCloseText}>Close</Text>
+          </TouchableOpacity>
+          
+          <View style={styles.fullscreenControls}>
+            <TouchableOpacity
+              style={[styles.fullscreenNavButton, imageViewerIndex === 0 && styles.viewerNavButtonDisabled]}
+              disabled={imageViewerIndex === 0}
+              onPress={() => setImageViewerIndex(i => Math.max(0, i - 1))}
+            >
+              <Text style={styles.fullscreenNavText}>{'<'} Prev</Text>
             </TouchableOpacity>
+            <Text style={styles.fullscreenCounter}>{imageViewerIndex + 1} / {imageViewerImages.length}</Text>
+            <TouchableOpacity
+              style={[styles.fullscreenNavButton, imageViewerIndex === imageViewerImages.length - 1 && styles.viewerNavButtonDisabled]}
+              disabled={imageViewerIndex === imageViewerImages.length - 1}
+              onPress={() => setImageViewerIndex(i => Math.min(imageViewerImages.length - 1, i + 1))}
+            >
+              <Text style={styles.fullscreenNavText}>Next {'>'}</Text>
+            </TouchableOpacity>
+          </View>
+          
+          <View style={styles.fullscreenCloseContainer}>
+            <TouchableOpacity style={styles.fullscreenCloseButton} onPress={() => setImageViewerVisible(false)}>
+              <Text style={styles.fullscreenCloseText}>Close</Text>
+            </TouchableOpacity>
+            <Text style={styles.fullscreenHint}>Long press to save</Text>
           </View>
         </View>
       </Modal>
@@ -1518,9 +1660,9 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingTop: 60,
     paddingBottom: 16,
-    backgroundColor: '#FFFFFF',
-    borderBottomWidth: 1,
-    borderBottomColor: '#E5E7EB',
+    backgroundColor: '#0F172A',
+    borderBottomWidth: 0,
+    borderBottomColor: '#1E293B',
   },
   backButton: {
     padding: 8,
@@ -1528,7 +1670,7 @@ const styles = StyleSheet.create({
   headerTitle: {
     fontSize: 18,
     fontWeight: '700',
-    color: '#111827',
+    color: '#FFFFFF',
   },
   moreButton: {
     padding: 8,
@@ -1544,7 +1686,7 @@ const styles = StyleSheet.create({
     borderRadius: 18,
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: '#F3F4F6',
+    backgroundColor: '#1E293B',
   },
   content: {
     flex: 1,
@@ -1572,7 +1714,7 @@ const styles = StyleSheet.create({
   authorName: {
     fontSize: 16,
     fontWeight: '600',
-    color: '#000000',
+    color: '#0F172A',
   },
   authorRole: {
     fontSize: 14,
@@ -1582,27 +1724,29 @@ const styles = StyleSheet.create({
   categoryTag: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#EBF0FF',
+    backgroundColor: '#FFFBF0',
     paddingHorizontal: 12,
     paddingVertical: 6,
     borderRadius: 16,
     gap: 4,
+    borderWidth: 1,
+    borderColor: '#ffc857',
   },
   categoryText: {
     fontSize: 12,
     fontWeight: '600',
-    color: '#4169E1',
+    color: '#92400E',
   },
   discussionTitle: {
     fontSize: 20,
     fontWeight: '700',
-    color: '#000000',
+    color: '#0F172A',
     marginBottom: 12,
     lineHeight: 28,
   },
   discussionContent: {
     fontSize: 15,
-    color: '#374151',
+    color: '#475569',
     lineHeight: 24,
     marginBottom: 16,
   },
@@ -1625,7 +1769,7 @@ const styles = StyleSheet.create({
     fontWeight: '500',
   },
   actionTextActive: {
-    color: '#4169E1',
+    color: '#ffc857',
   },
   timeAgo: {
     fontSize: 13,
@@ -1666,7 +1810,7 @@ const styles = StyleSheet.create({
   commentsTitle: {
     fontSize: 18,
     fontWeight: '700',
-    color: '#000000',
+    color: '#0F172A',
     marginBottom: 16,
   },
   commentCard: {
@@ -1697,7 +1841,7 @@ const styles = StyleSheet.create({
   commentAuthorName: {
     fontSize: 14,
     fontWeight: '600',
-    color: '#000000',
+    color: '#0F172A',
   },
   commentAuthorRole: {
     fontSize: 12,
@@ -1714,7 +1858,7 @@ const styles = StyleSheet.create({
   },
   commentContent: {
     fontSize: 14,
-    color: '#374151',
+    color: '#475569',
     lineHeight: 21,
     marginLeft: 46,
   },
@@ -1801,16 +1945,18 @@ const styles = StyleSheet.create({
     fontWeight: '500',
   },
   commentLikeTextActive: {
-    color: '#4169E1',
+    color: '#ffc857',
   },
   replyCountBadge: {
-    backgroundColor: '#EBF0FF',
+    backgroundColor: '#FFFBF0',
     borderRadius: 10,
     paddingHorizontal: 6,
     paddingVertical: 2,
+    borderWidth: 1,
+    borderColor: '#ffc857',
   },
   replyCountText: {
-    color: '#4169E1',
+    color: '#92400E',
     fontSize: 11,
     fontWeight: '700',
   },
@@ -1826,6 +1972,16 @@ const styles = StyleSheet.create({
   replyToggleText: {
     color: '#374151',
     fontSize: 12,
+    fontWeight: '600',
+  },
+  showMoreButton: {
+    marginLeft: 46,
+    marginTop: 8,
+    alignSelf: 'flex-start',
+  },
+  showMoreText: {
+    color: '#ffc857',
+    fontSize: 13,
     fontWeight: '600',
   },
   inputContainer: {
@@ -1847,7 +2003,7 @@ const styles = StyleSheet.create({
     paddingTop: 10,
   },
   replyContextText: {
-    color: '#4169E1',
+    color: '#ffc857',
     fontWeight: '600',
   },
   replyCancelText: {
@@ -1906,11 +2062,11 @@ const styles = StyleSheet.create({
     alignItems: 'flex-end',
     paddingHorizontal: 16,
     paddingTop: 12,
-    gap: 8,
+    gap: 4,
   },
   attachButton: {
-    width: 40,
-    height: 40,
+    width: 32,
+    height: 32,
     justifyContent: 'center',
     alignItems: 'center',
   },
@@ -2015,6 +2171,71 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '600',
   },
+  // Fullscreen Image Viewer Styles
+  fullscreenViewerContainer: {
+    flex: 1,
+    backgroundColor: '#000000',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  fullscreenImageWrapper: {
+    flex: 1,
+    width: '100%',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  fullscreenImage: {
+    width: '100%',
+    height: '100%',
+  },
+  fullscreenControls: {
+    position: 'absolute',
+    bottom: 100,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    width: '100%',
+    paddingHorizontal: 20,
+  },
+  fullscreenNavButton: {
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    backgroundColor: 'rgba(255, 255, 255, 0.2)',
+    borderRadius: 8,
+  },
+  fullscreenNavText: {
+    color: '#FFFFFF',
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  fullscreenCounter: {
+    color: '#FFFFFF',
+    fontSize: 16,
+    fontWeight: '500',
+  },
+  fullscreenCloseContainer: {
+    position: 'absolute',
+    bottom: 40,
+    alignItems: 'center',
+    width: '100%',
+  },
+  fullscreenCloseButton: {
+    paddingHorizontal: 24,
+    paddingVertical: 12,
+    backgroundColor: '#DC2626',
+    borderRadius: 8,
+    marginBottom: 8,
+  },
+  fullscreenCloseText: {
+    color: '#FFFFFF',
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  fullscreenHint: {
+    color: 'rgba(255, 255, 255, 0.7)',
+    fontSize: 12,
+    fontStyle: 'italic',
+  },
   // Pagination styles
   loadMoreContainer: {
     paddingTop: 8,
@@ -2024,14 +2245,16 @@ const styles = StyleSheet.create({
   loadMoreButton: {
     paddingHorizontal: 16,
     paddingVertical: 10,
-    backgroundColor: '#EBF0FF',
+    backgroundColor: '#FFFBF0',
     borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#ffc857',
   },
   loadMoreButtonDisabled: {
     opacity: 0.6,
   },
   loadMoreText: {
-    color: '#4169E1',
+    color: '#92400E',
     fontWeight: '600',
   },
   endOfCommentsContainer: {

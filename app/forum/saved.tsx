@@ -3,7 +3,7 @@ import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Image, ActivityIn
 import { useRouter, useFocusEffect } from 'expo-router'
 import { DebouncedTouchable } from '@/components/DebouncedTouchable';
 import { debouncedRouter } from '@/utils/navigationDebounce';;
-import { ArrowLeft, Bookmark, MessageCircle, ThumbsUp } from 'lucide-react-native';
+import { ArrowLeft, Bookmark, MessageCircle, ThumbsUp, Star, MessagesSquare } from 'lucide-react-native';
 import { useAuth } from '@/hooks/useAuth';
 import { supabase } from '@/lib/supabase';
 import { on } from '@/lib/eventBus';
@@ -168,10 +168,10 @@ export default function SavedDiscussionsScreen() {
                 <Image source={{ uri: d.profiles?.avatar_url || 'https://via.placeholder.com/40' }} style={styles.avatar} />
                 <View style={{ flex: 1 }}>
                   <Text style={styles.name}>{d.profiles?.full_name || 'User'}</Text>
-                  <Text style={styles.meta}>@{d.profiles?.username || 'user'} · {getTimeAgo(d.created_at)}</Text>
+                  <Text style={styles.meta}>{getTimeAgo(d.created_at)}</Text>
                 </View>
                 <TouchableOpacity onPress={() => unsave(d.id)} style={styles.unsaveButton} accessibilityLabel="Unsave discussion">
-                  <Star size={20} color="#14B8A6" fill="#14B8A6" />
+                  <Star size={20} color="#ffc857" fill="#ffc857" />
                 </TouchableOpacity>
               </View>
               <Text style={styles.title}>{d.title}</Text>

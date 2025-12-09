@@ -1181,9 +1181,6 @@ export default function HomeScreen() {
                           )}
                           <View style={styles.shareFriendInfo}>
                             <Text style={styles.shareFriendName}>{friend.full_name || 'Unknown'}</Text>
-                            {friend.username && (
-                              <Text style={styles.shareFriendUsername}>@{friend.username}</Text>
-                            )}
                           </View>
                         </View>
                         <View style={styles.shareSendButton}>

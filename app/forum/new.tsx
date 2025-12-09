@@ -277,7 +277,7 @@ export default function NewDiscussion() {
       {/* Header */}
       <View style={styles.header}>
         <TouchableOpacity onPress={() => debouncedRouter.back()} style={styles.backButton}>
-          <ArrowLeft size={24} color="#000000" />
+          <ArrowLeft size={24} color="#FFFFFF" />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>New Discussion</Text>
         <TouchableOpacity
@@ -286,7 +286,7 @@ export default function NewDiscussion() {
           disabled={!title.trim() || !content.trim() || posting}
         >
           {posting ? (
-            <ActivityIndicator size="small" color="#FFFFFF" />
+            <ActivityIndicator size="small" color="#0F172A" />
           ) : (
             <Text style={styles.postButtonText}>Post</Text>
           )}
@@ -359,7 +359,7 @@ export default function NewDiscussion() {
                     <Image source={{ uri: attachment.uri }} style={styles.attachmentImage} />
                   ) : (
                     <View style={styles.attachmentDocument}>
-                      <FileText size={24} color="#4169E1" />
+                      <FileText size={24} color="#0F172A" />
                       <Text style={styles.attachmentName} numberOfLines={1}>
                         {attachment.name}
                       </Text>
@@ -390,7 +390,7 @@ export default function NewDiscussion() {
             onPress={handleImagePick}
             disabled={posting}
           >
-            <ImageIcon size={20} color="#4169E1" />
+            <ImageIcon size={20} color="#0F172A" />
             <Text style={styles.attachButtonText}>Add Image</Text>
           </TouchableOpacity>
           <TouchableOpacity
@@ -398,7 +398,7 @@ export default function NewDiscussion() {
             onPress={handleDocumentPick}
             disabled={posting}
           >
-            <FileText size={20} color="#4169E1" />
+            <FileText size={20} color="#0F172A" />
             <Text style={styles.attachButtonText}>Add Document</Text>
           </TouchableOpacity>
         </View>
@@ -419,9 +419,9 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingTop: Platform.OS === 'ios' ? 60 : 16,
     paddingBottom: 16,
-    backgroundColor: '#FFFFFF',
+    backgroundColor: '#0F172A',
     borderBottomWidth: 1,
-    borderBottomColor: '#E5E7EB',
+    borderBottomColor: '#1E293B',
   },
   backButton: {
     padding: 8,
@@ -429,12 +429,12 @@ const styles = StyleSheet.create({
   headerTitle: {
     fontSize: 18,
     fontWeight: '600',
-    color: '#000000',
+    color: '#FFFFFF',
     flex: 1,
     marginLeft: 8,
   },
   postButton: {
-    backgroundColor: '#4169E1',
+    backgroundColor: '#ffc857',
     paddingHorizontal: 20,
     paddingVertical: 8,
     borderRadius: 20,
@@ -445,7 +445,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#9CA3AF',
   },
   postButtonText: {
-    color: '#FFFFFF',
+    color: '#0F172A',
     fontSize: 16,
     fontWeight: '600',
   },
@@ -459,7 +459,7 @@ const styles = StyleSheet.create({
   label: {
     fontSize: 16,
     fontWeight: '600',
-    color: '#000000',
+    color: '#0F172A',
     marginBottom: 8,
   },
   titleInput: {
@@ -467,14 +467,14 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     padding: 16,
     fontSize: 16,
-    color: '#000000',
+    color: '#0F172A',
   },
   contentInput: {
     backgroundColor: '#F3F4F6',
     borderRadius: 12,
     padding: 16,
     fontSize: 16,
-    color: '#000000',
+    color: '#0F172A',
     minHeight: 200,
   },
   categoriesContainer: {
@@ -484,19 +484,19 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingVertical: 8,
     borderRadius: 20,
-    backgroundColor: '#F3F4F6',
+    backgroundColor: '#1E293B',
     marginRight: 8,
   },
   categoryChipSelected: {
-    backgroundColor: '#4169E1',
+    backgroundColor: '#ffc857',
   },
   categoryChipText: {
     fontSize: 14,
-    color: '#666666',
+    color: '#E2E8F0',
     fontWeight: '500',
   },
   categoryChipTextSelected: {
-    color: '#FFFFFF',
+    color: '#0F172A',
   },
   attachmentsSection: {
     marginBottom: 24,
@@ -568,12 +568,12 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     backgroundColor: '#F3F4F6',
     borderWidth: 1,
-    borderColor: '#4169E1',
+    borderColor: '#0F172A',
     borderStyle: 'dashed',
   },
   attachButtonText: {
     fontSize: 14,
-    color: '#4169E1',
+    color: '#0F172A',
     fontWeight: '500',
   },
 });
