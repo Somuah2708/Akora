@@ -544,6 +544,7 @@ const fetchLocations = useCallback(async () => {
                 contentContainerStyle={styles.optionsScrollContent}
               >
                 <TouchableOpacity
+                  key="all-regions"
                   style={[
                     styles.optionChip,
                     selectedRegion === 'all' && styles.optionChipSelected,
@@ -562,7 +563,7 @@ const fetchLocations = useCallback(async () => {
                     All Ghana
                   </Text>
                 </TouchableOpacity>
-                {regions.map((region) => {
+                {regions.filter(region => region.name !== 'All Ghana').map((region) => {
                   const selected = selectedRegion === region.id;
                   const count = locationCounts.filter(lc => lc.region_id === region.id).reduce((sum, lc) => sum + (lc.item_count || 0), 0);
                   return (
@@ -835,7 +836,7 @@ const fetchLocations = useCallback(async () => {
       >
         <View style={styles.header}>
           <TouchableOpacity onPress={() => debouncedRouter.push('/(tabs)/hub')} style={styles.backButton}>
-            <ArrowLeft size={24} color="#020617" />
+            <ArrowLeft size={24} color="#FFFFFF" />
           </TouchableOpacity>
           <View style={styles.headerTextContainer}>
             <Text style={styles.title}>Products and Services</Text>
@@ -845,7 +846,7 @@ const fetchLocations = useCallback(async () => {
             onPress={() => debouncedRouter.push('/services/saved')} 
             style={styles.bookmarkButton}
           >
-            <Star size={24} color="#020617" />
+            <Star size={24} color="#ffc857" />
           </TouchableOpacity>
         </View>
 
@@ -867,7 +868,7 @@ const fetchLocations = useCallback(async () => {
             )}
           </View>
           <TouchableOpacity style={styles.filterButton} onPress={() => setIsFilterVisible(true)}>
-            <Filter size={20} color="#0F172A" />
+            <Filter size={20} color="#ffc857" />
           </TouchableOpacity>
         </View>
 
@@ -1018,7 +1019,7 @@ const fetchLocations = useCallback(async () => {
           style={styles.floatingButton}
           onPress={handleAddListing}
         >
-          <Plus size={24} color="#FFFFFF" />
+          <Plus size={24} color="#ffc857" />
           <Text style={styles.floatingButtonText}>Add Listing</Text>
         </TouchableOpacity>
       )}
@@ -1041,7 +1042,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingTop: 56,
     paddingBottom: 16,
-    backgroundColor: '#FFFFFF',
+    backgroundColor: '#0F172A',
     marginTop: -800,
     paddingTop: 856,
   },
@@ -1058,17 +1059,18 @@ const styles = StyleSheet.create({
   title: {
     fontSize: 22,
     fontFamily: 'Inter-SemiBold',
-    color: '#020617',
+    color: '#FFFFFF',
   },
   subtitle: {
     fontSize: 13,
     marginTop: 2,
     fontFamily: 'Inter-Regular',
-    color: '#64748B',
+    color: '#ffc857',
   },
   searchContainer: {
     flexDirection: 'row',
     paddingHorizontal: 16,
+    paddingTop: 16,
     paddingBottom: 12,
     gap: 8,
   },
@@ -1094,10 +1096,12 @@ const styles = StyleSheet.create({
   filterButton: {
     width: 48,
     height: 48,
-    backgroundColor: '#E5EDFF',
+    backgroundColor: '#0F172A',
     borderRadius: 12,
     justifyContent: 'center',
     alignItems: 'center',
+    borderWidth: 1,
+    borderColor: '#ffc857',
   },
   filtersScrollContainer: {
     marginBottom: 20,
@@ -1201,8 +1205,8 @@ const styles = StyleSheet.create({
     borderColor: '#E2E8F0',
   },
   optionChipSelected: {
-    backgroundColor: '#4169E1',
-    borderColor: '#4169E1',
+    backgroundColor: '#0F172A',
+    borderColor: '#ffc857',
   },
   optionChipText: {
     fontSize: 13,
@@ -1210,7 +1214,7 @@ const styles = StyleSheet.create({
     color: '#475569',
   },
   optionChipTextSelected: {
-    color: '#FFFFFF',
+    color: '#ffc857',
   },
   filterSubLabel: {
     fontSize: 12,
@@ -1449,23 +1453,25 @@ const styles = StyleSheet.create({
     position: 'absolute',
     bottom: 24,
     right: 24,
-    backgroundColor: '#4169E1',
+    backgroundColor: '#0F172A',
     flexDirection: 'row',
     alignItems: 'center',
-    paddingVertical: 12,
-    paddingHorizontal: 20,
+    paddingVertical: 14,
+    paddingHorizontal: 24,
     borderRadius: 30,
-    elevation: 4,
+    elevation: 8,
     shadowColor: '#000000',
     shadowOffset: {
       width: 0,
-      height: 2,
+      height: 4,
     },
-    shadowOpacity: 0.25,
-    shadowRadius: 4,
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    borderWidth: 2,
+    borderColor: '#ffc857',
   },
   floatingButtonText: {
-    color: '#FFFFFF',
+    color: '#ffc857',
     fontSize: 16,
     fontFamily: 'Inter-SemiBold',
     marginLeft: 8,
@@ -1552,14 +1558,16 @@ const styles = StyleSheet.create({
   },
   applyFilterButton: {
     marginTop: 8,
-    backgroundColor: '#4169E1',
-    paddingVertical: 12,
+    backgroundColor: '#0F172A',
+    paddingVertical: 14,
     borderRadius: 999,
     alignItems: 'center',
+    borderWidth: 2,
+    borderColor: '#ffc857',
   },
   applyFilterText: {
     fontSize: 15,
     fontFamily: 'Inter-SemiBold',
-    color: '#FFFFFF',
+    color: '#ffc857',
   },
 });

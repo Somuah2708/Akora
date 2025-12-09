@@ -300,32 +300,6 @@ export default function SecretariatScreen() {
         </View>
       </View>
 
-      {/* Heritage & Archives */}
-      <View style={styles.section}>
-        <Text style={styles.sectionTitle}>Heritage & Archives</Text>
-        <View style={styles.heritageContainer}>
-          {HERITAGE_ITEMS.map((item) => {
-            const IconComponent = item.icon;
-            return (
-              <TouchableOpacity 
-                key={item.id} 
-                style={styles.heritageCard}
-                activeOpacity={0.8}
-              >
-                <View style={styles.heritageIcon}>
-                  <IconComponent size={24} color="#1a1a1a" strokeWidth={2} />
-                </View>
-                <View style={styles.heritageContent}>
-                  <Text style={styles.heritageTitle}>{item.title}</Text>
-                  <Text style={styles.heritageDescription}>{item.description}</Text>
-                </View>
-                <ChevronRight size={20} color="#666666" strokeWidth={2} />
-              </TouchableOpacity>
-            );
-          })}
-        </View>
-      </View>
-
       <View style={styles.bottomSpacer} />
     </ScrollView>
   );
@@ -623,13 +597,13 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#4169E1',
+    backgroundColor: '#0F172A',
     paddingVertical: 16,
     paddingHorizontal: 24,
     borderRadius: 14,
     marginHorizontal: 20,
     marginBottom: 12,
-    shadowColor: '#4169E1',
+    shadowColor: '#0F172A',
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.3,
     shadowRadius: 8,

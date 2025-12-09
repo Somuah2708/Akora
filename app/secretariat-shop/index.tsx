@@ -255,66 +255,6 @@ export default function SecretariatShopScreen() {
 
   return (
     <View style={styles.container}>
-      {/* Header */}
-      <View style={styles.header}>
-        <TouchableOpacity onPress={() => debouncedRouter.back()} style={styles.backButton}>
-          <ArrowLeft size={24} color="#000000" />
-        </TouchableOpacity>
-        <View style={styles.headerTextContainer}>
-          <Text style={styles.title}>OAA Shop</Text>
-          <Text style={styles.subtitle}>Official Alumni Merchandise</Text>
-        </View>
-        {userProfile?.is_admin ? (
-          <TouchableOpacity 
-            onPress={() => {
-              setEditingPhone(secretariatPhone);
-              setShowSettingsModal(true);
-            }} 
-            style={styles.settingsButton}
-          >
-            <Settings size={24} color="#000000" />
-          </TouchableOpacity>
-        ) : (
-          <View style={styles.placeholder} />
-        )}
-      </View>
-
-      {/* Search */}
-      <View style={styles.searchContainer}>
-        <View style={styles.searchInputContainer}>
-          <Search size={20} color="#94A3B8" />
-          <TextInput
-            style={styles.searchInput}
-            placeholder="Search merchandise..."
-            placeholderTextColor="#94A3B8"
-            value={searchQuery}
-            onChangeText={setSearchQuery}
-          />
-        </View>
-      </View>
-
-      {/* Currency Toggle */}
-      <View style={styles.currencyContainer}>
-        <View style={styles.currencyToggle}>
-          <TouchableOpacity
-            style={[styles.currencyButton, currency === 'GHS' && styles.activeCurrencyButton]}
-            onPress={() => setCurrency('GHS')}
-          >
-            <Text style={[styles.currencyButtonText, currency === 'GHS' && styles.activeCurrencyButtonText]}>
-              GHS (₵)
-            </Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={[styles.currencyButton, currency === 'USD' && styles.activeCurrencyButton]}
-            onPress={() => setCurrency('USD')}
-          >
-            <Text style={[styles.currencyButtonText, currency === 'USD' && styles.activeCurrencyButtonText]}>
-              USD ($)
-            </Text>
-          </TouchableOpacity>
-        </View>
-      </View>
-
       <ScrollView 
         style={styles.content} 
         showsVerticalScrollIndicator={false}
@@ -322,6 +262,65 @@ export default function SecretariatShopScreen() {
           <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
         }
       >
+        {/* Header */}
+        <View style={styles.header}>
+          <TouchableOpacity onPress={() => debouncedRouter.back()} style={styles.backButton}>
+            <ArrowLeft size={24} color="#FFFFFF" />
+          </TouchableOpacity>
+          <View style={styles.headerTextContainer}>
+            <Text style={styles.title}>OAA Shop</Text>
+            <Text style={styles.subtitle}>Official Alumni Merchandise</Text>
+          </View>
+          {userProfile?.is_admin ? (
+            <TouchableOpacity 
+              onPress={() => {
+                setEditingPhone(secretariatPhone);
+                setShowSettingsModal(true);
+              }} 
+              style={styles.settingsButton}
+            >
+              <Settings size={24} color="#FFFFFF" />
+            </TouchableOpacity>
+          ) : (
+            <View style={styles.placeholder} />
+          )}
+        </View>
+
+        {/* Search */}
+        <View style={styles.searchContainer}>
+          <View style={styles.searchInputContainer}>
+            <Search size={20} color="#94A3B8" />
+            <TextInput
+              style={styles.searchInput}
+              placeholder="Search merchandise..."
+              placeholderTextColor="#94A3B8"
+              value={searchQuery}
+              onChangeText={setSearchQuery}
+            />
+          </View>
+        </View>
+
+        {/* Currency Toggle */}
+        <View style={styles.currencyContainer}>
+          <View style={styles.currencyToggle}>
+            <TouchableOpacity
+              style={[styles.currencyButton, currency === 'GHS' && styles.activeCurrencyButton]}
+              onPress={() => setCurrency('GHS')}
+            >
+              <Text style={[styles.currencyButtonText, currency === 'GHS' && styles.activeCurrencyButtonText]}>
+                GHS (₵)
+              </Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.currencyButton, currency === 'USD' && styles.activeCurrencyButton]}
+              onPress={() => setCurrency('USD')}
+            >
+              <Text style={[styles.currencyButtonText, currency === 'USD' && styles.activeCurrencyButtonText]}>
+                USD ($)
+              </Text>
+            </TouchableOpacity>
+          </View>
+        </View>
         {/* Admin Post Button */}
         {userProfile?.is_admin && (
           <View style={styles.adminActionsContainer}>
@@ -557,12 +556,17 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: 16,
+    paddingHorizontal: 20,
     paddingTop: 60,
-    paddingBottom: 16,
-    backgroundColor: '#FFFFFF',
-    borderBottomWidth: 1,
-    borderBottomColor: '#F1F5F9',
+    paddingBottom: 20,
+    backgroundColor: '#0F172A',
+    borderBottomLeftRadius: 24,
+    borderBottomRightRadius: 24,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.15,
+    shadowRadius: 12,
+    elevation: 8,
   },
   backButton: {
     width: 40,
@@ -577,12 +581,12 @@ const styles = StyleSheet.create({
   title: {
     fontSize: 20,
     fontFamily: 'Inter-SemiBold',
-    color: '#0F172A',
+    color: '#FFFFFF',
   },
   subtitle: {
     fontSize: 12,
     fontFamily: 'Inter-Regular',
-    color: '#64748B',
+    color: 'rgba(255, 255, 255, 0.7)',
     marginTop: 2,
   },
   placeholder: {
@@ -590,6 +594,7 @@ const styles = StyleSheet.create({
   },
   searchContainer: {
     paddingHorizontal: 16,
+    paddingTop: 16,
     paddingVertical: 12,
     backgroundColor: '#FFFFFF',
   },
@@ -665,14 +670,16 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     paddingVertical: 14,
-    backgroundColor: '#EEF2FF',
+    backgroundColor: '#FFF9E6',
     borderRadius: 12,
     gap: 8,
+    borderWidth: 1,
+    borderColor: '#ffc857',
   },
   myItemsText: {
     fontSize: 15,
     fontFamily: 'Inter-SemiBold',
-    color: '#4169E1',
+    color: '#8B6914',
   },
   categoriesScroll: {
     marginTop: 16,
@@ -691,8 +698,8 @@ const styles = StyleSheet.create({
     borderColor: '#E2E8F0',
   },
   categoryChipActive: {
-    backgroundColor: '#4169E1',
-    borderColor: '#4169E1',
+    backgroundColor: '#0F172A',
+    borderColor: '#0F172A',
   },
   categoryChipText: {
     fontSize: 14,
@@ -777,10 +784,12 @@ const styles = StyleSheet.create({
   editButton: {
     width: 32,
     height: 32,
-    backgroundColor: '#4169E1',
+    backgroundColor: '#0F172A',
     borderRadius: 16,
     justifyContent: 'center',
     alignItems: 'center',
+    borderWidth: 1,
+    borderColor: '#ffc857',
   },
   deleteButton: {
     width: 32,
@@ -827,7 +836,7 @@ const styles = StyleSheet.create({
   price: {
     fontSize: 16,
     fontFamily: 'Inter-SemiBold',
-    color: '#10B981',
+    color: '#0F172A',
   },
   conditionBadge: {
     backgroundColor: '#FEF3C7',
@@ -877,21 +886,25 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#4169E1',
+    backgroundColor: '#0F172A',
     paddingVertical: 14,
     borderRadius: 12,
     gap: 8,
+    borderWidth: 2,
+    borderColor: '#ffc857',
   },
   callButtonFull: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#10B981',
+    backgroundColor: '#0F172A',
     paddingVertical: 16,
     paddingHorizontal: 24,
     borderRadius: 12,
     gap: 8,
     marginTop: 16,
+    borderWidth: 2,
+    borderColor: '#ffc857',
   },
   callButtonText: {
     fontSize: 15,

@@ -467,7 +467,7 @@ export default function ListingDetailScreen() {
   if (!fontsLoaded || loading) {
     return (
       <View style={[styles.container, styles.centerContent]}>
-        <ActivityIndicator size="large" color="#4169E1" />
+        <ActivityIndicator size="large" color="#0F172A" />
       </View>
     );
   }
@@ -494,7 +494,7 @@ export default function ListingDetailScreen() {
         <Text style={styles.title}>Listing Details</Text>
         {!isOwner && !isEditing && (
           <TouchableOpacity onPress={toggleSave} style={styles.saveButton}>
-            <Star size={24} color={isSaved ? "#14B8A6" : "#666666"} fill={isSaved ? "#14B8A6" : "none"} />
+            <Star size={24} color={isSaved ? "#ffc857" : "#666666"} fill={isSaved ? "#ffc857" : "none"} />
           </TouchableOpacity>
         )}
         {isOwner && !isEditing && (
@@ -647,7 +647,7 @@ export default function ListingDetailScreen() {
                   ))}
                   {editedImageUris.length < 5 && (
                     <TouchableOpacity style={styles.addImageButton} onPress={handlePickImages}>
-                      <Camera size={24} color="#4169E1" />
+                      <Camera size={24} color="#0F172A" />
                       <Text style={styles.addImageText}>Add Photo</Text>
                     </TouchableOpacity>
                   )}
@@ -839,16 +839,32 @@ export default function ListingDetailScreen() {
             <>
               <Text style={styles.listingTitle}>{listing.title}</Text>
               
-              <View style={styles.sellerInfo}>
+              <TouchableOpacity 
+                style={styles.sellerInfo}
+                onPress={() => {
+                  if (listing.user_id) {
+                    debouncedRouter.push(`/user-profile/${listing.user_id}`);
+                  }
+                }}
+                activeOpacity={0.7}
+              >
                 <View style={styles.sellerAvatar}>
-                  <Text style={styles.sellerInitial}>
-                    {listing.user?.full_name?.[0] || 'A'}
-                  </Text>
+                  {listing.user?.avatar_url ? (
+                    <Image 
+                      source={{ uri: listing.user.avatar_url }} 
+                      style={{ width: 48, height: 48, borderRadius: 24 }}
+                      resizeMode="cover"
+                    />
+                  ) : (
+                    <Text style={styles.sellerInitial}>
+                      {listing.user?.full_name?.[0] || 'A'}
+                    </Text>
+                  )}
                 </View>
                 <View style={styles.sellerDetails}>
                   <Text style={styles.sellerName}>{listing.user?.full_name || 'Unknown'}</Text>
                 </View>
-              </View>
+              </TouchableOpacity>
 
               <View style={styles.timestampSection}>
                 <Text style={styles.timestampText}>
@@ -899,7 +915,7 @@ export default function ListingDetailScreen() {
                   )}
                   {listing.contact_phone && (
                     <TouchableOpacity style={[styles.contactInfoItem, listing.contact_email && { marginTop: 8 }]}>
-                      <Phone size={16} color="#4169E1" />
+                      <Phone size={16} color="#0F172A" />
                       <Text style={styles.contactInfoText}>{listing.contact_phone}</Text>
                     </TouchableOpacity>
                   )}
@@ -916,8 +932,8 @@ export default function ListingDetailScreen() {
               {listing.condition && listing.condition !== 'not_applicable' && (
                 <View style={styles.section}>
                   <Text style={styles.sectionTitle}>Condition</Text>
-                  <View style={[styles.categoryBadge, listing.condition === 'new' ? styles.newBadge : styles.usedBadge]}>
-                    <Text style={[styles.categoryText, listing.condition === 'new' ? styles.newBadgeText : styles.usedBadgeText]}>
+                  <View style={styles.categoryBadge}>
+                    <Text style={styles.categoryText}>
                       {formatCondition(listing.condition)}
                     </Text>
                   </View>
@@ -1132,15 +1148,16 @@ const styles = StyleSheet.create({
     width: 48,
     height: 48,
     borderRadius: 24,
-    backgroundColor: '#4169E1',
+    backgroundColor: '#0F172A',
     justifyContent: 'center',
     alignItems: 'center',
     marginRight: 12,
+    overflow: 'hidden',
   },
   sellerInitial: {
     fontSize: 20,
     fontFamily: 'Inter-SemiBold',
-    color: '#FFFFFF',
+    color: '#ffc857',
   },
   sellerDetails: {
     flex: 1,
@@ -1187,7 +1204,7 @@ const styles = StyleSheet.create({
   priceValue: {
     fontSize: 32,
     fontFamily: 'Inter-SemiBold',
-    color: '#4169E1',
+    color: '#0F172A',
   },
   callForPriceText: {
     fontSize: 24,
@@ -1246,12 +1263,12 @@ const styles = StyleSheet.create({
   contactInfoText: {
     fontSize: 14,
     fontFamily: 'Inter-Regular',
-    color: '#4169E1',
+    color: '#0F172A',
     flex: 1,
   },
   categoryBadge: {
     alignSelf: 'flex-start',
-    backgroundColor: '#EBF0FF',
+    backgroundColor: '#0F172A',
     paddingHorizontal: 12,
     paddingVertical: 6,
     borderRadius: 16,
@@ -1259,7 +1276,7 @@ const styles = StyleSheet.create({
   categoryText: {
     fontSize: 14,
     fontFamily: 'Inter-SemiBold',
-    color: '#4169E1',
+    color: '#ffc857',
   },
   newBadge: {
     backgroundColor: '#D1FAE5',
@@ -1294,25 +1311,29 @@ const styles = StyleSheet.create({
   primaryButton: {
     flex: 1,
     flexDirection: 'row',
-    backgroundColor: '#4169E1',
+    backgroundColor: '#0F172A',
     borderRadius: 12,
     padding: 16,
     justifyContent: 'center',
     alignItems: 'center',
     gap: 8,
+    borderWidth: 2,
+    borderColor: '#ffc857',
   },
   primaryButtonText: {
     fontSize: 16,
     fontFamily: 'Inter-SemiBold',
-    color: '#FFFFFF',
+    color: '#ffc857',
   },
   secondaryButton: {
     width: 56,
     height: 56,
     borderRadius: 12,
-    backgroundColor: '#EBF0FF',
+    backgroundColor: '#0F172A',
     justifyContent: 'center',
     alignItems: 'center',
+    borderWidth: 2,
+    borderColor: '#ffc857',
   },
   formGroup: {
     marginBottom: 16,
@@ -1373,7 +1394,7 @@ const styles = StyleSheet.create({
   addImageText: {
     fontSize: 12,
     fontFamily: 'Inter-Regular',
-    color: '#4169E1',
+    color: '#0F172A',
     marginTop: 4,
   },
   chipRow: {
@@ -1391,8 +1412,8 @@ const styles = StyleSheet.create({
     backgroundColor: '#FFFFFF',
   },
   chipSelected: {
-    backgroundColor: '#4169E1',
-    borderColor: '#4169E1',
+    backgroundColor: '#0F172A',
+    borderColor: '#ffc857',
   },
   chipText: {
     fontSize: 14,
@@ -1400,7 +1421,7 @@ const styles = StyleSheet.create({
     color: '#666666',
   },
   chipTextSelected: {
-    color: '#FFFFFF',
+    color: '#ffc857',
     fontFamily: 'Inter-SemiBold',
   },
   locationButton: {
@@ -1464,7 +1485,7 @@ const styles = StyleSheet.create({
   },
   checkMark: {
     fontSize: 20,
-    color: '#4169E1',
+    color: '#ffc857',
   },
   errorText: {
     fontSize: 16,
@@ -1473,14 +1494,16 @@ const styles = StyleSheet.create({
     marginBottom: 16,
   },
   backToMarketButton: {
-    backgroundColor: '#4169E1',
+    backgroundColor: '#0F172A',
     paddingHorizontal: 24,
     paddingVertical: 12,
     borderRadius: 8,
+    borderWidth: 2,
+    borderColor: '#ffc857',
   },
   backToMarketText: {
     fontSize: 16,
     fontFamily: 'Inter-SemiBold',
-    color: '#FFFFFF',
+    color: '#ffc857',
   },
 });

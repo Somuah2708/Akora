@@ -594,7 +594,7 @@ export default function CreateListingScreen() {
       >
         <View style={styles.header}>
         <TouchableOpacity style={styles.backButton} onPress={() => debouncedRouter.back()}>
-          <ArrowLeft size={20} color="#020617" />
+          <ArrowLeft size={20} color="#FFFFFF" />
         </TouchableOpacity>
         <View style={styles.headerTextContainer}>
           <Text style={styles.headerTitle}>Post an ad</Text>
@@ -913,23 +913,28 @@ export default function CreateListingScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#F9FAFB',
+    backgroundColor: '#FFFFFF',
   },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
     paddingTop: 56,
-    paddingBottom: 12,
-    paddingHorizontal: 16,
-    backgroundColor: '#FFFFFF',
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: '#E5E7EB',
+    paddingBottom: 16,
+    paddingHorizontal: 20,
+    backgroundColor: '#0F172A',
+    borderBottomLeftRadius: 24,
+    borderBottomRightRadius: 24,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.15,
+    shadowRadius: 12,
+    elevation: 8,
   },
   backButton: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    backgroundColor: '#F1F5F9',
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: 'rgba(255, 255, 255, 0.15)',
     alignItems: 'center',
     justifyContent: 'center',
     marginRight: 12,
@@ -938,14 +943,14 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   headerTitle: {
-    fontSize: 18,
+    fontSize: 20,
     fontFamily: 'Inter-SemiBold',
-    color: '#0F172A',
+    color: '#FFFFFF',
   },
   headerSubtitle: {
     fontSize: 13,
     fontFamily: 'Inter-Regular',
-    color: '#6B7280',
+    color: 'rgba(255, 255, 255, 0.7)',
     marginTop: 2,
   },
   scroll: {
@@ -998,7 +1003,7 @@ const styles = StyleSheet.create({
     marginRight: 8,
   },
   categoryChipSelected: {
-    backgroundColor: '#1D4ED8',
+    backgroundColor: '#0F172A',
   },
   categoryChipText: {
     fontSize: 12,
@@ -1038,8 +1043,8 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   priceTypeChipSelected: {
-    backgroundColor: '#EFF6FF',
-    borderColor: '#1D4ED8',
+    backgroundColor: '#FFF9E6',
+    borderColor: '#ffc857',
   },
   priceTypeLabel: {
     fontSize: 13,
@@ -1048,7 +1053,7 @@ const styles = StyleSheet.create({
     marginBottom: 2,
   },
   priceTypeLabelSelected: {
-    color: '#1D4ED8',
+    color: '#8B6914',
   },
   priceTypeDesc: {
     fontSize: 11,
@@ -1057,7 +1062,7 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
   priceTypeDescSelected: {
-    color: '#3B82F6',
+    color: '#8B6914',
   },
   contactPriceInfo: {
     backgroundColor: '#FEF3C7',
@@ -1092,8 +1097,8 @@ const styles = StyleSheet.create({
     backgroundColor: '#FFFFFF',
   },
   chipSelected: {
-    backgroundColor: '#1D4ED8',
-    borderColor: '#1D4ED8',
+    backgroundColor: '#0F172A',
+    borderColor: '#0F172A',
   },
   chipText: {
     fontSize: 12,
@@ -1154,15 +1159,17 @@ const styles = StyleSheet.create({
     color: '#6B7280',
   },
   noticeCard: {
-    backgroundColor: '#EFF6FF',
+    backgroundColor: '#FFF9E6',
     borderRadius: 12,
     padding: 12,
     marginBottom: 16,
+    borderWidth: 1,
+    borderColor: '#ffc857',
   },
   noticeTitle: {
     fontSize: 14,
     fontFamily: 'Inter-SemiBold',
-    color: '#1D4ED8',
+    color: '#8B6914',
     marginBottom: 4,
   },
   noticeText: {
@@ -1177,12 +1184,19 @@ const styles = StyleSheet.create({
     backgroundColor: '#FFFFFF',
   },
   submitButton: {
-    height: 48,
+    height: 52,
     borderRadius: 999,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#1D4ED8',
+    backgroundColor: '#0F172A',
     flexDirection: 'row',
+    borderWidth: 2,
+    borderColor: '#ffc857',
+    shadowColor: '#ffc857',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 5,
   },
   submitButtonDisabled: {
     opacity: 0.5,
@@ -1268,7 +1282,7 @@ const styles = StyleSheet.create({
   addOptionText: {
     fontSize: 15,
     fontFamily: 'Inter-SemiBold',
-    color: '#4169E1',
+    color: '#8B6914',
   },
   addLocationSheet: {
     backgroundColor: '#FFFFFF',
@@ -1299,10 +1313,12 @@ const styles = StyleSheet.create({
     marginBottom: 16,
   },
   addLocationSubmitButton: {
-    backgroundColor: '#4169E1',
+    backgroundColor: '#0F172A',
     paddingVertical: 14,
     borderRadius: 10,
     alignItems: 'center',
+    borderWidth: 2,
+    borderColor: '#ffc857',
   },
   addLocationSubmitText: {
     fontSize: 16,

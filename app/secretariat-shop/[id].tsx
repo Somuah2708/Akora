@@ -1,6 +1,6 @@
 import { View, Text, StyleSheet, ScrollView, Image, TouchableOpacity, Dimensions, Alert, ActivityIndicator, Linking } from 'react-native';
 import { useFonts, Inter_400Regular, Inter_600SemiBold, Inter_700Bold } from '@expo-google-fonts/inter';
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import { SplashScreen, useRouter, useLocalSearchParams } from 'expo-router'
 import { DebouncedTouchable } from '@/components/DebouncedTouchable';
 import { debouncedRouter } from '@/utils/navigationDebounce';;
@@ -139,6 +139,7 @@ export default function ProductDetailScreen() {
   const [loading, setLoading] = useState(true);
   const [selectedImage, setSelectedImage] = useState(0);
   const [currency, setCurrency] = useState<'USD' | 'GHS'>('USD');
+  const imageScrollViewRef = useRef<ScrollView>(null);
 
   const [fontsLoaded] = useFonts({
     'Inter-Regular': Inter_400Regular,
@@ -216,12 +217,20 @@ export default function ProductDetailScreen() {
     }
   };
 
+  const handleThumbnailPress = (index: number) => {
+    setSelectedImage(index);
+    imageScrollViewRef.current?.scrollTo({
+      x: index * width,
+      animated: true,
+    });
+  };
+
   return (
     <View style={styles.container}>
       {/* Header */}
       <View style={styles.header}>
         <TouchableOpacity onPress={() => debouncedRouter.back()} style={styles.headerButton}>
-          <ArrowLeft size={24} color="#000000" />
+          <ArrowLeft size={24} color="#FFFFFF" />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Product Details</Text>
         <View style={styles.headerButton} />
@@ -231,6 +240,7 @@ export default function ProductDetailScreen() {
         {/* Image Gallery */}
         <View style={styles.imageSection}>
           <ScrollView
+            ref={imageScrollViewRef}
             horizontal
             pagingEnabled
             showsHorizontalScrollIndicator={false}
@@ -276,7 +286,7 @@ export default function ProductDetailScreen() {
               {product.images.map((img: string, index: number) => (
                 <TouchableOpacity
                   key={index}
-                  onPress={() => setSelectedImage(index)}
+                  onPress={() => handleThumbnailPress(index)}
                   style={[
                     styles.thumbnail,
                     selectedImage === index && styles.thumbnailActive,
@@ -391,15 +401,15 @@ export default function ProductDetailScreen() {
           {/* Features */}
           <View style={styles.featuresSection}>
             <View style={styles.featureItem}>
-              <Package size={20} color="#4169E1" />
+              <Package size={20} color="#ffc857" />
               <Text style={styles.featureText}>Free pickup at Secretariat</Text>
             </View>
             <View style={styles.featureItem}>
-              <Truck size={20} color="#4169E1" />
+              <Truck size={20} color="#ffc857" />
               <Text style={styles.featureText}>Home delivery available</Text>
             </View>
             <View style={styles.featureItem}>
-              <Shield size={20} color="#4169E1" />
+              <Shield size={20} color="#ffc857" />
               <Text style={styles.featureText}>100% Authentic</Text>
             </View>
           </View>
@@ -437,10 +447,17 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingHorizontal: 16,
+    paddingHorizontal: 20,
     paddingTop: 60,
-    paddingBottom: 16,
-    backgroundColor: '#FFFFFF',
+    paddingBottom: 20,
+    backgroundColor: '#0F172A',
+    borderBottomLeftRadius: 24,
+    borderBottomRightRadius: 24,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.15,
+    shadowRadius: 12,
+    elevation: 8,
   },
   headerButton: {
     padding: 8,
@@ -520,17 +537,19 @@ const styles = StyleSheet.create({
     padding: 16,
   },
   categoryBadge: {
-    backgroundColor: '#EBF0FF',
+    backgroundColor: '#FFF9E6',
     paddingHorizontal: 12,
     paddingVertical: 6,
     borderRadius: 8,
     alignSelf: 'flex-start',
     marginBottom: 12,
+    borderWidth: 1,
+    borderColor: '#ffc857',
   },
   categoryText: {
     fontSize: 12,
     fontFamily: 'Inter-SemiBold',
-    color: '#4169E1',
+    color: '#8B6914',
   },
   productName: {
     fontSize: 24,
@@ -575,7 +594,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   currencyButtonActive: {
-    backgroundColor: '#4169E1',
+    backgroundColor: '#0F172A',
   },
   currencyButtonText: {
     fontSize: 14,
@@ -597,7 +616,7 @@ const styles = StyleSheet.create({
   price: {
     fontSize: 32,
     fontFamily: 'Inter-Bold',
-    color: '#4169E1',
+    color: '#0F172A',
   },
   optionSection: {
     marginBottom: 24,
@@ -616,8 +635,8 @@ const styles = StyleSheet.create({
     borderColor: '#E0E0E0',
   },
   optionButtonActive: {
-    backgroundColor: '#4169E1',
-    borderColor: '#4169E1',
+    backgroundColor: '#0F172A',
+    borderColor: '#0F172A',
   },
   optionText: {
     fontSize: 14,
@@ -636,8 +655,8 @@ const styles = StyleSheet.create({
     borderColor: '#E0E0E0',
   },
   colorButtonActive: {
-    backgroundColor: '#4169E1',
-    borderColor: '#4169E1',
+    backgroundColor: '#0F172A',
+    borderColor: '#0F172A',
   },
   colorText: {
     fontSize: 14,
@@ -741,7 +760,7 @@ const styles = StyleSheet.create({
   headerTitle: {
     fontSize: 18,
     fontFamily: 'Inter-SemiBold',
-    color: '#000000',
+    color: '#FFFFFF',
   },
   errorText: {
     fontSize: 16,
