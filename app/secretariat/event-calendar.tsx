@@ -7,6 +7,7 @@ import {
   TouchableOpacity,
   ActivityIndicator,
   Dimensions,
+  RefreshControl,
 } from 'react-native';
 import { useRouter } from 'expo-router'
 import { DebouncedTouchable } from '@/components/DebouncedTouchable';
@@ -57,6 +58,7 @@ export default function EventCalendarScreen() {
   
   const [events, setEvents] = useState<Event[]>([]);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [selectedYear, setSelectedYear] = useState(new Date().getFullYear());
   const [selectedMonth, setSelectedMonth] = useState<number | null>(null);
   const scrollRef = React.useRef<ScrollView | null>(null);
@@ -103,7 +105,13 @@ export default function EventCalendarScreen() {
       setEvents([]);
     } finally {
       setLoading(false);
+      setRefreshing(false);
     }
+  };
+
+  const handleRefresh = async () => {
+    setRefreshing(true);
+    await loadEvents();
   };
 
   const getEventsForMonth = (month: number) => {
@@ -233,7 +241,7 @@ export default function EventCalendarScreen() {
         activeOpacity={0.7}
       >
         <LinearGradient
-          colors={isUpcoming ? ['#4169E1', '#5B7FE8'] : isTBA ? ['#F59E0B', '#FBBF24'] : ['#6B7280', '#9CA3AF']}
+          colors={isUpcoming ? ['#0F172A', '#1E293B'] : isTBA ? ['#ffc857', '#FFD57E'] : ['#6B7280', '#9CA3AF']}
           start={{ x: 0, y: 0 }}
           end={{ x: 1, y: 1 }}
           style={styles.eventCardGradient}
@@ -318,42 +326,50 @@ export default function EventCalendarScreen() {
 
   return (
     <View style={styles.container}>
+      {refreshing && (
+        <View style={styles.refreshOverlay}>
+          <ActivityIndicator size="large" color="#ffc857" />
+        </View>
+      )}
       <ScrollView
         ref={scrollRef}
         style={styles.scrollContainer}
         showsVerticalScrollIndicator={false}
         contentContainerStyle={styles.scrollContentContainer}
-        stickyHeaderIndices={[0]}
+        refreshControl={
+          <RefreshControl
+            refreshing={false}
+            onRefresh={handleRefresh}
+            tintColor="transparent"
+            colors={['transparent']}
+          />
+        }
       >
-        {/* Fixed Back Button */}
-        <View style={styles.fixedHeaderContainer}>
-          <View style={styles.fixedHeader}>
-            <TouchableOpacity onPress={() => debouncedRouter.back()} style={styles.backButtonFixed}>
-              <ArrowLeft size={24} color="#1E3A8A" />
-            </TouchableOpacity>
-            {isAdmin && (
-              <TouchableOpacity
-                style={styles.addButtonFixed}
-                onPress={() => debouncedRouter.push('/create-event')}
-              >
-                <Plus size={24} color="#1E3A8A" />
-              </TouchableOpacity>
-            )}
-          </View>
-        </View>
-
         {/* Scrollable Header */}
         <LinearGradient
-          colors={['#1E3A8A', '#3B82F6']}
+          colors={['#0F172A', '#1E293B']}
           start={{ x: 0, y: 0 }}
           end={{ x: 1, y: 1 }}
           style={styles.headerGradient}
         >
           <View style={styles.header}>
+            <TouchableOpacity onPress={() => debouncedRouter.back()} style={styles.backButton}>
+              <ArrowLeft size={24} color="#FFFFFF" />
+            </TouchableOpacity>
             <View style={styles.headerCenter}>
               <Text style={styles.headerSubtitle}>OAA Secretariat</Text>
               <Text style={styles.headerTitle}>Events Calendar {selectedYear}</Text>
             </View>
+            {isAdmin ? (
+              <TouchableOpacity
+                style={styles.addButton}
+                onPress={() => debouncedRouter.push('/create-event')}
+              >
+                <Plus size={24} color="#FFFFFF" />
+              </TouchableOpacity>
+            ) : (
+              <View style={styles.placeholder} />
+            )}
           </View>
 
           {/* Year Selector */}
@@ -489,7 +505,18 @@ export default function EventCalendarScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#F5F7FA',
+    backgroundColor: '#FFFFFF',
+  },
+  refreshOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: '#FFFFFF',
+    justifyContent: 'center',
+    alignItems: 'center',
+    zIndex: 1000,
   },
   scrollContainer: {
     flex: 1,
@@ -498,7 +525,7 @@ const styles = StyleSheet.create({
     paddingBottom: 40,
   },
   fixedHeaderContainer: {
-    backgroundColor: '#F5F7FA',
+    backgroundColor: '#FFFFFF',
     paddingTop: 50,
   },
   fixedHeader: {
@@ -507,18 +534,20 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     paddingHorizontal: 20,
     paddingBottom: 12,
-    backgroundColor: '#F5F7FA',
+    backgroundColor: '#FFFFFF',
   },
   backButtonFixed: {
     width: 44,
     height: 44,
     borderRadius: 22,
-    backgroundColor: '#FFFFFF',
+    backgroundColor: '#0F172A',
     alignItems: 'center',
     justifyContent: 'center',
-    shadowColor: '#000',
+    borderWidth: 2,
+    borderColor: '#ffc857',
+    shadowColor: '#ffc857',
     shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
+    shadowOpacity: 0.3,
     shadowRadius: 8,
     elevation: 3,
   },
@@ -526,12 +555,14 @@ const styles = StyleSheet.create({
     width: 44,
     height: 44,
     borderRadius: 22,
-    backgroundColor: '#FFFFFF',
+    backgroundColor: '#0F172A',
     alignItems: 'center',
     justifyContent: 'center',
-    shadowColor: '#000',
+    borderWidth: 2,
+    borderColor: '#ffc857',
+    shadowColor: '#ffc857',
     shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
+    shadowOpacity: 0.3,
     shadowRadius: 8,
     elevation: 3,
   },
@@ -539,7 +570,7 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: '#F5F7FA',
+    backgroundColor: '#FFFFFF',
   },
   loadingText: {
     marginTop: 16,
@@ -549,10 +580,13 @@ const styles = StyleSheet.create({
     fontWeight: '500',
   },
   headerGradient: {
-    paddingTop: 24,
+    paddingTop: 60,
     paddingBottom: 20,
   },
   header: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
     paddingHorizontal: 20,
     marginBottom: 20,
   },
@@ -560,12 +594,14 @@ const styles = StyleSheet.create({
     width: 44,
     height: 44,
     borderRadius: 22,
-    backgroundColor: 'rgba(255, 255, 255, 0.25)',
+    backgroundColor: 'rgba(255, 255, 255, 0.15)',
     alignItems: 'center',
     justifyContent: 'center',
   },
   headerCenter: {
+    flex: 1,
     alignItems: 'center',
+    marginHorizontal: 16,
   },
   headerSubtitle: {
     fontSize: 13,
@@ -585,7 +621,7 @@ const styles = StyleSheet.create({
     width: 44,
     height: 44,
     borderRadius: 22,
-    backgroundColor: 'rgba(255, 255, 255, 0.25)',
+    backgroundColor: 'rgba(255, 255, 255, 0.15)',
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -662,7 +698,7 @@ const styles = StyleSheet.create({
   sectionCount: {
     fontSize: 16,
     fontWeight: '700',
-    color: '#3B82F6',
+    color: '#0F172A',
     fontFamily: 'Inter',
   },
   sectionDescription: {
@@ -711,15 +747,17 @@ const styles = StyleSheet.create({
     color: '#94A3B8',
   },
   upcomingBadge: {
-    backgroundColor: '#DBEAFE',
+    backgroundColor: '#FFF9E6',
     paddingHorizontal: 8,
     paddingVertical: 4,
     borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#ffc857',
   },
   upcomingBadgeText: {
     fontSize: 10,
     fontWeight: '700',
-    color: '#1E40AF',
+    color: '#8B6914',
     fontFamily: 'Inter',
   },
   monthCardStats: {
@@ -731,7 +769,7 @@ const styles = StyleSheet.create({
   monthCardNumber: {
     fontSize: 32,
     fontWeight: '800',
-    color: '#3B82F6',
+    color: '#0F172A',
     fontFamily: 'Inter',
   },
   monthCardNumberEmpty: {
@@ -764,10 +802,10 @@ const styles = StyleSheet.create({
     borderRadius: 3,
   },
   eventDotScheduled: {
-    backgroundColor: '#3B82F6',
+    backgroundColor: '#0F172A',
   },
   eventDotTBA: {
-    backgroundColor: '#F59E0B',
+    backgroundColor: '#ffc857',
   },
   monthEventTitle: {
     fontSize: 12,

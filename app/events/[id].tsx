@@ -13,6 +13,8 @@ import {
   Dimensions,
   Share,
   Platform,
+  StatusBar,
+  SafeAreaView,
 } from 'react-native';
 import { useRouter, useLocalSearchParams } from 'expo-router'
 import { DebouncedTouchable } from '@/components/DebouncedTouchable';
@@ -1095,41 +1097,46 @@ export default function EventDetailScreen() {
     : 0;
 
   return (
-    <View style={styles.container}>
-      {/* Header Image */}
+    <SafeAreaView style={styles.container}>
+      <StatusBar barStyle="dark-content" backgroundColor="#fff" />
+      
+      {/* Fixed Header */}
+      <View style={styles.fixedHeader}>
+        {/* Back Button */}
+        <TouchableOpacity 
+          style={styles.backButton}
+          onPress={() => debouncedRouter.back()}
+        >
+          <View style={styles.backButtonCircle}>
+            <ArrowLeft size={24} color="#333" />
+          </View>
+        </TouchableOpacity>
+
+        {/* Action Buttons */}
+        <View style={styles.actionButtons}>
+          <TouchableOpacity 
+            style={styles.actionButton}
+            onPress={handleShare}
+          >
+            <Share2 size={20} color="#333" />
+          </TouchableOpacity>
+          <TouchableOpacity 
+            style={styles.actionButton}
+            onPress={toggleBookmark}
+          >
+            <Star size={20} color={isBookmarked ? '#14B8A6' : '#333'} fill={isBookmarked ? '#14B8A6' : 'none'} />
+          </TouchableOpacity>
+        </View>
+      </View>
+
+      {/* Scrollable Content */}
       <ScrollView showsVerticalScrollIndicator={false}>
         <View style={styles.imageContainer}>
           <Image source={{ uri: event.imageUrl }} style={styles.headerImage} />
           <LinearGradient
-            colors={['transparent', 'rgba(0,0,0,0.7)']}
+            colors={['rgba(0,0,0,0.4)', 'transparent', 'rgba(0,0,0,0.7)']}
             style={styles.imageOverlay}
           />
-          
-          {/* Back Button */}
-          <TouchableOpacity 
-            style={styles.backButton}
-            onPress={() => debouncedRouter.back()}
-          >
-            <View style={styles.backButtonCircle}>
-              <ArrowLeft size={24} color="#333" />
-            </View>
-          </TouchableOpacity>
-
-          {/* Action Buttons */}
-          <View style={styles.actionButtons}>
-            <TouchableOpacity 
-              style={styles.actionButton}
-              onPress={handleShare}
-            >
-              <Share2 size={20} color="#333" />
-            </TouchableOpacity>
-            <TouchableOpacity 
-              style={styles.actionButton}
-              onPress={toggleBookmark}
-            >
-              <Star size={20} color={isBookmarked ? '#14B8A6' : '#333'} fill={isBookmarked ? '#14B8A6' : 'none'} />
-            </TouchableOpacity>
-          </View>
 
           {/* Featured Badge */}
           {event.isFeatured && (
@@ -1292,7 +1299,7 @@ export default function EventDetailScreen() {
           </LinearGradient>
         </TouchableOpacity>
       </View>
-    </View>
+    </SafeAreaView>
   );
 }
 
@@ -1300,6 +1307,16 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#fff',
+  },
+  fixedHeader: {
+    height: 60,
+    backgroundColor: '#fff',
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: '#f0f0f0',
   },
   imageContainer: {
     position: 'relative',
@@ -1316,11 +1333,8 @@ const styles = StyleSheet.create({
     right: 0,
     height: 100,
   },
-  backButton: {
-    position: 'absolute',
-    top: 50,
-    left: 16,
-  },
+  backButton: {},
+
   backButtonCircle: {
     width: 40,
     height: 40,
@@ -1335,9 +1349,6 @@ const styles = StyleSheet.create({
     elevation: 3,
   },
   actionButtons: {
-    position: 'absolute',
-    top: 50,
-    right: 16,
     flexDirection: 'row',
     gap: 8,
   },

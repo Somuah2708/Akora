@@ -275,10 +275,18 @@ export default function DocumentCenterScreen() {
     return File;
   };
 
+  const getDocumentIconColor = (fileName: string) => {
+    const ext = fileName.split('.').pop()?.toLowerCase() || '';
+    if (ext === 'pdf') return '#EF4444'; // Red for PDF
+    if (['doc', 'docx'].includes(ext)) return '#3B82F6'; // Blue for Word
+    if (['xls', 'xlsx', 'csv'].includes(ext)) return '#10B981'; // Green for Excel
+    return '#ffc857'; // Gold for others
+  };
+
   if (loading) {
     return (
       <View style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color="#4169E1" />
+        <ActivityIndicator size="large" color="#ffc857" />
         <Text style={styles.loadingText}>Loading documents...</Text>
       </View>
     );
@@ -288,7 +296,7 @@ export default function DocumentCenterScreen() {
     <View style={styles.container}>
       {/* Header */}
       <LinearGradient
-        colors={['#4169E1', '#5B7FE8']}
+        colors={['#0F172A', '#1E293B']}
         start={{ x: 0, y: 0 }}
         end={{ x: 1, y: 0 }}
         style={styles.headerGradient}
@@ -515,6 +523,7 @@ export default function DocumentCenterScreen() {
         ) : (
           filteredDocuments.map((document) => {
             const IconComponent = getDocumentIcon(document.file_name);
+            const iconColor = getDocumentIconColor(document.file_name);
 
             return (
               <TouchableOpacity
@@ -524,7 +533,7 @@ export default function DocumentCenterScreen() {
               >
                 {/* Document Icon */}
                 <View style={styles.documentIcon}>
-                  <IconComponent size={32} color="#4169E1" />
+                  <IconComponent size={32} color={iconColor} />
                 </View>
 
                 {/* Document Details */}
@@ -584,13 +593,13 @@ export default function DocumentCenterScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#F8F9FA',
+    backgroundColor: '#FFFFFF',
   },
   loadingContainer: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: '#F8F9FA',
+    backgroundColor: '#FFFFFF',
   },
   loadingText: {
     marginTop: 16,
@@ -600,6 +609,8 @@ const styles = StyleSheet.create({
   headerGradient: {
     paddingTop: 50,
     paddingBottom: 16,
+    borderBottomLeftRadius: 24,
+    borderBottomRightRadius: 24,
   },
   header: {
     flexDirection: 'row',
@@ -667,7 +678,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   filterButtonActive: {
-    backgroundColor: '#EBF0FF',
+    backgroundColor: '#FFF9E6',
   },
   filterBadge: {
     position: 'absolute',
@@ -720,7 +731,7 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
   },
   filterChipTextActive: {
-    color: '#4169E1',
+    color: '#0F172A',
   },
   filterActions: {
     flexDirection: 'row',
@@ -751,7 +762,7 @@ const styles = StyleSheet.create({
   applyButtonText: {
     fontSize: 15,
     fontWeight: '700',
-    color: '#4169E1',
+    color: '#0F172A',
   },
   categoriesContainer: {
     paddingHorizontal: 16,
@@ -775,7 +786,7 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
   },
   categoryChipTextActive: {
-    color: '#4169E1',
+    color: '#0F172A',
   },
   content: {
     flex: 1,
@@ -814,7 +825,7 @@ const styles = StyleSheet.create({
     width: 60,
     height: 60,
     borderRadius: 12,
-    backgroundColor: '#EBF0FF',
+    backgroundColor: '#FFF9E6',
     justifyContent: 'center',
     alignItems: 'center',
     marginRight: 16,
@@ -823,7 +834,7 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   categoryBadge: {
-    backgroundColor: '#EBF0FF',
+    backgroundColor: '#FFF9E6',
     paddingHorizontal: 10,
     paddingVertical: 4,
     borderRadius: 12,
@@ -833,7 +844,7 @@ const styles = StyleSheet.create({
   categoryBadgeText: {
     fontSize: 11,
     fontWeight: '600',
-    color: '#4169E1',
+    color: '#ffc857',
   },
   documentTitle: {
     fontSize: 16,

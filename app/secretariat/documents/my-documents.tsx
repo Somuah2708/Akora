@@ -209,7 +209,7 @@ export default function MyDocumentsScreen() {
     return (
       <View style={styles.container}>
         <LinearGradient
-          colors={['#4169E1', '#5B7FE8']}
+          colors={['#0F172A', '#1E293B']}
           start={{ x: 0, y: 0 }}
           end={{ x: 1, y: 0 }}
           style={styles.headerGradient}
@@ -225,7 +225,7 @@ export default function MyDocumentsScreen() {
           </View>
         </LinearGradient>
         <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color="#4169E1" />
+          <ActivityIndicator size="large" color="#ffc857" />
           <Text style={styles.loadingText}>Loading your documents...</Text>
         </View>
       </View>
@@ -236,7 +236,7 @@ export default function MyDocumentsScreen() {
     <View style={styles.container}>
       {/* Header */}
       <LinearGradient
-        colors={['#4169E1', '#5B7FE8']}
+        colors={['#0F172A', '#1E293B']}
         start={{ x: 0, y: 0 }}
         end={{ x: 1, y: 0 }}
         style={styles.headerGradient}
@@ -325,7 +325,7 @@ export default function MyDocumentsScreen() {
                     style={styles.editButton}
                     onPress={() => handleEdit(doc.id)}
                   >
-                    <Edit3 size={18} color="#4169E1" />
+                    <Edit3 size={18} color="#ffc857" />
                     <Text style={styles.editButtonText}>Edit</Text>
                   </TouchableOpacity>
 
@@ -351,11 +351,13 @@ export default function MyDocumentsScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#F8F9FA',
+    backgroundColor: '#FFFFFF',
   },
   headerGradient: {
     paddingTop: 50,
     paddingBottom: 16,
+    borderBottomLeftRadius: 24,
+    borderBottomRightRadius: 24,
   },
   header: {
     flexDirection: 'row',
@@ -418,7 +420,7 @@ const styles = StyleSheet.create({
     marginBottom: 24,
   },
   uploadButton: {
-    backgroundColor: '#4169E1',
+    backgroundColor: '#0F172A',
     paddingHorizontal: 24,
     paddingVertical: 12,
     borderRadius: 12,
@@ -486,7 +488,7 @@ const styles = StyleSheet.create({
   },
   categoryBadge: {
     alignSelf: 'flex-start',
-    backgroundColor: '#E4EAFF',
+    backgroundColor: '#FFF9E6',
     paddingHorizontal: 10,
     paddingVertical: 4,
     borderRadius: 6,
@@ -495,7 +497,7 @@ const styles = StyleSheet.create({
   categoryText: {
     fontSize: 12,
     fontWeight: '600',
-    color: '#4169E1',
+    color: '#ffc857',
   },
   documentDescription: {
     fontSize: 14,
@@ -553,12 +555,12 @@ const styles = StyleSheet.create({
     gap: 6,
     paddingVertical: 10,
     borderRadius: 8,
-    backgroundColor: '#E4EAFF',
+    backgroundColor: '#FFF9E6',
   },
   editButtonText: {
     fontSize: 14,
     fontWeight: '600',
-    color: '#4169E1',
+    color: '#ffc857',
   },
   deleteButton: {
     flex: 1,

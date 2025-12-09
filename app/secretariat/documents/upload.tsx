@@ -54,6 +54,14 @@ export default function UploadDocumentScreen() {
     version: '1.0',
   });
 
+  const getFileIconColor = (fileName: string) => {
+    const ext = fileName.split('.').pop()?.toLowerCase() || '';
+    if (ext === 'pdf') return '#EF4444'; // Red for PDF
+    if (['doc', 'docx'].includes(ext)) return '#3B82F6'; // Blue for Word
+    if (['xls', 'xlsx', 'csv'].includes(ext)) return '#10B981'; // Green for Excel
+    return '#ffc857'; // Gold for others
+  };
+
   // Handle document picking from computer
   const handlePickDocument = async () => {
     try {
@@ -288,7 +296,7 @@ export default function UploadDocumentScreen() {
     >
       {/* Header */}
       <LinearGradient
-        colors={['#4169E1', '#5B7FE8']}
+        colors={['#0F172A', '#1E293B']}
         start={{ x: 0, y: 0 }}
         end={{ x: 1, y: 0 }}
         style={styles.headerGradient}
@@ -388,7 +396,7 @@ export default function UploadDocumentScreen() {
         >
           <View style={styles.documentPickerContent}>
             <View style={styles.documentPickerIcon}>
-              <Paperclip size={24} color="#4169E1" />
+              <Paperclip size={24} color="#ffc857" />
             </View>
             <View style={styles.documentPickerText}>
               <Text style={styles.documentPickerTitle}>
@@ -398,7 +406,7 @@ export default function UploadDocumentScreen() {
                 {formData.fileName || 'PDF, DOC, XLS, PPT (Max 10MB)'}
               </Text>
             </View>
-            {uploading && <ActivityIndicator size="small" color="#4169E1" />}
+            {uploading && <ActivityIndicator size="small" color="#ffc857" />}
             {!uploading && formData.fileName && (
               <View style={styles.documentPickerCheckmark}>
                 <Text style={styles.documentPickerCheckmarkText}>✓</Text>
@@ -409,7 +417,7 @@ export default function UploadDocumentScreen() {
 
         {formData.fileName && (
           <View style={styles.fileInfo}>
-            <File size={16} color="#4169E1" />
+            <File size={16} color={getFileIconColor(formData.fileName)} />
             <Text style={styles.fileInfoText}>
               {formData.fileName} ({(formData.fileSize / 1024).toFixed(2)} KB)
             </Text>
@@ -582,11 +590,13 @@ export default function UploadDocumentScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#F8F9FA',
+    backgroundColor: '#FFFFFF',
   },
   headerGradient: {
     paddingTop: 50,
     paddingBottom: 16,
+    borderBottomLeftRadius: 24,
+    borderBottomRightRadius: 24,
   },
   header: {
     flexDirection: 'row',
@@ -669,8 +679,8 @@ const styles = StyleSheet.create({
     borderColor: '#E5E7EB',
   },
   optionChipActive: {
-    backgroundColor: '#4169E1',
-    borderColor: '#4169E1',
+    backgroundColor: '#0F172A',
+    borderColor: '#0F172A',
   },
   optionChipText: {
     fontSize: 14,
@@ -716,7 +726,7 @@ const styles = StyleSheet.create({
     gap: 8,
     paddingVertical: 16,
     borderRadius: 12,
-    backgroundColor: '#4169E1',
+    backgroundColor: '#0F172A',
   },
   submitButtonDisabled: {
     opacity: 0.6,
@@ -730,7 +740,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#FFFFFF',
     borderRadius: 12,
     borderWidth: 2,
-    borderColor: '#4169E1',
+    borderColor: '#ffc857',
     borderStyle: 'dashed',
     padding: 16,
     marginBottom: 16,
@@ -744,7 +754,7 @@ const styles = StyleSheet.create({
     width: 48,
     height: 48,
     borderRadius: 24,
-    backgroundColor: '#E4EAFF',
+    backgroundColor: '#FFF9E6',
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -778,7 +788,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
-    backgroundColor: '#E4EAFF',
+    backgroundColor: '#FFF9E6',
     padding: 12,
     borderRadius: 8,
     marginBottom: 16,

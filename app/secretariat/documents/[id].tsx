@@ -224,7 +224,7 @@ export default function DocumentViewerScreen() {
     <View style={styles.container}>
       {/* Header */}
       <LinearGradient
-        colors={['#4169E1', '#5B7FE8']}
+        colors={['#0F172A', '#1E293B']}
         start={{ x: 0, y: 0 }}
         end={{ x: 1, y: 0 }}
         style={styles.headerGradient}
@@ -383,13 +383,13 @@ export default function DocumentViewerScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#F8F9FA',
+    backgroundColor: '#FFFFFF',
   },
   loadingContainer: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: '#F8F9FA',
+    backgroundColor: '#FFFFFF',
   },
   loadingText: {
     marginTop: 16,
@@ -404,7 +404,7 @@ const styles = StyleSheet.create({
   backButton: {
     paddingHorizontal: 24,
     paddingVertical: 12,
-    backgroundColor: '#4169E1',
+    backgroundColor: '#0F172A',
     borderRadius: 8,
   },
   backButtonText: {
@@ -415,6 +415,8 @@ const styles = StyleSheet.create({
   headerGradient: {
     paddingTop: 50,
     paddingBottom: 16,
+    borderBottomLeftRadius: 24,
+    borderBottomRightRadius: 24,
   },
   header: {
     flexDirection: 'row',
@@ -445,7 +447,7 @@ const styles = StyleSheet.create({
     borderBottomColor: '#E5E7EB',
   },
   categoryBadge: {
-    backgroundColor: '#EBF0FF',
+    backgroundColor: '#FFF9E6',
     paddingHorizontal: 12,
     paddingVertical: 6,
     borderRadius: 12,
@@ -455,7 +457,7 @@ const styles = StyleSheet.create({
   categoryBadgeText: {
     fontSize: 12,
     fontWeight: '600',
-    color: '#4169E1',
+    color: '#ffc857',
   },
   documentTitle: {
     fontSize: 24,
@@ -533,12 +535,12 @@ const styles = StyleSheet.create({
     borderRadius: 12,
   },
   primaryButton: {
-    backgroundColor: '#4169E1',
+    backgroundColor: '#0F172A',
   },
   secondaryButton: {
     backgroundColor: '#FFFFFF',
     borderWidth: 2,
-    borderColor: '#4169E1',
+    borderColor: '#ffc857',
   },
   primaryButtonText: {
     fontSize: 16,
@@ -548,7 +550,7 @@ const styles = StyleSheet.create({
   secondaryButtonText: {
     fontSize: 16,
     fontWeight: '600',
-    color: '#4169E1',
+    color: '#ffc857',
   },
   previewSection: {
     padding: 16,
