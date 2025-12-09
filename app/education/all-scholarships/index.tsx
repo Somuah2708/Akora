@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react';
 import { SplashScreen, useRouter } from 'expo-router'
 import { DebouncedTouchable } from '@/components/DebouncedTouchable';
 import { debouncedRouter } from '@/utils/navigationDebounce';;
-import { ArrowLeft, Search, GraduationCap, Wallet, Clock, Heart, Award, Bookmark } from 'lucide-react-native';
+import { ArrowLeft, Search, GraduationCap, Wallet, Clock, Heart, Award, Star } from 'lucide-react-native';
 import { supabase } from '../../../lib/supabase';
 import { useAuth } from '../../../hooks/useAuth';
 
@@ -160,10 +160,10 @@ export default function AllScholarshipsScreen() {
                     toggleBookmark(scholarship.id);
                   }}
                 >
-                  <Bookmark 
+                  <Star 
                     size={20} 
-                    color={bookmarkedIds.includes(scholarship.id) ? "#4169E1" : "#666666"} 
-                    fill={bookmarkedIds.includes(scholarship.id) ? "#4169E1" : "none"}
+                    color={bookmarkedIds.includes(scholarship.id) ? "#ffc857" : "#666666"} 
+                    fill={bookmarkedIds.includes(scholarship.id) ? "#ffc857" : "none"}
                   />
                 </TouchableOpacity>
                 <View style={styles.scholarshipInfo}>

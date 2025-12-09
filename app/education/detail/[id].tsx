@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react';
 import { SplashScreen, useRouter, useLocalSearchParams } from 'expo-router'
 import { DebouncedTouchable } from '@/components/DebouncedTouchable';
 import { debouncedRouter } from '@/utils/navigationDebounce';;
-import { ArrowLeft, MapPin, Globe, Mail, Phone, Award, Calendar, Wallet, BookOpen, Share2, Bookmark, ExternalLink, Users, Briefcase, GraduationCap } from 'lucide-react-native';
+import { ArrowLeft, MapPin, Globe, Mail, Phone, Award, Calendar, Wallet, BookOpen, Share2, Star, ExternalLink, Users, Briefcase, GraduationCap } from 'lucide-react-native';
 import { supabase } from '../../../lib/supabase';
 import { useAuth } from '../../../hooks/useAuth';
 
@@ -238,14 +238,14 @@ export default function EducationDetailScreen() {
       {/* Header */}
       <View style={styles.header}>
         <TouchableOpacity onPress={() => debouncedRouter.back()} style={styles.backButton}>
-          <ArrowLeft size={24} color="#000000" />
+          <ArrowLeft size={24} color="#FFFFFF" />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Details</Text>
         <TouchableOpacity onPress={toggleBookmark} style={styles.bookmarkButton}>
-          <Bookmark 
+          <Star 
             size={24} 
-            color={isBookmarked ? "#4169E1" : "#000000"} 
-            fill={isBookmarked ? "#4169E1" : "none"}
+            color={isBookmarked ? "#ffc857" : "#FFFFFF"} 
+            fill={isBookmarked ? "#ffc857" : "none"}
           />
         </TouchableOpacity>
       </View>
@@ -254,7 +254,8 @@ export default function EducationDetailScreen() {
         {/* Main Image */}
         <Image 
           source={{ uri: imageUri }} 
-          style={styles.mainImage} 
+          style={styles.mainImage}
+          resizeMode="contain"
         />
 
         {/* Content */}
@@ -270,7 +271,7 @@ export default function EducationDetailScreen() {
           {/* Location (for Universities) */}
           {opportunity.location && (
             <View style={styles.infoRow}>
-              <MapPin size={18} color="#666666" />
+              <MapPin size={18} color="#ffc857" />
               <Text style={styles.infoText}>{opportunity.location}</Text>
             </View>
           )}
@@ -278,7 +279,7 @@ export default function EducationDetailScreen() {
           {/* Address (for Universities) */}
           {opportunity.address && (
             <View style={styles.infoRow}>
-              <MapPin size={18} color="#666666" />
+              <MapPin size={18} color="#ffc857" />
               <Text style={styles.infoText}>{opportunity.address}</Text>
             </View>
           )}
@@ -286,7 +287,7 @@ export default function EducationDetailScreen() {
           {/* Deadline Badge (for Scholarships) */}
           {daysLeft !== null && (
             <View style={[styles.deadlineBadge, daysLeft < 30 && styles.urgentDeadline]}>
-              <Calendar size={16} color={daysLeft < 30 ? "#FF6B6B" : "#4169E1"} />
+              <Calendar size={16} color={daysLeft < 30 ? "#FF6B6B" : "#ffc857"} />
               <Text style={[styles.deadlineText, daysLeft < 30 && styles.urgentText]}>
                 {daysLeft > 0 ? `${daysLeft} days left` : 'Deadline passed'}
               </Text>
@@ -295,7 +296,7 @@ export default function EducationDetailScreen() {
           {/* Show deadline_text if provided (freeform) or fallback to raw deadline_date */}
           {daysLeft === null && (opportunity.deadline_text || opportunity.deadline_date) && (
             <View style={styles.infoRow}>
-              <Calendar size={18} color="#666666" />
+              <Calendar size={18} color="#ffc857" />
               <Text style={styles.infoText}>Deadline: {opportunity.deadline_text || opportunity.deadline_date}</Text>
             </View>
           )}
@@ -303,7 +304,7 @@ export default function EducationDetailScreen() {
           {/* Funding Amount (for Scholarships) */}
           {isScholarship && (opportunity.amount || opportunity.funding_amount) && (
             <View style={styles.fundingCard}>
-              <Wallet size={20} color="#4CAF50" />
+              <Wallet size={20} color="#ffc857" />
               <View>
                 <Text style={styles.fundingLabel}>Funding Amount</Text>
                 <Text style={styles.fundingAmount}>
@@ -383,7 +384,7 @@ export default function EducationDetailScreen() {
             <View style={styles.section}>
               <Text style={styles.sectionTitle}>Eligibility Requirements</Text>
               <View style={styles.eligibilityBox}>
-                <BookOpen size={20} color="#4169E1" />
+                <BookOpen size={20} color="#ffc857" />
                 <Text style={styles.eligibilityText}>{opportunity.eligibility_criteria || opportunity.eligibility}</Text>
               </View>
             </View>
@@ -578,7 +579,7 @@ export default function EducationDetailScreen() {
               <Text style={styles.applyButtonText}>
                 {isScholarship ? 'Apply for Scholarship' : 'Apply Now'}
               </Text>
-              <ExternalLink size={20} color="#FFFFFF" />
+              <ExternalLink size={20} color="#0F172A" />
             </TouchableOpacity>
           )}
 
@@ -601,9 +602,9 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingTop: 60,
     paddingBottom: 16,
-    backgroundColor: '#FFFFFF',
+    backgroundColor: '#0F172A',
     borderBottomWidth: 1,
-    borderBottomColor: '#F0F0F0',
+    borderBottomColor: '#1E293B',
   },
   backButton: {
     padding: 8,
@@ -611,7 +612,7 @@ const styles = StyleSheet.create({
   headerTitle: {
     fontSize: 18,
     fontFamily: 'Inter-SemiBold',
-    color: '#000000',
+    color: '#FFFFFF',
   },
   bookmarkButton: {
     padding: 8,
@@ -621,28 +622,32 @@ const styles = StyleSheet.create({
   },
   mainImage: {
     width: '100%',
-    height: 250,
+    aspectRatio: 16 / 9,
+    backgroundColor: '#F3F4F6',
   },
   content: {
     padding: 20,
+    backgroundColor: '#FFFFFF',
   },
   categoryBadge: {
     alignSelf: 'flex-start',
-    backgroundColor: '#E3F2FD',
+    backgroundColor: '#FFF9E6',
     paddingHorizontal: 12,
     paddingVertical: 6,
     borderRadius: 12,
     marginBottom: 12,
+    borderWidth: 1,
+    borderColor: '#8B6914',
   },
   categoryText: {
     fontSize: 12,
     fontFamily: 'Inter-SemiBold',
-    color: '#4169E1',
+    color: '#8B6914',
   },
   title: {
     fontSize: 24,
     fontFamily: 'Inter-SemiBold',
-    color: '#000000',
+    color: '#0F172A',
     marginBottom: 12,
     lineHeight: 32,
   },
@@ -661,20 +666,23 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
-    backgroundColor: '#E3F2FD',
+    backgroundColor: '#FFF9E6',
     paddingHorizontal: 16,
     paddingVertical: 10,
     borderRadius: 12,
     marginBottom: 16,
     alignSelf: 'flex-start',
+    borderWidth: 1,
+    borderColor: '#8B6914',
   },
   urgentDeadline: {
     backgroundColor: '#FFE5E5',
+    borderColor: '#FF6B6B',
   },
   deadlineText: {
     fontSize: 14,
     fontFamily: 'Inter-SemiBold',
-    color: '#4169E1',
+    color: '#8B6914',
   },
   urgentText: {
     color: '#FF6B6B',
@@ -683,10 +691,12 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 12,
-    backgroundColor: '#E8F5E9',
+    backgroundColor: '#FFF9E6',
     padding: 16,
     borderRadius: 12,
     marginBottom: 20,
+    borderWidth: 1,
+    borderColor: '#8B6914',
   },
   fundingLabel: {
     fontSize: 12,
@@ -696,7 +706,7 @@ const styles = StyleSheet.create({
   fundingAmount: {
     fontSize: 20,
     fontFamily: 'Inter-SemiBold',
-    color: '#4CAF50',
+    color: '#8B6914',
   },
   section: {
     marginBottom: 24,
@@ -704,7 +714,7 @@ const styles = StyleSheet.create({
   sectionTitle: {
     fontSize: 18,
     fontFamily: 'Inter-SemiBold',
-    color: '#000000',
+    color: '#0F172A',
     marginBottom: 12,
   },
   description: {
@@ -720,7 +730,7 @@ const styles = StyleSheet.create({
     padding: 16,
     borderRadius: 12,
     borderLeftWidth: 4,
-    borderLeftColor: '#4169E1',
+    borderLeftColor: '#8B6914',
   },
   eligibilityText: {
     flex: 1,
@@ -737,17 +747,19 @@ const styles = StyleSheet.create({
     padding: 14,
     borderRadius: 12,
     marginBottom: 8,
+    borderWidth: 1,
+    borderColor: '#8B6914',
   },
   contactText: {
     fontSize: 14,
     fontFamily: 'Inter-Regular',
-    color: '#4169E1',
+    color: '#8B6914',
   },
   applyButton: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#4169E1',
+    backgroundColor: '#0F172A',
     paddingVertical: 16,
     borderRadius: 12,
     gap: 8,
@@ -763,6 +775,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     gap: 16,
+    backgroundColor: '#FFFFFF',
   },
   loadingText: {
     fontSize: 16,
@@ -776,7 +789,7 @@ const styles = StyleSheet.create({
   },
   backButtonError: {
     marginTop: 16,
-    backgroundColor: '#4169E1',
+    backgroundColor: '#0F172A',
     paddingHorizontal: 24,
     paddingVertical: 12,
     borderRadius: 8,
@@ -804,7 +817,7 @@ const styles = StyleSheet.create({
     marginTop: 2,
   },
   mentorCountBadge: {
-    backgroundColor: '#4169E1',
+    backgroundColor: '#ffc857',
     borderRadius: 12,
     paddingHorizontal: 10,
     paddingVertical: 4,
@@ -814,7 +827,7 @@ const styles = StyleSheet.create({
   mentorCountText: {
     fontSize: 12,
     fontFamily: 'Inter-SemiBold',
-    color: '#FFFFFF',
+    color: '#0F172A',
   },
   mentorsLoadingContainer: {
     flexDirection: 'row',
@@ -854,7 +867,7 @@ const styles = StyleSheet.create({
   mentorName: {
     fontSize: 15,
     fontFamily: 'Inter-SemiBold',
-    color: '#000000',
+    color: '#0F172A',
   },
   mentorTitleRow: {
     flexDirection: 'row',
@@ -870,7 +883,7 @@ const styles = StyleSheet.create({
   mentorCompany: {
     fontSize: 12,
     fontFamily: 'Inter-Regular',
-    color: '#4169E1',
+    color: '#ffc857',
   },
   expertisePreview: {
     marginTop: 4,
@@ -885,17 +898,17 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     gap: 8,
-    backgroundColor: '#F9FAFB',
+    backgroundColor: '#FFFFFF',
     paddingVertical: 12,
     borderRadius: 12,
     borderWidth: 1,
-    borderColor: '#4169E1',
+    borderColor: '#ffc857',
     marginTop: 8,
   },
   viewAllMentorsText: {
     fontSize: 14,
     fontFamily: 'Inter-SemiBold',
-    color: '#4169E1',
+    color: '#ffc857',
   },
   noMentorsContainer: {
     alignItems: 'center',
@@ -919,7 +932,7 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
   browseMentorsButton: {
-    backgroundColor: '#4169E1',
+    backgroundColor: '#0F172A',
     paddingHorizontal: 20,
     paddingVertical: 10,
     borderRadius: 8,
@@ -936,20 +949,20 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   tag: {
-    backgroundColor: '#EEF2FF',
+    backgroundColor: '#FFF9E6',
     paddingHorizontal: 12,
     paddingVertical: 6,
     borderRadius: 16,
     borderWidth: 1,
-    borderColor: '#C7D2FE',
+    borderColor: '#ffc857',
   },
   tagText: {
     fontSize: 13,
     fontFamily: 'Inter-SemiBold',
-    color: '#4169E1',
+    color: '#ffc857',
   },
   applicationButton: {
-    backgroundColor: '#10B981',
+    backgroundColor: '#0F172A',
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',

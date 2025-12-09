@@ -3,7 +3,7 @@ import { useState, useEffect } from 'react';
 import { useRouter } from 'expo-router'
 import { DebouncedTouchable } from '@/components/DebouncedTouchable';
 import { debouncedRouter } from '@/utils/navigationDebounce';;
-import { ArrowLeft, User, Briefcase, GraduationCap, Heart, Calendar, FileText, Upload, CheckCircle, ChevronDown, X } from 'lucide-react-native';
+import { ArrowLeft, User, Briefcase, GraduationCap, Heart, Calendar, FileText, Upload, CheckCircle, ChevronDown, X, ThumbsUp } from 'lucide-react-native';
 import { useAuth } from '@/hooks/useAuth';
 import { supabase } from '@/lib/supabase';
 import { EXPERTISE_OPTIONS, MEETING_FORMATS, DAYS_OPTIONS, INDUSTRY_OPTIONS } from '@/constants/mentorConstants';

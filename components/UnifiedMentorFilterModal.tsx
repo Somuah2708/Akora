@@ -414,7 +414,7 @@ const styles = StyleSheet.create({
     color: '#1F2937',
   },
   filterCountBadge: {
-    backgroundColor: '#4169E1',
+    backgroundColor: '#0F172A',
     borderRadius: 12,
     paddingHorizontal: 8,
     paddingVertical: 2,
@@ -449,9 +449,9 @@ const styles = StyleSheet.create({
     gap: 6,
   },
   tabActive: {
-    backgroundColor: '#EEF2FF',
+    backgroundColor: '#F1F5F9',
     borderWidth: 1,
-    borderColor: '#4169E1',
+    borderColor: '#0F172A',
   },
   tabText: {
     fontSize: 14,
@@ -459,7 +459,7 @@ const styles = StyleSheet.create({
     color: '#6B7280',
   },
   tabTextActive: {
-    color: '#4169E1',
+    color: '#0F172A',
   },
   content: {
     paddingHorizontal: 20,
@@ -487,18 +487,18 @@ const styles = StyleSheet.create({
     color: '#4B5563',
   },
   selectedBanner: {
-    backgroundColor: '#EEF2FF',
+    backgroundColor: '#F1F5F9',
     paddingVertical: 10,
     paddingHorizontal: 14,
     borderRadius: 10,
     marginBottom: 16,
     borderWidth: 1,
-    borderColor: '#C7D2FE',
+    borderColor: '#CBD5E1',
   },
   selectedText: {
     fontSize: 13,
     fontFamily: 'Inter-SemiBold',
-    color: '#4169E1',
+    color: '#0F172A',
     textAlign: 'center',
   },
   expertiseGrid: {
@@ -516,8 +516,8 @@ const styles = StyleSheet.create({
     backgroundColor: '#F9FAFB',
   },
   expertiseChipSelected: {
-    backgroundColor: '#4169E1',
-    borderColor: '#4169E1',
+    backgroundColor: '#0F172A',
+    borderColor: '#0F172A',
   },
   expertiseChipText: {
     fontSize: 13,
@@ -553,7 +553,7 @@ const styles = StyleSheet.create({
     color: '#1F2937',
   },
   addButton: {
-    backgroundColor: '#4169E1',
+    backgroundColor: '#0F172A',
     paddingHorizontal: 20,
     paddingVertical: 12,
     borderRadius: 10,
@@ -574,9 +574,9 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
-    backgroundColor: '#EEF2FF',
+    backgroundColor: '#F1F5F9',
     borderWidth: 1,
-    borderColor: '#C7D2FE',
+    borderColor: '#CBD5E1',
     paddingHorizontal: 12,
     paddingVertical: 8,
     borderRadius: 16,
@@ -584,7 +584,7 @@ const styles = StyleSheet.create({
   chipText: {
     fontSize: 13,
     fontFamily: 'Inter-SemiBold',
-    color: '#4169E1',
+    color: '#0F172A',
   },
   industryGrid: {
     flexDirection: 'row',
@@ -723,9 +723,9 @@ const styles = StyleSheet.create({
     flex: 1,
     paddingVertical: 14,
     borderRadius: 12,
-    backgroundColor: '#4169E1',
+    backgroundColor: '#0F172A',
     alignItems: 'center',
-    shadowColor: '#4169E1',
+    shadowColor: '#0F172A',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.2,
     shadowRadius: 4,

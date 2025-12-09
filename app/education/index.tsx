@@ -1,4 +1,4 @@
-import { View, Text, StyleSheet, ScrollView, Image, TouchableOpacity, TextInput, Dimensions, Alert, ActivityIndicator, Modal } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, Image, TouchableOpacity, TextInput, Dimensions, Alert, ActivityIndicator, Modal, RefreshControl } from 'react-native';
 import { useFonts, Inter_400Regular, Inter_600SemiBold } from '@expo-google-fonts/inter';
 import { useEffect, useState, useCallback } from 'react';
 import { SplashScreen, useRouter, Link, useLocalSearchParams } from 'expo-router'
@@ -42,29 +42,23 @@ export default function EducationScreen() {
   const [selectedExpertise, setSelectedExpertise] = useState<string[]>([]);
   const [advancedFilters, setAdvancedFilters] = useState<FilterCriteria | null>(null);
   const [isAdmin, setIsAdmin] = useState(false);
-  const [checkingAdmin, setCheckingAdmin] = useState(true);
   const [adminMenuVisible, setAdminMenuVisible] = useState(false);
   const [bookmarkMenuVisible, setBookmarkMenuVisible] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
   
   const [fontsLoaded] = useFonts({
     'Inter-Regular': Inter_400Regular,
     'Inter-SemiBold': Inter_600SemiBold,
   });
 
-  // Check if user is admin (same pattern as events screen)
+  // Check if user is admin (non-blocking, only for showing manage button)
   const loadRole = useCallback(async () => {
-    console.log('[Education] loadRole called');
-    console.log('[Education] user exists:', !!user);
-    console.log('[Education] user.id:', user?.id);
-    
     if (!user) {
-      console.log('[Education] No user, skipping admin check');
-      setCheckingAdmin(false);
+      setIsAdmin(false);
       return;
     }
     
     try {
-      console.log('[Education] Fetching profile for user:', user.id);
       const { data, error } = await supabase
         .from('profiles')
         .select('is_admin, role')
@@ -72,31 +66,17 @@ export default function EducationScreen() {
         .single();
       
       if (error) {
-        console.error('[Education] Error fetching profile:', error);
         setIsAdmin(false);
-        setCheckingAdmin(false);
         return;
       }
       
-      console.log('[Education] Profile data:', data);
-      console.log('[Education] is_admin:', data?.is_admin);
-      console.log('[Education] role:', data?.role);
-      
       const admin = data?.is_admin === true || data?.role === 'admin';
-      console.log('[Education] Computed admin status:', admin);
-      
       setIsAdmin(!!admin);
       
-      // Don't auto-redirect admins - let them see the content
-      // They can access admin panel via the button if needed
-      
-      setCheckingAdmin(false);
     } catch (err) {
-      console.error('[Education] Exception in loadRole:', err);
       setIsAdmin(false);
-      setCheckingAdmin(false);
     }
-  }, [user, router]);
+  }, [user]);
 
   useEffect(() => {
     console.log('[Education] useEffect for loadRole triggered');
@@ -262,7 +242,8 @@ export default function EducationScreen() {
       const { data, error } = await supabase
         .from('education_bookmarks')
         .select('opportunity_id')
-        .eq('user_id', user.id);
+        .eq('user_id', user.id)
+        .in('opportunity_type', ['university', 'scholarship']);
 
       if (error) throw error;
       setBookmarkedIds(data?.map(b => b.opportunity_id) || []);
@@ -283,16 +264,16 @@ export default function EducationScreen() {
     try {
       const { data, error } = await supabase
         .from('education_bookmarks')
-        .select('mentor_id')
+        .select('opportunity_id')
         .eq('user_id', user.id)
-        .not('mentor_id', 'is', null);
+        .eq('opportunity_type', 'mentor');
 
       if (error) {
         console.error('❌ [Education] Error fetching favorite mentors:', error);
         throw error;
       }
       
-      const mentorIds = data?.map(f => f.mentor_id!) || [];
+      const mentorIds = data?.map(f => f.opportunity_id) || [];
       setFavoriteMentorIds(mentorIds);
       console.log('✅ [Education] Loaded favorite mentors:', mentorIds.length, 'mentors');
       console.log('✅ [Education] Mentor IDs:', mentorIds);
@@ -325,18 +306,35 @@ export default function EducationScreen() {
     }
   }, [fontsLoaded]);
 
+  const onRefresh = useCallback(async () => {
+    setRefreshing(true);
+    try {
+      // Refresh based on active tab
+      switch (activeTab) {
+        case 'universities':
+          await fetchUniversities();
+          break;
+        case 'scholarships':
+          await fetchScholarships();
+          break;
+        case 'mentors':
+          await fetchMentors();
+          break;
+      }
+      // Also refresh bookmarks
+      if (user) {
+        await fetchBookmarks();
+        await fetchFavoriteMentors();
+      }
+    } catch (error) {
+      console.error('Error refreshing:', error);
+    } finally {
+      setRefreshing(false);
+    }
+  }, [activeTab, fetchUniversities, fetchScholarships, fetchMentors, user, fetchBookmarks, fetchFavoriteMentors]);
+
   if (!fontsLoaded) {
     return null;
-  }
-
-  // Show loading while checking admin status
-  if (checkingAdmin) {
-    return (
-      <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
-        <ActivityIndicator size="small" color="#4169E1" />
-        <Text style={{ marginTop: 8, fontSize: 14, color: '#666' }}>Loading...</Text>
-      </View>
-    );
   }
 
   // Filter based on search query
@@ -477,7 +475,7 @@ export default function EducationScreen() {
     
     // Check if user is admin
     if (!isAdmin) {
-      Alert.alert('Admins only', 'You need admin access to manage Schools & Scholarships.');
+      Alert.alert('Admins only', 'You need admin access to manage Educational Opportunities.');
       return;
     }
     // Show admin menu modal
@@ -506,7 +504,8 @@ export default function EducationScreen() {
           .from('education_bookmarks')
           .delete()
           .eq('user_id', user.id)
-          .eq('mentor_id', mentorId);
+          .eq('opportunity_id', mentorId)
+          .eq('opportunity_type', 'mentor');
 
         if (error) {
           console.error('❌ [Education] Delete error:', error);
@@ -519,8 +518,8 @@ export default function EducationScreen() {
         console.log('🔖 [Education] Adding mentor to favorites...');
         const insertData = { 
           user_id: user.id, 
-          mentor_id: mentorId,
-          opportunity_id: null
+          opportunity_id: mentorId,
+          opportunity_type: 'mentor'
         };
         console.log('🔖 [Education] Insert data:', insertData);
         
@@ -551,10 +550,10 @@ export default function EducationScreen() {
   };
 
   // Toggle bookmark
-  const toggleBookmark = async (opportunityId: string, event: any) => {
+  const toggleBookmark = async (opportunityId: string, opportunityType: 'university' | 'scholarship', event: any) => {
     event.stopPropagation(); // Prevent card click
     
-    console.log('toggleBookmark called', { opportunityId, user: !!user });
+    console.log('toggleBookmark called', { opportunityId, opportunityType, user: !!user });
     
     if (!user) {
       Alert.alert('Login Required', 'Please sign in to bookmark opportunities.');
@@ -570,7 +569,8 @@ export default function EducationScreen() {
           .from('education_bookmarks')
           .delete()
           .eq('user_id', user.id)
-          .eq('opportunity_id', opportunityId);
+          .eq('opportunity_id', opportunityId)
+          .eq('opportunity_type', opportunityType);
         
         if (error) throw error;
         
@@ -579,7 +579,11 @@ export default function EducationScreen() {
       } else {
         const { error } = await supabase
           .from('education_bookmarks')
-          .insert({ user_id: user.id, opportunity_id: opportunityId });
+          .insert({ 
+            user_id: user.id, 
+            opportunity_id: opportunityId,
+            opportunity_type: opportunityType
+          });
         
         if (error) throw error;
         
@@ -593,37 +597,54 @@ export default function EducationScreen() {
   };
 
   return (
-    <ScrollView style={styles.container} showsVerticalScrollIndicator={false}>
+    <View style={{ flex: 1 }}>
+      {/* Full Screen Refresh Overlay */}
+      {refreshing && (
+        <View style={styles.loadingOverlay}>
+          <ActivityIndicator size="large" color="#ffc857" />
+        </View>
+      )}
+
+      <ScrollView 
+        style={styles.container} 
+        showsVerticalScrollIndicator={false}
+        refreshControl={
+          <RefreshControl 
+            refreshing={false}
+            onRefresh={onRefresh}
+          />
+        }
+      >
       {/* Hero Header */}
       <View style={styles.heroHeader}>
         <View style={styles.heroTopRow}>
           <TouchableOpacity onPress={() => debouncedRouter.back()} style={styles.backButton}>
-            <ArrowLeft size={22} color="#0F172A" />
+            <ArrowLeft size={22} color="#FFFFFF" />
           </TouchableOpacity>
+          <Text style={styles.heroTitle}>Educational Opportunities</Text>
           {(profile?.is_admin || profile?.role === 'admin') ? (
             <TouchableOpacity 
               style={styles.heroManageButton}
               onPress={handleAddOpportunity}
-              accessibilityLabel="Manage Schools and Scholarships"
+              accessibilityLabel="Manage Educational Opportunities"
             >
-              <Plus size={18} color="#4169E1" />
+              <Plus size={18} color="#FFFFFF" />
               <Text style={styles.heroManageText}>Manage</Text>
             </TouchableOpacity>
           ) : (
             <View style={{ width: 74 }} />
           )}
         </View>
-        <Text style={styles.heroTitle}>Universities, Scholarships & Alumni Mentors</Text>
-        <Text style={styles.heroSubtitle}>Discover schools, secure funding, and get guidance from alumni mentors</Text>
+        <Text style={styles.heroSubtitle}>Discover universities, secure funding, and get guidance from alumni mentors</Text>
 
         {/* Search */}
         <View style={styles.searchContainer}>
           <View style={styles.searchInputContainer}>
-            <Search size={20} color="#64748B" />
+            <Search size={20} color="#94A3B8" />
             <TextInput
               style={styles.searchInput}
               placeholder="Search universities, scholarships, mentors..."
-              placeholderTextColor="#64748B"
+              placeholderTextColor="#94A3B8"
               value={searchQuery}
               onChangeText={setSearchQuery}
             />
@@ -632,7 +653,7 @@ export default function EducationScreen() {
             style={styles.bookmarkIconButton}
             onPress={() => setBookmarkMenuVisible(!bookmarkMenuVisible)}
           >
-            <Star size={22} color="#4169E1" fill={bookmarkMenuVisible ? "#4169E1" : "none"} />
+            <Star size={22} color="#ffc857" fill={bookmarkMenuVisible ? "#ffc857" : "none"} />
           </TouchableOpacity>
         </View>
 
@@ -643,10 +664,10 @@ export default function EducationScreen() {
               style={styles.bookmarkDropdownItem}
               onPress={() => {
                 setBookmarkMenuVisible(false);
-                debouncedRouter.push('/education/saved-opportunities?type=universities');
+                debouncedRouter.push('/education/saved-universities');
               }}
             >
-              <Building2 size={18} color="#4169E1" />
+              <Building2 size={18} color="#ffc857" />
               <Text style={styles.bookmarkDropdownText}>Saved Universities</Text>
             </TouchableOpacity>
             <View style={styles.bookmarkDropdownDivider} />
@@ -654,10 +675,10 @@ export default function EducationScreen() {
               style={styles.bookmarkDropdownItem}
               onPress={() => {
                 setBookmarkMenuVisible(false);
-                debouncedRouter.push('/education/saved-opportunities?type=scholarships');
+                debouncedRouter.push('/education/saved-scholarships');
               }}
             >
-              <Award size={18} color="#4169E1" />
+              <Award size={18} color="#ffc857" />
               <Text style={styles.bookmarkDropdownText}>Saved Scholarships</Text>
             </TouchableOpacity>
             <View style={styles.bookmarkDropdownDivider} />
@@ -668,7 +689,7 @@ export default function EducationScreen() {
                 debouncedRouter.push('/education/saved-mentors');
               }}
             >
-              <Users size={18} color="#4169E1" />
+              <Users size={18} color="#ffc857" />
               <Text style={styles.bookmarkDropdownText}>Saved Alumni Mentors</Text>
             </TouchableOpacity>
           </View>
@@ -713,7 +734,7 @@ export default function EducationScreen() {
           <View style={styles.modernSectionHeader}>
             <View style={styles.headerLeft}>
               <View style={styles.headerIconBox}>
-                <Building2 size={24} color="#4169E1" />
+                <Building2 size={24} color="#ffc857" />
               </View>
               <View>
                 <Text style={styles.modernSectionTitle}>Ghanaian Universities</Text>
@@ -727,7 +748,7 @@ export default function EducationScreen() {
 
           {loading ? (
             <View style={styles.loadingContainer}>
-              <ActivityIndicator size="large" color="#4169E1" />
+              <ActivityIndicator size="large" color="#ffc857" />
               <Text style={styles.loadingText}>Loading universities...</Text>
             </View>
           ) : filteredUniversities.length > 0 ? (
@@ -755,7 +776,7 @@ export default function EducationScreen() {
                       <Image 
                         source={{ uri: imageUri }} 
                         style={styles.modernCardImage} 
-                        resizeMode="cover"
+                        resizeMode="contain"
                       />
                       <View style={styles.imageGradient} />
                       <TouchableOpacity 
@@ -763,15 +784,15 @@ export default function EducationScreen() {
                         onPress={(e) => {
                           e?.preventDefault?.();
                           e?.stopPropagation?.();
-                          toggleBookmark(university.id, e);
+                          toggleBookmark(university.id, 'university', e);
                         }}
                         activeOpacity={0.7}
                         hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
                       >
-                        <Bookmark 
+                        <Star 
                           size={20} 
-                          color={bookmarkedIds.includes(university.id) ? "#FFD700" : "#FFFFFF"} 
-                          fill={bookmarkedIds.includes(university.id) ? "#FFD700" : "none"}
+                          color={bookmarkedIds.includes(university.id) ? "#ffc857" : "#FFFFFF"} 
+                          fill={bookmarkedIds.includes(university.id) ? "#ffc857" : "none"}
                           strokeWidth={2}
                         />
                       </TouchableOpacity>
@@ -779,7 +800,7 @@ export default function EducationScreen() {
                     <View style={styles.modernCardContent}>
                       <Text style={styles.modernCardTitle} numberOfLines={2}>{university.title}</Text>
                       <View style={styles.modernLocationRow}>
-                        <MapPin size={16} color="#4169E1" />
+                        <MapPin size={16} color="#ffc857" />
                         <Text style={styles.modernLocationText}>{university.location || 'Ghana'}</Text>
                       </View>
                       <Text style={styles.modernCardDescription} numberOfLines={3}>
@@ -791,9 +812,12 @@ export default function EducationScreen() {
                           <Text style={styles.modernApplicationText}>Applications Open</Text>
                         </View>
                       )}
-                      <TouchableOpacity style={styles.modernViewButton}>
+                      <TouchableOpacity 
+                        style={styles.modernViewButton}
+                        onPress={() => debouncedRouter.push(`/education/detail/${university.id}`)}
+                      >
                         <Text style={styles.modernViewButtonText}>View Details</Text>
-                        <ChevronRight size={16} color="#4169E1" />
+                        <ChevronRight size={16} color="#0F172A" />
                       </TouchableOpacity>
                     </View>
                   </TouchableOpacity>
@@ -918,7 +942,7 @@ export default function EducationScreen() {
                       <Image 
                         source={{ uri: imageUri }} 
                         style={styles.modernCardImage}
-                        resizeMode="cover"
+                        resizeMode="contain"
                       />
                       <View style={styles.imageGradient} />
                       
@@ -937,28 +961,21 @@ export default function EducationScreen() {
                         onPress={(e) => {
                           e?.preventDefault?.();
                           e?.stopPropagation?.();
-                          toggleBookmark(scholarship.id, e);
+                          toggleBookmark(scholarship.id, 'scholarship', e);
                         }}
                         activeOpacity={0.7}
                         hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
                       >
-                        <Bookmark 
+                        <Star 
                           size={20} 
-                          color={bookmarkedIds.includes(scholarship.id) ? "#FFD700" : "#FFFFFF"} 
-                          fill={bookmarkedIds.includes(scholarship.id) ? "#FFD700" : "none"}
+                          color={bookmarkedIds.includes(scholarship.id) ? "#ffc857" : "#FFFFFF"} 
+                          fill={bookmarkedIds.includes(scholarship.id) ? "#ffc857" : "none"}
                           strokeWidth={2}
                         />
                       </TouchableOpacity>
                     </View>
                     
                     <View style={styles.modernCardContent}>
-                      <View style={styles.cardHeaderRow}>
-                        <View style={styles.scholarshipTypeBadge}>
-                          <GraduationCap size={12} color="#F59E0B" />
-                          <Text style={styles.scholarshipTypeBadgeText}>Scholarship</Text>
-                        </View>
-                      </View>
-                      
                       <Text style={styles.modernCardTitle} numberOfLines={2}>{scholarship.title}</Text>
                       
                       {/* Deadline Info - More Prominent */}
@@ -981,9 +998,12 @@ export default function EducationScreen() {
                         {scholarship.description}
                       </Text>
                       
-                      <TouchableOpacity style={styles.applyNowButton}>
+                      <TouchableOpacity 
+                        style={styles.applyNowButton}
+                        onPress={() => debouncedRouter.push(`/education/detail/${scholarship.id}`)}
+                      >
                         <Text style={styles.applyNowButtonText}>View Details</Text>
-                        <ChevronRight size={16} color="#FFFFFF" />
+                        <ChevronRight size={16} color="#0F172A" />
                       </TouchableOpacity>
                     </View>
                   </TouchableOpacity>
@@ -1011,13 +1031,13 @@ export default function EducationScreen() {
               <Text style={styles.sectionTitle}>👨‍🎓 Free Alumni Mentors</Text>
               <Text style={styles.sectionCount}>{filteredMentors.length} mentors available</Text>
             </View>
-            <View style={{flexDirection: 'row', gap: 8}}>
+            <View style={{flexDirection: 'row', gap: 8, paddingRight: 12}}>
               {/* My Requests Button */}
               <TouchableOpacity 
                 style={styles.myRequestsButton}
                 onPress={() => debouncedRouter.push('/my-mentorship-requests')}
               >
-                <FileText size={16} color="#4169E1" />
+                <FileText size={16} color="#ffc857" />
                 <Text style={styles.myRequestsButtonText}>My Requests</Text>
               </TouchableOpacity>
               
@@ -1080,10 +1100,11 @@ export default function EducationScreen() {
                   style={styles.mentorFavoriteButton}
                   onPress={(e) => toggleFavoriteMentor(mentor.id, e)}
                 >
-                  <Bookmark
+                  <Star
                     size={20}
-                    color={favoriteMentorIds.includes(mentor.id) ? '#EF4444' : '#9CA3AF'}
-                    fill={favoriteMentorIds.includes(mentor.id) ? '#EF4444' : 'none'}
+                    color={favoriteMentorIds.includes(mentor.id) ? '#ffc857' : '#94A3B8'}
+                    fill={favoriteMentorIds.includes(mentor.id) ? '#ffc857' : 'none'}
+                    strokeWidth={2}
                   />
                 </TouchableOpacity>
                 <View style={styles.mentorInfo}>
@@ -1103,7 +1124,7 @@ export default function EducationScreen() {
                       ))}
                       {mentor.expertise_areas.length > 3 && (
                         <View style={[styles.mentorChip, { backgroundColor: '#F3F4F6', borderColor: '#E5E7EB' }]}>
-                          <Text style={[styles.mentorChipText, { color: '#6B7280' }]}>+{mentor.expertise_areas.length - 3}</Text>
+                          <Text style={[styles.mentorChipText, { color: '#94A3B8' }]}>+{mentor.expertise_areas.length - 3}</Text>
                         </View>
                       )}
                     </View>
@@ -1174,7 +1195,7 @@ export default function EducationScreen() {
         >
           <View style={styles.adminModalContent} onStartShouldSetResponder={() => true}>
             <View style={styles.adminModalHeader}>
-              <Settings size={24} color="#4169E1" />
+              <Settings size={24} color="#ffc857" />
               <Text style={styles.adminModalTitle}>Manage Education</Text>
             </View>
             
@@ -1185,7 +1206,7 @@ export default function EducationScreen() {
                 debouncedRouter.push('/admin-education-universities');
               }}
             >
-              <GraduationCap size={20} color="#4169E1" />
+              <GraduationCap size={20} color="#ffc857" />
               <Text style={styles.adminMenuItemText}>Universities</Text>
               <ChevronRight size={20} color="#94A3B8" />
             </TouchableOpacity>
@@ -1197,7 +1218,7 @@ export default function EducationScreen() {
                 debouncedRouter.push('/admin-education-scholarships');
               }}
             >
-              <Award size={20} color="#4169E1" />
+              <Award size={20} color="#ffc857" />
               <Text style={styles.adminMenuItemText}>Scholarships</Text>
               <ChevronRight size={20} color="#94A3B8" />
             </TouchableOpacity>
@@ -1209,7 +1230,7 @@ export default function EducationScreen() {
                 debouncedRouter.push('/admin-alumni-mentors');
               }}
             >
-              <Users size={20} color="#4169E1" />
+              <Users size={20} color="#ffc857" />
               <Text style={styles.adminMenuItemText}>Alumni Mentors</Text>
               <ChevronRight size={20} color="#94A3B8" />
             </TouchableOpacity>
@@ -1223,14 +1244,24 @@ export default function EducationScreen() {
           </View>
         </TouchableOpacity>
       </Modal>
-    </ScrollView>
+      </ScrollView>
+    </View>
   );
-}
-
-const styles = StyleSheet.create({
+}const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#FFFFFF',
+    backgroundColor: '#0F172A',
+  },
+  loadingOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: '#0F172A',
+    zIndex: 9999,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   header: {
     flexDirection: 'row',
@@ -1239,69 +1270,68 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingTop: 60,
     paddingBottom: 16,
-    backgroundColor: '#FFFFFF',
+    backgroundColor: '#0F172A',
   },
   backButton: {
     padding: 8,
   },
   heroHeader: {
-    backgroundColor: '#F8FAFF',
-    paddingTop: 56,
-    paddingBottom: 16,
-    borderBottomWidth: 1,
-    borderBottomColor: '#E5EAF2',
+    backgroundColor: '#0F172A',
+    paddingTop: 48,
+    paddingBottom: 12,
   },
   heroTopRow: {
-    paddingHorizontal: 16,
+    paddingHorizontal: 20,
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
     marginBottom: 8,
   },
   heroTitle: {
-    paddingHorizontal: 16,
-    fontSize: 22,
+    fontSize: 20,
     fontFamily: 'Inter-SemiBold',
-    color: '#0F172A',
-    letterSpacing: -0.3,
+    color: '#FFFFFF',
+    letterSpacing: -0.4,
   },
   heroSubtitle: {
-    paddingHorizontal: 16,
+    paddingHorizontal: 20,
     fontSize: 13,
     fontFamily: 'Inter-Regular',
-    color: '#475569',
+    color: '#94A3B8',
     marginTop: 4,
+    marginBottom: 8,
+    lineHeight: 18,
   },
   heroManageButton: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
-    backgroundColor: '#FFFFFF',
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 10,
-    borderWidth: 1,
-    borderColor: '#D6E1FF',
-    shadowColor: '#4169E1',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 2,
+    backgroundColor: '#ffc857',
+    paddingHorizontal: 14,
+    paddingVertical: 9,
+    borderRadius: 12,
+    shadowColor: '#ffc857',
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.4,
+    shadowRadius: 8,
+    elevation: 4,
   },
   heroManageText: {
-    fontSize: 12,
+    fontSize: 13,
     fontFamily: 'Inter-SemiBold',
-    color: '#4169E1',
+    color: '#0F172A',
+    letterSpacing: 0.3,
   },
   title: {
     fontSize: 24,
-    fontFamily: 'Inter-SemiBold',
-    color: '#000000',
+    fontFamily: 'Inter-Bold',
+    color: '#FFFFFF',
+    letterSpacing: -0.5,
   },
   subtitle: {
     fontSize: 13,
     fontFamily: 'Inter-Regular',
-    color: '#666666',
+    color: '#94A3B8',
     marginTop: 4,
     textAlign: 'center',
   },
@@ -1311,80 +1341,88 @@ const styles = StyleSheet.create({
   searchContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 16,
-    gap: 10,
-    marginBottom: 16,
+    paddingHorizontal: 20,
+    gap: 12,
+    marginBottom: 20,
   },
   searchInputContainer: {
     flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#F8F9FA',
-    borderRadius: 12,
-    paddingHorizontal: 16,
-    height: 48,
+    backgroundColor: '#1E293B',
+    borderRadius: 16,
+    paddingHorizontal: 18,
+    height: 52,
+    borderWidth: 1,
+    borderColor: '#334155',
   },
   bookmarkIconButton: {
-    width: 48,
-    height: 48,
-    backgroundColor: '#F8F9FA',
-    borderRadius: 12,
+    width: 52,
+    height: 52,
+    backgroundColor: '#1E293B',
+    borderRadius: 16,
     alignItems: 'center',
     justifyContent: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.05,
-    shadowRadius: 2,
-    elevation: 1,
+    borderWidth: 1,
+    borderColor: '#334155',
   },
   searchInput: {
     flex: 1,
     marginLeft: 12,
-    fontSize: 16,
+    fontSize: 15,
     fontFamily: 'Inter-Regular',
-    color: '#000000',
+    color: '#FFFFFF',
   },
   typesScroll: {
     marginBottom: 24,
   },
   typesContent: {
-    paddingHorizontal: 16,
+    paddingHorizontal: 20,
     gap: 12,
   },
   typeButton: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#F8F9FA',
-    borderRadius: 12,
-    paddingHorizontal: 16,
-    paddingVertical: 12,
+    backgroundColor: '#1E293B',
+    borderRadius: 14,
+    paddingHorizontal: 18,
+    paddingVertical: 14,
     gap: 8,
+    borderWidth: 1.5,
+    borderColor: '#334155',
   },
   activeTypeButton: {
-    backgroundColor: '#4169E1',
+    backgroundColor: '#ffc857',
+    borderColor: '#ffc857',
+    shadowColor: '#ffc857',
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.35,
+    shadowRadius: 8,
+    elevation: 4,
   },
   typeName: {
     fontSize: 14,
-    fontFamily: 'Inter-Regular',
-    color: '#000000',
+    fontFamily: 'Inter-SemiBold',
+    color: '#94A3B8',
   },
   activeTypeName: {
-    color: '#FFFFFF',
+    color: '#0F172A',
   },
   section: {
-    marginBottom: 24,
+    marginBottom: 32,
   },
   sectionHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingHorizontal: 16,
-    marginBottom: 16,
+    paddingHorizontal: 20,
+    marginBottom: 20,
   },
   sectionTitle: {
-    fontSize: 18,
-    fontFamily: 'Inter-SemiBold',
-    color: '#000000',
+    fontSize: 20,
+    fontFamily: 'Inter-Bold',
+    color: '#FFFFFF',
+    letterSpacing: -0.4,
   },
   seeAllButton: {
     flexDirection: 'row',
@@ -1393,26 +1431,28 @@ const styles = StyleSheet.create({
   },
   seeAllText: {
     fontSize: 14,
-    fontFamily: 'Inter-Regular',
-    color: '#666666',
+    fontFamily: 'Inter-Medium',
+    color: '#ffc857',
   },
   featuredContent: {
-    paddingHorizontal: 16,
-    gap: 16,
+    paddingHorizontal: 20,
+    gap: 20,
   },
   featuredCard: {
     width: CARD_WIDTH,
-    borderRadius: 16,
-    backgroundColor: '#FFFFFF',
+    borderRadius: 20,
+    backgroundColor: '#1E293B',
     shadowColor: '#000000',
     shadowOffset: {
       width: 0,
-      height: 2,
+      height: 6,
     },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
+    shadowOpacity: 0.3,
+    shadowRadius: 12,
+    elevation: 8,
     overflow: 'hidden',
+    borderWidth: 1,
+    borderColor: '#334155',
   },
   featuredImage: {
     width: '100%',
@@ -1424,114 +1464,118 @@ const styles = StyleSheet.create({
     right: 16,
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#FFFFFF',
-    paddingHorizontal: 12,
-    paddingVertical: 6,
+    backgroundColor: '#ffc857',
+    paddingHorizontal: 14,
+    paddingVertical: 8,
     borderRadius: 20,
     gap: 4,
+    shadowColor: '#000000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.25,
+    shadowRadius: 4,
+    elevation: 3,
   },
   rankingText: {
     fontSize: 12,
-    fontFamily: 'Inter-SemiBold',
-    color: '#000000',
+    fontFamily: 'Inter-Bold',
+    color: '#0F172A',
   },
   featuredInfo: {
-    padding: 16,
-    gap: 8,
+    padding: 20,
+    gap: 12,
   },
   universityName: {
     fontSize: 18,
-    fontFamily: 'Inter-SemiBold',
-    color: '#000000',
+    fontFamily: 'Inter-Bold',
+    color: '#FFFFFF',
+    letterSpacing: -0.3,
   },
   locationInfo: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 4,
+    gap: 6,
   },
   locationText: {
     fontSize: 14,
-    fontFamily: 'Inter-Regular',
-    color: '#666666',
+    fontFamily: 'Inter-Medium',
+    color: '#ffc857',
   },
   programTags: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: 8,
+    gap: 10,
   },
   programTag: {
-    backgroundColor: '#F8F9FA',
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 6,
+    backgroundColor: '#334155',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 8,
   },
   programText: {
     fontSize: 12,
-    fontFamily: 'Inter-Regular',
-    color: '#666666',
+    fontFamily: 'Inter-Medium',
+    color: '#CBD5E1',
   },
   deadlineInfo: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 4,
+    gap: 6,
     marginTop: 4,
   },
   scholarshipCard: {
     flexDirection: 'row',
-    backgroundColor: '#FFFFFF',
-    marginHorizontal: 16,
-    marginBottom: 18,
-    borderRadius: 18,
+    backgroundColor: '#1E293B',
+    marginHorizontal: 20,
+    marginBottom: 20,
+    borderRadius: 20,
     overflow: 'hidden',
-    shadowColor: '#FFD700',
+    shadowColor: '#ffc857',
     shadowOffset: {
       width: 0,
-      height: 4,
+      height: 6,
     },
-    shadowOpacity: 0.15,
-    shadowRadius: 10,
-    elevation: 6,
+    shadowOpacity: 0.25,
+    shadowRadius: 12,
+    elevation: 8,
     borderWidth: 1,
-    borderColor: '#FFF9E6',
+    borderColor: '#334155',
   },
   scholarshipImage: {
     flex: 1,
     width: '100%',
   },
   scholarshipImageContainer: {
-    width: 120,
+    width: 130,
     alignSelf: 'stretch',
-    backgroundColor: '#F0F4FF',
+    backgroundColor: '#0F172A',
   },
   scholarshipInfo: {
     flex: 1,
-    padding: 16,
-    gap: 8,
-    backgroundColor: '#FAFAFA',
+    padding: 20,
+    gap: 12,
   },
   scholarshipTypeTag: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
-    backgroundColor: '#FFF9E6',
-    paddingHorizontal: 12,
-    paddingVertical: 6,
+    backgroundColor: '#ffc857',
+    paddingHorizontal: 14,
+    paddingVertical: 7,
     borderRadius: 10,
     alignSelf: 'flex-start',
-    borderWidth: 1,
-    borderColor: '#FFD700',
   },
   scholarshipTypeText: {
     fontSize: 12,
-    fontFamily: 'Inter-SemiBold',
-    color: '#F57C00',
+    fontFamily: 'Inter-Bold',
+    color: '#0F172A',
     letterSpacing: 0.5,
   },
   scholarshipTitle: {
     fontSize: 17,
-    fontFamily: 'Inter-SemiBold',
-    color: '#1a1a1a',
+    fontFamily: 'Inter-Bold',
+    color: '#FFFFFF',
     lineHeight: 24,
+    letterSpacing: -0.3,
   },
   scholarshipDetails: {
     flexDirection: 'row',
@@ -1542,145 +1586,137 @@ const styles = StyleSheet.create({
   detailItem: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 4,
+    gap: 6,
   },
   detailText: {
-    fontSize: 12,
-    fontFamily: 'Inter-Regular',
-    color: '#666666',
+    fontSize: 13,
+    fontFamily: 'Inter-Medium',
+    color: '#94A3B8',
   },
   quickActions: {
     flexDirection: 'row',
-    paddingHorizontal: 16,
-    gap: 8,
-    marginBottom: 20,
+    paddingHorizontal: 20,
+    gap: 12,
+    marginBottom: 24,
   },
   quickActionButton: {
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#EEF2FF',
-    paddingVertical: 10,
-    paddingHorizontal: 6,
-    borderRadius: 10,
+    backgroundColor: '#1E293B',
+    paddingVertical: 14,
+    paddingHorizontal: 8,
+    borderRadius: 14,
     borderWidth: 1.5,
-    borderColor: '#D6E1FF',
-    shadowColor: '#4169E1',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.08,
-    shadowRadius: 3,
-    elevation: 2,
+    borderColor: '#334155',
   },
   quickActionText: {
-    fontSize: 11,
-    fontFamily: 'Inter-SemiBold',
-    color: '#4169E1',
-    letterSpacing: 0.1,
+    fontSize: 12,
+    fontFamily: 'Inter-Bold',
+    color: '#ffc857',
+    letterSpacing: 0.3,
     textAlign: 'center',
   },
   bookmarkDropdown: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 12,
-    marginHorizontal: 16,
-    marginBottom: 16,
-    paddingVertical: 8,
+    backgroundColor: '#1E293B',
+    borderRadius: 16,
+    marginHorizontal: 20,
+    marginBottom: 20,
+    paddingVertical: 10,
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.1,
-    shadowRadius: 8,
-    elevation: 5,
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.3,
+    shadowRadius: 12,
+    elevation: 8,
     borderWidth: 1,
-    borderColor: '#E5E7EB',
+    borderColor: '#334155',
   },
   bookmarkDropdownItem: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingVertical: 12,
-    paddingHorizontal: 16,
-    gap: 12,
+    paddingVertical: 14,
+    paddingHorizontal: 20,
+    gap: 14,
   },
   bookmarkDropdownText: {
     fontSize: 15,
-    fontFamily: 'Inter-Regular',
-    color: '#1F2937',
+    fontFamily: 'Inter-Medium',
+    color: '#FFFFFF',
   },
   bookmarkDropdownDivider: {
     height: 1,
-    backgroundColor: '#F3F4F6',
-    marginHorizontal: 16,
+    backgroundColor: '#334155',
+    marginHorizontal: 20,
   },
   loadingText: {
     textAlign: 'center',
     marginTop: 20,
     fontSize: 16,
-    color: '#666',
+    fontFamily: 'Inter-Medium',
+    color: '#94A3B8',
   },
   emptyText: {
     textAlign: 'center',
     fontSize: 18,
-    fontFamily: 'Inter-SemiBold',
-    color: '#1a1a1a',
+    fontFamily: 'Inter-Bold',
+    color: '#CBD5E1',
+    marginTop: 40,
   },
   // Tab styles
   tabContainer: {
     flexDirection: 'row',
-    paddingHorizontal: 16,
-    gap: 10,
-    marginBottom: 20,
+    paddingHorizontal: 20,
+    gap: 12,
+    marginBottom: 24,
   },
   tabButton: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#F5F7FA',
-    paddingVertical: 12,
-    paddingHorizontal: 16,
+    backgroundColor: '#1E293B',
+    paddingVertical: 14,
+    paddingHorizontal: 18,
     borderRadius: 16,
+    borderWidth: 1.5,
+    borderColor: '#334155',
     gap: 8,
-    borderWidth: 2,
-    borderColor: '#E8EDF2',
-    shadowColor: '#000000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.05,
-    shadowRadius: 4,
-    elevation: 2,
   },
   activeTabButton: {
-    backgroundColor: '#4169E1',
-    borderColor: '#4169E1',
-    shadowColor: '#4169E1',
+    backgroundColor: '#ffc857',
+    borderColor: '#ffc857',
+    shadowColor: '#ffc857',
     shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 8,
+    shadowOpacity: 0.35,
+    shadowRadius: 10,
     elevation: 6,
   },
   tabText: {
     fontSize: 13,
-    fontFamily: 'Inter-SemiBold',
-    color: '#666666',
+    fontFamily: 'Inter-Bold',
+    color: '#94A3B8',
   },
   activeTabText: {
-    color: '#FFFFFF',
+    color: '#0F172A',
     letterSpacing: 0.3,
   },
   sectionCount: {
     fontSize: 14,
-    fontFamily: 'Inter-Regular',
-    color: '#666666',
+    fontFamily: 'Inter-Medium',
+    color: '#94A3B8',
   },
   universityCard: {
-    backgroundColor: '#FFFFFF',
+    backgroundColor: '#1E293B',
     borderRadius: 20,
-    marginHorizontal: 16,
+    marginHorizontal: 20,
     marginBottom: 20,
     overflow: 'hidden',
-    shadowColor: '#4169E1',
-    shadowOffset: { width: 0, height: 5 },
-    shadowOpacity: 0.18,
+    shadowColor: '#000000',
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.3,
     shadowRadius: 12,
     elevation: 8,
     borderWidth: 1,
-    borderColor: '#F0F4FF',
+    borderColor: '#334155',
   },
   cardImage: {
     width: '100%',
@@ -1688,14 +1724,14 @@ const styles = StyleSheet.create({
   },
   cardInfo: {
     padding: 20,
-    gap: 10,
-    backgroundColor: '#FAFAFA',
+    gap: 12,
   },
   cardTitle: {
     fontSize: 19,
-    fontFamily: 'Inter-SemiBold',
-    color: '#1a1a1a',
+    fontFamily: 'Inter-Bold',
+    color: '#FFFFFF',
     lineHeight: 26,
+    letterSpacing: -0.3,
   },
   locationRow: {
     flexDirection: 'row',
@@ -1705,8 +1741,8 @@ const styles = StyleSheet.create({
   cardDescription: {
     fontSize: 14,
     fontFamily: 'Inter-Regular',
-    color: '#666666',
-    lineHeight: 20,
+    color: '#94A3B8',
+    lineHeight: 22,
   },
   linkRow: {
     flexDirection: 'row',
@@ -1716,192 +1752,199 @@ const styles = StyleSheet.create({
   },
   linkText: {
     fontSize: 14,
-    fontFamily: 'Inter-SemiBold',
-    color: '#4169E1',
+    fontFamily: 'Inter-Bold',
+    color: '#ffc857',
   },
   emptyContainer: {
     alignItems: 'center',
     padding: 50,
     gap: 16,
-    backgroundColor: '#F8F9FA',
-    marginHorizontal: 16,
+    backgroundColor: '#1E293B',
+    marginHorizontal: 20,
     borderRadius: 20,
     borderWidth: 2,
-    borderColor: '#E8EDF2',
+    borderColor: '#334155',
     borderStyle: 'dashed',
   },
   deadlineText: {
-    fontSize: 12,
-    fontFamily: 'Inter-SemiBold',
-    color: '#FF6B6B',
+    fontSize: 13,
+    fontFamily: 'Inter-Bold',
+    color: '#ffc857',
   },
   bookmarkIcon: {
     position: 'absolute',
     top: 12,
     right: 12,
-    backgroundColor: '#FFFFFF',
+    backgroundColor: '#1E293B',
     padding: 8,
     borderRadius: 20,
     shadowColor: '#000000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.2,
-    shadowRadius: 4,
-    elevation: 3,
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.3,
+    shadowRadius: 6,
+    elevation: 4,
     zIndex: 10,
+    borderWidth: 1,
+    borderColor: '#334155',
   },
   bookmarkIconSmall: {
     position: 'absolute',
     top: 8,
     right: 8,
-    backgroundColor: '#FFFFFF',
+    backgroundColor: '#1E293B',
     padding: 6,
     borderRadius: 16,
     shadowColor: '#000000',
     shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.2,
+    shadowOpacity: 0.3,
     shadowRadius: 4,
     elevation: 3,
     zIndex: 10,
+    borderWidth: 1,
+    borderColor: '#334155',
   },
   segmentedTabs: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 10,
-    paddingHorizontal: 16,
-    paddingTop: 12,
-    paddingBottom: 8,
+    gap: 12,
+    paddingHorizontal: 20,
+    paddingTop: 8,
+    paddingBottom: 20,
   },
   segmentedTab: {
     flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: 12,
-    paddingHorizontal: 10,
-    borderRadius: 12,
-    backgroundColor: '#FFFFFF',
+    paddingVertical: 14,
+    paddingHorizontal: 12,
+    borderRadius: 14,
+    backgroundColor: '#1E293B',
     borderWidth: 1.5,
-    borderColor: '#E5EAF2',
+    borderColor: '#334155',
     gap: 8,
   },
   segmentedTabActive: {
-    backgroundColor: '#4169E1',
-    borderColor: '#4169E1',
-    shadowColor: '#4169E1',
+    backgroundColor: '#ffc857',
+    borderColor: '#ffc857',
+    shadowColor: '#ffc857',
     shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.25,
-    shadowRadius: 8,
-    elevation: 4,
+    shadowOpacity: 0.35,
+    shadowRadius: 10,
+    elevation: 5,
   },
   segmentedTabText: {
-    fontSize: 13,
+    fontSize: 12,
     fontFamily: 'Inter-SemiBold',
-    color: '#1F2937',
+    color: '#94A3B8',
   },
   segmentedTabTextActive: {
-    color: '#FFFFFF',
+    color: '#0F172A',
   },
   emptySubtext: {
     fontSize: 14,
     fontFamily: 'Inter-Regular',
-    color: '#999999',
+    color: '#64748B',
     textAlign: 'center',
   },
   // Mentor Card Styles
   mentorCard: {
     position: 'relative',
     flexDirection: 'row',
-    backgroundColor: '#FFFFFF',
+    backgroundColor: '#1E293B',
     borderRadius: 20,
-    marginHorizontal: 16,
-    marginBottom: 16,
+    marginHorizontal: 20,
+    marginBottom: 20,
     padding: 20,
-    shadowColor: '#4169E1',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.15,
+    shadowColor: '#000000',
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.3,
     shadowRadius: 12,
-    elevation: 6,
+    elevation: 8,
     gap: 16,
     borderWidth: 1,
-    borderColor: '#F0F4FF',
+    borderColor: '#334155',
   },
   mentorFavoriteButton: {
     position: 'absolute',
     top: 12,
     right: 12,
     padding: 8,
-    backgroundColor: '#fff',
+    backgroundColor: '#0F172A',
     borderRadius: 20,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
+    shadowOpacity: 0.3,
     shadowRadius: 4,
     elevation: 3,
     zIndex: 10,
+    borderWidth: 1,
+    borderColor: '#334155',
   },
   mentorAvatar: {
     width: 70,
     height: 70,
     borderRadius: 35,
     borderWidth: 3,
-    borderColor: '#4169E1',
+    borderColor: '#ffc857',
   },
   modernMentorCard: {
     position: 'relative',
     flexDirection: 'row',
-    backgroundColor: '#FFFFFF',
-    borderRadius: 16,
-    marginHorizontal: 16,
-    marginBottom: 14,
-    padding: 16,
+    backgroundColor: '#1E293B',
+    borderRadius: 18,
+    marginHorizontal: 20,
+    marginBottom: 16,
+    padding: 18,
     shadowColor: '#000000',
-    shadowOffset: { width: 0, height: 3 },
-    shadowOpacity: 0.08,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.25,
     shadowRadius: 10,
-    elevation: 4,
-    gap: 14,
+    elevation: 6,
+    gap: 16,
     borderWidth: 1,
-    borderColor: '#EEF2FF',
+    borderColor: '#334155',
   },
   mentorInfo: {
     flex: 1,
-    gap: 6,
+    gap: 8,
   },
   mentorName: {
     fontSize: 17,
-    fontFamily: 'Inter-SemiBold',
-    color: '#1a1a1a',
+    fontFamily: 'Inter-Bold',
+    color: '#FFFFFF',
+    letterSpacing: -0.3,
   },
   mentorRole: {
     fontSize: 14,
-    fontFamily: 'Inter-Regular',
-    color: '#666666',
+    fontFamily: 'Inter-Medium',
+    color: '#94A3B8',
     lineHeight: 20,
   },
   mentorLocation: {
-    fontSize: 12,
+    fontSize: 13,
     fontFamily: 'Inter-Regular',
-    color: '#999999',
+    color: '#64748B',
   },
   mentorActions: {
     marginTop: 10,
   },
   messageButton: {
-    backgroundColor: '#4169E1',
-    paddingVertical: 10,
-    paddingHorizontal: 20,
-    borderRadius: 12,
+    backgroundColor: '#ffc857',
+    paddingVertical: 12,
+    paddingHorizontal: 22,
+    borderRadius: 14,
     alignSelf: 'flex-start',
-    shadowColor: '#4169E1',
+    shadowColor: '#ffc857',
     shadowOffset: { width: 0, height: 3 },
-    shadowOpacity: 0.3,
-    shadowRadius: 6,
+    shadowOpacity: 0.4,
+    shadowRadius: 8,
     elevation: 4,
   },
   messageButtonText: {
     fontSize: 14,
-    fontFamily: 'Inter-SemiBold',
-    color: '#FFFFFF',
+    fontFamily: 'Inter-Bold',
+    color: '#0F172A',
     letterSpacing: 0.3,
   },
   // New mentor styles
@@ -1909,41 +1952,39 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'flex-start',
-    paddingHorizontal: 16,
-    marginBottom: 12,
+    paddingHorizontal: 20,
+    marginBottom: 16,
+    paddingRight: 24,
   },
   myRequestsButton: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
-    backgroundColor: '#EAF2FF',
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    borderRadius: 10,
-    borderWidth: 1,
-    borderColor: '#D6E1FF',
+    backgroundColor: '#ffc857',
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    borderRadius: 12,
   },
   myRequestsButtonText: {
     fontSize: 13,
-    fontFamily: 'Inter-SemiBold',
-    color: '#4169E1',
+    fontFamily: 'Inter-Bold',
+    color: '#0F172A',
   },
   filterIconButton: {
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#F9FAFB',
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    borderRadius: 10,
+    backgroundColor: '#1E293B',
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    borderRadius: 12,
     borderWidth: 1,
-    borderColor: '#E5E7EB',
-    position: 'relative',
+    borderColor: '#334155',
   },
   filterBadge: {
     position: 'absolute',
     top: -4,
     right: -4,
-    backgroundColor: '#10B981',
+    backgroundColor: '#ffc857',
     borderRadius: 10,
     minWidth: 18,
     height: 18,
@@ -1953,63 +1994,64 @@ const styles = StyleSheet.create({
   },
   filterBadgeText: {
     fontSize: 10,
-    fontFamily: 'Inter-SemiBold',
-    color: '#FFFFFF',
+    fontFamily: 'Inter-Bold',
+    color: '#0F172A',
   },
   mentorDashboardButton: {
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#F5F3FF',
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    borderRadius: 10,
+    backgroundColor: '#1E293B',
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    borderRadius: 12,
     borderWidth: 1,
-    borderColor: '#E9D5FF',
+    borderColor: '#334155',
   },
   volunteerButton: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#10B981',
-    paddingVertical: 10,
-    paddingHorizontal: 16,
-    borderRadius: 12,
+    backgroundColor: '#ffc857',
+    paddingVertical: 12,
+    paddingHorizontal: 18,
+    borderRadius: 14,
     gap: 6,
-    shadowColor: '#10B981',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.2,
-    shadowRadius: 4,
-    elevation: 3,
+    shadowColor: '#ffc857',
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.4,
+    shadowRadius: 8,
+    elevation: 4,
+    marginRight: 4,
   },
   volunteerButtonText: {
     fontSize: 13,
-    fontFamily: 'Inter-SemiBold',
-    color: '#FFFFFF',
+    fontFamily: 'Inter-Bold',
+    color: '#0F172A',
   },
   mentorInfoBanner: {
-    backgroundColor: '#EFF6FF',
-    borderRadius: 12,
-    padding: 14,
-    marginHorizontal: 16,
-    marginBottom: 16,
+    backgroundColor: '#1E293B',
+    borderRadius: 14,
+    padding: 16,
+    marginHorizontal: 20,
+    marginBottom: 20,
     borderWidth: 1,
-    borderColor: '#DBEAFE',
+    borderColor: '#334155',
   },
   mentorInfoText: {
     fontSize: 13,
     fontFamily: 'Inter-Regular',
-    color: '#1E40AF',
-    lineHeight: 18,
+    color: '#94A3B8',
+    lineHeight: 20,
   },
   companyRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 4,
+    gap: 6,
     marginTop: 2,
   },
   mentorCompany: {
-    fontSize: 12,
-    fontFamily: 'Inter-Regular',
-    color: '#666666',
+    fontSize: 13,
+    fontFamily: 'Inter-Medium',
+    color: '#94A3B8',
   },
   mentorFooter: {
     flexDirection: 'row',
@@ -2019,32 +2061,30 @@ const styles = StyleSheet.create({
     marginTop: 12,
     paddingTop: 12,
     borderTopWidth: 1,
-    borderTopColor: '#F3F4F6',
+    borderTopColor: '#334155',
   },
   mentorFormatsRow: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: 6,
+    gap: 8,
     marginTop: 6,
   },
   mentorChip: {
-    backgroundColor: '#EAF2FF',
-    paddingHorizontal: 10,
-    paddingVertical: 5,
+    backgroundColor: '#334155',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
     borderRadius: 10,
-    borderWidth: 1,
-    borderColor: '#D6E1FF',
   },
   mentorChipText: {
     fontSize: 11,
-    fontFamily: 'Inter-SemiBold',
-    color: '#4169E1',
+    fontFamily: 'Inter-Bold',
+    color: '#CBD5E1',
   },
   availabilityBadge: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 4,
-    backgroundColor: '#F1F5F9',
+    backgroundColor: '#334155',
     paddingHorizontal: 12,
     paddingVertical: 6,
     borderRadius: 8,
@@ -2054,88 +2094,85 @@ const styles = StyleSheet.create({
   },
   availabilityText: {
     fontSize: 12,
-    fontFamily: 'Inter-SemiBold',
-    color: '#334155',
+    fontFamily: 'Inter-Bold',
+    color: '#ffc857',
   },
   mentorCTAButton: {
-    backgroundColor: '#4169E1',
-    paddingVertical: 10,
-    paddingHorizontal: 14,
-    borderRadius: 10,
-    shadowColor: '#4169E1',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.2,
-    shadowRadius: 4,
-    elevation: 3,
+    backgroundColor: '#ffc857',
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    borderRadius: 12,
+    shadowColor: '#ffc857',
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.4,
+    shadowRadius: 6,
+    elevation: 4,
   },
   mentorCTAButtonText: {
     fontSize: 13,
-    fontFamily: 'Inter-SemiBold',
-    color: '#FFFFFF',
+    fontFamily: 'Inter-Bold',
+    color: '#0F172A',
     letterSpacing: 0.3,
   },
   emptyButton: {
-    backgroundColor: '#4169E1',
-    paddingVertical: 12,
-    paddingHorizontal: 24,
-    borderRadius: 12,
+    backgroundColor: '#ffc857',
+    paddingVertical: 14,
+    paddingHorizontal: 26,
+    borderRadius: 14,
     marginTop: 16,
-    shadowColor: '#4169E1',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.2,
-    shadowRadius: 4,
-    elevation: 3,
+    shadowColor: '#ffc857',
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.4,
+    shadowRadius: 8,
+    elevation: 4,
   },
   emptyButtonText: {
     fontSize: 14,
-    fontFamily: 'Inter-SemiBold',
-    color: '#FFFFFF',
+    fontFamily: 'Inter-Bold',
+    color: '#0F172A',
   },
   // Resource Card Styles
   resourceCard: {
     flexDirection: 'row',
-    backgroundColor: '#FFFFFF',
-    borderRadius: 18,
-    marginHorizontal: 16,
-    marginBottom: 14,
-    padding: 18,
+    backgroundColor: '#1E293B',
+    borderRadius: 20,
+    marginHorizontal: 20,
+    marginBottom: 16,
+    padding: 20,
     alignItems: 'center',
-    shadowColor: '#FF9800',
-    shadowOffset: { width: 0, height: 3 },
-    shadowOpacity: 0.12,
-    shadowRadius: 8,
-    elevation: 5,
-    gap: 14,
+    shadowColor: '#000000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.25,
+    shadowRadius: 10,
+    elevation: 6,
+    gap: 16,
     borderLeftWidth: 4,
-    borderLeftColor: '#FF9800',
+    borderLeftColor: '#ffc857',
+    borderWidth: 1,
+    borderColor: '#334155',
   },
   resourceIcon: {
     width: 56,
     height: 56,
     borderRadius: 28,
-    backgroundColor: '#FFF3E0',
+    backgroundColor: '#334155',
     alignItems: 'center',
     justifyContent: 'center',
-    shadowColor: '#FF9800',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.2,
-    shadowRadius: 4,
-    elevation: 3,
   },
   resourceInfo: {
     flex: 1,
-    gap: 6,
+    gap: 8,
   },
   resourceTitle: {
     fontSize: 16,
-    fontFamily: 'Inter-SemiBold',
-    color: '#1a1a1a',
+    fontFamily: 'Inter-Bold',
+    color: '#FFFFFF',
   },
   resourceDescription: {
     fontSize: 13,
     fontFamily: 'Inter-Regular',
-    color: '#666666',
-    lineHeight: 18,
+    color: '#94A3B8',
+    lineHeight: 20,
   },
   resourcePrice: {
     fontSize: 15,
@@ -2145,18 +2182,18 @@ const styles = StyleSheet.create({
   },
   // Course Card Styles
   courseCard: {
-    backgroundColor: '#FFFFFF',
+    backgroundColor: '#1E293B',
     borderRadius: 20,
-    marginHorizontal: 16,
-    marginBottom: 18,
+    marginHorizontal: 20,
+    marginBottom: 20,
     overflow: 'hidden',
-    shadowColor: '#9C27B0',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.15,
-    shadowRadius: 10,
-    elevation: 6,
+    shadowColor: '#000000',
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.3,
+    shadowRadius: 12,
+    elevation: 8,
     borderWidth: 1,
-    borderColor: '#F3E5F5',
+    borderColor: '#334155',
   },
   courseImage: {
     width: '100%',
@@ -2165,18 +2202,19 @@ const styles = StyleSheet.create({
   courseInfo: {
     padding: 18,
     gap: 10,
-    backgroundColor: '#FAFAFA',
+    backgroundColor: '#1E293B',
   },
   courseTitle: {
     fontSize: 17,
-    fontFamily: 'Inter-SemiBold',
-    color: '#1a1a1a',
+    fontFamily: 'Inter-Bold',
+    color: '#FFFFFF',
     lineHeight: 24,
+    letterSpacing: -0.3,
   },
   courseDescription: {
     fontSize: 14,
     fontFamily: 'Inter-Regular',
-    color: '#666666',
+    color: '#94A3B8',
     lineHeight: 20,
   },
   courseFooter: {
@@ -2204,19 +2242,19 @@ const styles = StyleSheet.create({
   },
   // Study Group Card Styles
   studyGroupCard: {
-    backgroundColor: '#FFFFFF',
+    backgroundColor: '#1E293B',
     borderRadius: 20,
-    marginHorizontal: 16,
-    marginBottom: 18,
+    marginHorizontal: 20,
+    marginBottom: 20,
     padding: 20,
-    shadowColor: '#00BCD4',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.15,
-    shadowRadius: 10,
-    elevation: 6,
+    shadowColor: '#000000',
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.3,
+    shadowRadius: 12,
+    elevation: 8,
     gap: 16,
-    borderWidth: 2,
-    borderColor: '#E0F7FA',
+    borderWidth: 1,
+    borderColor: '#334155',
   },
   studyGroupHeader: {
     flexDirection: 'row',
@@ -2241,13 +2279,14 @@ const styles = StyleSheet.create({
   },
   studyGroupTitle: {
     fontSize: 17,
-    fontFamily: 'Inter-SemiBold',
-    color: '#1a1a1a',
+    fontFamily: 'Inter-Bold',
+    color: '#FFFFFF',
+    letterSpacing: -0.3,
   },
   studyGroupDescription: {
     fontSize: 14,
     fontFamily: 'Inter-Regular',
-    color: '#666666',
+    color: '#94A3B8',
     lineHeight: 20,
   },
   studyGroupFooter: {
@@ -2283,25 +2322,25 @@ const styles = StyleSheet.create({
   // Event Card Styles
   eventCard: {
     flexDirection: 'row',
-    backgroundColor: '#FFFFFF',
+    backgroundColor: '#1E293B',
     borderRadius: 20,
-    marginHorizontal: 16,
-    marginBottom: 18,
+    marginHorizontal: 20,
+    marginBottom: 20,
     padding: 20,
-    shadowColor: '#FF5722',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.15,
+    shadowColor: '#000000',
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.3,
     shadowRadius: 12,
-    elevation: 6,
+    elevation: 8,
     gap: 18,
     borderWidth: 1,
-    borderColor: '#FFEBEE',
+    borderColor: '#334155',
   },
   eventDateBox: {
     width: 70,
     height: 70,
     borderRadius: 16,
-    backgroundColor: '#FF5722',
+    backgroundColor: '#ffc857',
     alignItems: 'center',
     justifyContent: 'center',
     shadowColor: '#FF5722',
@@ -2328,14 +2367,15 @@ const styles = StyleSheet.create({
   },
   eventTitle: {
     fontSize: 17,
-    fontFamily: 'Inter-SemiBold',
-    color: '#1a1a1a',
+    fontFamily: 'Inter-Bold',
+    color: '#FFFFFF',
     lineHeight: 24,
+    letterSpacing: -0.3,
   },
   eventDescription: {
     fontSize: 14,
     fontFamily: 'Inter-Regular',
-    color: '#666666',
+    color: '#94A3B8',
     lineHeight: 20,
   },
   eventLocation: {
@@ -2352,7 +2392,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
     paddingVertical: 16,
     marginBottom: 8,
-    backgroundColor: '#FFFFFF',
+    backgroundColor: '#0F172A',
   },
   headerLeft: {
     flexDirection: 'row',
@@ -2364,25 +2404,22 @@ const styles = StyleSheet.create({
     width: 48,
     height: 48,
     borderRadius: 14,
-    backgroundColor: '#EEF2FF',
+    backgroundColor: '#1E293B',
     alignItems: 'center',
     justifyContent: 'center',
-    shadowColor: '#4169E1',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 6,
-    elevation: 3,
+    borderWidth: 1,
+    borderColor: '#334155',
   },
   modernSectionTitle: {
     fontSize: 20,
     fontFamily: 'Inter-SemiBold',
-    color: '#1F2937',
+    color: '#FFFFFF',
     letterSpacing: -0.3,
   },
   modernSectionSubtitle: {
     fontSize: 13,
     fontFamily: 'Inter-Regular',
-    color: '#6B7280',
+    color: '#94A3B8',
     marginTop: 2,
   },
   countBadge: {
@@ -2413,32 +2450,32 @@ const styles = StyleSheet.create({
     paddingBottom: 20,
   },
   modernUniversityCard: {
-    backgroundColor: '#FFFFFF',
+    backgroundColor: '#1E293B',
     borderRadius: 20,
     overflow: 'hidden',
     shadowColor: '#000000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.08,
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.3,
     shadowRadius: 12,
-    elevation: 5,
+    elevation: 8,
     borderWidth: 1,
-    borderColor: '#F3F4F6',
+    borderColor: '#334155',
   },
   modernScholarshipCard: {
-    backgroundColor: '#FFFFFF',
+    backgroundColor: '#1E293B',
     borderRadius: 24,
     overflow: 'hidden',
     shadowColor: '#000000',
     shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.08,
+    shadowOpacity: 0.3,
     shadowRadius: 16,
-    elevation: 8,
+    elevation: 10,
     borderWidth: 1,
-    borderColor: '#F3F4F6',
+    borderColor: '#334155',
   },
   modernCardImageContainer: {
     width: '100%',
-    height: 180,
+    aspectRatio: 16 / 9,
     position: 'relative',
     backgroundColor: '#F3F4F6',
   },
@@ -2500,11 +2537,11 @@ const styles = StyleSheet.create({
     marginBottom: 4,
   },
   modernCardTitle: {
-    fontSize: 18,
+    fontSize: 20,
     fontFamily: 'Inter-Bold',
-    color: '#111827',
-    lineHeight: 26,
-    letterSpacing: -0.3,
+    color: '#FFFFFF',
+    lineHeight: 28,
+    letterSpacing: -0.4,
   },
   modernLocationRow: {
     flexDirection: 'row',
@@ -2514,12 +2551,12 @@ const styles = StyleSheet.create({
   modernLocationText: {
     fontSize: 14,
     fontFamily: 'Inter-Regular',
-    color: '#4169E1',
+    color: '#ffc857',
   },
   modernCardDescription: {
     fontSize: 14,
     fontFamily: 'Inter-Regular',
-    color: '#6B7280',
+    color: '#94A3B8',
     lineHeight: 22,
   },
   modernApplicationBadge: {
@@ -2594,7 +2631,7 @@ const styles = StyleSheet.create({
   deadlineInfoText: {
     fontSize: 11,
     fontFamily: 'Inter-SemiBold',
-    color: '#6B7280',
+    color: '#94A3B8',
   },
   urgentDeadline: {
     color: '#EF4444',
@@ -2603,41 +2640,38 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#2563EB',
+    backgroundColor: '#FFFFFF',
     paddingVertical: 14,
     paddingHorizontal: 16,
     borderRadius: 14,
     gap: 8,
     marginTop: 8,
-    shadowColor: '#2563EB',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.2,
-    shadowRadius: 8,
-    elevation: 4,
+    borderWidth: 1.5,
+    borderColor: '#E5E7EB',
   },
   applyNowButtonText: {
     fontSize: 14,
     fontFamily: 'Inter-SemiBold',
-    color: '#FFFFFF',
+    color: '#0F172A',
     letterSpacing: 0.3,
   },
   modernViewButton: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#EEF2FF',
+    backgroundColor: '#FFFFFF',
     paddingVertical: 12,
     paddingHorizontal: 16,
     borderRadius: 12,
     gap: 8,
     marginTop: 4,
     borderWidth: 1.5,
-    borderColor: '#4169E1',
+    borderColor: '#E5E7EB',
   },
   modernViewButtonText: {
     fontSize: 14,
     fontFamily: 'Inter-SemiBold',
-    color: '#4169E1',
+    color: '#0F172A',
     letterSpacing: 0.3,
   },
   modernEmptyState: {
@@ -2671,15 +2705,17 @@ const styles = StyleSheet.create({
   submitScholarshipCTA: {
     marginHorizontal: 16,
     marginBottom: 24,
-    backgroundColor: '#2563EB',
+    backgroundColor: '#FFFFFF',
     borderRadius: 20,
     padding: 20,
-    shadowColor: '#2563EB',
+    shadowColor: '#000000',
     shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.25,
+    shadowOpacity: 0.15,
     shadowRadius: 12,
     elevation: 8,
     overflow: 'hidden',
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
   },
   submitScholarshipContent: {
     flexDirection: 'row',
@@ -2691,36 +2727,29 @@ const styles = StyleSheet.create({
     width: 52,
     height: 52,
     borderRadius: 14,
-    backgroundColor: 'rgba(255, 255, 255, 0.15)',
+    backgroundColor: '#ffc857',
     alignItems: 'center',
     justifyContent: 'center',
-    borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.2)',
   },
   submitScholarshipTitle: {
     fontSize: 18,
     fontFamily: 'Inter-Bold',
-    color: '#FFFFFF',
+    color: '#0F172A',
     letterSpacing: -0.3,
   },
   submitScholarshipSubtitle: {
     fontSize: 13,
     fontFamily: 'Inter-Medium',
-    color: 'rgba(255, 255, 255, 0.9)',
+    color: '#64748B',
     marginTop: 2,
   },
   submitScholarshipArrow: {
     width: 36,
     height: 36,
     borderRadius: 18,
-    backgroundColor: '#FFFFFF',
+    backgroundColor: '#ffc857',
     alignItems: 'center',
     justifyContent: 'center',
-    shadowColor: '#000000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 2,
   },
   submitScholarshipButton: {
     flexDirection: 'row',
@@ -2752,16 +2781,18 @@ const styles = StyleSheet.create({
     padding: 20,
   },
   adminModalContent: {
-    backgroundColor: '#FFFFFF',
+    backgroundColor: '#1E293B',
     borderRadius: 16,
     padding: 20,
     width: '100%',
     maxWidth: 400,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.2,
-    shadowRadius: 8,
-    elevation: 5,
+    shadowOpacity: 0.4,
+    shadowRadius: 12,
+    elevation: 8,
+    borderWidth: 1,
+    borderColor: '#334155',
   },
   adminModalHeader: {
     flexDirection: 'row',
@@ -2806,6 +2837,6 @@ const styles = StyleSheet.create({
   adminModalCancelText: {
     fontSize: 16,
     fontFamily: 'Inter-SemiBold',
-    color: '#6B7280',
+    color: '#94A3B8',
   },
 });

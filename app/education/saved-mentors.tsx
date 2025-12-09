@@ -12,7 +12,7 @@ import {
 import { router } from 'expo-router'
 import { DebouncedTouchable } from '@/components/DebouncedTouchable';
 import { debouncedRouter } from '@/utils/navigationDebounce';;
-import { ArrowLeft, Bookmark, Heart, Star, Trash2 } from 'lucide-react-native';
+import { ArrowLeft, Heart, Star, Trash2, ThumbsUp } from 'lucide-react-native';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/hooks/useAuth';
 
@@ -81,56 +81,65 @@ export default function SavedMentorsScreen() {
     console.log('📥 [SavedMentors] Fetching bookmarks for user:', user.id);
 
     try {
-      const { data, error } = await supabase
+      // First, get the bookmarked mentor IDs
+      const { data: bookmarkData, error: bookmarkError } = await supabase
         .from('education_bookmarks')
-        .select(`
-          id,
-          mentor_id,
-          created_at,
-          alumni_mentors!inner (
-            id,
-            full_name,
-            current_title,
-            company,
-            expertise_areas,
-            short_bio,
-            profile_photo_url,
-            years_of_experience
-          )
-        `)
+        .select('opportunity_id, created_at')
         .eq('user_id', user.id)
-        .not('mentor_id', 'is', null)
+        .eq('opportunity_type', 'mentor')
         .order('created_at', { ascending: false });
 
-      if (error) {
-        console.error('❌ [SavedMentors] Query error:', error);
-        console.error('❌ [SavedMentors] Error details:', {
-          message: error.message,
-          code: error.code,
-          details: error.details,
-          hint: error.hint
-        });
-        throw error;
+      if (bookmarkError) {
+        console.error('❌ [SavedMentors] Bookmark query error:', bookmarkError);
+        throw bookmarkError;
       }
-      
-      console.log('✅ [SavedMentors] Raw data received:', data?.length || 0, 'items');
-      console.log('✅ [SavedMentors] Sample data:', data?.[0]);
-      
+
+      if (!bookmarkData || bookmarkData.length === 0) {
+        console.log('✅ [SavedMentors] No bookmarked mentors found');
+        setFavorites([]);
+        return;
+      }
+
+      console.log('✅ [SavedMentors] Found', bookmarkData.length, 'bookmarked mentors');
+
+      // Get the mentor IDs
+      const mentorIds = bookmarkData.map(b => b.opportunity_id);
+
+      // Fetch the actual mentor data
+      const { data: mentorData, error: mentorError } = await supabase
+        .from('alumni_mentors')
+        .select('*')
+        .in('id', mentorIds);
+
+      if (mentorError) {
+        console.error('❌ [SavedMentors] Mentor query error:', mentorError);
+        throw mentorError;
+      }
+
+      console.log('✅ [SavedMentors] Fetched', mentorData?.length || 0, 'mentor details');
+
+      // Create a map for quick lookup
+      const bookmarkMap = new Map(bookmarkData.map(b => [b.opportunity_id, b.created_at]));
+
       // Transform the data to match the expected format
-      const transformedData = (data || []).map(item => {
-        console.log('🔄 [SavedMentors] Transforming item:', item);
+      const transformedData = (mentorData || []).map(mentor => {
         return {
-          mentor_id: item.mentor_id!,
-          full_name: item.alumni_mentors.full_name,
-          current_title: item.alumni_mentors.current_title,
-          company: item.alumni_mentors.company || '',
-          expertise_areas: item.alumni_mentors.expertise_areas || [],
-          bio: item.alumni_mentors.short_bio || '',
-          profile_photo_url: item.alumni_mentors.profile_photo_url || '',
-          years_of_experience: item.alumni_mentors.years_of_experience || 0,
-          favorited_at: item.created_at
+          mentor_id: mentor.id,
+          full_name: mentor.full_name,
+          current_title: mentor.current_title,
+          company: mentor.company || '',
+          expertise_areas: mentor.expertise_areas || [],
+          bio: mentor.short_bio || '',
+          profile_photo_url: mentor.profile_photo_url || '',
+          years_of_experience: mentor.years_of_experience || 0,
+          favorited_at: bookmarkMap.get(mentor.id) || new Date().toISOString()
         };
       });
+
+      // Sort by favorited_at
+      transformedData.sort((a, b) => 
+        new Date(b.favorited_at).getTime() - new Date(a.favorited_at).getTime()
+      );
       
       console.log('✅ [SavedMentors] Transformed data:', transformedData.length, 'mentors');
       setFavorites(transformedData);
@@ -172,7 +181,8 @@ export default function SavedMentorsScreen() {
                 .from('education_bookmarks')
                 .delete()
                 .eq('user_id', user.id)
-                .eq('mentor_id', mentorId);
+                .eq('opportunity_id', mentorId)
+                .eq('opportunity_type', 'mentor');
 
               if (error) throw error;
 
@@ -225,7 +235,7 @@ export default function SavedMentorsScreen() {
       >
         {/* Stats Banner */}
         <View style={styles.statsBanner}>
-          <ThumbsUp size={20} color="#14B8A6" fill="#14B8A6" />
+          <Star size={20} color="#ffc857" fill="#ffc857" />
           <Text style={styles.statsText}>
             {favorites.length} saved {favorites.length === 1 ? 'mentor' : 'mentors'}
           </Text>

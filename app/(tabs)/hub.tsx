@@ -26,8 +26,8 @@ const HERITAGE_ITEMS = [
   },
   {
     id: '2',
-    title: 'Schools and Scholarships',
-    description: 'Educational opportunities and scholarship programs',
+    title: 'Educational Opportunities',
+    description: 'Universities, scholarships and alumni mentors',
     icon: GraduationCap,
     image: 'https://images.unsplash.com/photo-1523050854058-8df90110c9f1?w=800&auto=format&fit=crop&q=60',
     route: '/education',

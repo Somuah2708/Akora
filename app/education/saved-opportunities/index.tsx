@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react';
 import { useRouter } from 'expo-router'
 import { DebouncedTouchable } from '@/components/DebouncedTouchable';
 import { debouncedRouter } from '@/utils/navigationDebounce';;
-import { ArrowLeft, Bookmark, Trash2, Clock, Wallet } from 'lucide-react-native';
+import { ArrowLeft, Star, Trash2, Clock, Wallet } from 'lucide-react-native';
 import { supabase } from '../../../lib/supabase';
 import { useAuth } from '../../../hooks/useAuth';
 
@@ -31,10 +31,10 @@ export default function SavedOpportunitiesScreen() {
     try {
       setLoading(true);
       
-      // First get bookmark IDs
+      // First get bookmarks with their types
       const { data: bookmarks, error: bookmarkError } = await supabase
         .from('education_bookmarks')
-        .select('id, opportunity_id, created_at')
+        .select('id, opportunity_id, opportunity_type, created_at')
         .eq('user_id', user?.id)
         .order('created_at', { ascending: false });
 
@@ -46,23 +46,48 @@ export default function SavedOpportunitiesScreen() {
         return;
       }
 
-      // Then get the actual opportunities
-      const opportunityIds = bookmarks.map(b => b.opportunity_id);
-      const { data: opportunities, error: oppError } = await supabase
-        .from('products_services')
-        .select('*')
-        .in('id', opportunityIds);
+      // Fetch data from different tables based on type
+      const combined = await Promise.all(bookmarks.map(async (bookmark) => {
+        let opportunityData = null;
+        
+        try {
+          if (bookmark.opportunity_type === 'university') {
+            const { data } = await supabase
+              .from('universities')
+              .select('*')
+              .eq('id', bookmark.opportunity_id)
+              .single();
+            opportunityData = data;
+          } else if (bookmark.opportunity_type === 'scholarship') {
+            const { data } = await supabase
+              .from('scholarships')
+              .select('*')
+              .eq('id', bookmark.opportunity_id)
+              .single();
+            opportunityData = data;
+          } else if (bookmark.opportunity_type === 'mentor') {
+            const { data } = await supabase
+              .from('alumni_mentors')
+              .select('*')
+              .eq('id', bookmark.opportunity_id)
+              .single();
+            opportunityData = data;
+          }
+        } catch (error) {
+          console.error(`Error fetching ${bookmark.opportunity_type}:`, error);
+        }
 
-      if (oppError) throw oppError;
-
-      // Combine bookmark info with opportunity data
-      const combined = bookmarks.map(bookmark => ({
-        id: bookmark.id,
-        created_at: bookmark.created_at,
-        products_services: opportunities?.find(o => o.id === bookmark.opportunity_id) || null
+        return {
+          id: bookmark.id,
+          opportunity_id: bookmark.opportunity_id,
+          opportunity_type: bookmark.opportunity_type,
+          created_at: bookmark.created_at,
+          data: opportunityData
+        };
       }));
 
-      setSavedOpportunities(combined);
+      // Filter out any null data
+      setSavedOpportunities(combined.filter(item => item.data !== null));
     } catch (error) {
       console.error('Error fetching saved opportunities:', error);
       Alert.alert('Error', 'Failed to load saved opportunities.');
@@ -122,31 +147,52 @@ export default function SavedOpportunitiesScreen() {
           <Text style={styles.countText}>{savedOpportunities.length} saved {savedOpportunities.length === 1 ? 'opportunity' : 'opportunities'}</Text>
           
           {savedOpportunities.map((item) => {
-            const opportunity = item.products_services;
+            const opportunity = item.data;
+            if (!opportunity) return null;
+
+            // Determine the route based on type
+            let detailRoute = '/education';
+            if (item.opportunity_type === 'university') {
+              detailRoute = `/education/detail/${item.opportunity_id}`;
+            } else if (item.opportunity_type === 'scholarship') {
+              detailRoute = `/education/scholarship-detail/${item.opportunity_id}`;
+            } else if (item.opportunity_type === 'mentor') {
+              detailRoute = `/education/mentor-detail/${item.opportunity_id}`;
+            }
+
+            // Get display fields based on type
+            const title = opportunity.name || opportunity.title || opportunity.full_name || 'Untitled';
+            const imageUrl = opportunity.image_url || opportunity.profile_photo_url || 'https://images.unsplash.com/photo-1523050854058-8df90110c9f1?w=800';
+            const description = opportunity.bio || opportunity.description || opportunity.location || '';
             
             return (
               <TouchableOpacity 
                 key={item.id} 
                 style={styles.opportunityCard}
-                onPress={() => debouncedRouter.push(`/education/opportunity-detail?id=${opportunity.id}`)}
+                onPress={() => debouncedRouter.push(detailRoute)}
               >
                 <Image 
-                  source={{ uri: opportunity.image_url || 'https://images.unsplash.com/photo-1523050854058-8df90110c9f1?w=800' }} 
+                  source={{ uri: imageUrl }} 
                   style={styles.opportunityImage} 
                 />
                 <View style={styles.opportunityInfo}>
                   <View style={styles.categoryTag}>
-                    <Text style={styles.categoryText}>{opportunity.category_name}</Text>
+                    <Text style={styles.categoryText}>
+                      {item.opportunity_type === 'university' ? 'University' : 
+                       item.opportunity_type === 'scholarship' ? 'Scholarship' : 'Mentor'}
+                    </Text>
                   </View>
-                  <Text style={styles.opportunityTitle}>{opportunity.title}</Text>
+                  <Text style={styles.opportunityTitle}>{title}</Text>
                   <Text style={styles.description} numberOfLines={2}>
-                    {opportunity.description}
+                    {description}
                   </Text>
                   <View style={styles.detailsRow}>
-                    {opportunity.funding_amount && (
+                    {(opportunity.funding_amount || opportunity.amount) && (
                       <View style={styles.detailItem}>
                         <Wallet size={14} color="#666666" />
-                        <Text style={styles.detailText}>${opportunity.funding_amount}</Text>
+                        <Text style={styles.detailText}>
+                          {opportunity.currency || 'GHS'} {opportunity.funding_amount || opportunity.amount}
+                        </Text>
                       </View>
                     )}
                     {opportunity.deadline_date && (
