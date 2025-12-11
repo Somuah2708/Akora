@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { View, Text, TouchableOpacity, Image, FlatList, TextInput, Alert } from "react-native";
 import { useLocalSearchParams, useRouter } from "expo-router";
+import { debouncedRouter } from '@/utils/navigationDebounce';
 import { supabase } from "../../../lib/supabase";
 import { useAuth } from "../../../hooks/useAuth";
 import { uploadMedia, pickMedia } from "../../../lib/media";
@@ -145,7 +146,7 @@ export default function GroupInfoScreen() {
     <View style={{ flex: 1, backgroundColor: "#fff" }}>
       {/* Header */}
       <View style={{ paddingTop: 52, paddingHorizontal: 12, paddingBottom: 12, borderBottomWidth: 0.5, borderBottomColor: "#eee", flexDirection: "row", alignItems: "center" }}>
-        <TouchableOpacity onPress={() => router.back()} style={{ padding: 8, marginRight: 8 }}>
+        <TouchableOpacity onPress={() => debouncedRouter.back()} style={{ padding: 8, marginRight: 8 }}>
           <Text style={{ fontSize: 16 }}>‹</Text>
         </TouchableOpacity>
         <Text style={{ fontSize: 18, fontWeight: "600" }}>Group Info</Text>
@@ -274,7 +275,7 @@ export default function GroupInfoScreen() {
                         Alert.alert("Error", "Failed to delete group");
                       } else {
                         // Navigate back to chats list
-                        router.replace('/(tabs)/chat');
+                        debouncedRouter.replace('/(tabs)/chat');
                       }
                     },
                   },
@@ -310,7 +311,7 @@ export default function GroupInfoScreen() {
                     }
                     
                     const { error } = await supabase.from('group_members').delete().eq('group_id', groupId).eq('user_id', meId);
-                    if (!error) router.back();
+                    if (!error) debouncedRouter.back();
                   },
                 },
               ]

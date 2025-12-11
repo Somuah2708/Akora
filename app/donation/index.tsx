@@ -11,6 +11,7 @@ import {
   ActivityIndicator,
 } from 'react-native';
 import { useRouter } from 'expo-router';
+import { debouncedRouter } from '@/utils/navigationDebounce';
 import { LinearGradient } from 'expo-linear-gradient';
 import {
   ArrowLeft,
@@ -73,17 +74,32 @@ export default function DonationScreen() {
     loadData();
   }, []);
 
+  useEffect(() => {
+    if (user) {
+      checkAdminStatus();
+    }
+  }, [user]);
+
   const checkAdminStatus = async () => {
-    if (!user) return;
+    if (!user) {
+      console.log('🔒 No user logged in');
+      return;
+    }
     
     try {
-      const { data } = await supabase
+      console.log('🔍 Checking admin status for user:', user.id);
+      const { data, error } = await supabase
         .from('profiles')
-        .select('is_admin, role')
+        .select('is_admin, role, email')
         .eq('id', user.id)
         .single();
       
-      setIsAdmin(data?.is_admin === true || data?.role === 'admin');
+      console.log('👤 Profile data:', data);
+      console.log('❌ Query error:', error);
+      
+      const adminStatus = data?.is_admin === true || data?.role === 'admin';
+      console.log('🛡️ Admin status:', adminStatus);
+      setIsAdmin(adminStatus);
     } catch (error) {
       console.error('Error checking admin status:', error);
     }
@@ -257,7 +273,7 @@ export default function DonationScreen() {
         style={styles.header}
       >
         <View style={styles.headerContent}>
-          <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
+          <TouchableOpacity onPress={() => debouncedRouter.back()} style={styles.backButton}>
             <ArrowLeft size={24} color="#FFFFFF" />
           </TouchableOpacity>
           <View style={styles.headerTextContainer}>
@@ -268,14 +284,15 @@ export default function DonationScreen() {
             {isAdmin && (
               <TouchableOpacity 
                 style={styles.adminButton}
-                onPress={() => router.push('/donation/admin')}
+                onPress={() => debouncedRouter.push('/donation/admin')}
               >
-                <Shield size={18} color="#ffc857" />
+                <Shield size={20} color="#ffc857" />
+                <Text style={styles.adminButtonText}>Admin</Text>
               </TouchableOpacity>
             )}
             <TouchableOpacity 
               style={styles.myDonationsButton}
-              onPress={() => router.push('/donation/my-donations')}
+              onPress={() => debouncedRouter.push('/donation/my-donations')}
             >
               <Heart size={20} color="#ffc857" fill="#ffc857" />
             </TouchableOpacity>
@@ -306,7 +323,7 @@ export default function DonationScreen() {
           <View style={styles.statsRow}>
             <TouchableOpacity 
               style={styles.statCardSmall}
-              onPress={() => router.push('/donation/all-donors')}
+              onPress={() => debouncedRouter.push('/donation/all-donors')}
               activeOpacity={0.7}
             >
               <View style={styles.statIconContainer}>
@@ -331,14 +348,10 @@ export default function DonationScreen() {
           <View style={styles.section}>
             <View style={styles.sectionHeader}>
               <Text style={styles.sectionTitle}>Featured Campaign</Text>
-              <View style={styles.featuredBadge}>
-                <Trophy size={12} color="#ffc857" />
-                <Text style={styles.featuredBadgeText}>Admin Pick</Text>
-              </View>
             </View>
             <TouchableOpacity
               style={styles.featuredCard}
-              onPress={() => router.push(`/donation/campaign/${featuredCampaign.id}`)}
+              onPress={() => debouncedRouter.push(`/donation/campaign/${featuredCampaign.id}`)}
             >
               <Image
                 source={{ uri: featuredCampaign.campaign_image || 'https://images.unsplash.com/photo-1562774053-701939374585' }}
@@ -387,7 +400,7 @@ export default function DonationScreen() {
         <View style={styles.section}>
           <View style={styles.sectionHeader}>
             <Text style={styles.sectionTitle}>Active Campaigns</Text>
-            <TouchableOpacity onPress={() => router.push('/donation/all-campaigns')}>
+            <TouchableOpacity onPress={() => debouncedRouter.push('/donation/all-campaigns')}>
               <Text style={styles.seeAllText}>See All</Text>
             </TouchableOpacity>
           </View>
@@ -400,7 +413,7 @@ export default function DonationScreen() {
               <TouchableOpacity
                 key={campaign.id}
                 style={styles.campaignCard}
-                onPress={() => router.push(`/donation/campaign/${campaign.id}`)}
+                onPress={() => debouncedRouter.push(`/donation/campaign/${campaign.id}`)}
               >
                 <Image
                   source={{ uri: campaign.campaign_image || 'https://images.unsplash.com/photo-1562774053-701939374585' }}
@@ -444,7 +457,7 @@ export default function DonationScreen() {
         <View style={styles.section}>
           <View style={styles.sectionHeader}>
             <Text style={styles.sectionTitle}>Top Donors</Text>
-            <TouchableOpacity onPress={() => router.push('/donation/all-donors')}>
+            <TouchableOpacity onPress={() => debouncedRouter.push('/donation/all-donors')}>
               <Text style={styles.seeAllText}>See All</Text>
             </TouchableOpacity>
           </View>
@@ -485,7 +498,7 @@ export default function DonationScreen() {
       {/* Floating Action Button */}
       <TouchableOpacity
         style={styles.fab}
-        onPress={() => router.push('/donation/make-donation')}
+        onPress={() => debouncedRouter.push('/donation/make-donation')}
         activeOpacity={0.9}
       >
         <LinearGradient
@@ -550,9 +563,20 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   adminButton: {
-    padding: 8,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
     backgroundColor: 'rgba(255, 200, 87, 0.2)',
     borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#ffc857',
+  },
+  adminButtonText: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#ffc857',
   },
   myDonationsButton: {
     padding: 8,
@@ -645,22 +669,6 @@ const styles = StyleSheet.create({
   sectionTitle: {
     fontSize: 20,
     fontWeight: '700',
-    color: '#0F172A',
-  },
-  featuredBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#FFF9E6',
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 20,
-    gap: 4,
-    borderWidth: 1,
-    borderColor: '#ffc857',
-  },
-  featuredBadgeText: {
-    fontSize: 12,
-    fontWeight: '600',
     color: '#0F172A',
   },
   seeAllText: {

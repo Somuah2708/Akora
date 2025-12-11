@@ -14,6 +14,7 @@ import {
   Switch,
 } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
+import { debouncedRouter } from '@/utils/navigationDebounce';
 import { LinearGradient } from 'expo-linear-gradient';
 import { 
   ChevronLeft, 
@@ -230,11 +231,11 @@ export default function MakeDonationScreen() {
         [
           {
             text: 'View My Donations',
-            onPress: () => router.replace('/donation/my-donations'),
+            onPress: () => debouncedRouter.replace('/donation/my-donations'),
           },
           {
             text: 'Back to Home',
-            onPress: () => router.replace('/donation'),
+            onPress: () => debouncedRouter.replace('/donation'),
           },
         ]
       );
@@ -260,7 +261,7 @@ export default function MakeDonationScreen() {
         <View style={styles.headerContent}>
           <TouchableOpacity 
             style={styles.headerButton}
-            onPress={() => router.back()}
+            onPress={() => debouncedRouter.back()}
           >
             <ChevronLeft size={24} color="#FFFFFF" />
           </TouchableOpacity>

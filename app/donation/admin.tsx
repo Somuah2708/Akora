@@ -14,6 +14,7 @@ import {
   StatusBar as RNStatusBar,
 } from 'react-native';
 import { useRouter } from 'expo-router';
+import { debouncedRouter } from '@/utils/navigationDebounce';
 import { LinearGradient } from 'expo-linear-gradient';
 import {
   ChevronLeft,
@@ -29,6 +30,7 @@ import {
   DollarSign,
   User,
   X,
+  Plus,
 } from 'lucide-react-native';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/hooks/useAuth';
@@ -317,7 +319,7 @@ export default function AdminDonationScreen() {
         <View style={styles.headerContent}>
           <TouchableOpacity 
             style={styles.headerButton}
-            onPress={() => router.back()}
+            onPress={() => debouncedRouter.back()}
           >
             <ChevronLeft size={24} color="#FFFFFF" />
           </TouchableOpacity>
@@ -325,7 +327,12 @@ export default function AdminDonationScreen() {
             <Shield size={20} color="#ffc857" />
             <Text style={styles.headerTitle}>Admin Dashboard</Text>
           </View>
-          <View style={{ width: 40 }} />
+          <TouchableOpacity 
+            style={styles.createButton}
+            onPress={() => debouncedRouter.push('/donation/create-campaign')}
+          >
+            <Plus size={20} color="#0F172A" />
+          </TouchableOpacity>
         </View>
       </LinearGradient>
 
@@ -477,7 +484,7 @@ export default function AdminDonationScreen() {
 
         {/* Campaign Management */}
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Featured Campaign Management</Text>
+          <Text style={styles.sectionTitle}>Campaign Management</Text>
           {campaigns.map((campaign) => (
             <View key={campaign.id} style={styles.campaignCard}>
               <View style={styles.campaignInfo}>
@@ -485,22 +492,32 @@ export default function AdminDonationScreen() {
                 <Text style={styles.campaignProgress}>
                   GH₵ {campaign.current_amount.toLocaleString()} / GH₵ {campaign.goal_amount.toLocaleString()}
                 </Text>
+                <Text style={styles.campaignStatus}>Status: {campaign.status}</Text>
               </View>
-              <TouchableOpacity
-                style={[
-                  styles.featureButton,
-                  campaign.is_featured && styles.featureButtonActive,
-                ]}
-                onPress={() => toggleFeaturedCampaign(campaign.id, campaign.is_featured)}
-              >
-                <Trophy size={16} color={campaign.is_featured ? '#ffc857' : '#64748B'} />
-                <Text style={[
-                  styles.featureButtonText,
-                  campaign.is_featured && styles.featureButtonTextActive,
-                ]}>
-                  {campaign.is_featured ? 'Featured' : 'Feature'}
-                </Text>
-              </TouchableOpacity>
+              <View style={styles.campaignActions}>
+                <TouchableOpacity
+                  style={styles.editCampaignButton}
+                  onPress={() => router.push(`/donation/edit-campaign/${campaign.id}`)}
+                >
+                  <Eye size={14} color="#0F172A" />
+                  <Text style={styles.editCampaignButtonText}>Edit</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[
+                    styles.featureButton,
+                    campaign.is_featured && styles.featureButtonActive,
+                  ]}
+                  onPress={() => toggleFeaturedCampaign(campaign.id, campaign.is_featured)}
+                >
+                  <Trophy size={14} color={campaign.is_featured ? '#ffc857' : '#64748B'} />
+                  <Text style={[
+                    styles.featureButtonText,
+                    campaign.is_featured && styles.featureButtonTextActive,
+                  ]}>
+                    {campaign.is_featured ? 'Featured' : 'Feature'}
+                  </Text>
+                </TouchableOpacity>
+              </View>
             </View>
           ))}
         </View>
@@ -661,6 +678,14 @@ const styles = StyleSheet.create({
   },
   headerButton: {
     padding: 8,
+  },
+  createButton: {
+    width: 40,
+    height: 40,
+    backgroundColor: '#ffc857',
+    borderRadius: 20,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   headerTitleContainer: {
     flexDirection: 'row',
@@ -857,8 +882,6 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
   },
   campaignCard: {
-    flexDirection: 'row',
-    alignItems: 'center',
     backgroundColor: '#FFFFFF',
     padding: 16,
     borderRadius: 12,
@@ -871,7 +894,7 @@ const styles = StyleSheet.create({
   },
   campaignInfo: {
     flex: 1,
-    marginRight: 12,
+    marginBottom: 12,
   },
   campaignTitle: {
     fontSize: 15,
@@ -882,6 +905,31 @@ const styles = StyleSheet.create({
   campaignProgress: {
     fontSize: 13,
     color: '#64748B',
+    marginBottom: 4,
+  },
+  campaignStatus: {
+    fontSize: 12,
+    color: '#94A3B8',
+    fontWeight: '500',
+    textTransform: 'capitalize',
+  },
+  campaignActions: {
+    flexDirection: 'row',
+    gap: 8,
+  },
+  editCampaignButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 20,
+    backgroundColor: '#ffc857',
+  },
+  editCampaignButtonText: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#0F172A',
   },
   featureButton: {
     flexDirection: 'row',

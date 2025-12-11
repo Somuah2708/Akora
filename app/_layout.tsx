@@ -11,6 +11,7 @@ import { useEffect, useRef } from 'react';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { Stack, useRouter, useSegments } from 'expo-router';
+import { debouncedRouter } from '@/utils/navigationDebounce';
 import { StatusBar } from 'expo-status-bar';
 import { QueryClientProvider } from '@tanstack/react-query';
 import { queryClient } from '@/lib/queryClient';
@@ -203,13 +204,13 @@ function RootLayout() {
       // Navigate based on notification type
       if (data?.type === 'new_message' && data?.chatId) {
         console.log('📱 Navigating to chat:', data.chatId);
-        router.push(`/chat/direct/${data.chatId}`);
+        debouncedRouter.push(`/chat/direct/${data.chatId}`);
       } else if (data?.type === 'new_group_message' && data?.chatId) {
         console.log('📱 Navigating to group chat:', data.chatId);
-        router.push(`/chat/group/${data.chatId}`);
+        debouncedRouter.push(`/chat/group/${data.chatId}`);
       } else if (data?.type === 'friend_request') {
         console.log('📱 Navigating to friends screen');
-        router.push('/(tabs)/friends');
+        debouncedRouter.push('/(tabs)/friends');
       }
     });
 
@@ -260,13 +261,13 @@ function RootLayout() {
       console.log('[RootLayout] No user and not in auth/protected group, scheduling redirect to sign-in');
       // Slight delay to ensure state is stable
       navigationTimeoutRef.current = setTimeout(() => {
-        router.replace('/auth/sign-in');
+        debouncedRouter.replace('/auth/sign-in');
       }, 100);
     } else if (user && inAuthGroup) {
       console.log('[RootLayout] User exists and in auth group, scheduling redirect to tabs');
       // Slight delay to ensure state is stable
       navigationTimeoutRef.current = setTimeout(() => {
-        router.replace('/(tabs)');
+        debouncedRouter.replace('/(tabs)');
       }, 100);
     } else {
       console.log('[RootLayout] User state is stable, no redirect needed', {

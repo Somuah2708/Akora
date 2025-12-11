@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { View, Text, FlatList, TextInput, TouchableOpacity, Image, Modal, Pressable, ActivityIndicator, StyleSheet, Linking, Alert, KeyboardAvoidingView, Platform, Keyboard } from "react-native";
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter } from "expo-router";
+import { debouncedRouter } from '@/utils/navigationDebounce';
 import { supabase } from "../../../lib/supabase";
 import { useAuth } from "../../../hooks/useAuth";
 import dayjs from "dayjs";
@@ -862,9 +863,9 @@ export default function GroupChatScreen() {
         <TouchableOpacity 
           onPress={() => {
             if (router.canGoBack()) {
-              router.back();
+              debouncedRouter.back();
             } else {
-              router.push('/(tabs)/chat');
+              debouncedRouter.push('/(tabs)/chat');
             }
           }} 
           style={{ padding: 8, marginRight: 8 }}
@@ -876,7 +877,7 @@ export default function GroupChatScreen() {
           <Text style={{ fontWeight: "600", fontSize: 16, color: "#FFFFFF" }}>{group?.name || "Group"}</Text>
           {!!typingText && <Text style={{ fontSize: 12, color: "#4CAF50" }}>{typingText}</Text>}
         </View>
-        <TouchableOpacity onPress={() => router.push(`/chat/group-info/${groupId}` as any)} style={{ padding: 8 }}>
+        <TouchableOpacity onPress={() => debouncedRouter.push(`/chat/group-info/${groupId}` as any)} style={{ padding: 8 }}>
           <Text style={{ color: "#94A3B8" }}>Info</Text>
         </TouchableOpacity>
       </View>

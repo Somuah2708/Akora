@@ -38,10 +38,10 @@ export default function CategoryCampaignsScreen() {
     try {
       setLoading(true);
       const { data, error } = await supabase
-        .from('campaigns')
+        .from('donation_campaigns')
         .select('*')
         .eq('status', 'active')
-        .eq('category', (category as string).toLowerCase())
+        .eq('category', (category as string))
         .order('created_at', { ascending: false });
 
       if (error) {
@@ -53,14 +53,14 @@ export default function CategoryCampaignsScreen() {
         id: campaign.id,
         title: campaign.title,
         description: campaign.description,
-        target: `GH₵${campaign.target_amount.toLocaleString()}`,
-        raised: `GH₵${campaign.raised_amount.toLocaleString()}`,
-        progress: Math.min((campaign.raised_amount / campaign.target_amount) * 100, 100),
-        daysLeft: Math.max(0, Math.ceil((new Date(campaign.end_date).getTime() - new Date().getTime()) / (1000 * 60 * 60 * 24))),
+        target: `GH₵${campaign.goal_amount.toLocaleString()}`,
+        raised: `GH₵${campaign.current_amount.toLocaleString()}`,
+        progress: Math.min((campaign.current_amount / campaign.goal_amount) * 100, 100),
+        daysLeft: campaign.deadline ? Math.max(0, Math.ceil((new Date(campaign.deadline).getTime() - new Date().getTime()) / (1000 * 60 * 60 * 24))) : 0,
         category: campaign.category,
-        image: campaign.image_urls?.[0] || 'https://images.unsplash.com/photo-1532094349884-543bc11b234d?w=800',
-        targetAmount: campaign.target_amount,
-        raisedAmount: campaign.raised_amount,
+        image: campaign.campaign_image || 'https://images.unsplash.com/photo-1532094349884-543bc11b234d?w=800',
+        targetAmount: campaign.goal_amount,
+        raisedAmount: campaign.current_amount,
       })) || [];
 
       setCampaigns(transformedCampaigns);

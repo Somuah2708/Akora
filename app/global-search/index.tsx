@@ -187,21 +187,21 @@ export default function GlobalSearchScreen() {
       // Search Campaigns
       if (selectedFilter === 'all' || selectedFilter === 'campaigns') {
         const { data: campaigns } = await supabase
-          .from('campaigns')
+          .from('donation_campaigns')
           .select('*')
           .or(`title.ilike.%${query}%,description.ilike.%${query}%`)
           .eq('status', 'active')
           .limit(10);
 
         if (campaigns) {
-          campaigns.forEach((campaign: Campaign) => {
-            const progress = (campaign.raised_amount / campaign.target_amount) * 100;
+          campaigns.forEach((campaign: any) => {
+            const progress = (campaign.current_amount / campaign.goal_amount) * 100;
             searchResults.push({
               type: 'campaign',
               id: campaign.id,
               title: campaign.title,
-              subtitle: `${progress.toFixed(0)}% funded • GH₵${campaign.raised_amount.toLocaleString()} raised`,
-              image: campaign.image_urls?.[0],
+              subtitle: `${progress.toFixed(0)}% funded • GH₵${campaign.current_amount.toLocaleString()} raised`,
+              image: campaign.campaign_image,
               data: campaign,
             });
           });

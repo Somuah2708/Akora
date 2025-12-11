@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   View,
   Text,
@@ -11,8 +11,11 @@ import {
   Dimensions,
   Platform,
   StatusBar as RNStatusBar,
+  Modal,
+  Animated,
 } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
+import { debouncedRouter } from '@/utils/navigationDebounce';
 import { LinearGradient } from 'expo-linear-gradient';
 import { 
   ChevronLeft, 
@@ -30,8 +33,13 @@ import {
   Activity,
   DollarSign,
   CheckCircle,
+  Trophy,
+  Sparkles,
+  Edit3,
+  Shield,
 } from 'lucide-react-native';
 import { supabase } from '@/lib/supabase';
+import { useAuth } from '@/hooks/useAuth';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 const { width } = Dimensions.get('window');
@@ -62,17 +70,109 @@ interface Donor {
 export default function CampaignDetailScreen() {
   const { id } = useLocalSearchParams();
   const router = useRouter();
+  const { user } = useAuth();
   const [campaign, setCampaign] = useState<Campaign | null>(null);
   const [donors, setDonors] = useState<Donor[]>([]);
   const [loading, setLoading] = useState(true);
   const [isFavorited, setIsFavorited] = useState(false);
+  const [showGoalAchieved, setShowGoalAchieved] = useState(false);
+  const [hasShownGoalModal, setHasShownGoalModal] = useState(false);
+  const [isAdmin, setIsAdmin] = useState(false);
+  
+  // Animation refs
+  const trophyScale = useRef(new Animated.Value(0)).current;
+  const trophyRotate = useRef(new Animated.Value(0)).current;
+  const confettiAnimations = useRef(
+    Array.from({ length: 30 }, () => ({
+      x: new Animated.Value(0),
+      y: new Animated.Value(0),
+      rotate: new Animated.Value(0),
+      opacity: new Animated.Value(1),
+    }))
+  ).current;
 
   useEffect(() => {
     if (id) {
       fetchCampaignDetails();
       fetchDonors();
+      checkAdminStatus();
     }
   }, [id]);
+
+  useEffect(() => {
+    // Check if goal is met and show celebration
+    if (campaign && !loading && !hasShownGoalModal) {
+      const progress = (campaign.current_amount / campaign.goal_amount) * 100;
+      if (progress >= 100) {
+        // Delay slightly to ensure page is loaded
+        setTimeout(() => {
+          setShowGoalAchieved(true);
+          setHasShownGoalModal(true);
+          startCelebrationAnimation();
+        }, 500);
+      }
+    }
+  }, [campaign, loading]);
+
+  const startCelebrationAnimation = () => {
+    // Trophy animation
+    Animated.parallel([
+      Animated.spring(trophyScale, {
+        toValue: 1,
+        friction: 4,
+        tension: 40,
+        useNativeDriver: true,
+      }),
+      Animated.sequence([
+        Animated.timing(trophyRotate, {
+          toValue: 1,
+          duration: 200,
+          useNativeDriver: true,
+        }),
+        Animated.timing(trophyRotate, {
+          toValue: -1,
+          duration: 200,
+          useNativeDriver: true,
+        }),
+        Animated.timing(trophyRotate, {
+          toValue: 0,
+          duration: 200,
+          useNativeDriver: true,
+        }),
+      ]),
+    ]).start();
+
+    // Confetti animations
+    confettiAnimations.forEach((confetti, index) => {
+      const randomX = (Math.random() - 0.5) * width * 2;
+      const randomY = Math.random() * -800 - 200;
+      const randomRotate = Math.random() * 720;
+
+      Animated.parallel([
+        Animated.timing(confetti.x, {
+          toValue: randomX,
+          duration: 2000 + Math.random() * 1000,
+          useNativeDriver: true,
+        }),
+        Animated.timing(confetti.y, {
+          toValue: randomY,
+          duration: 2000 + Math.random() * 1000,
+          useNativeDriver: true,
+        }),
+        Animated.timing(confetti.rotate, {
+          toValue: randomRotate,
+          duration: 2000 + Math.random() * 1000,
+          useNativeDriver: true,
+        }),
+        Animated.timing(confetti.opacity, {
+          toValue: 0,
+          duration: 2000,
+          delay: 1000,
+          useNativeDriver: true,
+        }),
+      ]).start();
+    });
+  };
 
   const fetchCampaignDetails = async () => {
     try {
@@ -89,6 +189,22 @@ export default function CampaignDetailScreen() {
       Alert.alert('Error', 'Failed to load campaign details');
     } finally {
       setLoading(false);
+    }
+  };
+
+  const checkAdminStatus = async () => {
+    if (!user) return;
+    
+    try {
+      const { data } = await supabase
+        .from('profiles')
+        .select('is_admin, role')
+        .eq('id', user.id)
+        .single();
+      
+      setIsAdmin(data?.is_admin === true || data?.role === 'admin');
+    } catch (error) {
+      console.error('Error checking admin status:', error);
     }
   };
 
@@ -189,7 +305,7 @@ export default function CampaignDetailScreen() {
 
   const handleDonate = () => {
     if (campaign) {
-      router.push(`/donation/make-donation?campaignId=${campaign.id}&campaignTitle=${encodeURIComponent(campaign.title)}`);
+      debouncedRouter.push(`/donation/make-donation?campaignId=${campaign.id}&campaignTitle=${encodeURIComponent(campaign.title)}`);
     }
   };
 
@@ -214,7 +330,7 @@ export default function CampaignDetailScreen() {
     return (
       <View style={styles.errorContainer}>
         <Text style={styles.errorText}>Campaign not found</Text>
-        <TouchableOpacity style={styles.backButton} onPress={() => router.back()}>
+        <TouchableOpacity style={styles.backButton} onPress={() => debouncedRouter.back()}>
           <Text style={styles.backButtonText}>Go Back</Text>
         </TouchableOpacity>
       </View>
@@ -223,10 +339,110 @@ export default function CampaignDetailScreen() {
 
   const progressPercentage = getProgressPercentage();
   const daysRemaining = getDaysRemaining();
+  const isGoalMet = progressPercentage >= 100;
+
+  const renderGoalAchievedModal = () => {
+    if (!showGoalAchieved) return null;
+
+    const trophyRotateInterpolate = trophyRotate.interpolate({
+      inputRange: [-1, 0, 1],
+      outputRange: ['-15deg', '0deg', '15deg'],
+    });
+
+    return (
+      <Modal
+        visible={showGoalAchieved}
+        transparent={true}
+        animationType="fade"
+        onRequestClose={() => setShowGoalAchieved(false)}
+      >
+        <View style={styles.modalOverlay}>
+          {/* Confetti */}
+          {confettiAnimations.map((confetti, index) => (
+            <Animated.View
+              key={index}
+              style={[
+                styles.confetti,
+                {
+                  backgroundColor: ['#ffc857', '#FF6B6B', '#4ECDC4', '#95E1D3', '#F38181'][index % 5],
+                  transform: [
+                    { translateX: confetti.x },
+                    { translateY: confetti.y },
+                    { rotate: confetti.rotate.interpolate({
+                      inputRange: [0, 360],
+                      outputRange: ['0deg', '360deg'],
+                    }) },
+                  ],
+                  opacity: confetti.opacity,
+                },
+              ]}
+            />
+          ))}
+
+          {/* Trophy Card */}
+          <Animated.View
+            style={[
+              styles.goalCard,
+              {
+                transform: [
+                  { scale: trophyScale },
+                  { rotate: trophyRotateInterpolate },
+                ],
+              },
+            ]}
+          >
+            <LinearGradient
+              colors={['#ffc857', '#FFD700']}
+              style={styles.goalCardGradient}
+            >
+              <View style={styles.trophyContainer}>
+                <Trophy size={80} color="#0F172A" strokeWidth={2.5} />
+                <Sparkles size={32} color="#0F172A" style={styles.sparkle1} />
+                <Sparkles size={24} color="#0F172A" style={styles.sparkle2} />
+              </View>
+              
+              <Text style={styles.goalTitle}>🎉 Goal Achieved! 🎉</Text>
+              <Text style={styles.goalSubtitle}>
+                This campaign has reached its funding goal!
+              </Text>
+              
+              <View style={styles.goalStats}>
+                <View style={styles.goalStatItem}>
+                  <Text style={styles.goalStatValue}>
+                    {formatCurrency(campaign?.current_amount || 0)}
+                  </Text>
+                  <Text style={styles.goalStatLabel}>Total Raised</Text>
+                </View>
+                <View style={styles.goalStatDivider} />
+                <View style={styles.goalStatItem}>
+                  <Text style={styles.goalStatValue}>{campaign?.donors_count || 0}</Text>
+                  <Text style={styles.goalStatLabel}>Generous Donors</Text>
+                </View>
+              </View>
+
+              <Text style={styles.goalMessage}>
+                Thank you to everyone who contributed to making this possible! 
+                Your generosity will make a real difference.
+              </Text>
+
+              <TouchableOpacity
+                style={styles.goalButton}
+                onPress={() => setShowGoalAchieved(false)}
+              >
+                <Text style={styles.goalButtonText}>Continue</Text>
+              </TouchableOpacity>
+            </LinearGradient>
+          </Animated.View>
+        </View>
+      </Modal>
+    );
+  };
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
       <RNStatusBar barStyle="light-content" />
+      
+      {renderGoalAchievedModal()}
       
       {/* Header with Back Button */}
       <LinearGradient
@@ -236,12 +452,21 @@ export default function CampaignDetailScreen() {
         <View style={styles.headerContent}>
           <TouchableOpacity 
             style={styles.headerButton}
-            onPress={() => router.back()}
+            onPress={() => debouncedRouter.back()}
           >
             <ChevronLeft size={24} color="#FFFFFF" />
           </TouchableOpacity>
           <Text style={styles.headerTitle}>Campaign Details</Text>
           <View style={styles.headerActions}>
+            {isAdmin && (
+              <TouchableOpacity 
+                style={styles.adminEditButton}
+                onPress={() => debouncedRouter.push(`/donation/edit-campaign/${id}`)}
+              >
+                <Shield size={16} color="#ffc857" />
+                <Edit3 size={16} color="#ffc857" />
+              </TouchableOpacity>
+            )}
             <TouchableOpacity 
               style={styles.headerButton}
               onPress={() => setIsFavorited(!isFavorited)}
@@ -290,6 +515,12 @@ export default function CampaignDetailScreen() {
         {/* Progress Section */}
         <View style={styles.section}>
           <View style={styles.progressCard}>
+            {isGoalMet && (
+              <View style={styles.goalAchievedBadge}>
+                <Trophy size={20} color="#0F172A" />
+                <Text style={styles.goalAchievedText}>Goal Achieved! 🎉</Text>
+              </View>
+            )}
             <View style={styles.progressHeader}>
               <View style={styles.amountRow}>
                 <Text style={styles.currentAmount}>{formatCurrency(campaign.current_amount)}</Text>
@@ -347,31 +578,6 @@ export default function CampaignDetailScreen() {
           <Text style={styles.description}>{campaign.description}</Text>
         </View>
 
-        {/* Impact Section */}
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Expected Impact</Text>
-          <View style={styles.impactCard}>
-            <View style={styles.impactItem}>
-              <View style={styles.impactIconContainer}>
-                <CheckCircle size={20} color="#10B981" />
-              </View>
-              <Text style={styles.impactText}>Direct benefit to over 2,000 students</Text>
-            </View>
-            <View style={styles.impactItem}>
-              <View style={styles.impactIconContainer}>
-                <CheckCircle size={20} color="#10B981" />
-              </View>
-              <Text style={styles.impactText}>Long-term infrastructure for future generations</Text>
-            </View>
-            <View style={styles.impactItem}>
-              <View style={styles.impactIconContainer}>
-                <CheckCircle size={20} color="#10B981" />
-              </View>
-              <Text style={styles.impactText}>Enhanced learning environment and outcomes</Text>
-            </View>
-          </View>
-        </View>
-
         {/* Payment Information */}
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Payment Information</Text>
@@ -416,7 +622,7 @@ export default function CampaignDetailScreen() {
           <View style={styles.section}>
             <View style={styles.sectionHeader}>
               <Text style={styles.sectionTitle}>Recent Supporters</Text>
-              <TouchableOpacity onPress={() => router.push('/donation/all-donors')}>
+              <TouchableOpacity onPress={() => debouncedRouter.push('/donation/all-donors')}>
                 <Text style={styles.viewAllText}>View All</Text>
               </TouchableOpacity>
             </View>
@@ -534,6 +740,17 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     gap: 8,
   },
+  adminEditButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    backgroundColor: 'rgba(255, 200, 87, 0.2)',
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#ffc857',
+  },
   content: {
     flex: 1,
   },
@@ -583,6 +800,23 @@ const styles = StyleSheet.create({
     padding: 20,
     borderWidth: 1,
     borderColor: '#ffc857',
+  },
+  goalAchievedBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#ffc857',
+    paddingVertical: 8,
+    paddingHorizontal: 16,
+    borderRadius: 12,
+    marginBottom: 16,
+    gap: 8,
+  },
+  goalAchievedText: {
+    fontSize: 14,
+    fontWeight: '800',
+    color: '#0F172A',
+    letterSpacing: 0.3,
   },
   progressHeader: {
     flexDirection: 'row',
@@ -821,5 +1055,127 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontWeight: '800',
     color: '#0F172A',
+  },
+  // Goal Achievement Modal Styles
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.85)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 20,
+  },
+  confetti: {
+    position: 'absolute',
+    width: 10,
+    height: 10,
+    borderRadius: 5,
+    top: '50%',
+    left: '50%',
+  },
+  goalCard: {
+    width: width - 40,
+    maxWidth: 400,
+    borderRadius: 24,
+    overflow: 'hidden',
+    shadowColor: '#ffc857',
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.5,
+    shadowRadius: 20,
+    elevation: 15,
+  },
+  goalCardGradient: {
+    padding: 32,
+    alignItems: 'center',
+  },
+  trophyContainer: {
+    position: 'relative',
+    marginBottom: 24,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  sparkle1: {
+    position: 'absolute',
+    top: -10,
+    right: -10,
+  },
+  sparkle2: {
+    position: 'absolute',
+    bottom: -5,
+    left: -15,
+  },
+  goalTitle: {
+    fontSize: 28,
+    fontWeight: '900',
+    color: '#0F172A',
+    textAlign: 'center',
+    marginBottom: 12,
+    letterSpacing: 0.5,
+  },
+  goalSubtitle: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#1E293B',
+    textAlign: 'center',
+    marginBottom: 24,
+    lineHeight: 24,
+  },
+  goalStats: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(15, 23, 42, 0.1)',
+    borderRadius: 16,
+    padding: 20,
+    width: '100%',
+    marginBottom: 24,
+  },
+  goalStatItem: {
+    flex: 1,
+    alignItems: 'center',
+  },
+  goalStatValue: {
+    fontSize: 22,
+    fontWeight: '900',
+    color: '#0F172A',
+    marginBottom: 4,
+  },
+  goalStatLabel: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#475569',
+    textAlign: 'center',
+  },
+  goalStatDivider: {
+    width: 2,
+    height: 40,
+    backgroundColor: 'rgba(15, 23, 42, 0.2)',
+    marginHorizontal: 16,
+  },
+  goalMessage: {
+    fontSize: 14,
+    fontWeight: '500',
+    color: '#334155',
+    textAlign: 'center',
+    lineHeight: 22,
+    marginBottom: 28,
+    paddingHorizontal: 8,
+  },
+  goalButton: {
+    backgroundColor: '#0F172A',
+    paddingVertical: 16,
+    paddingHorizontal: 48,
+    borderRadius: 12,
+    width: '100%',
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 8,
+  },
+  goalButtonText: {
+    fontSize: 16,
+    fontWeight: '800',
+    color: '#ffc857',
+    letterSpacing: 0.5,
   },
 });

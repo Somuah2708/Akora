@@ -35,7 +35,7 @@ export default function AllCampaignsScreen() {
     try {
       setLoading(true);
       const { data, error } = await supabase
-        .from('campaigns')
+        .from('donation_campaigns')
         .select('*')
         .eq('status', 'active')
         .order('created_at', { ascending: false });
@@ -49,14 +49,14 @@ export default function AllCampaignsScreen() {
         id: campaign.id,
         title: campaign.title,
         description: campaign.description,
-        target: `GH₵${campaign.target_amount.toLocaleString()}`,
-        raised: `GH₵${campaign.raised_amount.toLocaleString()}`,
-        progress: Math.min((campaign.raised_amount / campaign.target_amount) * 100, 100),
-        daysLeft: Math.max(0, Math.ceil((new Date(campaign.end_date).getTime() - new Date().getTime()) / (1000 * 60 * 60 * 24))),
+        target: `GH₵${campaign.goal_amount.toLocaleString()}`,
+        raised: `GH₵${campaign.current_amount.toLocaleString()}`,
+        progress: Math.min((campaign.current_amount / campaign.goal_amount) * 100, 100),
+        daysLeft: campaign.deadline ? Math.max(0, Math.ceil((new Date(campaign.deadline).getTime() - new Date().getTime()) / (1000 * 60 * 60 * 24))) : 0,
         category: campaign.category,
-        image: campaign.image_urls?.[0] || 'https://images.unsplash.com/photo-1532094349884-543bc11b234d?w=800',
-        targetAmount: campaign.target_amount,
-        raisedAmount: campaign.raised_amount,
+        image: campaign.campaign_image || 'https://images.unsplash.com/photo-1532094349884-543bc11b234d?w=800',
+        targetAmount: campaign.goal_amount,
+        raisedAmount: campaign.current_amount,
       })) || [];
 
       setCampaigns(transformedCampaigns);
@@ -80,7 +80,7 @@ export default function AllCampaignsScreen() {
     <View style={styles.container}>
       <View style={styles.header}>
         <TouchableOpacity onPress={() => debouncedRouter.back()} style={styles.backButton}>
-          <ArrowLeft size={24} color="#000000" />
+          <ArrowLeft size={24} color="#FFFFFF" />
         </TouchableOpacity>
         <Text style={styles.title}>All Campaigns</Text>
         <View style={{ width: 40 }} />
@@ -88,7 +88,7 @@ export default function AllCampaignsScreen() {
 
       {loading ? (
         <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color="#4169E1" />
+          <ActivityIndicator size="large" color="#0F172A" />
           <Text style={styles.loadingText}>Loading campaigns...</Text>
         </View>
       ) : campaigns.length === 0 ? (
@@ -101,7 +101,12 @@ export default function AllCampaignsScreen() {
         <ScrollView style={styles.scrollView} showsVerticalScrollIndicator={false}>
           <View style={styles.campaignsGrid}>
             {campaigns.map((campaign) => (
-              <View key={campaign.id} style={styles.campaignCard}>
+              <TouchableOpacity 
+                key={campaign.id} 
+                style={styles.campaignCard}
+                onPress={() => debouncedRouter.push(`/donation/campaign/${campaign.id}`)}
+                activeOpacity={0.7}
+              >
                 <Image source={{ uri: campaign.image }} style={styles.campaignImage} />
                 <View style={styles.campaignContent}>
                   <View style={styles.categoryBadge}>
@@ -130,13 +135,16 @@ export default function AllCampaignsScreen() {
                   </View>
                   <TouchableOpacity 
                     style={styles.donateButton}
-                    onPress={() => handleDonate(campaign)}
+                    onPress={(e) => {
+                      e.stopPropagation();
+                      handleDonate(campaign);
+                    }}
                   >
                     <Heart size={16} color="#FFFFFF" />
                     <Text style={styles.donateButtonText}>Donate Now</Text>
                   </TouchableOpacity>
                 </View>
-              </View>
+              </TouchableOpacity>
             ))}
           </View>
         </ScrollView>
@@ -157,8 +165,9 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingTop: 60,
     paddingBottom: 16,
+    backgroundColor: '#0F172A',
     borderBottomWidth: 1,
-    borderBottomColor: '#F0F0F0',
+    borderBottomColor: '#1E293B',
   },
   backButton: {
     padding: 8,
@@ -166,7 +175,7 @@ const styles = StyleSheet.create({
   title: {
     fontSize: 20,
     fontFamily: 'Inter-SemiBold',
-    color: '#000000',
+    color: '#FFFFFF',
   },
   scrollView: {
     flex: 1,
@@ -180,7 +189,7 @@ const styles = StyleSheet.create({
   loadingText: {
     fontSize: 16,
     fontFamily: 'Inter-Regular',
-    color: '#666666',
+    color: '#0F172A',
   },
   emptyContainer: {
     flex: 1,
@@ -224,21 +233,23 @@ const styles = StyleSheet.create({
   },
   categoryBadge: {
     alignSelf: 'flex-start',
-    backgroundColor: '#E3F2FD',
+    backgroundColor: '#FFFBF0',
     paddingHorizontal: 12,
     paddingVertical: 6,
     borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#ffc857',
   },
   categoryText: {
     fontSize: 12,
     fontFamily: 'Inter-SemiBold',
-    color: '#4169E1',
+    color: '#92400E',
     textTransform: 'capitalize',
   },
   campaignTitle: {
     fontSize: 18,
     fontFamily: 'Inter-SemiBold',
-    color: '#000000',
+    color: '#0F172A',
   },
   campaignDescription: {
     fontSize: 14,
@@ -254,7 +265,7 @@ const styles = StyleSheet.create({
   },
   progressBar: {
     height: '100%',
-    backgroundColor: '#4169E1',
+    backgroundColor: '#ffc857',
     borderRadius: 3,
   },
   statsRow: {
@@ -276,7 +287,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#4169E1',
+    backgroundColor: '#ffc857',
     paddingVertical: 12,
     borderRadius: 8,
     gap: 8,
@@ -285,6 +296,6 @@ const styles = StyleSheet.create({
   donateButtonText: {
     fontSize: 14,
     fontFamily: 'Inter-SemiBold',
-    color: '#FFFFFF',
+    color: '#0F172A',
   },
 });

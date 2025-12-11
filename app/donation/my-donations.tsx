@@ -11,6 +11,7 @@ import {
   StatusBar as RNStatusBar,
 } from 'react-native';
 import { useRouter } from 'expo-router';
+import { debouncedRouter } from '@/utils/navigationDebounce';
 import { LinearGradient } from 'expo-linear-gradient';
 import {
   ChevronLeft,
@@ -205,7 +206,7 @@ export default function MyDonationsScreen() {
         <View style={styles.headerContent}>
           <TouchableOpacity 
             style={styles.headerButton}
-            onPress={() => router.back()}
+            onPress={() => debouncedRouter.back()}
           >
             <ChevronLeft size={24} color="#FFFFFF" />
           </TouchableOpacity>
@@ -323,7 +324,7 @@ export default function MyDonationsScreen() {
               </Text>
               <TouchableOpacity
                 style={styles.emptyStateButton}
-                onPress={() => router.push('/donation')}
+                onPress={() => debouncedRouter.push('/donation')}
               >
                 <Text style={styles.emptyStateButtonText}>Browse Campaigns</Text>
               </TouchableOpacity>
