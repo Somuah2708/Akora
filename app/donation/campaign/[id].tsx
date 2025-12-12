@@ -25,12 +25,7 @@ import {
   Target,
   Users,
   TrendingUp,
-  Building2,
-  GraduationCap,
-  Laptop,
   Building,
-  Book,
-  Activity,
   DollarSign,
   CheckCircle,
   Trophy,
@@ -67,6 +62,23 @@ interface Donor {
   donor_avatar: string | null;
 }
 
+interface PaymentSettings {
+  bank_name?: string;
+  bank_account_name?: string;
+  bank_account_number?: string;
+  bank_branch?: string;
+  enable_bank_transfer?: boolean;
+  mtn_number?: string;
+  mtn_name?: string;
+  enable_mtn?: boolean;
+  vodafone_number?: string;
+  vodafone_name?: string;
+  enable_vodafone?: boolean;
+  airteltigo_number?: string;
+  airteltigo_name?: string;
+  enable_airteltigo?: boolean;
+}
+
 export default function CampaignDetailScreen() {
   const { id } = useLocalSearchParams();
   const router = useRouter();
@@ -78,6 +90,7 @@ export default function CampaignDetailScreen() {
   const [showGoalAchieved, setShowGoalAchieved] = useState(false);
   const [hasShownGoalModal, setHasShownGoalModal] = useState(false);
   const [isAdmin, setIsAdmin] = useState(false);
+  const [paymentSettings, setPaymentSettings] = useState<PaymentSettings>({});
   
   // Animation refs
   const trophyScale = useRef(new Animated.Value(0)).current;
@@ -96,6 +109,7 @@ export default function CampaignDetailScreen() {
       fetchCampaignDetails();
       fetchDonors();
       checkAdminStatus();
+      fetchPaymentSettings();
     }
   }, [id]);
 
@@ -266,6 +280,45 @@ export default function CampaignDetailScreen() {
     }
   };
 
+  const fetchPaymentSettings = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('admin_configs')
+        .select('config_key, config_value')
+        .in('config_key', [
+          'bank_name',
+          'bank_account_name',
+          'bank_account_number',
+          'bank_branch',
+          'enable_bank_transfer',
+          'mtn_number',
+          'mtn_name',
+          'enable_mtn',
+          'vodafone_number',
+          'vodafone_name',
+          'enable_vodafone',
+          'airteltigo_number',
+          'airteltigo_name',
+          'enable_airteltigo',
+        ]);
+
+      if (error) throw error;
+
+      const settingsObj: any = {};
+      data?.forEach((item) => {
+        if (item.config_key.startsWith('enable_')) {
+          settingsObj[item.config_key] = item.config_value === 'true';
+        } else {
+          settingsObj[item.config_key] = item.config_value || '';
+        }
+      });
+
+      setPaymentSettings(settingsObj);
+    } catch (error) {
+      console.error('Error fetching payment settings:', error);
+    }
+  };
+
   const getProgressPercentage = () => {
     if (!campaign || campaign.goal_amount === 0) return 0;
     return Math.min((campaign.current_amount / campaign.goal_amount) * 100, 100);
@@ -281,14 +334,25 @@ export default function CampaignDetailScreen() {
   };
 
   const getCategoryIcon = (category: string) => {
-    const iconProps = { size: 20, color: '#ffc857' };
-    switch (category) {
-      case 'Infrastructure': return <Building2 {...iconProps} />;
-      case 'Scholarship': return <GraduationCap {...iconProps} />;
-      case 'Equipment': case 'Technology': return <Laptop {...iconProps} />;
-      case 'Sports': return <Activity {...iconProps} />;
-      case 'Library': return <Book {...iconProps} />;
-      default: return <Target {...iconProps} />;
+    switch (category.toLowerCase()) {
+      case 'infrastructure':
+        return { icon: '🏫', color: '#3B82F6' };
+      case 'scholarship':
+        return { icon: '🎓', color: '#F59E0B' };
+      case 'sports':
+        return { icon: '⚽', color: '#10B981' };
+      case 'technology':
+        return { icon: '💻', color: '#06B6D4' };
+      case 'academic':
+        return { icon: '📚', color: '#8B5CF6' };
+      case 'events':
+        return { icon: '🎉', color: '#EC4899' };
+      case 'emergency':
+        return { icon: '🚨', color: '#DC2626' };
+      case 'other':
+        return { icon: '📌', color: '#64748B' };
+      default:
+        return { icon: '🎯', color: '#ffc857' };
     }
   };
 
@@ -407,14 +471,14 @@ export default function CampaignDetailScreen() {
               </Text>
               
               <View style={styles.goalStats}>
-                <View style={styles.goalStatItem}>
+                <View style={styles.goalStatItemFull}>
                   <Text style={styles.goalStatValue}>
                     {formatCurrency(campaign?.current_amount || 0)}
                   </Text>
                   <Text style={styles.goalStatLabel}>Total Raised</Text>
                 </View>
-                <View style={styles.goalStatDivider} />
-                <View style={styles.goalStatItem}>
+                <View style={styles.goalStatDividerHorizontal} />
+                <View style={styles.goalStatItemFull}>
                   <Text style={styles.goalStatValue}>{campaign?.donors_count || 0}</Text>
                   <Text style={styles.goalStatLabel}>Generous Donors</Text>
                 </View>
@@ -501,8 +565,8 @@ export default function CampaignDetailScreen() {
               <Building size={48} color="#94A3B8" />
             </View>
           )}
-          <View style={styles.categoryBadge}>
-            {getCategoryIcon(campaign.category)}
+          <View style={[styles.categoryBadge, { backgroundColor: getCategoryIcon(campaign.category).color }]}>
+            <Text style={styles.categoryEmoji}>{getCategoryIcon(campaign.category).icon}</Text>
             <Text style={styles.categoryText}>{campaign.category}</Text>
           </View>
         </View>
@@ -582,35 +646,98 @@ export default function CampaignDetailScreen() {
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Payment Information</Text>
           <View style={styles.paymentCard}>
-            <View style={styles.paymentMethod}>
-              <Text style={styles.paymentMethodTitle}>Bank Transfer</Text>
-              <View style={styles.paymentDetail}>
-                <Text style={styles.paymentLabel}>Bank:</Text>
-                <Text style={styles.paymentValue}>GCB Bank Limited</Text>
+            {!paymentSettings.enable_bank_transfer && !paymentSettings.enable_mtn && 
+             !paymentSettings.enable_vodafone && !paymentSettings.enable_airteltigo ? (
+              <View style={styles.noPaymentMethod}>
+                <Text style={styles.noPaymentText}>
+                  Payment methods are being configured. Please check back soon or contact the admin for payment details.
+                </Text>
               </View>
-              <View style={styles.paymentDetail}>
-                <Text style={styles.paymentLabel}>Account Name:</Text>
-                <Text style={styles.paymentValue}>Achimota School Alumni</Text>
-              </View>
-              <View style={styles.paymentDetail}>
-                <Text style={styles.paymentLabel}>Account Number:</Text>
-                <Text style={styles.paymentValue}>1234567890</Text>
-              </View>
-            </View>
+            ) : (
+              <>
+                {paymentSettings.enable_bank_transfer && paymentSettings.bank_name && (
+              <>
+                <View style={styles.paymentMethod}>
+                  <Text style={styles.paymentMethodTitle}>Bank Transfer</Text>
+                  <View style={styles.paymentDetail}>
+                    <Text style={styles.paymentLabel}>Bank:</Text>
+                    <Text style={styles.paymentValue}>{paymentSettings.bank_name}</Text>
+                  </View>
+                  <View style={styles.paymentDetail}>
+                    <Text style={styles.paymentLabel}>Account Name:</Text>
+                    <Text style={styles.paymentValue}>{paymentSettings.bank_account_name}</Text>
+                  </View>
+                  <View style={styles.paymentDetail}>
+                    <Text style={styles.paymentLabel}>Account Number:</Text>
+                    <Text style={styles.paymentValue}>{paymentSettings.bank_account_number}</Text>
+                  </View>
+                  {paymentSettings.bank_branch && (
+                    <View style={styles.paymentDetail}>
+                      <Text style={styles.paymentLabel}>Branch:</Text>
+                      <Text style={styles.paymentValue}>{paymentSettings.bank_branch}</Text>
+                    </View>
+                  )}
+                </View>
+              </>
+            )}
 
-            <View style={styles.divider} />
+            {(paymentSettings.enable_mtn || paymentSettings.enable_vodafone || paymentSettings.enable_airteltigo) && (
+              <>
+                {paymentSettings.enable_bank_transfer && paymentSettings.bank_name && (
+                  <View style={styles.divider} />
+                )}
+                <View style={styles.paymentMethod}>
+                  <Text style={styles.paymentMethodTitle}>Mobile Money</Text>
+                  
+                  {paymentSettings.enable_mtn && paymentSettings.mtn_number && (
+                    <>
+                      <View style={styles.paymentDetail}>
+                        <Text style={styles.paymentLabel}>MTN MoMo:</Text>
+                        <Text style={styles.paymentValue}>{paymentSettings.mtn_number}</Text>
+                      </View>
+                      {paymentSettings.mtn_name && (
+                        <View style={styles.paymentDetail}>
+                          <Text style={styles.paymentLabel}>Name:</Text>
+                          <Text style={styles.paymentValue}>{paymentSettings.mtn_name}</Text>
+                        </View>
+                      )}
+                    </>
+                  )}
 
-            <View style={styles.paymentMethod}>
-              <Text style={styles.paymentMethodTitle}>Mobile Money</Text>
-              <View style={styles.paymentDetail}>
-                <Text style={styles.paymentLabel}>MTN MoMo:</Text>
-                <Text style={styles.paymentValue}>0244-123-4567</Text>
-              </View>
-              <View style={styles.paymentDetail}>
-                <Text style={styles.paymentLabel}>Vodafone Cash:</Text>
-                <Text style={styles.paymentValue}>0204-123-4567</Text>
-              </View>
-            </View>
+                  {paymentSettings.enable_vodafone && paymentSettings.vodafone_number && (
+                    <>
+                      <View style={styles.paymentDetail}>
+                        <Text style={styles.paymentLabel}>Vodafone Cash:</Text>
+                        <Text style={styles.paymentValue}>{paymentSettings.vodafone_number}</Text>
+                      </View>
+                      {paymentSettings.vodafone_name && (
+                        <View style={styles.paymentDetail}>
+                          <Text style={styles.paymentLabel}>Name:</Text>
+                          <Text style={styles.paymentValue}>{paymentSettings.vodafone_name}</Text>
+                        </View>
+                      )}
+                    </>
+                  )}
+
+                  {paymentSettings.enable_airteltigo && paymentSettings.airteltigo_number && (
+                    <>
+                      <View style={styles.paymentDetail}>
+                        <Text style={styles.paymentLabel}>AirtelTigo Money:</Text>
+                        <Text style={styles.paymentValue}>{paymentSettings.airteltigo_number}</Text>
+                      </View>
+                      {paymentSettings.airteltigo_name && (
+                        <View style={styles.paymentDetail}>
+                          <Text style={styles.paymentLabel}>Name:</Text>
+                          <Text style={styles.paymentValue}>{paymentSettings.airteltigo_name}</Text>
+                        </View>
+                      )}
+                    </>
+                  )}
+                </View>
+              </>
+            )}
+              </>
+            )}
           </View>
           <Text style={styles.paymentNote}>
             ⚠️ After making payment, please submit your receipt through the donation form for verification.
@@ -780,10 +907,13 @@ const styles = StyleSheet.create({
     borderRadius: 20,
     gap: 6,
   },
+  categoryEmoji: {
+    fontSize: 16,
+  },
   categoryText: {
     fontSize: 13,
     fontWeight: '600',
-    color: '#ffc857',
+    color: '#FFFFFF',
   },
   section: {
     padding: 20,
@@ -925,6 +1055,16 @@ const styles = StyleSheet.create({
     backgroundColor: '#F8FAFC',
     borderRadius: 12,
     padding: 16,
+  },
+  noPaymentMethod: {
+    padding: 20,
+    alignItems: 'center',
+  },
+  noPaymentText: {
+    fontSize: 14,
+    color: '#64748B',
+    textAlign: 'center',
+    lineHeight: 22,
   },
   paymentMethod: {
     marginBottom: 4,
@@ -1120,8 +1260,7 @@ const styles = StyleSheet.create({
     lineHeight: 24,
   },
   goalStats: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: 'column',
     backgroundColor: 'rgba(15, 23, 42, 0.1)',
     borderRadius: 16,
     padding: 20,
@@ -1131,6 +1270,11 @@ const styles = StyleSheet.create({
   goalStatItem: {
     flex: 1,
     alignItems: 'center',
+  },
+  goalStatItemFull: {
+    width: '100%',
+    alignItems: 'center',
+    paddingVertical: 8,
   },
   goalStatValue: {
     fontSize: 22,
@@ -1149,6 +1293,12 @@ const styles = StyleSheet.create({
     height: 40,
     backgroundColor: 'rgba(15, 23, 42, 0.2)',
     marginHorizontal: 16,
+  },
+  goalStatDividerHorizontal: {
+    width: '100%',
+    height: 1,
+    backgroundColor: 'rgba(15, 23, 42, 0.2)',
+    marginVertical: 12,
   },
   goalMessage: {
     fontSize: 14,

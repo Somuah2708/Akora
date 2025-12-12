@@ -40,8 +40,6 @@ interface Campaign {
 const PAYMENT_METHODS = [
   { id: 'bank_transfer', label: 'Bank Transfer' },
   { id: 'mobile_money', label: 'Mobile Money' },
-  { id: 'card', label: 'Card Payment' },
-  { id: 'cash', label: 'Cash' },
 ];
 
 export default function MakeDonationScreen() {
@@ -156,14 +154,14 @@ export default function MakeDonationScreen() {
       const fileName = `${user?.id}_${Date.now()}.${fileExt}`;
       const filePath = `donation-receipts/${fileName}`;
 
-      // Convert to blob
+      // Convert to arrayBuffer for React Native
       const response = await fetch(uri);
-      const blob = await response.blob();
+      const arrayBuffer = await response.arrayBuffer();
 
       // Upload to Supabase Storage
       const { error: uploadError } = await supabase.storage
         .from('donation-proofs')
-        .upload(filePath, blob, {
+        .upload(filePath, new Uint8Array(arrayBuffer), {
           contentType: `image/${fileExt}`,
           cacheControl: '3600',
           upsert: false,

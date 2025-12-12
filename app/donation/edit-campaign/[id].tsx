@@ -25,6 +25,7 @@ import {
   Check,
   Trash2,
   AlertTriangle,
+  Trophy,
 } from 'lucide-react-native';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/hooks/useAuth';
@@ -32,21 +33,14 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import * as ImagePicker from 'expo-image-picker';
 
 const CATEGORIES = [
-  { value: 'infrastructure', label: 'Infrastructure', icon: '🏫' },
-  { value: 'education', label: 'Education', icon: '📚' },
-  { value: 'sports', label: 'Sports', icon: '⚽' },
-  { value: 'technology', label: 'Technology', icon: '💻' },
-  { value: 'healthcare', label: 'Healthcare', icon: '🏥' },
-  { value: 'scholarship', label: 'Scholarship', icon: '🎓' },
-  { value: 'emergency', label: 'Emergency', icon: '🚨' },
-  { value: 'other', label: 'Other', icon: '📌' },
-];
-
-const STATUS_OPTIONS = [
-  { value: 'active', label: 'Active', color: '#10B981' },
-  { value: 'completed', label: 'Completed', color: '#3B82F6' },
-  { value: 'paused', label: 'Paused', color: '#F59E0B' },
-  { value: 'cancelled', label: 'Cancelled', color: '#EF4444' },
+  { value: 'Infrastructure', label: 'Infrastructure', icon: '🏫' },
+  { value: 'Scholarship', label: 'Scholarship', icon: '🎓' },
+  { value: 'Sports', label: 'Sports', icon: '⚽' },
+  { value: 'Technology', label: 'Technology', icon: '💻' },
+  { value: 'Academic', label: 'Academic', icon: '📚' },
+  { value: 'Events', label: 'Events', icon: '🎉' },
+  { value: 'Emergency', label: 'Emergency', icon: '🚨' },
+  { value: 'Other', label: 'Other', icon: '📌' },
 ];
 
 export default function EditCampaignScreen() {
@@ -62,7 +56,7 @@ export default function EditCampaignScreen() {
   const [imageUri, setImageUri] = useState('');
   const [existingImageUrl, setExistingImageUrl] = useState('');
   const [isFeatured, setIsFeatured] = useState(false);
-  const [status, setStatus] = useState('active');
+  const [isActive, setIsActive] = useState(true);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [isAdmin, setIsAdmin] = useState(false);
@@ -124,7 +118,7 @@ export default function EditCampaignScreen() {
         setDeadline(campaign.deadline ? campaign.deadline.split('T')[0] : '');
         setExistingImageUrl(campaign.campaign_image || '');
         setIsFeatured(campaign.is_featured || false);
-        setStatus(campaign.status || 'active');
+        setIsActive(campaign.status === 'active');
       }
     } catch (error) {
       console.error('❌ Error loading campaign:', error);
@@ -154,15 +148,21 @@ export default function EditCampaignScreen() {
   };
 
   const uploadImage = async (uri: string): Promise<string> => {
-    const response = await fetch(uri);
-    const blob = await response.blob();
+    // Create form data for upload
     const fileExt = uri.split('.').pop();
     const fileName = `campaign-${Date.now()}.${fileExt}`;
     const filePath = `campaigns/${fileName}`;
 
+    // Fetch the file as array buffer
+    const response = await fetch(uri);
+    const arrayBuffer = await response.arrayBuffer();
+    const fileData = new Uint8Array(arrayBuffer);
+
     const { error: uploadError } = await supabase.storage
       .from('campaign-images')
-      .upload(filePath, blob);
+      .upload(filePath, fileData, {
+        contentType: `image/${fileExt}`,
+      });
 
     if (uploadError) {
       throw uploadError;
@@ -223,13 +223,23 @@ export default function EditCampaignScreen() {
           category,
           deadline,
           campaign_image: imageUrl,
-          status,
+          status: isActive ? 'active' : 'inactive',
           is_featured: isFeatured,
           updated_at: new Date().toISOString(),
         })
         .eq('id', id);
 
-      if (error) throw error;
+      if (error) {
+        console.error('❌ Update error:', error);
+        Alert.alert(
+          'Update Failed', 
+          `Could not update campaign: ${error.message}. You may not have permission to edit this campaign.`,
+          [{ text: 'OK' }]
+        );
+        throw error;
+      }
+
+      console.log('✅ Campaign updated successfully');
 
       Alert.alert(
         'Success! 🎉',
@@ -292,7 +302,17 @@ export default function EditCampaignScreen() {
         .delete()
         .eq('id', id);
 
-      if (error) throw error;
+      if (error) {
+        console.error('❌ Delete error:', error);
+        Alert.alert(
+          'Delete Failed',
+          `Could not delete campaign: ${error.message}. You may not have permission to delete this campaign.`,
+          [{ text: 'OK' }]
+        );
+        throw error;
+      }
+
+      console.log('✅ Campaign deleted successfully');
 
       Alert.alert(
         'Deleted',
@@ -453,7 +473,7 @@ export default function EditCampaignScreen() {
 
         {/* Deadline */}
         <View style={styles.section}>
-          <Text style={styles.label}>Deadline (YYYY-MM-DD) *</Text>
+          <Text style={styles.label}>Deadline (Optional)</Text>
           <View style={styles.inputWithIcon}>
             <Calendar size={20} color="#64748B" style={styles.inputIcon} />
             <TextInput
@@ -466,46 +486,11 @@ export default function EditCampaignScreen() {
           </View>
         </View>
 
-        {/* Status */}
-        <View style={styles.section}>
-          <Text style={styles.label}>Campaign Status *</Text>
-          <View style={styles.statusGrid}>
-            {STATUS_OPTIONS.map((statusOption) => (
-              <TouchableOpacity
-                key={statusOption.value}
-                style={[
-                  styles.statusButton,
-                  status === statusOption.value && styles.statusButtonActive,
-                  { borderColor: statusOption.color },
-                ]}
-                onPress={() => setStatus(statusOption.value)}
-              >
-                <View 
-                  style={[
-                    styles.statusDot,
-                    { backgroundColor: statusOption.color },
-                    status === statusOption.value && styles.statusDotActive,
-                  ]} 
-                />
-                <Text
-                  style={[
-                    styles.statusText,
-                    { color: statusOption.color },
-                    status === statusOption.value && styles.statusTextActive,
-                  ]}
-                >
-                  {statusOption.label}
-                </Text>
-              </TouchableOpacity>
-            ))}
-          </View>
-        </View>
-
         {/* Featured Toggle */}
         <View style={styles.section}>
           <View style={styles.toggleRow}>
             <View style={styles.toggleLabel}>
-              <Target size={20} color="#ffc857" />
+              <Trophy size={20} color="#ffc857" />
               <View>
                 <Text style={styles.label}>Featured Campaign</Text>
                 <Text style={styles.helperText}>
@@ -522,12 +507,35 @@ export default function EditCampaignScreen() {
           </View>
         </View>
 
-        {/* Warning for Active Campaigns */}
-        {status !== 'active' && (
+        {/* Campaign Status Toggle */}
+        <View style={styles.section}>
+          <View style={styles.statusContainer}>
+            <View style={styles.statusHeader}>
+              <Target size={20} color={isActive ? '#10B981' : '#64748B'} />
+              <Text style={styles.label}>Campaign Status</Text>
+            </View>
+            <Text style={styles.helperText}>
+              {isActive ? 'Active campaigns are visible to all users' : 'Inactive campaigns only appear in admin dashboard'}
+            </Text>
+            <View style={styles.toggleWithLabel}>
+              <Text style={[styles.toggleStatusText, !isActive && styles.toggleStatusTextActive]}>Inactive</Text>
+              <Switch
+                value={isActive}
+                onValueChange={setIsActive}
+                trackColor={{ false: '#EF4444', true: '#10B981' }}
+                thumbColor="#FFFFFF"
+              />
+              <Text style={[styles.toggleStatusText, isActive && styles.toggleStatusTextActive]}>Active</Text>
+            </View>
+          </View>
+        </View>
+
+        {/* Warning for Inactive Campaigns */}
+        {!isActive && (
           <View style={styles.warningBox}>
-            <AlertTriangle size={20} color="#F59E0B" />
+            <AlertTriangle size={20} color="#EF4444" />
             <Text style={styles.warningText}>
-              Setting status to "{status}" will hide this campaign from the active campaigns list.
+              This campaign is inactive and will only be visible in the admin dashboard.
             </Text>
           </View>
         )}
@@ -711,45 +719,13 @@ const styles = StyleSheet.create({
   categoryTextActive: {
     color: '#0F172A',
   },
-  statusGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
+  statusContainer: {
     gap: 12,
   },
-  statusButton: {
+  statusHeader: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    backgroundColor: '#F8FAFC',
-    borderWidth: 2,
-    borderRadius: 12,
-  },
-  statusButtonActive: {
-    backgroundColor: '#FFFFFF',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 2,
-  },
-  statusDot: {
-    width: 10,
-    height: 10,
-    borderRadius: 5,
-  },
-  statusDotActive: {
-    width: 12,
-    height: 12,
-    borderRadius: 6,
-  },
-  statusText: {
-    fontSize: 14,
-    fontWeight: '600',
-  },
-  statusTextActive: {
-    fontWeight: '700',
   },
   toggleRow: {
     flexDirection: 'row',
@@ -761,6 +737,21 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 12,
     flex: 1,
+  },
+  toggleWithLabel: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    marginTop: 8,
+  },
+  toggleStatusText: {
+    fontSize: 13,
+    color: '#64748B',
+  },
+  toggleStatusTextActive: {
+    fontWeight: '600',
+    color: '#0F172A',
   },
   helperText: {
     fontSize: 13,

@@ -32,14 +32,14 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import * as ImagePicker from 'expo-image-picker';
 
 const CATEGORIES = [
-  { value: 'infrastructure', label: 'Infrastructure', icon: '🏫' },
-  { value: 'education', label: 'Education', icon: '📚' },
-  { value: 'sports', label: 'Sports', icon: '⚽' },
-  { value: 'technology', label: 'Technology', icon: '💻' },
-  { value: 'healthcare', label: 'Healthcare', icon: '🏥' },
-  { value: 'scholarship', label: 'Scholarship', icon: '🎓' },
-  { value: 'emergency', label: 'Emergency', icon: '🚨' },
-  { value: 'other', label: 'Other', icon: '📌' },
+  { value: 'Infrastructure', label: 'Infrastructure', icon: '🏫' },
+  { value: 'Scholarship', label: 'Scholarship', icon: '🎓' },
+  { value: 'Sports', label: 'Sports', icon: '⚽' },
+  { value: 'Technology', label: 'Technology', icon: '💻' },
+  { value: 'Academic', label: 'Academic', icon: '📚' },
+  { value: 'Events', label: 'Events', icon: '🎉' },
+  { value: 'Emergency', label: 'Emergency', icon: '🚨' },
+  { value: 'Other', label: 'Other', icon: '📌' },
 ];
 
 export default function CreateCampaignScreen() {
@@ -76,14 +76,16 @@ export default function CreateCampaignScreen() {
 
   const uploadImage = async (uri: string): Promise<string> => {
     const response = await fetch(uri);
-    const blob = await response.blob();
+    const arrayBuffer = await response.arrayBuffer();
     const fileExt = uri.split('.').pop();
     const fileName = `campaign-${Date.now()}.${fileExt}`;
     const filePath = `campaigns/${fileName}`;
 
     const { error: uploadError } = await supabase.storage
       .from('campaign-images')
-      .upload(filePath, blob);
+      .upload(filePath, new Uint8Array(arrayBuffer), {
+        contentType: `image/${fileExt}`,
+      });
 
     if (uploadError) {
       throw uploadError;
@@ -114,10 +116,6 @@ export default function CreateCampaignScreen() {
       Alert.alert('Error', 'Please select a category');
       return;
     }
-    if (!deadline) {
-      Alert.alert('Error', 'Please enter a deadline (YYYY-MM-DD)');
-      return;
-    }
     if (!imageUri) {
       Alert.alert('Error', 'Please select a campaign image');
       return;
@@ -138,7 +136,7 @@ export default function CreateCampaignScreen() {
           goal_amount: parseFloat(goalAmount),
           current_amount: 0,
           category,
-          deadline,
+          deadline: deadline.trim() || null,
           campaign_image: imageUrl,
           status: 'active',
           is_featured: isFeatured,
@@ -224,55 +222,21 @@ export default function CreateCampaignScreen() {
           />
         </View>
 
-        {/* Description */}
+        {/* Overview */}
         <View style={styles.section}>
-          <Text style={styles.label}>Short Description *</Text>
-          <TextInput
-            style={[styles.input, styles.textArea]}
-            value={description}
-            onChangeText={setDescription}
-            placeholder="Brief overview of the campaign..."
-            placeholderTextColor="#94A3B8"
-            multiline
-            numberOfLines={3}
-            maxLength={200}
-            textAlignVertical="top"
-          />
-          <Text style={styles.charCount}>{description.length}/200</Text>
-        </View>
-
-        {/* About This Campaign */}
-        <View style={styles.section}>
-          <Text style={styles.label}>About This Campaign</Text>
+          <Text style={styles.label}>Campaign Overview *</Text>
           <TextInput
             style={[styles.input, styles.textAreaLarge]}
-            value={about}
-            onChangeText={setAbout}
-            placeholder="Provide detailed information about this campaign, its goals, and why it matters..."
+            value={description}
+            onChangeText={setDescription}
+            placeholder="Provide a comprehensive overview of the campaign, its goals, expected impact, and why it matters..."
             placeholderTextColor="#94A3B8"
             multiline
-            numberOfLines={8}
-            maxLength={1000}
+            numberOfLines={10}
+            maxLength={2000}
             textAlignVertical="top"
           />
-          <Text style={styles.charCount}>{about.length}/1000</Text>
-        </View>
-
-        {/* Expected Impact */}
-        <View style={styles.section}>
-          <Text style={styles.label}>Expected Impact</Text>
-          <TextInput
-            style={[styles.input, styles.textArea]}
-            value={expectedImpact}
-            onChangeText={setExpectedImpact}
-            placeholder="Describe the expected outcomes and benefits of this campaign..."
-            placeholderTextColor="#94A3B8"
-            multiline
-            numberOfLines={6}
-            maxLength={500}
-            textAlignVertical="top"
-          />
-          <Text style={styles.charCount}>{expectedImpact.length}/500</Text>
+          <Text style={styles.charCount}>{description.length}/2000</Text>
         </View>
 
         {/* Goal Amount */}
@@ -320,7 +284,7 @@ export default function CreateCampaignScreen() {
 
         {/* Deadline */}
         <View style={styles.section}>
-          <Text style={styles.label}>Deadline (YYYY-MM-DD) *</Text>
+          <Text style={styles.label}>Deadline (Optional)</Text>
           <View style={styles.inputWithIcon}>
             <Calendar size={20} color="#64748B" style={styles.inputIcon} />
             <TextInput

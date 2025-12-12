@@ -20,9 +20,6 @@ import {
   Heart,
   Trophy,
   Target,
-  Building2,
-  GraduationCap,
-  Laptop,
   ChevronRight,
   Plus,
   Shield,
@@ -60,6 +57,7 @@ export default function DonationScreen() {
   
   const [campaigns, setCampaigns] = useState<Campaign[]>([]);
   const [featuredCampaign, setFeaturedCampaign] = useState<Campaign | null>(null);
+  const [completedCampaigns, setCompletedCampaigns] = useState<Campaign[]>([]);
   const [topDonors, setTopDonors] = useState<TopDonor[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -112,6 +110,7 @@ export default function DonationScreen() {
         fetchCampaigns(),
         fetchTopDonors(),
         fetchStats(),
+        fetchCompletedCampaigns(),
         checkAdminStatus(),
       ]);
     } catch (error) {
@@ -239,6 +238,46 @@ export default function DonationScreen() {
     }
   };
 
+  const fetchCompletedCampaigns = async () => {
+    try {
+      console.log('🔍 Fetching completed campaigns...');
+      
+      // First check all campaigns with their status
+      const { data: allCampaigns } = await supabase
+        .from('donation_campaigns')
+        .select('id, title, status')
+        .order('created_at', { ascending: false });
+      
+      console.log('📋 All campaigns:', allCampaigns);
+      
+      const { data, error } = await supabase
+        .from('donation_campaigns')
+        .select('*')
+        .eq('status', 'completed')
+        .order('created_at', { ascending: false })
+        .limit(10);
+
+      console.log('✅ Completed campaigns data:', data);
+      console.log('❌ Completed campaigns error:', error);
+      console.log('📊 Completed campaigns count:', data?.length || 0);
+
+      if (error) {
+        console.error('❌ Error fetching completed campaigns:', error);
+        return;
+      }
+
+      if (data) {
+        setCompletedCampaigns(data);
+        console.log(`✨ Set ${data.length} completed campaigns in state`);
+      } else {
+        console.log('⚠️ No completed campaigns found');
+        setCompletedCampaigns([]);
+      }
+    } catch (error) {
+      console.error('💥 Exception in fetchCompletedCampaigns:', error);
+    }
+  };
+
   const getProgressPercentage = (current: number, goal: number) => {
     return Math.min((current / goal) * 100, 100);
   };
@@ -246,13 +285,23 @@ export default function DonationScreen() {
   const getCategoryIcon = (category: string) => {
     switch (category.toLowerCase()) {
       case 'infrastructure':
-        return Building2;
+        return { icon: '🏫', color: '#3B82F6' };
       case 'scholarship':
-        return GraduationCap;
-      case 'equipment':
-        return Laptop;
+        return { icon: '🎓', color: '#F59E0B' };
+      case 'sports':
+        return { icon: '⚽', color: '#10B981' };
+      case 'technology':
+        return { icon: '💻', color: '#06B6D4' };
+      case 'academic':
+        return { icon: '📚', color: '#8B5CF6' };
+      case 'events':
+        return { icon: '🎉', color: '#EC4899' };
+      case 'emergency':
+        return { icon: '🚨', color: '#DC2626' };
+      case 'other':
+        return { icon: '📌', color: '#64748B' };
       default:
-        return Target;
+        return { icon: '🎯', color: '#ffc857' };
     }
   };
 
@@ -264,6 +313,8 @@ export default function DonationScreen() {
       </View>
     );
   }
+
+  console.log('🎨 Rendering donations screen with completed campaigns:', completedCampaigns.length);
 
   return (
     <View style={styles.container}>
@@ -362,10 +413,7 @@ export default function DonationScreen() {
                 style={styles.featuredOverlay}
               >
                 <View style={styles.categoryBadge}>
-                  {(() => {
-                    const Icon = getCategoryIcon(featuredCampaign.category);
-                    return <Icon size={14} color="#0F172A" />;
-                  })()}
+                  <Text style={styles.categoryEmoji}>{getCategoryIcon(featuredCampaign.category).icon}</Text>
                   <Text style={styles.categoryText}>{featuredCampaign.category}</Text>
                 </View>
                 <Text style={styles.featuredTitle}>{featuredCampaign.title}</Text>
@@ -400,13 +448,10 @@ export default function DonationScreen() {
         <View style={styles.section}>
           <View style={styles.sectionHeader}>
             <Text style={styles.sectionTitle}>Active Campaigns</Text>
-            <TouchableOpacity onPress={() => debouncedRouter.push('/donation/all-campaigns')}>
-              <Text style={styles.seeAllText}>See All</Text>
-            </TouchableOpacity>
           </View>
           
-          {campaigns.slice(1).map((campaign) => {
-            const Icon = getCategoryIcon(campaign.category);
+          {campaigns.map((campaign) => {
+            const categoryInfo = getCategoryIcon(campaign.category);
             const progress = getProgressPercentage(campaign.current_amount, campaign.goal_amount);
             
             return (
@@ -421,9 +466,9 @@ export default function DonationScreen() {
                 />
                 <View style={styles.campaignContent}>
                   <View style={styles.campaignHeader}>
-                    <View style={styles.campaignCategory}>
-                      <Icon size={14} color="#ffc857" />
-                      <Text style={styles.campaignCategoryText}>{campaign.category}</Text>
+                    <View style={[styles.campaignCategory, { backgroundColor: `${categoryInfo.color}15` }]}>
+                      <Text style={styles.categoryIconText}>{categoryInfo.icon}</Text>
+                      <Text style={[styles.campaignCategoryText, { color: categoryInfo.color }]}>{campaign.category}</Text>
                     </View>
                     <Text style={styles.donorsCount}>{campaign.donors_count || 0} donors</Text>
                   </View>
@@ -464,7 +509,7 @@ export default function DonationScreen() {
           
           <View style={styles.donorsCard}>
             <View style={styles.donorsHeader}>
-              <Trophy size={24} color="#ffc857" />
+              <Trophy size={24} color="#ffc857" fill="#ffc857" />
               <Text style={styles.donorsHeaderText}>Hall of Fame</Text>
             </View>
             
@@ -484,12 +529,97 @@ export default function DonationScreen() {
                   <Text style={styles.donorName}>{donor.name}</Text>
                   <Text style={styles.donorAmount}>GH₵{donor.total_amount.toLocaleString()}</Text>
                 </View>
-                {index === 0 && <Trophy size={18} color="#FFD700" />}
-                {index === 1 && <Trophy size={18} color="#C0C0C0" />}
-                {index === 2 && <Trophy size={18} color="#CD7F32" />}
+                {index === 0 && <Trophy size={18} color="#FFD700" fill="#FFD700" />}
+                {index === 1 && <Trophy size={18} color="#C0C0C0" fill="#C0C0C0" />}
+                {index === 2 && <Trophy size={18} color="#CD7F32" fill="#CD7F32" />}
               </View>
             ))}
           </View>
+        </View>
+
+        {/* Completed Campaigns */}
+        <View style={styles.section}>
+          <View style={styles.sectionHeader}>
+            <View style={styles.sectionTitleWithIcon}>
+              <Trophy size={20} color="#10B981" fill="#10B981" />
+              <Text style={styles.sectionTitle}>Completed Campaigns</Text>
+            </View>
+          </View>
+          
+          {completedCampaigns.length > 0 ? (
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={styles.completedScrollContent}
+            >
+              {completedCampaigns.map((campaign) => {
+                const categoryInfo = getCategoryIcon(campaign.category);
+                return (
+                  <TouchableOpacity
+                    key={campaign.id}
+                    style={styles.completedCard}
+                    onPress={() => debouncedRouter.push(`/donation/campaign/${campaign.id}`)}
+                    activeOpacity={0.95}
+                  >
+                    <Image
+                      source={{ uri: campaign.campaign_image || 'https://images.unsplash.com/photo-1562774053-701939374585' }}
+                      style={styles.completedImage}
+                    />
+                    <LinearGradient
+                      colors={['rgba(0,0,0,0)', 'rgba(0,0,0,0.3)', 'rgba(0,0,0,0.95)']}
+                      locations={[0, 0.5, 1]}
+                      style={styles.completedOverlay}
+                    >
+                      {/* Top badges container */}
+                      <View style={styles.completedTopBadges}>
+                        <View style={[styles.completedCategoryBadge, { borderColor: categoryInfo.color }]}>
+                          <Text style={styles.completedBadgeEmoji}>{categoryInfo.icon}</Text>
+                          <Text style={[styles.completedCategoryText, { color: categoryInfo.color }]}>{campaign.category}</Text>
+                        </View>
+                      </View>
+
+                      {/* Bottom content */}
+                      <View style={styles.completedBottomContent}>
+                        <View style={styles.completedGoalBadge}>
+                          <View style={styles.completedGoalBadgeInner}>
+                            <Trophy size={16} color="#10B981" fill="#10B981" />
+                            <Text style={styles.completedGoalText}>Goal Achieved</Text>
+                          </View>
+                        </View>
+                        
+                        <Text style={styles.completedTitle} numberOfLines={2}>{campaign.title}</Text>
+                        
+                        <View style={styles.completedProgressInfo}>
+                          <View style={styles.completedProgressBar}>
+                            <View style={styles.completedProgressFill} />
+                          </View>
+                          <View style={styles.completedStatsColumn}>
+                            <View style={styles.completedStatItemFull}>
+                              <Text style={styles.completedStatValue}>GH₵{campaign.current_amount.toLocaleString()}</Text>
+                              <Text style={styles.completedStatLabel}>Total Raised</Text>
+                            </View>
+                            <View style={styles.completedStatDividerHorizontal} />
+                            <View style={styles.completedStatItemFull}>
+                              <Text style={styles.completedStatValue}>{campaign.donors_count || 0}</Text>
+                              <Text style={styles.completedStatLabel}>Generous Donors</Text>
+                            </View>
+                          </View>
+                        </View>
+                      </View>
+                    </LinearGradient>
+                  </TouchableOpacity>
+                );
+              })}
+            </ScrollView>
+          ) : (
+            <View style={styles.emptyCompletedContainer}>
+              <Trophy size={48} color="#94A3B8" fill="#94A3B8" />
+              <Text style={styles.emptyCompletedText}>No completed campaigns yet</Text>
+              <Text style={styles.emptyCompletedSubtext}>
+                Campaigns that reach their goal will appear here
+              </Text>
+            </View>
+          )}
         </View>
 
         <View style={{ height: 100 }} />
@@ -708,6 +838,9 @@ const styles = StyleSheet.create({
     marginBottom: 12,
     gap: 6,
   },
+  categoryEmoji: {
+    fontSize: 14,
+  },
   categoryText: {
     fontSize: 12,
     fontWeight: '600',
@@ -783,7 +916,13 @@ const styles = StyleSheet.create({
   campaignCategory: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 4,
+    gap: 6,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 12,
+  },
+  categoryIconText: {
+    fontSize: 14,
   },
   campaignCategoryText: {
     fontSize: 12,
@@ -933,5 +1072,185 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '700',
     color: '#0F172A',
+  },
+  sectionTitleWithIcon: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  completedScrollContent: {
+    paddingRight: 20,
+    gap: 16,
+  },
+  completedCard: {
+    width: 300,
+    height: 400,
+    borderRadius: 24,
+    overflow: 'hidden',
+    backgroundColor: '#1E293B',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.3,
+    shadowRadius: 16,
+    elevation: 12,
+  },
+  completedImage: {
+    width: '100%',
+    height: '100%',
+    position: 'absolute',
+  },
+  completedOverlay: {
+    flex: 1,
+    justifyContent: 'space-between',
+    padding: 20,
+  },
+  completedTopBadges: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+  },
+  completedCategoryBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 16,
+    borderWidth: 2,
+    gap: 6,
+    backgroundColor: '#FFFFFF',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.2,
+    shadowRadius: 6,
+    elevation: 4,
+  },
+  completedBadgeEmoji: {
+    fontSize: 16,
+  },
+  completedCategoryText: {
+    fontSize: 13,
+    fontWeight: '700',
+    textTransform: 'capitalize',
+  },
+  completedBottomContent: {
+    gap: 14,
+  },
+  completedGoalBadge: {
+    alignSelf: 'flex-start',
+  },
+  completedGoalBadgeInner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#D1FAE5',
+    borderWidth: 2,
+    borderColor: '#10B981',
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 20,
+    gap: 6,
+    shadowColor: '#10B981',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.4,
+    shadowRadius: 8,
+    elevation: 5,
+  },
+  completedGoalText: {
+    fontSize: 13,
+    fontWeight: '800',
+    color: '#10B981',
+    letterSpacing: 0.5,
+  },
+  completedTitle: {
+    fontSize: 22,
+    fontWeight: '900',
+    color: '#FFFFFF',
+    lineHeight: 28,
+    textShadowColor: 'rgba(0, 0, 0, 0.8)',
+    textShadowOffset: { width: 0, height: 2 },
+    textShadowRadius: 4,
+  },
+  completedProgressInfo: {
+    gap: 12,
+  },
+  completedProgressBar: {
+    height: 8,
+    backgroundColor: 'rgba(255, 255, 255, 0.2)',
+    borderRadius: 8,
+    overflow: 'hidden',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.3)',
+  },
+  completedProgressFill: {
+    height: '100%',
+    width: '100%',
+    backgroundColor: '#10B981',
+    shadowColor: '#10B981',
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0.8,
+    shadowRadius: 4,
+  },
+  completedStatsColumn: {
+    backgroundColor: 'rgba(255, 255, 255, 0.1)',
+    backdropFilter: 'blur(10px)',
+    borderRadius: 16,
+    padding: 16,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.2)',
+    gap: 12,
+  },
+  completedStatItemFull: {
+    alignItems: 'center',
+  },
+  completedStatValue: {
+    fontSize: 20,
+    fontWeight: '900',
+    color: '#FFFFFF',
+    marginBottom: 4,
+  },
+  completedStatLabel: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: 'rgba(255, 255, 255, 0.7)',
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+  },
+  completedStatDividerHorizontal: {
+    height: 1,
+    backgroundColor: 'rgba(255, 255, 255, 0.2)',
+  },
+  completedStatsRow: {
+    flexDirection: 'row',
+    backgroundColor: 'rgba(255, 255, 255, 0.1)',
+    backdropFilter: 'blur(10px)',
+    borderRadius: 16,
+    padding: 16,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.2)',
+  },
+  completedStatItem: {
+    flex: 1,
+    alignItems: 'center',
+  },
+  completedStatDivider: {
+    width: 1,
+    backgroundColor: 'rgba(255, 255, 255, 0.2)',
+    marginHorizontal: 12,
+  },
+  emptyCompletedContainer: {
+    alignItems: 'center',
+    paddingVertical: 40,
+    paddingHorizontal: 20,
+  },
+  emptyCompletedText: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#64748B',
+    marginTop: 16,
+    marginBottom: 8,
+  },
+  emptyCompletedSubtext: {
+    fontSize: 14,
+    color: '#94A3B8',
+    textAlign: 'center',
+    lineHeight: 20,
   },
 });

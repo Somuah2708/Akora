@@ -12,6 +12,11 @@ import {
   Modal,
   Alert,
   StatusBar as RNStatusBar,
+  KeyboardAvoidingView,
+  Platform,
+  TouchableWithoutFeedback,
+  Keyboard,
+  Dimensions,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { debouncedRouter } from '@/utils/navigationDebounce';
@@ -31,10 +36,13 @@ import {
   User,
   X,
   Plus,
+  Settings,
 } from 'lucide-react-native';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/hooks/useAuth';
 import { SafeAreaView } from 'react-native-safe-area-context';
+
+const { width, height } = Dimensions.get('window');
 
 interface Donation {
   id: string;
@@ -79,6 +87,7 @@ export default function AdminDonationScreen() {
   const [adminNotes, setAdminNotes] = useState('');
   const [processing, setProcessing] = useState(false);
   const [actionType, setActionType] = useState<'approve' | 'reject'>('approve');
+  const [fullScreenImage, setFullScreenImage] = useState<string | null>(null);
 
   const [stats, setStats] = useState({
     pending: 0,
@@ -367,6 +376,25 @@ export default function AdminDonationScreen() {
           </View>
         </View>
 
+        {/* Payment Settings Button */}
+        <View style={styles.quickActionsContainer}>
+          <TouchableOpacity
+            style={styles.paymentSettingsButton}
+            onPress={() => debouncedRouter.push('/donation/payment-settings')}
+          >
+            <View style={styles.paymentSettingsIcon}>
+              <DollarSign size={20} color="#ffc857" />
+            </View>
+            <View style={styles.paymentSettingsTextContainer}>
+              <Text style={styles.paymentSettingsTitle}>Payment Settings</Text>
+              <Text style={styles.paymentSettingsSubtitle}>
+                Manage bank accounts and mobile money numbers
+              </Text>
+            </View>
+            <Settings size={20} color="#64748B" />
+          </TouchableOpacity>
+        </View>
+
         {/* Filter Tabs */}
         <View style={styles.filterContainer}>
           <ScrollView horizontal showsHorizontalScrollIndicator={false}>
@@ -547,11 +575,17 @@ export default function AdminDonationScreen() {
                 {selectedDonation.payment_proof_url && (
                   <View style={styles.receiptContainer}>
                     <Text style={styles.modalLabel}>Payment Receipt</Text>
-                    <Image
-                      source={{ uri: selectedDonation.payment_proof_url }}
-                      style={styles.receiptImage}
-                      resizeMode="contain"
-                    />
+                    <TouchableOpacity 
+                      onPress={() => setFullScreenImage(selectedDonation.payment_proof_url)}
+                      activeOpacity={0.8}
+                    >
+                      <Image
+                        source={{ uri: selectedDonation.payment_proof_url }}
+                        style={styles.receiptImage}
+                        resizeMode="contain"
+                      />
+                      <Text style={styles.tapToEnlargeText}>Tap to enlarge</Text>
+                    </TouchableOpacity>
                   </View>
                 )}
 
@@ -596,57 +630,95 @@ export default function AdminDonationScreen() {
         transparent={true}
         onRequestClose={() => setShowApprovalModal(false)}
       >
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalContent}>
-            <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>
-                {actionType === 'approve' ? 'Approve' : 'Reject'} Donation
-              </Text>
-              <TouchableOpacity onPress={() => setShowApprovalModal(false)}>
-                <X size={24} color="#64748B" />
-              </TouchableOpacity>
-            </View>
+        <KeyboardAvoidingView 
+          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+          style={{ flex: 1 }}
+        >
+          <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
+            <View style={styles.modalOverlay}>
+              <TouchableWithoutFeedback onPress={() => {}}>
+                <View style={styles.modalContent}>
+                  <View style={styles.modalHeader}>
+                    <Text style={styles.modalTitle}>
+                      {actionType === 'approve' ? 'Approve' : 'Reject'} Donation
+                    </Text>
+                    <TouchableOpacity onPress={() => setShowApprovalModal(false)}>
+                      <X size={24} color="#64748B" />
+                    </TouchableOpacity>
+                  </View>
 
-            <View style={styles.modalBody}>
-              <Text style={styles.modalLabel}>Admin Notes (Optional)</Text>
-              <TextInput
-                style={styles.notesInput}
-                placeholder={`Add notes about this ${actionType === 'approve' ? 'approval' : 'rejection'}...`}
-                value={adminNotes}
-                onChangeText={setAdminNotes}
-                multiline
-                numberOfLines={4}
-                maxLength={500}
+                  <View style={styles.modalBody}>
+                    <Text style={styles.modalLabel}>Admin Notes (Optional)</Text>
+                    <TextInput
+                      style={styles.notesInput}
+                      placeholder={`Add notes about this ${actionType === 'approve' ? 'approval' : 'rejection'}...`}
+                      value={adminNotes}
+                      onChangeText={setAdminNotes}
+                      multiline
+                      numberOfLines={4}
+                      maxLength={500}
+                    />
+                    <Text style={styles.charCount}>{adminNotes.length}/500</Text>
+                  </View>
+
+                  <View style={styles.modalActions}>
+                    <TouchableOpacity
+                      style={styles.modalCancelButton}
+                      onPress={() => setShowApprovalModal(false)}
+                      disabled={processing}
+                    >
+                      <Text style={styles.modalCancelButtonText}>Cancel</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      style={[
+                        styles.modalConfirmButton,
+                        { backgroundColor: actionType === 'approve' ? '#10B981' : '#EF4444' },
+                        processing && styles.modalConfirmButtonDisabled,
+                      ]}
+                      onPress={processDonation}
+                      disabled={processing}
+                    >
+                      {processing ? (
+                        <ActivityIndicator size="small" color="#FFFFFF" />
+                      ) : (
+                        <Text style={styles.modalConfirmButtonText}>
+                          {actionType === 'approve' ? 'Approve' : 'Reject'}
+                        </Text>
+                      )}
+                    </TouchableOpacity>
+                  </View>
+                </View>
+              </TouchableWithoutFeedback>
+            </View>
+          </TouchableWithoutFeedback>
+        </KeyboardAvoidingView>
+      </Modal>
+
+      {/* Full Screen Image Modal */}
+      <Modal
+        visible={fullScreenImage !== null}
+        transparent={true}
+        animationType="fade"
+        onRequestClose={() => setFullScreenImage(null)}
+      >
+        <View style={styles.fullScreenModalContainer}>
+          <View style={styles.fullScreenModalContent}>
+            <TouchableOpacity 
+              style={styles.fullScreenCloseButton}
+              onPress={() => setFullScreenImage(null)}
+            >
+              <View style={styles.fullScreenCloseButtonCircle}>
+                <X size={24} color="#FFFFFF" />
+              </View>
+            </TouchableOpacity>
+            
+            {fullScreenImage && (
+              <Image 
+                source={{ uri: fullScreenImage }} 
+                style={styles.fullScreenImageStyle}
+                resizeMode="contain"
               />
-              <Text style={styles.charCount}>{adminNotes.length}/500</Text>
-            </View>
-
-            <View style={styles.modalActions}>
-              <TouchableOpacity
-                style={styles.modalCancelButton}
-                onPress={() => setShowApprovalModal(false)}
-                disabled={processing}
-              >
-                <Text style={styles.modalCancelButtonText}>Cancel</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[
-                  styles.modalConfirmButton,
-                  { backgroundColor: actionType === 'approve' ? '#10B981' : '#EF4444' },
-                  processing && styles.modalConfirmButtonDisabled,
-                ]}
-                onPress={processDonation}
-                disabled={processing}
-              >
-                {processing ? (
-                  <ActivityIndicator size="small" color="#FFFFFF" />
-                ) : (
-                  <Text style={styles.modalConfirmButtonText}>
-                    {actionType === 'approve' ? 'Approve' : 'Reject'}
-                  </Text>
-                )}
-              </TouchableOpacity>
-            </View>
+            )}
           </View>
         </View>
       </Modal>
@@ -718,6 +790,44 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.05,
     shadowRadius: 4,
     elevation: 2,
+  },
+  quickActionsContainer: {
+    paddingHorizontal: 20,
+    paddingBottom: 16,
+  },
+  paymentSettingsButton: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 12,
+    padding: 16,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 4,
+    elevation: 2,
+  },
+  paymentSettingsIcon: {
+    width: 44,
+    height: 44,
+    backgroundColor: '#FEF3C7',
+    borderRadius: 22,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  paymentSettingsTextContainer: {
+    flex: 1,
+  },
+  paymentSettingsTitle: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#0F172A',
+    marginBottom: 2,
+  },
+  paymentSettingsSubtitle: {
+    fontSize: 13,
+    color: '#64748B',
   },
   statValue: {
     fontSize: 24,
@@ -1021,6 +1131,13 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     backgroundColor: '#F1F5F9',
   },
+  tapToEnlargeText: {
+    fontSize: 12,
+    color: '#ffc857',
+    fontWeight: '600',
+    textAlign: 'center',
+    marginTop: 8,
+  },
   notesInput: {
     backgroundColor: '#F8FAFC',
     borderWidth: 1,
@@ -1082,5 +1199,35 @@ const styles = StyleSheet.create({
     fontSize: 15,
     fontWeight: '600',
     color: '#FFFFFF',
+  },
+  fullScreenModalContainer: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.95)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  fullScreenModalContent: {
+    width: width,
+    height: height,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  fullScreenCloseButton: {
+    position: 'absolute',
+    top: 60,
+    right: 20,
+    zIndex: 10,
+  },
+  fullScreenCloseButtonCircle: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: 'rgba(255, 255, 255, 0.2)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  fullScreenImageStyle: {
+    width: width,
+    height: height * 0.8,
   },
 });

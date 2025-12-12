@@ -9,6 +9,8 @@ import {
   Image,
   RefreshControl,
   StatusBar as RNStatusBar,
+  Modal,
+  Dimensions,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { debouncedRouter } from '@/utils/navigationDebounce';
@@ -23,10 +25,13 @@ import {
   DollarSign,
   TrendingUp,
   Award,
+  X,
 } from 'lucide-react-native';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/hooks/useAuth';
 import { SafeAreaView } from 'react-native-safe-area-context';
+
+const { width, height } = Dimensions.get('window');
 
 interface Donation {
   id: string;
@@ -88,6 +93,7 @@ export default function MyDonationsScreen() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [filter, setFilter] = useState<'all' | 'pending' | 'approved' | 'rejected'>('all');
+  const [selectedReceipt, setSelectedReceipt] = useState<string | null>(null);
 
   useEffect(() => {
     if (user?.id) {
@@ -395,7 +401,10 @@ export default function MyDonationsScreen() {
 
                   {/* Receipt Preview */}
                   {donation.payment_proof_url && (
-                    <TouchableOpacity style={styles.receiptContainer}>
+                    <TouchableOpacity 
+                      style={styles.receiptContainer}
+                      onPress={() => setSelectedReceipt(donation.payment_proof_url)}
+                    >
                       <Image 
                         source={{ uri: donation.payment_proof_url }} 
                         style={styles.receiptThumbnail}
@@ -411,6 +420,35 @@ export default function MyDonationsScreen() {
 
         <View style={{ height: 40 }} />
       </ScrollView>
+
+      {/* Full Screen Receipt Modal */}
+      <Modal
+        visible={selectedReceipt !== null}
+        transparent={true}
+        animationType="fade"
+        onRequestClose={() => setSelectedReceipt(null)}
+      >
+        <View style={styles.modalContainer}>
+          <View style={styles.modalContent}>
+            <TouchableOpacity 
+              style={styles.closeButton}
+              onPress={() => setSelectedReceipt(null)}
+            >
+              <View style={styles.closeButtonCircle}>
+                <X size={24} color="#FFFFFF" />
+              </View>
+            </TouchableOpacity>
+            
+            {selectedReceipt && (
+              <Image 
+                source={{ uri: selectedReceipt }} 
+                style={styles.fullScreenImage}
+                resizeMode="contain"
+              />
+            )}
+          </View>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -739,5 +777,35 @@ const styles = StyleSheet.create({
     fontSize: 15,
     fontWeight: '700',
     color: '#ffc857',
+  },
+  modalContainer: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.95)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  modalContent: {
+    width: width,
+    height: height,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  closeButton: {
+    position: 'absolute',
+    top: 60,
+    right: 20,
+    zIndex: 10,
+  },
+  closeButtonCircle: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: 'rgba(255, 255, 255, 0.2)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  fullScreenImage: {
+    width: width,
+    height: height * 0.8,
   },
 });
