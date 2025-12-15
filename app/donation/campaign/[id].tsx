@@ -14,7 +14,7 @@ import {
   Modal,
   Animated,
 } from 'react-native';
-import { useLocalSearchParams, useRouter } from 'expo-router';
+import { useLocalSearchParams, useRouter, useFocusEffect } from 'expo-router';
 import { debouncedRouter } from '@/utils/navigationDebounce';
 import { LinearGradient } from 'expo-linear-gradient';
 import { 
@@ -46,6 +46,7 @@ interface Campaign {
   goal_amount: number;
   current_amount: number;
   campaign_image: string | null;
+  campaign_images?: string[] | null;
   category: string;
   deadline: string | null;
   status: string;
@@ -55,6 +56,7 @@ interface Campaign {
 
 interface Donor {
   id: string;
+  user_id: string;
   amount: number;
   is_anonymous: boolean;
   created_at: string;
@@ -91,6 +93,7 @@ export default function CampaignDetailScreen() {
   const [hasShownGoalModal, setHasShownGoalModal] = useState(false);
   const [isAdmin, setIsAdmin] = useState(false);
   const [paymentSettings, setPaymentSettings] = useState<PaymentSettings>({});
+  const [currentImageIndex, setCurrentImageIndex] = useState(0);
   
   // Animation refs
   const trophyScale = useRef(new Animated.Value(0)).current;
@@ -112,6 +115,18 @@ export default function CampaignDetailScreen() {
       fetchPaymentSettings();
     }
   }, [id]);
+
+  // Refresh data when screen comes into focus
+  useFocusEffect(
+    React.useCallback(() => {
+      if (id) {
+        console.log('🔄 Campaign screen focused, refreshing data...');
+        fetchCampaignDetails();
+        fetchDonors();
+        fetchPaymentSettings();
+      }
+    }, [id])
+  );
 
   useEffect(() => {
     // Check if goal is met and show celebration
@@ -197,6 +212,39 @@ export default function CampaignDetailScreen() {
         .single();
 
       if (error) throw error;
+
+      // Calculate accurate current_amount and donors_count from actual approved donations
+      const { data: donationsData } = await supabase
+        .from('donations')
+        .select('user_id, amount')
+        .eq('campaign_id', id)
+        .eq('status', 'approved');
+
+      if (donationsData && donationsData.length > 0) {
+        // Calculate total amount from actual donations
+        const actualCurrentAmount = donationsData.reduce((sum, d) => sum + (d.amount || 0), 0);
+        
+        // Count unique donors
+        const uniqueDonors = new Set(donationsData.map(d => d.user_id)).size;
+        
+        // Update campaign data with accurate values
+        data.current_amount = actualCurrentAmount;
+        data.donors_count = uniqueDonors;
+        
+        console.log('💰 Campaign accurate stats:', {
+          campaign_id: id,
+          stored_amount: data.current_amount,
+          calculated_amount: actualCurrentAmount,
+          stored_donors: data.donors_count,
+          calculated_donors: uniqueDonors,
+          total_donations: donationsData.length
+        });
+      } else {
+        // No donations yet
+        data.current_amount = 0;
+        data.donors_count = 0;
+      }
+
       setCampaign(data);
     } catch (error) {
       console.error('Error fetching campaign:', error);
@@ -266,6 +314,7 @@ export default function CampaignDetailScreen() {
         const profile = profilesMap.get(d.user_id);
         return {
           id: d.id,
+          user_id: d.user_id,
           amount: d.amount,
           is_anonymous: d.is_anonymous,
           created_at: d.created_at,
@@ -304,15 +353,18 @@ export default function CampaignDetailScreen() {
 
       if (error) throw error;
 
+      console.log('💳 Payment settings data:', data);
+
       const settingsObj: any = {};
       data?.forEach((item) => {
         if (item.config_key.startsWith('enable_')) {
-          settingsObj[item.config_key] = item.config_value === 'true';
+          settingsObj[item.config_key] = item.config_value === 'true' || item.config_value === true;
         } else {
           settingsObj[item.config_key] = item.config_value || '';
         }
       });
 
+      console.log('💳 Parsed payment settings:', settingsObj);
       setPaymentSettings(settingsObj);
     } catch (error) {
       console.error('Error fetching payment settings:', error);
@@ -531,30 +583,44 @@ export default function CampaignDetailScreen() {
                 <Edit3 size={16} color="#ffc857" />
               </TouchableOpacity>
             )}
-            <TouchableOpacity 
-              style={styles.headerButton}
-              onPress={() => setIsFavorited(!isFavorited)}
-            >
-              <Heart 
-                size={22} 
-                color={isFavorited ? "#ffc857" : "#FFFFFF"} 
-                fill={isFavorited ? "#ffc857" : "transparent"}
-              />
-            </TouchableOpacity>
-            <TouchableOpacity 
-              style={styles.headerButton}
-              onPress={handleShare}
-            >
-              <Share2 size={22} color="#FFFFFF" />
-            </TouchableOpacity>
           </View>
         </View>
       </LinearGradient>
 
       <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
-        {/* Campaign Image */}
+        {/* Campaign Images Carousel */}
         <View style={styles.imageContainer}>
-          {campaign.campaign_image ? (
+          {(campaign.campaign_images && campaign.campaign_images.length > 0) ? (
+            <>
+              <ScrollView
+                horizontal
+                pagingEnabled
+                showsHorizontalScrollIndicator={false}
+                onScroll={(event) => {
+                  const scrollX = event.nativeEvent.contentOffset.x;
+                  const index = Math.round(scrollX / width);
+                  setCurrentImageIndex(index);
+                }}
+                scrollEventThrottle={16}
+              >
+                {campaign.campaign_images.map((imageUrl, index) => (
+                  <Image
+                    key={index}
+                    source={{ uri: imageUrl }}
+                    style={styles.campaignImage}
+                    resizeMode="cover"
+                  />
+                ))}
+              </ScrollView>
+              {campaign.campaign_images.length > 1 && (
+                <View style={styles.imageCounter}>
+                  <Text style={styles.imageCounterText}>
+                    {currentImageIndex + 1}/{campaign.campaign_images.length}
+                  </Text>
+                </View>
+              )}
+            </>
+          ) : campaign.campaign_image ? (
             <Image 
               source={{ uri: campaign.campaign_image }} 
               style={styles.campaignImage}
@@ -623,15 +689,27 @@ export default function CampaignDetailScreen() {
                 </View>
               )}
 
-              <View style={styles.stat}>
-                <View style={styles.statIconContainer}>
-                  <TrendingUp size={16} color="#ffc857" />
+              {!isGoalMet ? (
+                <View style={styles.stat}>
+                  <View style={styles.statIconContainer}>
+                    <TrendingUp size={16} color="#ffc857" />
+                  </View>
+                  <Text style={styles.statValue}>
+                    {formatCurrency(campaign.goal_amount - campaign.current_amount)}
+                  </Text>
+                  <Text style={styles.statLabel}>Remaining</Text>
                 </View>
-                <Text style={styles.statValue}>
-                  {formatCurrency(campaign.goal_amount - campaign.current_amount)}
-                </Text>
-                <Text style={styles.statLabel}>Remaining</Text>
-              </View>
+              ) : (
+                <View style={styles.stat}>
+                  <View style={styles.statIconContainer}>
+                    <Trophy size={16} color="#10B981" />
+                  </View>
+                  <Text style={[styles.statValue, { color: '#10B981' }]}>
+                    ✓
+                  </Text>
+                  <Text style={styles.statLabel}>Completed</Text>
+                </View>
+              )}
             </View>
           </View>
         </View>
@@ -646,8 +724,8 @@ export default function CampaignDetailScreen() {
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Payment Information</Text>
           <View style={styles.paymentCard}>
-            {!paymentSettings.enable_bank_transfer && !paymentSettings.enable_mtn && 
-             !paymentSettings.enable_vodafone && !paymentSettings.enable_airteltigo ? (
+            {!paymentSettings.bank_name && !paymentSettings.mtn_number && 
+             !paymentSettings.vodafone_number && !paymentSettings.airteltigo_number ? (
               <View style={styles.noPaymentMethod}>
                 <Text style={styles.noPaymentText}>
                   Payment methods are being configured. Please check back soon or contact the admin for payment details.
@@ -655,7 +733,7 @@ export default function CampaignDetailScreen() {
               </View>
             ) : (
               <>
-                {paymentSettings.enable_bank_transfer && paymentSettings.bank_name && (
+                {paymentSettings.bank_name && (
               <>
                 <View style={styles.paymentMethod}>
                   <Text style={styles.paymentMethodTitle}>Bank Transfer</Text>
@@ -681,15 +759,15 @@ export default function CampaignDetailScreen() {
               </>
             )}
 
-            {(paymentSettings.enable_mtn || paymentSettings.enable_vodafone || paymentSettings.enable_airteltigo) && (
+            {(paymentSettings.mtn_number || paymentSettings.vodafone_number || paymentSettings.airteltigo_number) && (
               <>
-                {paymentSettings.enable_bank_transfer && paymentSettings.bank_name && (
+                {paymentSettings.bank_name && (
                   <View style={styles.divider} />
                 )}
                 <View style={styles.paymentMethod}>
                   <Text style={styles.paymentMethodTitle}>Mobile Money</Text>
                   
-                  {paymentSettings.enable_mtn && paymentSettings.mtn_number && (
+                  {paymentSettings.mtn_number && (
                     <>
                       <View style={styles.paymentDetail}>
                         <Text style={styles.paymentLabel}>MTN MoMo:</Text>
@@ -704,7 +782,7 @@ export default function CampaignDetailScreen() {
                     </>
                   )}
 
-                  {paymentSettings.enable_vodafone && paymentSettings.vodafone_number && (
+                  {paymentSettings.vodafone_number && (
                     <>
                       <View style={styles.paymentDetail}>
                         <Text style={styles.paymentLabel}>Vodafone Cash:</Text>
@@ -719,7 +797,7 @@ export default function CampaignDetailScreen() {
                     </>
                   )}
 
-                  {paymentSettings.enable_airteltigo && paymentSettings.airteltigo_number && (
+                  {paymentSettings.airteltigo_number && (
                     <>
                       <View style={styles.paymentDetail}>
                         <Text style={styles.paymentLabel}>AirtelTigo Money:</Text>
@@ -755,7 +833,17 @@ export default function CampaignDetailScreen() {
             </View>
             
             {donors.slice(0, 10).map((donor, index) => (
-              <View key={donor.id} style={styles.donorCard}>
+              <TouchableOpacity 
+                key={donor.id} 
+                style={styles.donorCard}
+                onPress={() => {
+                  if (!donor.is_anonymous && donor.user_id) {
+                    debouncedRouter.push(`/user-profile/${donor.user_id}`);
+                  }
+                }}
+                activeOpacity={donor.is_anonymous ? 1 : 0.7}
+                disabled={donor.is_anonymous}
+              >
                 <View style={styles.donorRank}>
                   <Text style={styles.donorRankText}>#{index + 1}</Text>
                 </View>
@@ -777,7 +865,7 @@ export default function CampaignDetailScreen() {
                   <Text style={styles.donorDate}>{formatDate(donor.created_at)}</Text>
                 </View>
                 <Text style={styles.donorAmount}>{formatCurrency(donor.amount)}</Text>
-              </View>
+              </TouchableOpacity>
             ))}
           </View>
         )}
@@ -885,7 +973,7 @@ const styles = StyleSheet.create({
     position: 'relative',
   },
   campaignImage: {
-    width: '100%',
+    width: width,
     height: 280,
   },
   placeholderImage: {
@@ -894,6 +982,20 @@ const styles = StyleSheet.create({
     backgroundColor: '#F1F5F9',
     justifyContent: 'center',
     alignItems: 'center',
+  },
+  imageCounter: {
+    position: 'absolute',
+    top: 16,
+    left: 16,
+    backgroundColor: 'rgba(15, 23, 42, 0.85)',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 20,
+  },
+  imageCounterText: {
+    color: '#FFFFFF',
+    fontSize: 13,
+    fontWeight: '700',
   },
   categoryBadge: {
     position: 'absolute',

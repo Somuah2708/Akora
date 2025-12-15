@@ -76,14 +76,40 @@ export default function MakeDonationScreen() {
 
   const fetchCampaigns = async () => {
     try {
-      const { data, error } = await supabase
+      // Fetch ALL campaigns with goal_amount
+      const { data: allCampaigns, error } = await supabase
         .from('donation_campaigns')
-        .select('id, title, category')
-        .eq('status', 'active')
+        .select('id, title, category, goal_amount')
         .order('created_at', { ascending: false });
 
       if (error) throw error;
-      setCampaigns(data || []);
+
+      // Fetch all donations to calculate actual completion
+      const { data: allDonations } = await supabase
+        .from('donations')
+        .select('campaign_id, amount')
+        .eq('status', 'approved');
+
+      // Group donations by campaign
+      const donationsByCampaign = new Map();
+      allDonations?.forEach(donation => {
+        if (!donationsByCampaign.has(donation.campaign_id)) {
+          donationsByCampaign.set(donation.campaign_id, 0);
+        }
+        donationsByCampaign.set(
+          donation.campaign_id,
+          donationsByCampaign.get(donation.campaign_id) + donation.amount
+        );
+      });
+
+      // Filter to only show incomplete campaigns (haven't reached goal)
+      const incompleteCampaigns = allCampaigns?.filter((campaign: any) => {
+        const currentAmount = donationsByCampaign.get(campaign.id) || 0;
+        return currentAmount < campaign.goal_amount;
+      }) || [];
+
+      console.log('📋 Available campaigns for donation:', incompleteCampaigns.length);
+      setCampaigns(incompleteCampaigns);
     } catch (error) {
       console.error('Error fetching campaigns:', error);
     }

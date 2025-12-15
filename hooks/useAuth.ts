@@ -68,12 +68,20 @@ export function useAuth() {
         .single();
 
       if (error) {
-        console.error('[useAuth] Error fetching profile:', error);
-        console.error('[useAuth] Error code:', error.code);
-        console.error('[useAuth] Error message:', error.message);
+        // Check if it's a "not found" error (PGRST116)
+        if (error.code === 'PGRST116') {
+          console.log('[useAuth] Profile not found for user, may need to be created');
+        } else {
+          console.error('[useAuth] Error fetching profile:', {
+            code: error.code || 'NO_CODE',
+            message: error.message || 'NO_MESSAGE',
+            details: error.details || 'NO_DETAILS',
+            hint: error.hint || 'NO_HINT',
+          });
+        }
         // Don't throw - user can still be authenticated without profile
         // Profile might not exist yet for new users
-      } else {
+      } else if (data) {
         console.log('[useAuth] Profile fetched successfully');
         console.log('[useAuth] Profile data:', {
           id: data.id,

@@ -10,7 +10,7 @@ import {
   RefreshControl,
   ActivityIndicator,
 } from 'react-native';
-import { useRouter } from 'expo-router';
+import { useRouter, useFocusEffect } from 'expo-router';
 import { debouncedRouter } from '@/utils/navigationDebounce';
 import { LinearGradient } from 'expo-linear-gradient';
 import {
@@ -45,6 +45,7 @@ interface Campaign {
 
 interface TopDonor {
   id: string;
+  user_id: string;
   name: string;
   total_amount: number;
   avatar: string;
@@ -120,6 +121,14 @@ export default function DonationScreen() {
     }
   };
 
+  // Refresh data when screen comes into focus
+  useFocusEffect(
+    React.useCallback(() => {
+      console.log('🔄 Donations screen focused, refreshing data...');
+      loadData();
+    }, [])
+  );
+
   const onRefresh = async () => {
     setRefreshing(true);
     await loadData();
@@ -127,30 +136,81 @@ export default function DonationScreen() {
   };
 
   const fetchCampaigns = async () => {
-    // Fetch featured campaign
-    const { data: featuredData } = await supabase
-      .from('donation_campaigns')
-      .select('*')
-      .eq('status', 'active')
-      .eq('is_featured', true)
-      .limit(1)
-      .single();
+    try {
+      // Fetch ALL campaigns regardless of status
+      const { data: allCampaigns, error: fetchError } = await supabase
+        .from('donation_campaigns')
+        .select('*')
+        .order('created_at', { ascending: false });
 
-    if (featuredData) {
-      setFeaturedCampaign(featuredData);
-    }
+      if (fetchError || !allCampaigns) {
+        console.log('❌ Error fetching campaigns:', fetchError);
+        return;
+      }
 
-    // Fetch other active campaigns (excluding featured)
-    const { data, error } = await supabase
-      .from('donation_campaigns')
-      .select('*')
-      .eq('status', 'active')
-      .neq('is_featured', true)
-      .order('created_at', { ascending: false })
-      .limit(10);
+      // Fetch ALL donations at once (more efficient than per-campaign queries)
+      const { data: allDonations } = await supabase
+        .from('donations')
+        .select('campaign_id, user_id, amount')
+        .eq('status', 'approved');
 
-    if (!error && data) {
-      setCampaigns(data);
+      // Group donations by campaign
+      const donationsByCampaign = new Map();
+      allDonations?.forEach(donation => {
+        if (!donationsByCampaign.has(donation.campaign_id)) {
+          donationsByCampaign.set(donation.campaign_id, []);
+        }
+        donationsByCampaign.get(donation.campaign_id).push(donation);
+      });
+
+      // Process each campaign
+      const activeCampaignsWithAmounts = [];
+      const completedCampaignsWithAmounts = [];
+
+      for (const campaign of allCampaigns) {
+        const campaignDonations = donationsByCampaign.get(campaign.id) || [];
+        
+        // Calculate actual current amount
+        const actualCurrentAmount = campaignDonations.reduce((sum, d) => sum + (d.amount || 0), 0);
+        
+        // Calculate actual donors count (unique users)
+        const actualDonorsCount = new Set(campaignDonations.map(d => d.user_id)).size;
+
+        const updatedCampaign = {
+          ...campaign,
+          current_amount: actualCurrentAmount,
+          donors_count: actualDonorsCount,
+        };
+
+        // Split into active vs completed based on actual donations
+        if (actualCurrentAmount < campaign.goal_amount) {
+          activeCampaignsWithAmounts.push(updatedCampaign);
+        } else {
+          completedCampaignsWithAmounts.push(updatedCampaign);
+        }
+      }
+
+      console.log('✅ Active campaigns:', activeCampaignsWithAmounts.length);
+      console.log('✅ Completed campaigns:', completedCampaignsWithAmounts.length);
+
+      // Set featured campaign
+      const featured = activeCampaignsWithAmounts.find(c => c.is_featured === true);
+      setFeaturedCampaign(featured || null);
+
+      // Set other active campaigns (excluding featured)
+      const otherCampaigns = activeCampaignsWithAmounts.filter(c => c.is_featured !== true).slice(0, 10);
+      setCampaigns(otherCampaigns);
+
+      // Set completed campaigns
+      setCompletedCampaigns(completedCampaignsWithAmounts.slice(0, 10));
+
+      // Update stats with accurate active campaign count
+      setStats(prev => ({
+        ...prev,
+        activeCampaigns: activeCampaignsWithAmounts.length,
+      }));
+    } catch (error) {
+      console.error('💥 Error in fetchCampaigns:', error);
     }
   };
 
@@ -199,6 +259,7 @@ export default function DonationScreen() {
           const profile = profilesMap.get(userId);
           donorMap.set(userId, {
             id: userId,
+            user_id: userId,
             name: donation.is_anonymous ? 'Anonymous' : (profile?.full_name || 'Anonymous'),
             total_amount: 0,
             avatar: donation.is_anonymous ? '' : (profile?.avatar_url || ''),
@@ -220,62 +281,30 @@ export default function DonationScreen() {
   };
 
   const fetchStats = async () => {
-    const [campaignsResult, donationsResult] = await Promise.all([
-      supabase.from('donation_campaigns').select('id', { count: 'exact' }).eq('status', 'active'),
-      supabase.from('donations').select('user_id, amount').eq('status', 'approved'),
-    ]);
+    const { data: donationsResult, error } = await supabase
+      .from('donations')
+      .select('user_id, amount')
+      .eq('status', 'approved');
 
-    if (!campaignsResult.error && !donationsResult.error) {
-      // Calculate total raised from actual approved donations (not campaign.current_amount)
-      const totalRaised = donationsResult.data?.reduce((sum, donation) => sum + (donation.amount || 0), 0) || 0;
-      const uniqueDonors = new Set(donationsResult.data?.map(d => d.user_id)).size;
+    if (!error && donationsResult) {
+      // Calculate total raised from actual approved donations
+      const totalRaised = donationsResult.reduce((sum, donation) => sum + (donation.amount || 0), 0);
+      const uniqueDonors = new Set(donationsResult.map(d => d.user_id)).size;
       
-      setStats({
+      setStats(prev => ({
+        ...prev,
         totalRaised,
         totalDonors: uniqueDonors,
-        activeCampaigns: campaignsResult.count || 0,
-      });
+        // activeCampaigns will be set by fetchCampaigns after calculating actual completion
+      }));
     }
   };
 
+  // fetchCompletedCampaigns is now handled inside fetchCampaigns for efficiency
+  // Keeping this function for backward compatibility but it does nothing
   const fetchCompletedCampaigns = async () => {
-    try {
-      console.log('🔍 Fetching completed campaigns...');
-      
-      // First check all campaigns with their status
-      const { data: allCampaigns } = await supabase
-        .from('donation_campaigns')
-        .select('id, title, status')
-        .order('created_at', { ascending: false });
-      
-      console.log('📋 All campaigns:', allCampaigns);
-      
-      const { data, error } = await supabase
-        .from('donation_campaigns')
-        .select('*')
-        .eq('status', 'completed')
-        .order('created_at', { ascending: false })
-        .limit(10);
-
-      console.log('✅ Completed campaigns data:', data);
-      console.log('❌ Completed campaigns error:', error);
-      console.log('📊 Completed campaigns count:', data?.length || 0);
-
-      if (error) {
-        console.error('❌ Error fetching completed campaigns:', error);
-        return;
-      }
-
-      if (data) {
-        setCompletedCampaigns(data);
-        console.log(`✨ Set ${data.length} completed campaigns in state`);
-      } else {
-        console.log('⚠️ No completed campaigns found');
-        setCompletedCampaigns([]);
-      }
-    } catch (error) {
-      console.error('💥 Exception in fetchCompletedCampaigns:', error);
-    }
+    // Completed campaigns are now calculated in fetchCampaigns()
+    // This prevents duplicate queries and ensures consistency
   };
 
   const getProgressPercentage = (current: number, goal: number) => {
@@ -432,10 +461,10 @@ export default function DonationScreen() {
                   </View>
                   <View style={styles.progressStats}>
                     <Text style={styles.raisedAmount}>
-                      GH₵{campaigns[0].current_amount.toLocaleString()} raised
+                      GH₵{featuredCampaign.current_amount.toLocaleString()} raised
                     </Text>
                     <Text style={styles.goalAmount}>
-                      of GH₵{campaigns[0].goal_amount.toLocaleString()}
+                      of GH₵{featuredCampaign.goal_amount.toLocaleString()}
                     </Text>
                   </View>
                 </View>
@@ -484,10 +513,10 @@ export default function DonationScreen() {
                     </View>
                     <View style={styles.campaignStats}>
                       <Text style={styles.campaignRaised}>
-                        GH₵{campaign.current_amount.toLocaleString()}
+                        GH₵{campaign.current_amount.toLocaleString()} <Text style={styles.campaignGoal}>of</Text>
                       </Text>
                       <Text style={styles.campaignGoal}>
-                        of GH₵{campaign.goal_amount.toLocaleString()}
+                        GH₵{campaign.goal_amount.toLocaleString()}
                       </Text>
                     </View>
                   </View>
@@ -513,8 +542,18 @@ export default function DonationScreen() {
               <Text style={styles.donorsHeaderText}>Hall of Fame</Text>
             </View>
             
-            {topDonors.map((donor, index) => (
-              <View key={donor.id} style={styles.donorRow}>
+            {topDonors.slice(0, 15).map((donor, index) => (
+              <TouchableOpacity 
+                key={donor.id} 
+                style={styles.donorRow}
+                onPress={() => {
+                  if (!donor.is_anonymous && donor.user_id) {
+                    debouncedRouter.push(`/user-profile/${donor.user_id}`);
+                  }
+                }}
+                activeOpacity={donor.is_anonymous ? 1 : 0.7}
+                disabled={donor.is_anonymous}
+              >
                 <View style={styles.donorRank}>
                   <Text style={styles.rankNumber}>#{index + 1}</Text>
                 </View>
@@ -532,7 +571,7 @@ export default function DonationScreen() {
                 {index === 0 && <Trophy size={18} color="#FFD700" fill="#FFD700" />}
                 {index === 1 && <Trophy size={18} color="#C0C0C0" fill="#C0C0C0" />}
                 {index === 2 && <Trophy size={18} color="#CD7F32" fill="#CD7F32" />}
-              </View>
+              </TouchableOpacity>
             ))}
           </View>
         </View>
@@ -960,8 +999,8 @@ const styles = StyleSheet.create({
     borderRadius: 3,
   },
   campaignStats: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
+    flexDirection: 'column',
+    gap: 2,
   },
   campaignRaised: {
     fontSize: 14,

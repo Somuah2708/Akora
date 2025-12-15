@@ -51,11 +51,16 @@ export default function CreateCampaignScreen() {
   const [goalAmount, setGoalAmount] = useState('');
   const [category, setCategory] = useState('');
   const [deadline, setDeadline] = useState('');
-  const [imageUri, setImageUri] = useState('');
+  const [imageUris, setImageUris] = useState<string[]>([]);
   const [isFeatured, setIsFeatured] = useState(false);
   const [loading, setLoading] = useState(false);
 
-  const pickImage = async () => {
+  const pickImages = async () => {
+    if (imageUris.length >= 10) {
+      Alert.alert('Limit Reached', 'You can only upload up to 10 images per campaign');
+      return;
+    }
+
     const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
     if (status !== 'granted') {
       Alert.alert('Permission needed', 'Please grant camera roll permissions');
@@ -67,18 +72,23 @@ export default function CreateCampaignScreen() {
       allowsEditing: true,
       aspect: [16, 9],
       quality: 0.8,
+      allowsMultipleSelection: false,
     });
 
-    if (!result.canceled) {
-      setImageUri(result.assets[0].uri);
+    if (!result.canceled && result.assets[0]) {
+      setImageUris(prev => [...prev, result.assets[0].uri]);
     }
   };
 
-  const uploadImage = async (uri: string): Promise<string> => {
+  const removeImage = (index: number) => {
+    setImageUris(prev => prev.filter((_, i) => i !== index));
+  };
+
+  const uploadImage = async (uri: string, index: number): Promise<string> => {
     const response = await fetch(uri);
     const arrayBuffer = await response.arrayBuffer();
     const fileExt = uri.split('.').pop();
-    const fileName = `campaign-${Date.now()}.${fileExt}`;
+    const fileName = `campaign-${Date.now()}-${index}.${fileExt}`;
     const filePath = `campaigns/${fileName}`;
 
     const { error: uploadError } = await supabase.storage
@@ -116,16 +126,18 @@ export default function CreateCampaignScreen() {
       Alert.alert('Error', 'Please select a category');
       return;
     }
-    if (!imageUri) {
-      Alert.alert('Error', 'Please select a campaign image');
+    if (imageUris.length === 0) {
+      Alert.alert('Error', 'Please select at least one campaign image');
       return;
     }
 
     try {
       setLoading(true);
 
-      // Upload image
-      const imageUrl = await uploadImage(imageUri);
+      // Upload all images
+      const uploadedUrls = await Promise.all(
+        imageUris.map((uri, index) => uploadImage(uri, index))
+      );
 
       // Create campaign
       const { error } = await supabase
@@ -137,7 +149,8 @@ export default function CreateCampaignScreen() {
           current_amount: 0,
           category,
           deadline: deadline.trim() || null,
-          campaign_image: imageUrl,
+          campaign_image: uploadedUrls[0], // First image as fallback
+          campaign_images: uploadedUrls, // All images array
           status: 'active',
           is_featured: isFeatured,
           created_by: user?.id,
@@ -186,27 +199,44 @@ export default function CreateCampaignScreen() {
         showsVerticalScrollIndicator={false}
         keyboardShouldPersistTaps="handled"
       >
-        {/* Campaign Image */}
+        {/* Campaign Images */}
         <View style={styles.section}>
-          <Text style={styles.label}>Campaign Image *</Text>
-          <TouchableOpacity style={styles.imagePickerButton} onPress={pickImage}>
-            {imageUri ? (
-              <View style={styles.imagePreview}>
-                <Image source={{ uri: imageUri }} style={styles.previewImage} />
+          <View style={styles.labelRow}>
+            <Text style={styles.label}>Campaign Images *</Text>
+            <Text style={styles.imageCount}>{imageUris.length}/10</Text>
+          </View>
+          <Text style={styles.helperText}>Upload up to 10 images for your campaign</Text>
+          
+          <ScrollView 
+            horizontal 
+            showsHorizontalScrollIndicator={false}
+            style={styles.imagesScroll}
+          >
+            {imageUris.map((uri, index) => (
+              <View key={index} style={styles.imagePreviewContainer}>
+                <Image source={{ uri }} style={styles.previewImageThumb} />
                 <TouchableOpacity
                   style={styles.removeImageButton}
-                  onPress={() => setImageUri('')}
+                  onPress={() => removeImage(index)}
                 >
-                  <X size={16} color="#FFFFFF" />
+                  <X size={14} color="#FFFFFF" />
                 </TouchableOpacity>
+                <View style={styles.imageNumber}>
+                  <Text style={styles.imageNumberText}>{index + 1}</Text>
+                </View>
               </View>
-            ) : (
-              <View style={styles.imagePlaceholder}>
+            ))}
+            
+            {imageUris.length < 10 && (
+              <TouchableOpacity 
+                style={styles.addImageButton} 
+                onPress={pickImages}
+              >
                 <ImageIcon size={32} color="#94A3B8" />
-                <Text style={styles.imagePlaceholderText}>Tap to select image</Text>
-              </View>
+                <Text style={styles.addImageText}>Add Image</Text>
+              </TouchableOpacity>
             )}
-          </TouchableOpacity>
+          </ScrollView>
         </View>
 
         {/* Title */}
@@ -392,6 +422,9 @@ const styles = StyleSheet.create({
   textArea: {
     minHeight: 120,
   },
+  textAreaLarge: {
+    minHeight: 180,
+  },
   charCount: {
     fontSize: 12,
     color: '#94A3B8',
@@ -410,43 +443,74 @@ const styles = StyleSheet.create({
   inputWithPadding: {
     paddingLeft: 48,
   },
-  imagePickerButton: {
-    backgroundColor: '#F8FAFC',
-    borderWidth: 2,
-    borderColor: '#E2E8F0',
+  labelRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 4,
+  },
+  imageCount: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#64748B',
+  },
+  imagesScroll: {
+    marginTop: 12,
+  },
+  imagePreviewContainer: {
+    width: 120,
+    height: 120,
     borderRadius: 12,
-    borderStyle: 'dashed',
+    marginRight: 12,
+    position: 'relative',
     overflow: 'hidden',
   },
-  imagePlaceholder: {
-    height: 200,
-    justifyContent: 'center',
-    alignItems: 'center',
-    gap: 8,
-  },
-  imagePlaceholderText: {
-    fontSize: 14,
-    color: '#94A3B8',
-  },
-  imagePreview: {
-    height: 200,
-    position: 'relative',
-  },
-  previewImage: {
+  previewImageThumb: {
     width: '100%',
     height: '100%',
     resizeMode: 'cover',
   },
   removeImageButton: {
     position: 'absolute',
-    top: 12,
-    right: 12,
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    backgroundColor: 'rgba(0, 0, 0, 0.6)',
+    top: 6,
+    right: 6,
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    backgroundColor: 'rgba(0, 0, 0, 0.7)',
     justifyContent: 'center',
     alignItems: 'center',
+  },
+  imageNumber: {
+    position: 'absolute',
+    bottom: 6,
+    left: 6,
+    backgroundColor: 'rgba(0, 0, 0, 0.7)',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 8,
+  },
+  imageNumberText: {
+    color: '#FFFFFF',
+    fontSize: 11,
+    fontWeight: '700',
+  },
+  addImageButton: {
+    width: 120,
+    height: 120,
+    borderRadius: 12,
+    backgroundColor: '#F8FAFC',
+    borderWidth: 2,
+    borderColor: '#E2E8F0',
+    borderStyle: 'dashed',
+    justifyContent: 'center',
+    alignItems: 'center',
+    gap: 6,
+  },
+  addImageText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#64748B',
   },
   categoryGrid: {
     flexDirection: 'row',

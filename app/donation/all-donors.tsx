@@ -138,7 +138,7 @@ export default function AllDonorsScreen() {
   const handleDonorPress = (donor: Donor) => {
     if (!donor.is_anonymous) {
       // Navigate to user's profile
-      debouncedRouter.push(`/profile/${donor.user_id}`);
+      debouncedRouter.push(`/user-profile/${donor.user_id}`);
     }
   };
 
@@ -269,7 +269,7 @@ export default function AllDonorsScreen() {
                 {/* Chevron for non-anonymous donors */}
                 {!donor.is_anonymous && (
                   <View style={styles.chevronContainer}>
-                    <Text style={styles.viewProfileText}>View Profile</Text>
+                    <ChevronLeft size={20} color="#64748B" style={{ transform: [{ rotate: '180deg' }] }} />
                   </View>
                 )}
               </TouchableOpacity>

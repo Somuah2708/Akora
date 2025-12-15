@@ -181,14 +181,45 @@ export default function AdminDonationScreen() {
   };
 
   const fetchCampaigns = async () => {
-    const { data } = await supabase
-      .from('donation_campaigns')
-      .select('id, title, is_featured, status, current_amount, goal_amount')
-      .eq('status', 'active')
-      .order('is_featured', { ascending: false });
+    try {
+      // Fetch ALL campaigns
+      const { data: allCampaigns } = await supabase
+        .from('donation_campaigns')
+        .select('id, title, is_featured, status, current_amount, goal_amount')
+        .order('is_featured', { ascending: false });
 
-    if (data) {
-      setCampaigns(data);
+      if (!allCampaigns) return;
+
+      // Fetch all donations to calculate actual completion
+      const { data: allDonations } = await supabase
+        .from('donations')
+        .select('campaign_id, amount')
+        .eq('status', 'approved');
+
+      // Group donations by campaign
+      const donationsByCampaign = new Map();
+      allDonations?.forEach(donation => {
+        if (!donationsByCampaign.has(donation.campaign_id)) {
+          donationsByCampaign.set(donation.campaign_id, 0);
+        }
+        donationsByCampaign.set(
+          donation.campaign_id,
+          donationsByCampaign.get(donation.campaign_id) + donation.amount
+        );
+      });
+
+      // Update campaigns with actual amounts and filter to incomplete ones
+      const activeCampaigns = allCampaigns
+        .map(campaign => ({
+          ...campaign,
+          current_amount: donationsByCampaign.get(campaign.id) || 0,
+        }))
+        .filter(campaign => campaign.current_amount < campaign.goal_amount);
+
+      console.log('📋 Admin - Active campaigns:', activeCampaigns.length);
+      setCampaigns(activeCampaigns);
+    } catch (error) {
+      console.error('Error fetching campaigns:', error);
     }
   };
 
@@ -207,9 +238,7 @@ export default function AdminDonationScreen() {
   };
 
   const handleViewDetails = (donation: Donation) => {
-    setSelectedDonation(donation);
-    setAdminNotes(donation.admin_notes || '');
-    setShowDetailsModal(true);
+    debouncedRouter.push(`/donation/donation-details?id=${donation.id}`);
   };
 
   const handleApprovalAction = (donation: Donation, type: 'approve' | 'reject') => {
@@ -576,15 +605,21 @@ export default function AdminDonationScreen() {
                   <View style={styles.receiptContainer}>
                     <Text style={styles.modalLabel}>Payment Receipt</Text>
                     <TouchableOpacity 
-                      onPress={() => setFullScreenImage(selectedDonation.payment_proof_url)}
-                      activeOpacity={0.8}
+                      onPress={() => {
+                        console.log('Receipt image tapped, opening full screen');
+                        setFullScreenImage(selectedDonation.payment_proof_url);
+                      }}
+                      activeOpacity={0.7}
+                      style={{ width: '100%' }}
                     >
                       <Image
                         source={{ uri: selectedDonation.payment_proof_url }}
                         style={styles.receiptImage}
                         resizeMode="contain"
                       />
-                      <Text style={styles.tapToEnlargeText}>Tap to enlarge</Text>
+                      <View style={styles.tapToEnlargeContainer}>
+                        <Text style={styles.tapToEnlargeText}>👆 Tap to enlarge</Text>
+                      </View>
                     </TouchableOpacity>
                   </View>
                 )}
@@ -699,19 +734,35 @@ export default function AdminDonationScreen() {
         visible={fullScreenImage !== null}
         transparent={true}
         animationType="fade"
-        onRequestClose={() => setFullScreenImage(null)}
+        onRequestClose={() => {
+          console.log('Full screen modal closing');
+          setFullScreenImage(null);
+        }}
       >
-        <View style={styles.fullScreenModalContainer}>
-          <View style={styles.fullScreenModalContent}>
-            <TouchableOpacity 
-              style={styles.fullScreenCloseButton}
-              onPress={() => setFullScreenImage(null)}
-            >
-              <View style={styles.fullScreenCloseButtonCircle}>
-                <X size={24} color="#FFFFFF" />
-              </View>
-            </TouchableOpacity>
-            
+        <SafeAreaView style={styles.fullScreenModalContainer} edges={[]}>
+          <RNStatusBar barStyle="light-content" />
+          
+          <TouchableOpacity 
+            style={styles.fullScreenCloseButton}
+            onPress={() => {
+              console.log('Close button pressed');
+              setFullScreenImage(null);
+            }}
+            activeOpacity={0.8}
+          >
+            <View style={styles.fullScreenCloseButtonCircle}>
+              <X size={32} color="#FFFFFF" />
+            </View>
+          </TouchableOpacity>
+          
+          <TouchableOpacity
+            style={styles.fullScreenTapArea}
+            activeOpacity={1}
+            onPress={() => {
+              console.log('Background tapped');
+              setFullScreenImage(null);
+            }}
+          >
             {fullScreenImage && (
               <Image 
                 source={{ uri: fullScreenImage }} 
@@ -719,8 +770,8 @@ export default function AdminDonationScreen() {
                 resizeMode="contain"
               />
             )}
-          </View>
-        </View>
+          </TouchableOpacity>
+        </SafeAreaView>
       </Modal>
     </SafeAreaView>
   );
@@ -1131,12 +1182,19 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     backgroundColor: '#F1F5F9',
   },
-  tapToEnlargeText: {
-    fontSize: 12,
-    color: '#ffc857',
-    fontWeight: '600',
-    textAlign: 'center',
+  tapToEnlargeContainer: {
+    backgroundColor: 'rgba(255, 200, 87, 0.1)',
+    paddingVertical: 8,
+    paddingHorizontal: 16,
+    borderRadius: 8,
     marginTop: 8,
+    alignItems: 'center',
+  },
+  tapToEnlargeText: {
+    fontSize: 13,
+    color: '#ffc857',
+    fontWeight: '700',
+    textAlign: 'center',
   },
   notesInput: {
     backgroundColor: '#F8FAFC',
@@ -1202,32 +1260,33 @@ const styles = StyleSheet.create({
   },
   fullScreenModalContainer: {
     flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.95)',
+    backgroundColor: '#000000',
     justifyContent: 'center',
     alignItems: 'center',
   },
-  fullScreenModalContent: {
-    width: width,
-    height: height,
+  fullScreenTapArea: {
+    flex: 1,
+    width: '100%',
     justifyContent: 'center',
     alignItems: 'center',
   },
   fullScreenCloseButton: {
     position: 'absolute',
-    top: 60,
+    top: Platform.OS === 'ios' ? 60 : 40,
     right: 20,
-    zIndex: 10,
+    zIndex: 100,
+    elevation: 100,
   },
   fullScreenCloseButtonCircle: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    backgroundColor: 'rgba(255, 255, 255, 0.2)',
+    width: 50,
+    height: 50,
+    borderRadius: 25,
+    backgroundColor: 'rgba(255, 255, 255, 0.3)',
     justifyContent: 'center',
     alignItems: 'center',
   },
   fullScreenImageStyle: {
-    width: width,
-    height: height * 0.8,
+    width: width * 0.95,
+    height: height * 0.9,
   },
 });

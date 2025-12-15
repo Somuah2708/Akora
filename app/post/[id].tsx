@@ -42,6 +42,103 @@ export default function PostDetailScreen() {
   const [isLiked, setIsLiked] = useState(false);
   const [isBookmarked, setIsBookmarked] = useState(false);
   const [currentMediaIndex, setCurrentMediaIndex] = useState(0);
+  const [mediaAspectRatios, setMediaAspectRatios] = useState<{[key: string]: number}>({});
+  const [mediaLoading, setMediaLoading] = useState<{[key: string]: boolean}>({});
+
+  // Handle media load to get actual dimensions (same as home screen)
+  const handleMediaLoad = (mediaId: string, width: number, height: number) => {
+    const aspectRatio = width / height;
+    // Clamp between 0.5 (tall) and 1.91 (wide) like Instagram
+    const clampedRatio = Math.max(0.5, Math.min(1.91, aspectRatio));
+    
+    setMediaAspectRatios(prev => ({
+      ...prev,
+      [mediaId]: clampedRatio
+    }));
+    setMediaLoading(prev => ({
+      ...prev,
+      [mediaId]: false
+    }));
+  };
+
+  // Preload media dimensions immediately when post loads
+  useEffect(() => {
+    if (!post) return;
+
+    const loadMediaDimensions = async () => {
+      // Handle mixed media items
+      if (post.media_items && post.media_items.length > 0) {
+        post.media_items.forEach((mediaItem, i) => {
+          const mediaId = `mixed_${post.id}_${i}`;
+          
+          if (mediaItem.type === 'image') {
+            setMediaLoading(prev => ({ ...prev, [mediaId]: true }));
+            Image.getSize(
+              mediaItem.url,
+              (w, h) => handleMediaLoad(mediaId, w, h),
+              (err) => {
+                console.log('Error loading image dimensions:', err);
+                setMediaLoading(prev => ({ ...prev, [mediaId]: false }));
+              }
+            );
+          } else if (mediaItem.type === 'video') {
+            // Default aspect ratio for videos - will update when video loads
+            handleMediaLoad(mediaId, 16, 9);
+          }
+        });
+      }
+
+      // Handle video_urls
+      if (post.video_urls && post.video_urls.length > 0) {
+        post.video_urls.forEach((url, i) => {
+          const mediaId = `video_${post.id}_${i}`;
+          // Default 16:9 for videos
+          handleMediaLoad(mediaId, 16, 9);
+        });
+      }
+
+      // Handle single video
+      if (post.video_url) {
+        const mediaId = `video_${post.id}_single`;
+        // Default 16:9 for videos
+        handleMediaLoad(mediaId, 16, 9);
+      }
+
+      // Handle image_urls
+      if (post.image_urls && post.image_urls.length > 0) {
+        post.image_urls.forEach((url, i) => {
+          const mediaId = `img_${post.id}_${i}`;
+          setMediaLoading(prev => ({ ...prev, [mediaId]: true }));
+          
+          Image.getSize(
+            url,
+            (w, h) => handleMediaLoad(mediaId, w, h),
+            (err) => {
+              console.log('Error loading image dimensions:', err);
+              setMediaLoading(prev => ({ ...prev, [mediaId]: false }));
+            }
+          );
+        });
+      }
+
+      // Handle single image
+      if (post.image_url) {
+        const mediaId = `img_${post.id}_single`;
+        setMediaLoading(prev => ({ ...prev, [mediaId]: true }));
+        
+        Image.getSize(
+          post.image_url,
+          (w, h) => handleMediaLoad(mediaId, w, h),
+          (err) => {
+            console.log('Error loading image dimensions:', err);
+            setMediaLoading(prev => ({ ...prev, [mediaId]: false }));
+          }
+        );
+      }
+    };
+
+    loadMediaDimensions();
+  }, [post?.id]);
 
   useEffect(() => {
     const load = async () => {
@@ -189,24 +286,49 @@ export default function PostDetailScreen() {
               }}
               scrollEventThrottle={16}
             >
-              {post.media_items.map((mediaItem, i) => (
-                <View key={i} style={[styles.hero, { width }]}>
-                  {mediaItem.type === 'video' ? (
-                    <Video
-                      source={{ uri: mediaItem.url }}
-                      style={styles.hero}
-                      useNativeControls
-                      resizeMode={ResizeMode.CONTAIN}
-                      isLooping
-                      isMuted={false}
-                      volume={1.0}
-                      onError={(err) => console.warn('Video error:', err)}
-                    />
-                  ) : (
-                    <Image source={{ uri: mediaItem.url }} style={styles.hero} resizeMode="cover" />
-                  )}
-                </View>
-              ))}
+              {post.media_items.map((mediaItem, i) => {
+                const mediaId = `mixed_${post.id}_${i}`;
+                const aspectRatio = mediaAspectRatios[mediaId] || 1;
+                const isLoading = mediaLoading[mediaId];
+                return (
+                  <View key={i} style={[styles.mediaWrapper, { width, aspectRatio }]}>
+                    {mediaItem.type === 'video' ? (
+                      <>
+                        <Video
+                          source={{ uri: mediaItem.url }}
+                          style={styles.mediaFull}
+                          useNativeControls
+                          resizeMode={ResizeMode.CONTAIN}
+                          isLooping={false}
+                          shouldPlay={false}
+                          isMuted={false}
+                          volume={1.0}
+                          onError={(err) => console.warn('Video error:', err)}
+                          onReadyForDisplay={(videoData) => {
+                            if (videoData.naturalSize) {
+                              const { width: w, height: h } = videoData.naturalSize;
+                              handleMediaLoad(mediaId, w, h);
+                            }
+                          }}
+                        />
+                      </>
+                    ) : (
+                      <>
+                        {isLoading && (
+                          <View style={styles.mediaLoadingOverlay}>
+                            <ActivityIndicator size="large" color="#ffc857" />
+                          </View>
+                        )}
+                        <Image 
+                          source={{ uri: mediaItem.url }} 
+                          style={styles.mediaFull} 
+                          resizeMode="cover"
+                        />
+                      </>
+                    )}
+                  </View>
+                );
+              })}
             </ScrollView>
             {post.media_items.length > 1 && (
               <View style={styles.carouselIndicator}>
@@ -229,20 +351,31 @@ export default function PostDetailScreen() {
               }}
               scrollEventThrottle={16}
             >
-              {post.video_urls.map((videoUrl, i) => (
-                <View key={i} style={styles.videoContainer}>
-                  <Video
-                    source={{ uri: videoUrl }}
-                    style={styles.hero}
-                    useNativeControls
-                    resizeMode={ResizeMode.CONTAIN}
-                    isLooping
-                    isMuted={false}
-                    volume={1.0}
-                    onError={(err) => console.warn('Video error:', err)}
-                  />
-                </View>
-              ))}
+              {post.video_urls.map((videoUrl, i) => {
+                const mediaId = `video_${post.id}_${i}`;
+                const aspectRatio = mediaAspectRatios[mediaId] || 1;
+                return (
+                  <View key={i} style={[styles.mediaWrapper, { width, aspectRatio }]}>
+                    <Video
+                      source={{ uri: videoUrl }}
+                      style={styles.mediaFull}
+                      useNativeControls
+                      resizeMode={ResizeMode.CONTAIN}
+                      isLooping={false}
+                      shouldPlay={false}
+                      isMuted={false}
+                      volume={1.0}
+                      onError={(err) => console.warn('Video error:', err)}
+                      onReadyForDisplay={(videoData) => {
+                        if (videoData.naturalSize) {
+                          const { width: w, height: h } = videoData.naturalSize;
+                          handleMediaLoad(mediaId, w, h);
+                        }
+                      }}
+                    />
+                  </View>
+                );
+              })}
             </ScrollView>
             {post.video_urls.length > 1 && (
               <View style={styles.carouselIndicator}>
@@ -253,16 +386,23 @@ export default function PostDetailScreen() {
             )}
           </View>
         ) : post.video_url ? (
-          <View style={styles.videoContainer}>
+          <View style={[styles.mediaWrapper, { width, aspectRatio: mediaAspectRatios[`video_${post.id}_single`] || 1 }]}>
             <Video
               source={{ uri: post.video_url }}
-              style={styles.hero}
+              style={styles.mediaFull}
               useNativeControls
               resizeMode={ResizeMode.CONTAIN}
-              isLooping
+              isLooping={false}
+              shouldPlay={false}
               isMuted={false}
               volume={1.0}
               onError={(err) => console.warn('Video error:', err)}
+              onReadyForDisplay={(videoData) => {
+                if (videoData.naturalSize) {
+                  const { width: w, height: h } = videoData.naturalSize;
+                  handleMediaLoad(`video_${post.id}_single`, w, h);
+                }
+              }}
             />
           </View>
         ) : post.image_urls && post.image_urls.length > 0 ? (
@@ -278,9 +418,25 @@ export default function PostDetailScreen() {
               }}
               scrollEventThrottle={16}
             >
-              {post.image_urls.map((u, i) => (
-                <Image key={i} source={{ uri: u }} style={styles.hero} />
-              ))}
+              {post.image_urls.map((u, i) => {
+                const mediaId = `img_${post.id}_${i}`;
+                const aspectRatio = mediaAspectRatios[mediaId] || 1;
+                const isLoading = mediaLoading[mediaId];
+                return (
+                  <View key={i} style={[styles.mediaWrapper, { width, aspectRatio }]}>
+                    {isLoading && (
+                      <View style={styles.mediaLoadingOverlay}>
+                        <ActivityIndicator size="large" color="#ffc857" />
+                      </View>
+                    )}
+                    <Image 
+                      source={{ uri: u }} 
+                      style={styles.mediaFull}
+                      resizeMode="cover"
+                    />
+                  </View>
+                );
+              })}
             </ScrollView>
             {post.image_urls.length > 1 && (
               <View style={styles.carouselIndicator}>
@@ -291,7 +447,18 @@ export default function PostDetailScreen() {
             )}
           </View>
         ) : post.image_url ? (
-          <Image source={{ uri: post.image_url }} style={styles.hero} />
+          <View style={[styles.mediaWrapper, { width, aspectRatio: mediaAspectRatios[`img_${post.id}_single`] || 1 }]}>
+            {mediaLoading[`img_${post.id}_single`] && (
+              <View style={styles.mediaLoadingOverlay}>
+                <ActivityIndicator size="large" color="#ffc857" />
+              </View>
+            )}
+            <Image 
+              source={{ uri: post.image_url }} 
+              style={styles.mediaFull}
+              resizeMode="cover"
+            />
+          </View>
         ) : null}
 
         {/* Actions */}
@@ -365,11 +532,30 @@ const styles = StyleSheet.create({
   headerTitle: { fontSize: 18, color: '#111827', fontFamily: 'Inter-SemiBold' },
   carouselContainer: {
     width,
-    height: width,
     position: 'relative',
   },
-  hero: { width, height: width, backgroundColor: '#F3F4F6' },
-  videoContainer: { width, height: width },
+  hero: { width, backgroundColor: '#F3F4F6' },
+  mediaWrapper: {
+    backgroundColor: '#F3F4F6',
+    position: 'relative',
+    overflow: 'hidden',
+  },
+  mediaFull: {
+    width: '100%',
+    height: '100%',
+  },
+  mediaLoadingOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: '#F3F4F6',
+    zIndex: 1,
+  },
+  videoContainer: { width },
   carouselIndicator: {
     position: 'absolute',
     top: 12,

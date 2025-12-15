@@ -53,8 +53,8 @@ export default function EditCampaignScreen() {
   const [goalAmount, setGoalAmount] = useState('');
   const [category, setCategory] = useState('');
   const [deadline, setDeadline] = useState('');
-  const [imageUri, setImageUri] = useState('');
-  const [existingImageUrl, setExistingImageUrl] = useState('');
+  const [imageUris, setImageUris] = useState<string[]>([]);
+  const [existingImageUrls, setExistingImageUrls] = useState<string[]>([]);
   const [isFeatured, setIsFeatured] = useState(false);
   const [isActive, setIsActive] = useState(true);
   const [loading, setLoading] = useState(true);
@@ -116,7 +116,12 @@ export default function EditCampaignScreen() {
         setGoalAmount(campaign.goal_amount.toString());
         setCategory(campaign.category);
         setDeadline(campaign.deadline ? campaign.deadline.split('T')[0] : '');
-        setExistingImageUrl(campaign.campaign_image || '');
+        // Load existing images (campaign_images array or fallback to single campaign_image)
+        if (campaign.campaign_images && Array.isArray(campaign.campaign_images) && campaign.campaign_images.length > 0) {
+          setExistingImageUrls(campaign.campaign_images);
+        } else if (campaign.campaign_image) {
+          setExistingImageUrls([campaign.campaign_image]);
+        }
         setIsFeatured(campaign.is_featured || false);
         setIsActive(campaign.status === 'active');
       }
@@ -128,7 +133,13 @@ export default function EditCampaignScreen() {
     }
   };
 
-  const pickImage = async () => {
+  const pickImages = async () => {
+    const totalImages = imageUris.length + existingImageUrls.length;
+    if (totalImages >= 10) {
+      Alert.alert('Limit Reached', 'You can only have up to 10 images per campaign');
+      return;
+    }
+
     const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
     if (status !== 'granted') {
       Alert.alert('Permission needed', 'Please grant camera roll permissions');
@@ -140,27 +151,32 @@ export default function EditCampaignScreen() {
       allowsEditing: true,
       aspect: [16, 9],
       quality: 0.8,
+      allowsMultipleSelection: false,
     });
 
-    if (!result.canceled) {
-      setImageUri(result.assets[0].uri);
+    if (!result.canceled && result.assets[0]) {
+      setImageUris(prev => [...prev, result.assets[0].uri]);
     }
   };
 
-  const uploadImage = async (uri: string): Promise<string> => {
-    // Create form data for upload
-    const fileExt = uri.split('.').pop();
-    const fileName = `campaign-${Date.now()}.${fileExt}`;
-    const filePath = `campaigns/${fileName}`;
+  const removeNewImage = (index: number) => {
+    setImageUris(prev => prev.filter((_, i) => i !== index));
+  };
 
-    // Fetch the file as array buffer
+  const removeExistingImage = (index: number) => {
+    setExistingImageUrls(prev => prev.filter((_, i) => i !== index));
+  };
+
+  const uploadImage = async (uri: string, index: number): Promise<string> => {
     const response = await fetch(uri);
     const arrayBuffer = await response.arrayBuffer();
-    const fileData = new Uint8Array(arrayBuffer);
+    const fileExt = uri.split('.').pop();
+    const fileName = `campaign-${Date.now()}-${index}.${fileExt}`;
+    const filePath = `campaigns/${fileName}`;
 
     const { error: uploadError } = await supabase.storage
       .from('campaign-images')
-      .upload(filePath, fileData, {
+      .upload(filePath, new Uint8Array(arrayBuffer), {
         contentType: `image/${fileExt}`,
       });
 
@@ -201,15 +217,15 @@ export default function EditCampaignScreen() {
     try {
       setSaving(true);
 
-      let imageUrl = existingImageUrl;
+      // Combine existing and new images
+      const uploadedUrls = await Promise.all(
+        imageUris.map((uri, index) => uploadImage(uri, index))
+      );
+      
+      const allImageUrls = [...existingImageUrls, ...uploadedUrls];
 
-      // Upload new image if selected
-      if (imageUri) {
-        imageUrl = await uploadImage(imageUri);
-      }
-
-      if (!imageUrl) {
-        Alert.alert('Error', 'Campaign must have an image');
+      if (allImageUrls.length === 0) {
+        Alert.alert('Error', 'Campaign must have at least one image');
         return;
       }
 
@@ -222,7 +238,8 @@ export default function EditCampaignScreen() {
           goal_amount: parseFloat(goalAmount),
           category,
           deadline,
-          campaign_image: imageUrl,
+          campaign_image: allImageUrls[0], // First image as fallback
+          campaign_images: allImageUrls, // All images array
           status: isActive ? 'active' : 'inactive',
           is_featured: isFeatured,
           updated_at: new Date().toISOString(),
@@ -371,31 +388,62 @@ export default function EditCampaignScreen() {
         showsVerticalScrollIndicator={false}
         keyboardShouldPersistTaps="handled"
       >
-        {/* Campaign Image */}
+        {/* Campaign Images */}
         <View style={styles.section}>
-          <Text style={styles.label}>Campaign Image *</Text>
-          <TouchableOpacity style={styles.imagePickerButton} onPress={pickImage}>
-            {imageUri || existingImageUrl ? (
-              <View style={styles.imagePreview}>
-                <Image 
-                  source={{ uri: imageUri || existingImageUrl }} 
-                  style={styles.previewImage} 
-                />
+          <View style={styles.labelRow}>
+            <Text style={styles.label}>Campaign Images *</Text>
+            <Text style={styles.imageCount}>{existingImageUrls.length + imageUris.length}/10</Text>
+          </View>
+          <Text style={styles.helperText}>Upload up to 10 images for your campaign</Text>
+          
+          <ScrollView 
+            horizontal 
+            showsHorizontalScrollIndicator={false}
+            style={styles.imagesScroll}
+          >
+            {/* Existing Images */}
+            {existingImageUrls.map((url, index) => (
+              <View key={`existing-${index}`} style={styles.imagePreviewContainer}>
+                <Image source={{ uri: url }} style={styles.previewImageThumb} />
                 <TouchableOpacity
-                  style={styles.changeImageButton}
-                  onPress={pickImage}
+                  style={styles.removeImageButton}
+                  onPress={() => removeExistingImage(index)}
                 >
-                  <ImageIcon size={16} color="#FFFFFF" />
-                  <Text style={styles.changeImageText}>Change</Text>
+                  <X size={14} color="#FFFFFF" />
                 </TouchableOpacity>
+                <View style={styles.imageNumber}>
+                  <Text style={styles.imageNumberText}>{index + 1}</Text>
+                </View>
               </View>
-            ) : (
-              <View style={styles.imagePlaceholder}>
+            ))}
+            
+            {/* New Images */}
+            {imageUris.map((uri, index) => (
+              <View key={`new-${index}`} style={styles.imagePreviewContainer}>
+                <Image source={{ uri }} style={styles.previewImageThumb} />
+                <TouchableOpacity
+                  style={styles.removeImageButton}
+                  onPress={() => removeNewImage(index)}
+                >
+                  <X size={14} color="#FFFFFF" />
+                </TouchableOpacity>
+                <View style={styles.imageNumber}>
+                  <Text style={styles.imageNumberText}>{existingImageUrls.length + index + 1}</Text>
+                </View>
+              </View>
+            ))}
+            
+            {/* Add Image Button */}
+            {(existingImageUrls.length + imageUris.length) < 10 && (
+              <TouchableOpacity 
+                style={styles.addImageButton} 
+                onPress={pickImages}
+              >
                 <ImageIcon size={32} color="#94A3B8" />
-                <Text style={styles.imagePlaceholderText}>Tap to select image</Text>
-              </View>
+                <Text style={styles.addImageText}>Add Image</Text>
+              </TouchableOpacity>
             )}
-          </TouchableOpacity>
+          </ScrollView>
         </View>
 
         {/* Title */}
@@ -615,6 +663,75 @@ const styles = StyleSheet.create({
     color: '#0F172A',
     marginBottom: 8,
   },
+  labelRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 4,
+  },
+  imageCount: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#64748B',
+  },
+  imagesScroll: {
+    marginTop: 12,
+  },
+  imagePreviewContainer: {
+    width: 120,
+    height: 120,
+    borderRadius: 12,
+    marginRight: 12,
+    position: 'relative',
+    overflow: 'hidden',
+  },
+  previewImageThumb: {
+    width: '100%',
+    height: '100%',
+    resizeMode: 'cover',
+  },
+  removeImageButton: {
+    position: 'absolute',
+    top: 6,
+    right: 6,
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    backgroundColor: 'rgba(0, 0, 0, 0.7)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  imageNumber: {
+    position: 'absolute',
+    bottom: 6,
+    left: 6,
+    backgroundColor: 'rgba(0, 0, 0, 0.7)',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 8,
+  },
+  imageNumberText: {
+    color: '#FFFFFF',
+    fontSize: 11,
+    fontWeight: '700',
+  },
+  addImageButton: {
+    width: 120,
+    height: 120,
+    borderRadius: 12,
+    backgroundColor: '#F8FAFC',
+    borderWidth: 2,
+    borderColor: '#E2E8F0',
+    borderStyle: 'dashed',
+    justifyContent: 'center',
+    alignItems: 'center',
+    gap: 6,
+  },
+  addImageText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#64748B',
+  },
   input: {
     backgroundColor: '#F8FAFC',
     borderWidth: 1,
@@ -756,7 +873,7 @@ const styles = StyleSheet.create({
   helperText: {
     fontSize: 13,
     color: '#64748B',
-    marginTop: 4,
+    marginTop: 8,
     lineHeight: 18,
   },
   warningBox: {
