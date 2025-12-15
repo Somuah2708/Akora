@@ -87,13 +87,13 @@ export default function UploadDocumentScreen() {
       const pickedFile = result.assets[0];
       console.log('[Document Picker] File selected:', pickedFile);
 
-      // Validate file size (max 10MB)
-      const maxSize = 10 * 1024 * 1024; // 10MB
+      // Validate file size (max 50MB)
+      const maxSize = 50 * 1024 * 1024; // 50MB
       if (pickedFile.size && pickedFile.size > maxSize) {
         if (Platform.OS === 'web') {
-          window.alert('File is too large. Maximum size is 10MB.');
+          window.alert('File is too large. Maximum size is 50MB.');
         } else {
-          Alert.alert('File Too Large', 'Maximum file size is 10MB. Please choose a smaller file.');
+          Alert.alert('File Too Large', 'Maximum file size is 50MB. Please choose a smaller file.');
         }
         return;
       }
@@ -138,23 +138,24 @@ export default function UploadDocumentScreen() {
       const sanitizedFileName = file.name.replace(/[^a-zA-Z0-9._-]/g, '_');
       const filePath = `secretariat/documents/${user?.id}/${timestamp}_${sanitizedFileName}`;
 
-      // Fetch the file blob
+      // Fetch the file as array buffer
       const response = await fetch(file.uri);
-      const blob = await response.blob();
+      const arrayBuffer = await response.arrayBuffer();
+      const fileData = new Uint8Array(arrayBuffer);
 
-      console.log('[Upload] File blob created, size:', blob.size);
+      console.log('[Upload] File data created, size:', fileData.length);
 
       // Upload to Supabase Storage
-      const { data, error } = await supabase.storage
+      const uploadResult = await supabase.storage
         .from('chat-media')
-        .upload(filePath, blob, {
+        .upload(filePath, fileData, {
           contentType: file.mimeType || 'application/octet-stream',
           upsert: false,
         });
 
-      if (error) {
-        console.error('[Upload] Supabase error:', error);
-        throw error;
+      if (uploadResult.error) {
+        console.error('[Upload] Supabase error:', uploadResult.error);
+        throw uploadResult.error;
       }
 
       console.log('[Upload] Upload successful, getting public URL...');
@@ -178,6 +179,16 @@ export default function UploadDocumentScreen() {
   };
 
   const handleSubmit = async () => {
+    console.log('[Submit] Starting document submission...');
+    console.log('[Submit] Current user ID:', user?.id);
+    console.log('[Submit] Form data:', {
+      title: formData.title,
+      category: formData.category,
+      fileName: formData.fileName,
+      fileSize: formData.fileSize,
+      uploaderName: formData.uploaderName,
+    });
+
     // Validation
     if (!formData.title.trim()) {
       Alert.alert('Error', 'Please enter a title');
@@ -208,39 +219,58 @@ export default function UploadDocumentScreen() {
         .map((tag) => tag.trim())
         .filter((tag) => tag.length > 0);
 
+      console.log('[Submit] Parsed tags:', tagsArray);
+
       // Determine file type from file name
       const fileExtension = formData.fileName.split('.').pop()?.toLowerCase() || '';
+      console.log('[Submit] File extension:', fileExtension);
+
+      const documentData = {
+        user_id: user?.id,
+        title: formData.title.trim(),
+        description: formData.description.trim() || null,
+        category: formData.category,
+        document_type: fileExtension,
+        file_url: formData.fileUrl.trim(),
+        file_name: formData.fileName.trim(),
+        file_size: formData.fileSize || 0,
+        uploader_name: formData.uploaderName.trim(),
+        uploader_title: formData.uploaderTitle.trim() || null,
+        uploader_email: formData.uploaderEmail.trim() || user?.email,
+        tags: tagsArray.length > 0 ? tagsArray : null,
+        version: formData.version.trim(),
+        is_public: true,
+        is_approved: true, // Auto-approve for now
+        created_at: new Date().toISOString(),
+      };
+
+      console.log('[Submit] Document data to insert:', JSON.stringify(documentData, null, 2));
 
       // Create document
+      console.log('[Submit] Inserting into database...');
       const { data, error } = await supabase
         .from('secretariat_documents')
-        .insert([
-          {
-            user_id: user?.id,
-            title: formData.title.trim(),
-            description: formData.description.trim() || null,
-            category: formData.category,
-            document_type: fileExtension,
-            file_url: formData.fileUrl.trim(),
-            file_name: formData.fileName.trim(),
-            file_size: formData.fileSize || 0,
-            uploader_name: formData.uploaderName.trim(),
-            uploader_title: formData.uploaderTitle.trim() || null,
-            uploader_email: formData.uploaderEmail.trim() || user?.email,
-            tags: tagsArray.length > 0 ? tagsArray : null,
-            version: formData.version.trim(),
-            is_public: true,
-            is_approved: true, // Auto-approve for now
-            created_at: new Date().toISOString(),
-          },
-        ])
+        .insert([documentData])
         .select();
 
-      if (error) throw error;
+      console.log('[Submit] Database response:', { data, error });
+
+      if (error) {
+        console.error('[Submit] Database error:', error);
+        console.error('[Submit] Error code:', error.code);
+        console.error('[Submit] Error message:', error.message);
+        console.error('[Submit] Error details:', JSON.stringify(error, null, 2));
+        throw error;
+      }
+
+      console.log('[Submit] Document inserted successfully!');
+      console.log('[Submit] Inserted document ID:', data?.[0]?.id);
+
+      console.log('[Submit] Upload complete, showing success message and navigating...');
 
       if (Platform.OS === 'web') {
         window.alert('✓ Document uploaded successfully!');
-        debouncedRouter.push('/secretariat/documents/my-documents');
+        debouncedRouter.push('/secretariat/documents/admin');
       } else {
         Alert.alert(
           'Success',
@@ -248,15 +278,19 @@ export default function UploadDocumentScreen() {
           [
             {
               text: 'OK',
-              onPress: () => debouncedRouter.push('/secretariat/documents/my-documents'),
+              onPress: () => debouncedRouter.push('/secretariat/documents/admin'),
             },
           ]
         );
       }
-    } catch (error) {
-      console.error('Error uploading document:', error);
-      Alert.alert('Error', 'Failed to upload document. Please try again.');
+    } catch (error: any) {
+      console.error('[Submit] Fatal error uploading document:', error);
+      console.error('[Submit] Error name:', error?.name);
+      console.error('[Submit] Error message:', error?.message);
+      console.error('[Submit] Full error:', JSON.stringify(error, null, 2));
+      Alert.alert('Error', `Failed to upload document: ${error?.message || 'Unknown error'}`);
     } finally {
+      console.log('[Submit] Cleaning up, setting loading to false');
       setLoading(false);
     }
   };
@@ -403,7 +437,7 @@ export default function UploadDocumentScreen() {
                 {uploading ? 'Uploading...' : 'Upload Document from Computer'}
               </Text>
               <Text style={styles.documentPickerSubtitle}>
-                {formData.fileName || 'PDF, DOC, XLS, PPT (Max 10MB)'}
+                {formData.fileName || 'PDF, DOC, XLS, PPT (Max 50MB)'}
               </Text>
             </View>
             {uploading && <ActivityIndicator size="small" color="#ffc857" />}

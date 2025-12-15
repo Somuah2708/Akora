@@ -8,6 +8,7 @@ import {
   TextInput,
   ActivityIndicator,
   Alert,
+  RefreshControl,
 } from 'react-native';
 import { useRouter } from 'expo-router'
 import { DebouncedTouchable } from '@/components/DebouncedTouchable';
@@ -73,8 +74,6 @@ const DOCUMENT_TYPES = [
 const SORT_OPTIONS = [
   { label: 'Newest First', value: 'newest' },
   { label: 'Oldest First', value: 'oldest' },
-  { label: 'Most Viewed', value: 'views' },
-  { label: 'Most Downloaded', value: 'downloads' },
   { label: 'A-Z', value: 'title_asc' },
   { label: 'Z-A', value: 'title_desc' },
 ];
@@ -101,6 +100,8 @@ export default function DocumentCenterScreen() {
   const [documents, setDocuments] = useState<Document[]>([]);
   const [filteredDocuments, setFilteredDocuments] = useState<Document[]>([]);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+  const [isAdmin, setIsAdmin] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('All');
   const [selectedType, setSelectedType] = useState('all');
@@ -111,11 +112,32 @@ export default function DocumentCenterScreen() {
 
   useEffect(() => {
     loadDocuments();
+    checkAdminStatus();
   }, [user?.id]);
 
   useEffect(() => {
     filterDocuments();
   }, [searchQuery, selectedCategory, selectedType, selectedSort, selectedDateRange, selectedFileSize, documents]);
+
+  const checkAdminStatus = async () => {
+    if (!user?.id) return;
+
+    try {
+      const { data: profileData, error } = await supabase
+        .from('profiles')
+        .select('is_admin, role')
+        .eq('id', user.id)
+        .single();
+
+      if (error) throw error;
+
+      const adminStatus = profileData?.is_admin === true || profileData?.role === 'admin';
+      setIsAdmin(adminStatus);
+    } catch (error) {
+      console.error('Error checking admin status:', error);
+      setIsAdmin(false);
+    }
+  };
 
   const loadDocuments = async () => {
     try {
@@ -139,6 +161,12 @@ export default function DocumentCenterScreen() {
     } finally {
       setLoading(false);
     }
+  };
+
+  const onRefresh = async () => {
+    setRefreshing(true);
+    await Promise.all([loadDocuments(), checkAdminStatus()]);
+    setRefreshing(false);
   };
 
   const filterDocuments = () => {
@@ -302,26 +330,28 @@ export default function DocumentCenterScreen() {
         style={styles.headerGradient}
       >
         <View style={styles.header}>
-          <TouchableOpacity onPress={() => debouncedRouter.push('/secretariat')} style={styles.backButton}>
+          <DebouncedTouchable onPress={() => debouncedRouter.push('/secretariat')} style={styles.backButton}>
             <ArrowLeft size={24} color="#FFFFFF" />
-          </TouchableOpacity>
+          </DebouncedTouchable>
           <View style={styles.headerCenter}>
             <Text style={styles.title}>Document Center</Text>
             <Text style={styles.subtitle}>{filteredDocuments.length} documents</Text>
           </View>
           <View style={styles.headerActions}>
-            <TouchableOpacity
+            <DebouncedTouchable
               style={styles.myDocumentsButton}
-              onPress={() => debouncedRouter.push('/secretariat/documents/my-documents')}
+              onPress={() => debouncedRouter.push('/secretariat/documents/favorites')}
             >
               <FolderOpen size={24} color="#FFFFFF" />
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={styles.addButton}
-              onPress={() => debouncedRouter.push('/secretariat/documents/upload')}
-            >
-              <Plus size={24} color="#FFFFFF" />
-            </TouchableOpacity>
+            </DebouncedTouchable>
+            {isAdmin && (
+              <DebouncedTouchable
+                style={styles.addButton}
+                onPress={() => debouncedRouter.push('/secretariat/documents/admin')}
+              >
+                <Plus size={24} color="#FFFFFF" />
+              </DebouncedTouchable>
+            )}
           </View>
         </View>
 
@@ -507,7 +537,18 @@ export default function DocumentCenterScreen() {
       </LinearGradient>
 
       {/* Documents List */}
-      <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
+      <ScrollView 
+        style={styles.content} 
+        showsVerticalScrollIndicator={false}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={onRefresh}
+            colors={['#ffc857']}
+            tintColor="#ffc857"
+          />
+        }
+      >
         {filteredDocuments.length === 0 ? (
           <View style={styles.emptyContainer}>
             <Folder size={64} color="#CCCCCC" />
@@ -526,7 +567,7 @@ export default function DocumentCenterScreen() {
             const iconColor = getDocumentIconColor(document.file_name);
 
             return (
-              <TouchableOpacity
+              <DebouncedTouchable
                 key={document.id}
                 style={styles.documentCard}
                 onPress={() => debouncedRouter.push(`/secretariat/documents/${document.id}`)}
@@ -566,21 +607,8 @@ export default function DocumentCenterScreen() {
                       <Text style={styles.metaText}>{formatDate(document.upload_date)}</Text>
                     </View>
                   </View>
-
-                  {/* Stats */}
-                  <View style={styles.stats}>
-                    <View style={styles.statItem}>
-                      <Eye size={14} color="#666" />
-                      <Text style={styles.statText}>{document.view_count} views</Text>
-                    </View>
-                    <View style={styles.statItem}>
-                      <Download size={14} color="#666" />
-                      <Text style={styles.statText}>{document.download_count} downloads</Text>
-                    </View>
-                    <Text style={styles.fileSize}>{formatFileSize(document.file_size)}</Text>
-                  </View>
                 </View>
-              </TouchableOpacity>
+              </DebouncedTouchable>
             );
           })
         )}

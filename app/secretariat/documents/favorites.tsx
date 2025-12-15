@@ -17,13 +17,10 @@ import {
   FileText,
   Download,
   Eye,
-  Edit3,
-  Trash2,
   Calendar,
   File,
-  CheckCircle,
-  Clock,
-  XCircle,
+  Star,
+  Folder,
 } from 'lucide-react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { supabase } from '@/lib/supabase';
@@ -47,7 +44,7 @@ interface Document {
   created_at: string;
 }
 
-export default function MyDocumentsScreen() {
+export default function FavoritesScreen() {
   const router = useRouter();
   const { user } = useAuth();
 
@@ -55,53 +52,76 @@ export default function MyDocumentsScreen() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    loadMyDocuments();
+    loadFavoriteDocuments();
   }, [user?.id]);
 
-  const loadMyDocuments = async () => {
+  const loadFavoriteDocuments = async () => {
     if (!user) return;
 
     try {
       setLoading(true);
-      console.log('[My Documents] Loading documents for user:', user.id);
+      console.log('[Favorites] Loading favorite documents for user:', user.id);
 
-      const { data, error } = await supabase
-        .from('secretariat_documents')
-        .select('*')
+      // Get bookmarked document IDs
+      const { data: bookmarks, error: bookmarksError } = await supabase
+        .from('document_bookmarks')
+        .select('document_id')
         .eq('user_id', user.id)
         .order('created_at', { ascending: false });
 
+      if (bookmarksError) {
+        console.error('[Favorites] Error loading bookmarks:', bookmarksError);
+        throw bookmarksError;
+      }
+
+      if (!bookmarks || bookmarks.length === 0) {
+        console.log('[Favorites] No bookmarks found');
+        setDocuments([]);
+        setLoading(false);
+        return;
+      }
+
+      const documentIds = bookmarks.map(b => b.document_id);
+
+      // Get the actual documents
+      const { data, error } = await supabase
+        .from('secretariat_documents')
+        .select('*')
+        .in('id', documentIds)
+        .eq('is_public', true)
+        .eq('is_approved', true);
+
       if (error) {
-        console.error('[My Documents] Error loading documents:', error);
+        console.error('[Favorites] Error loading documents:', error);
         throw error;
       }
 
-      console.log('[My Documents] Loaded documents:', data?.length || 0);
+      console.log('[Favorites] Loaded documents:', data?.length || 0);
       setDocuments(data || []);
     } catch (error) {
-      console.error('[My Documents] Error:', error);
+      console.error('[Favorites] Error:', error);
       if (Platform.OS === 'web') {
-        window.alert('Failed to load your documents. Please try again.');
+        window.alert('Failed to load your favorite documents. Please try again.');
       } else {
-        Alert.alert('Error', 'Failed to load your documents. Please try again.');
+        Alert.alert('Error', 'Failed to load your favorite documents. Please try again.');
       }
     } finally {
       setLoading(false);
     }
   };
 
-  const handleDelete = async (id: string, title: string) => {
-    const confirmDelete = () => {
+  const handleUnfavorite = async (documentId: string, title: string) => {
+    const confirmUnfavorite = () => {
       return new Promise<boolean>((resolve) => {
         if (Platform.OS === 'web') {
           const confirmed = window.confirm(
-            `Are you sure you want to delete "${title}"?\n\nThis action cannot be undone.`
+            `Remove "${title}" from favorites?`
           );
           resolve(confirmed);
         } else {
           Alert.alert(
-            'Delete Document',
-            `Are you sure you want to delete "${title}"?\n\nThis action cannot be undone.`,
+            'Remove Favorite',
+            `Remove "${title}" from favorites?`,
             [
               {
                 text: 'Cancel',
@@ -109,7 +129,7 @@ export default function MyDocumentsScreen() {
                 onPress: () => resolve(false),
               },
               {
-                text: 'Delete',
+                text: 'Remove',
                 style: 'destructive',
                 onPress: () => resolve(true),
               },
@@ -119,42 +139,38 @@ export default function MyDocumentsScreen() {
       });
     };
 
-    const confirmed = await confirmDelete();
+    const confirmed = await confirmUnfavorite();
     if (!confirmed) return;
 
     try {
-      console.log('[My Documents] Deleting document:', id);
+      console.log('[Favorites] Removing bookmark:', documentId);
 
       const { error } = await supabase
-        .from('secretariat_documents')
+        .from('document_bookmarks')
         .delete()
-        .eq('id', id)
-        .eq('user_id', user?.id); // Security: only delete own documents
+        .eq('user_id', user?.id)
+        .eq('document_id', documentId);
 
       if (error) throw error;
 
-      console.log('[My Documents] Document deleted successfully');
+      console.log('[Favorites] Bookmark removed successfully');
 
       if (Platform.OS === 'web') {
-        window.alert('✓ Document deleted successfully!');
+        window.alert('✓ Removed from favorites!');
       } else {
-        Alert.alert('Success', '✓ Document deleted successfully!');
+        Alert.alert('Success', '✓ Removed from favorites!');
       }
 
       // Reload documents
-      loadMyDocuments();
+      loadFavoriteDocuments();
     } catch (error) {
-      console.error('[My Documents] Error deleting document:', error);
+      console.error('[Favorites] Error removing bookmark:', error);
       if (Platform.OS === 'web') {
-        window.alert('Failed to delete document. Please try again.');
+        window.alert('Failed to remove from favorites. Please try again.');
       } else {
-        Alert.alert('Error', 'Failed to delete document. Please try again.');
+        Alert.alert('Error', 'Failed to remove from favorites. Please try again.');
       }
     }
-  };
-
-  const handleEdit = (id: string) => {
-    debouncedRouter.push(`/secretariat/documents/edit/${id}`);
   };
 
   const formatFileSize = (bytes: number) => {
@@ -170,31 +186,6 @@ export default function MyDocumentsScreen() {
       month: 'short',
       day: 'numeric',
     });
-  };
-
-  const getStatusBadge = (doc: Document) => {
-    if (!doc.is_approved) {
-      return (
-        <View style={[styles.statusBadge, styles.statusPending]}>
-          <Clock size={12} color="#F59E0B" />
-          <Text style={styles.statusText}>Pending Review</Text>
-        </View>
-      );
-    }
-    if (doc.is_public && doc.is_approved) {
-      return (
-        <View style={[styles.statusBadge, styles.statusPublished]}>
-          <CheckCircle size={12} color="#10B981" />
-          <Text style={styles.statusText}>Published</Text>
-        </View>
-      );
-    }
-    return (
-      <View style={[styles.statusBadge, styles.statusDraft]}>
-        <XCircle size={12} color="#6B7280" />
-        <Text style={styles.statusText}>Draft</Text>
-      </View>
-    );
   };
 
   const getFileIcon = (fileType: string) => {
@@ -219,14 +210,14 @@ export default function MyDocumentsScreen() {
               <ArrowLeft size={24} color="#FFFFFF" />
             </DebouncedTouchable>
             <View style={styles.headerCenter}>
-              <Text style={styles.title}>My Documents</Text>
+              <Text style={styles.title}>Favorite Documents</Text>
             </View>
             <View style={styles.placeholder} />
           </View>
         </LinearGradient>
         <View style={styles.loadingContainer}>
           <ActivityIndicator size="large" color="#ffc857" />
-          <Text style={styles.loadingText}>Loading your documents...</Text>
+          <Text style={styles.loadingText}>Loading your favorites...</Text>
         </View>
       </View>
     );
@@ -246,7 +237,7 @@ export default function MyDocumentsScreen() {
             <ArrowLeft size={24} color="#FFFFFF" />
           </DebouncedTouchable>
           <View style={styles.headerCenter}>
-            <Text style={styles.title}>My Documents</Text>
+            <Text style={styles.title}>Favorite Documents</Text>
             <Text style={styles.subtitle}>{documents.length} documents</Text>
           </View>
           <View style={styles.placeholder} />
@@ -257,17 +248,17 @@ export default function MyDocumentsScreen() {
       <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
         {documents.length === 0 ? (
           <View style={styles.emptyState}>
-            <FileText size={64} color="#CBD5E1" />
-            <Text style={styles.emptyTitle}>No Documents Yet</Text>
+            <Folder size={64} color="#CBD5E1" />
+            <Text style={styles.emptyTitle}>No Favorites Yet</Text>
             <Text style={styles.emptyText}>
-              Documents you upload will appear here.{'\n'}
-              You can edit or delete them anytime.
+              Documents you favorite will appear here.{'\n'}
+              Browse documents and tap the heart icon to save them.
             </Text>
             <TouchableOpacity
-              style={styles.uploadButton}
-              onPress={() => debouncedRouter.push('/secretariat/documents/upload')}
+              style={styles.browseButton}
+              onPress={() => debouncedRouter.push('/secretariat/documents')}
             >
-              <Text style={styles.uploadButtonText}>Upload Document</Text>
+              <Text style={styles.browseButtonText}>Browse Documents</Text>
             </TouchableOpacity>
           </View>
         ) : (
@@ -279,7 +270,12 @@ export default function MyDocumentsScreen() {
                   <View style={styles.fileIconContainer}>
                     {getFileIcon(doc.document_type)}
                   </View>
-                  {getStatusBadge(doc)}
+                  <TouchableOpacity
+                    style={styles.favoriteButton}
+                    onPress={() => handleUnfavorite(doc.id, doc.title)}
+                  >
+                    <Star size={20} color="#ffc857" fill="#ffc857" />
+                  </TouchableOpacity>
                 </View>
 
                 {/* Title and Category */}
@@ -303,39 +299,12 @@ export default function MyDocumentsScreen() {
                   <Text style={styles.fileSize}>{formatFileSize(doc.file_size)}</Text>
                 </View>
 
-                {/* Stats */}
-                <View style={styles.stats}>
-                  <View style={styles.stat}>
-                    <Eye size={14} color="#666" />
-                    <Text style={styles.statText}>{doc.view_count || 0} views</Text>
-                  </View>
-                  <View style={styles.stat}>
-                    <Download size={14} color="#666" />
-                    <Text style={styles.statText}>{doc.download_count || 0} downloads</Text>
-                  </View>
-                  <View style={styles.stat}>
+                {/* Metadata */}
+                <View style={styles.metadata}>
+                  <View style={styles.metaItem}>
                     <Calendar size={14} color="#666" />
-                    <Text style={styles.statText}>{formatDate(doc.created_at)}</Text>
+                    <Text style={styles.metaText}>{formatDate(doc.upload_date)}</Text>
                   </View>
-                </View>
-
-                {/* Actions */}
-                <View style={styles.actions}>
-                  <TouchableOpacity
-                    style={styles.editButton}
-                    onPress={() => handleEdit(doc.id)}
-                  >
-                    <Edit3 size={18} color="#ffc857" />
-                    <Text style={styles.editButtonText}>Edit</Text>
-                  </TouchableOpacity>
-
-                  <TouchableOpacity
-                    style={styles.deleteButton}
-                    onPress={() => handleDelete(doc.id, doc.title)}
-                  >
-                    <Trash2 size={18} color="#EF4444" />
-                    <Text style={styles.deleteButtonText}>Delete</Text>
-                  </TouchableOpacity>
                 </View>
               </View>
             ))}
@@ -419,13 +388,13 @@ const styles = StyleSheet.create({
     lineHeight: 24,
     marginBottom: 24,
   },
-  uploadButton: {
+  browseButton: {
     backgroundColor: '#0F172A',
     paddingHorizontal: 24,
     paddingVertical: 12,
     borderRadius: 12,
   },
-  uploadButtonText: {
+  browseButtonText: {
     fontSize: 16,
     fontWeight: '600',
     color: '#FFFFFF',
@@ -458,27 +427,8 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  statusBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 12,
-  },
-  statusPublished: {
-    backgroundColor: '#D1FAE5',
-  },
-  statusPending: {
-    backgroundColor: '#FEF3C7',
-  },
-  statusDraft: {
-    backgroundColor: '#F3F4F6',
-  },
-  statusText: {
-    fontSize: 12,
-    fontWeight: '600',
-    color: '#1A1A1A',
+  favoriteButton: {
+    padding: 8,
   },
   documentTitle: {
     fontSize: 18,
@@ -526,55 +476,17 @@ const styles = StyleSheet.create({
     color: '#666',
     marginLeft: 8,
   },
-  stats: {
+  metadata: {
     flexDirection: 'row',
     gap: 16,
-    marginBottom: 12,
-    paddingTop: 12,
-    borderTopWidth: 1,
-    borderTopColor: '#F3F4F6',
   },
-  stat: {
+  metaItem: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 4,
   },
-  statText: {
+  metaText: {
     fontSize: 12,
     color: '#666',
-  },
-  actions: {
-    flexDirection: 'row',
-    gap: 12,
-  },
-  editButton: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 6,
-    paddingVertical: 10,
-    borderRadius: 8,
-    backgroundColor: '#FFF9E6',
-  },
-  editButtonText: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#ffc857',
-  },
-  deleteButton: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 6,
-    paddingVertical: 10,
-    borderRadius: 8,
-    backgroundColor: '#FEE2E2',
-  },
-  deleteButtonText: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#EF4444',
   },
 });

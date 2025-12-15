@@ -21,9 +21,9 @@ import {
   Calendar,
   User,
   FileText,
-  Share2,
   ExternalLink,
   Clock,
+  Star,
 } from 'lucide-react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { supabase } from '@/lib/supabase';
@@ -59,13 +59,16 @@ export default function DocumentViewerScreen() {
   const [document, setDocument] = useState<Document | null>(null);
   const [loading, setLoading] = useState(true);
   const [downloading, setDownloading] = useState(false);
+  const [isFavorited, setIsFavorited] = useState(false);
+  const [favoriteLoading, setFavoriteLoading] = useState(false);
 
   useEffect(() => {
     if (id) {
       loadDocument();
       incrementViewCount();
+      checkIfFavorited();
     }
-  }, [id]);
+  }, [id, user?.id]);
 
   const loadDocument = async () => {
     try {
@@ -101,6 +104,70 @@ export default function DocumentViewerScreen() {
       });
     } catch (error) {
       console.error('Error incrementing view count:', error);
+    }
+  };
+
+  const checkIfFavorited = async () => {
+    if (!user?.id || !id) return;
+
+    try {
+      const { data, error } = await supabase
+        .from('document_bookmarks')
+        .select('id')
+        .eq('user_id', user.id)
+        .eq('document_id', id)
+        .single();
+
+      if (error && error.code !== 'PGRST116') {
+        console.error('Error checking favorite status:', error);
+      }
+
+      setIsFavorited(!!data);
+    } catch (error) {
+      console.error('Error checking favorite status:', error);
+    }
+  };
+
+  const toggleFavorite = async () => {
+    if (!user?.id || !id) {
+      Alert.alert('Error', 'Please sign in to favorite documents');
+      return;
+    }
+
+    try {
+      setFavoriteLoading(true);
+
+      if (isFavorited) {
+        // Remove from favorites
+        const { error } = await supabase
+          .from('document_bookmarks')
+          .delete()
+          .eq('user_id', user.id)
+          .eq('document_id', id);
+
+        if (error) throw error;
+
+        setIsFavorited(false);
+        Alert.alert('Success', 'Removed from favorites');
+      } else {
+        // Add to favorites
+        const { error } = await supabase
+          .from('document_bookmarks')
+          .insert({
+            user_id: user.id,
+            document_id: id,
+          });
+
+        if (error) throw error;
+
+        setIsFavorited(true);
+        Alert.alert('Success', 'Added to favorites');
+      }
+    } catch (error) {
+      console.error('Error toggling favorite:', error);
+      Alert.alert('Error', 'Failed to update favorites');
+    } finally {
+      setFavoriteLoading(false);
     }
   };
 
@@ -238,8 +305,20 @@ export default function DocumentViewerScreen() {
               {document.title}
             </Text>
           </View>
-          <TouchableOpacity onPress={handleShare} style={styles.headerButton}>
-            <Share2 size={24} color="#FFFFFF" />
+          <TouchableOpacity 
+            onPress={toggleFavorite} 
+            style={styles.headerButton}
+            disabled={favoriteLoading}
+          >
+            {favoriteLoading ? (
+              <ActivityIndicator size="small" color="#ffc857" />
+            ) : (
+              <Star 
+                size={24} 
+                color={isFavorited ? "#ffc857" : "#FFFFFF"}
+                fill={isFavorited ? "#ffc857" : "transparent"}
+              />
+            )}
           </TouchableOpacity>
         </View>
       </LinearGradient>
@@ -287,16 +366,6 @@ export default function DocumentViewerScreen() {
                 <Text style={styles.metadataLabel}>File Info</Text>
                 <Text style={styles.metadataValue}>{document.file_name}</Text>
                 <Text style={styles.metadataSubvalue}>{formatFileSize(document.file_size)}</Text>
-              </View>
-            </View>
-
-            <View style={styles.metadataItem}>
-              <Eye size={16} color="#666" />
-              <View style={styles.metadataContent}>
-                <Text style={styles.metadataLabel}>Engagement</Text>
-                <Text style={styles.metadataValue}>
-                  {document.view_count} views • {document.download_count} downloads
-                </Text>
               </View>
             </View>
           </View>
@@ -426,6 +495,10 @@ const styles = StyleSheet.create({
   },
   headerButton: {
     padding: 8,
+  },
+  headerActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
   },
   headerCenter: {
     flex: 1,
