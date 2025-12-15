@@ -4,9 +4,10 @@ import { useEffect, useState } from 'react';
 import { SplashScreen, useRouter } from 'expo-router'
 import { DebouncedTouchable } from '@/components/DebouncedTouchable';
 import { debouncedRouter } from '@/utils/navigationDebounce';;
-import { ArrowLeft, Building2, ShoppingBag, Calendar, FileText, Mail, Phone, Globe, MessageCircle, ChevronRight, History, Award, HeadphonesIcon, Clock, MapPin, Settings } from 'lucide-react-native';
+import { ArrowLeft, Building2, ShoppingBag, Calendar, FileText, Mail, Phone, Globe, MessageCircle, ChevronRight, History, Award, HeadphonesIcon, Clock, MapPin, Settings, Navigation } from 'lucide-react-native';
 import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../hooks/useAuth';
+import MapView, { Marker, PROVIDER_GOOGLE } from 'react-native-maps';
 
 SplashScreen.preventAutoHideAsync();
 
@@ -40,11 +41,11 @@ const QUICK_ACTIONS = [
 ];
 
 const CONTACT_INFO = {
-  address: 'Main Campus, University Avenue, Accra',
+  address: 'Achimota School, Greater Accra Region, Ghana',
   email: 'secretariat@oaa.edu',
-  phone: '+233 20 123 4567',
+  phone: '+233 30 240 2615',
   latitude: 5.6037,
-  longitude: -0.1870,
+  longitude: -0.2258,
   hours: 'Mon - Fri: 8:00 AM - 5:00 PM',
 };
 
@@ -255,18 +256,74 @@ export default function SecretariatScreen() {
           </TouchableOpacity>
         </View>
 
-        {/* Visit Us - Full Width */}
-        <TouchableOpacity 
-          style={[styles.contactMethodCard, styles.fullWidthCard]}
-          onPress={handleMapLocation}
-          activeOpacity={0.8}
-        >
-          <View style={[styles.contactMethodIcon, { backgroundColor: '#FEF3C7' }]}>
-            <MapPin size={24} color="#92400E" strokeWidth={2} />
+        {/* Visit Us - Enhanced Map Section */}
+        <View style={styles.visitUsSection}>
+          <View style={styles.sectionHeaderInline}>
+            <MapPin size={24} color="#4169E1" strokeWidth={2} />
+            <Text style={styles.sectionTitleInline}>Visit Us</Text>
           </View>
-          <Text style={styles.contactMethodLabel}>Visit Us - Tap to Open Maps</Text>
-          <Text style={styles.contactMethodValue} numberOfLines={2}>{contactInfo.address}</Text>
-        </TouchableOpacity>
+
+          <TouchableOpacity 
+            style={styles.mapContainer}
+            onPress={handleMapLocation}
+            activeOpacity={0.95}
+          >
+            <MapView
+              provider={PROVIDER_GOOGLE}
+              style={styles.map}
+              mapType="satellite"
+              initialRegion={{
+                latitude: contactInfo.latitude,
+                longitude: contactInfo.longitude,
+                latitudeDelta: 0.008,
+                longitudeDelta: 0.008,
+              }}
+              scrollEnabled={true}
+              zoomEnabled={true}
+              rotateEnabled={true}
+              pitchEnabled={true}
+              showsUserLocation={true}
+              showsMyLocationButton={true}
+              showsCompass={true}
+            >
+              <Marker
+                coordinate={{
+                  latitude: contactInfo.latitude,
+                  longitude: contactInfo.longitude,
+                }}
+                title="Achimota School"
+                description={contactInfo.address}
+                pinColor="#4169E1"
+              />
+            </MapView>
+
+            
+            {/* Tap indicator */}
+            <View style={styles.mapTapIndicator}>
+              <Text style={styles.mapTapText}>Tap map to interact • Pinch to zoom</Text>
+            </View>
+            
+            {/* Map Overlay with Location Details */}
+            <View style={styles.mapOverlay}>
+              <View style={styles.locationCard}>
+                <MapPin size={20} color="#4169E1" strokeWidth={2} />
+                <View style={styles.locationInfo}>
+                  <Text style={styles.locationTitle}>Achimota School</Text>
+                  <Text style={styles.locationAddress} numberOfLines={2}>{contactInfo.address}</Text>
+                </View>
+              </View>
+              
+              <TouchableOpacity 
+                style={styles.directionsButton}
+                onPress={handleMapLocation}
+                activeOpacity={0.8}
+              >
+                <Navigation size={18} color="#FFFFFF" strokeWidth={2} />
+                <Text style={styles.directionsText}>Get Directions</Text>
+              </TouchableOpacity>
+            </View>
+          </TouchableOpacity>
+        </View>
 
         {/* Office Hours */}
         <View style={styles.officeHoursCard}>
@@ -635,6 +692,119 @@ const styles = StyleSheet.create({
     fontFamily: 'Inter-Medium',
     lineHeight: 18,
     textAlign: 'center',
+  },
+  visitUsSection: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 20,
+    padding: 20,
+    marginHorizontal: 20,
+    marginBottom: 16,
+    shadowColor: '#000000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.08,
+    shadowRadius: 12,
+    elevation: 4,
+    borderWidth: 1,
+    borderColor: '#f0f0f0',
+  },
+  sectionHeaderInline: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 16,
+    gap: 10,
+  },
+  sectionTitleInline: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: '#1a1a1a',
+    fontFamily: 'Inter-Bold',
+  },
+  mapContainer: {
+    height: 320,
+    borderRadius: 16,
+    overflow: 'hidden',
+    position: 'relative',
+    backgroundColor: '#f5f5f5',
+  },
+  map: {
+    width: '100%',
+    height: '100%',
+  },
+  mapTapIndicator: {
+    position: 'absolute',
+    top: 12,
+    left: 12,
+    right: 12,
+    backgroundColor: 'rgba(0, 0, 0, 0.7)',
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    borderRadius: 8,
+    alignItems: 'center',
+    zIndex: 1,
+  },
+  mapTapText: {
+    color: '#FFFFFF',
+    fontSize: 12,
+    fontWeight: '600',
+    fontFamily: 'Inter-SemiBold',
+  },
+  mapOverlay: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    backgroundColor: 'rgba(255, 255, 255, 0.97)',
+    padding: 16,
+    borderTopLeftRadius: 16,
+    borderTopRightRadius: 16,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: -2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
+    elevation: 5,
+  },
+  locationCard: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    marginBottom: 12,
+    gap: 12,
+  },
+  locationInfo: {
+    flex: 1,
+  },
+  locationTitle: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#1a1a1a',
+    marginBottom: 4,
+    fontFamily: 'Inter-Bold',
+  },
+  locationAddress: {
+    fontSize: 13,
+    color: '#666666',
+    lineHeight: 18,
+    fontFamily: 'Inter-Regular',
+  },
+  directionsButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#4169E1',
+    paddingVertical: 12,
+    paddingHorizontal: 20,
+    borderRadius: 12,
+    gap: 8,
+    shadowColor: '#4169E1',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 4,
+  },
+  directionsText: {
+    color: '#FFFFFF',
+    fontSize: 15,
+    fontWeight: '700',
+    fontFamily: 'Inter-Bold',
   },
   messageButton: {
     flexDirection: 'row',

@@ -309,6 +309,50 @@ export default function WorkplaceScreen() {
     debouncedRouter.push(`/job-detail/${jobId}`);
   };
 
+  const handleJobLongPress = (job: Job) => {
+    // Handle long press for additional actions
+    if (user && job.user_id === user.id) {
+      Alert.alert(
+        job.title,
+        'What would you like to do?',
+        [
+          { text: 'Edit', onPress: () => debouncedRouter.push(`/edit-job-listing/${job.id}`) },
+          { text: 'Delete', style: 'destructive', onPress: () => handleDeleteJob(job.id) },
+          { text: 'Cancel', style: 'cancel' },
+        ]
+      );
+    }
+  };
+
+  const handleDeleteJob = async (jobId: string) => {
+    Alert.alert(
+      'Delete Job',
+      'Are you sure you want to delete this job listing?',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              const { error } = await supabase
+                .from('jobs')
+                .delete()
+                .eq('id', jobId);
+              
+              if (error) throw error;
+              Alert.alert('Success', 'Job deleted successfully');
+              fetchJobListings();
+            } catch (error) {
+              console.error('Error deleting job:', error);
+              Alert.alert('Error', 'Failed to delete job');
+            }
+          },
+        },
+      ]
+    );
+  };
+
   useEffect(() => {
     if (fontsLoaded) {
       SplashScreen.hideAsync();
@@ -708,7 +752,7 @@ export default function WorkplaceScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#F9FAFB',
+    backgroundColor: '#FFFFFF',
   },
   
   // Modern Header Styles
@@ -716,8 +760,11 @@ const styles = StyleSheet.create({
     backgroundColor: '#FFFFFF',
     paddingTop: 60,
     paddingBottom: 16,
-    borderBottomWidth: 1,
-    borderBottomColor: '#E5E7EB',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 8,
+    elevation: 2,
   },
   headerTop: {
     flexDirection: 'row',
@@ -727,17 +774,22 @@ const styles = StyleSheet.create({
     marginBottom: 16,
   },
   backButton: {
-    padding: 8,
+    padding: 10,
+    backgroundColor: '#F9FAFB',
+    borderRadius: 12,
   },
   headerTitle: {
-    fontSize: 24,
+    fontSize: 26,
     fontFamily: 'Inter-Bold',
     color: '#1F2937',
     flex: 1,
     textAlign: 'center',
+    letterSpacing: -0.5,
   },
   filterButton: {
-    padding: 8,
+    padding: 10,
+    backgroundColor: '#F9FAFB',
+    borderRadius: 12,
   },
 
   // Search Bar
@@ -748,11 +800,13 @@ const styles = StyleSheet.create({
   searchBar: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#F3F4F6',
+    backgroundColor: '#F9FAFB',
     borderRadius: 12,
     paddingHorizontal: 16,
-    height: 48,
+    height: 50,
     gap: 12,
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
   },
   searchInput: {
     flex: 1,
@@ -765,16 +819,28 @@ const styles = StyleSheet.create({
   tabsContainer: {
     flexDirection: 'row',
     paddingHorizontal: 20,
-    gap: 8,
+    gap: 10,
     marginBottom: 16,
+    backgroundColor: '#F9FAFB',
+    marginHorizontal: 16,
+    borderRadius: 12,
+    padding: 4,
   },
   tab: {
     flex: 1,
     alignItems: 'center',
-    paddingVertical: 12,
+    paddingVertical: 10,
     position: 'relative',
+    borderRadius: 10,
   },
-  tabActive: {},
+  tabActive: {
+    backgroundColor: '#FFFFFF',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.08,
+    shadowRadius: 4,
+    elevation: 2,
+  },
   tabText: {
     fontSize: 14,
     fontFamily: 'Inter-Medium',
@@ -782,16 +848,16 @@ const styles = StyleSheet.create({
   },
   tabTextActive: {
     color: '#4169E1',
-    fontFamily: 'Inter-SemiBold',
+    fontFamily: 'Inter-Bold',
   },
   tabIndicator: {
     position: 'absolute',
     bottom: 0,
     left: 0,
     right: 0,
-    height: 3,
-    backgroundColor: '#4169E1',
-    borderRadius: 2,
+    height: 0,
+    backgroundColor: 'transparent',
+    borderRadius: 0,
   },
 
   // Quick Filters
@@ -803,12 +869,17 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
-    paddingHorizontal: 14,
-    paddingVertical: 8,
-    borderRadius: 20,
-    backgroundColor: '#F3F4F6',
-    borderWidth: 1,
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderRadius: 24,
+    backgroundColor: '#F9FAFB',
+    borderWidth: 1.5,
     borderColor: '#E5E7EB',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 2,
+    elevation: 1,
   },
   quickFilterText: {
     fontSize: 13,
@@ -825,19 +896,19 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingTop: 16,
     paddingBottom: 100,
+    backgroundColor: '#F9FAFB',
   },
   jobCard: {
     backgroundColor: '#FFFFFF',
     borderRadius: 16,
-    padding: 16,
-    marginBottom: 12,
+    padding: 18,
+    marginBottom: 14,
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.05,
-    shadowRadius: 8,
-    elevation: 2,
-    borderWidth: 1,
-    borderColor: '#F3F4F6',
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.08,
+    shadowRadius: 12,
+    elevation: 4,
+    borderWidth: 0,
   },
   jobCardHeader: {
     flexDirection: 'row',
@@ -846,38 +917,41 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   companyLogoContainer: {
-    width: 48,
-    height: 48,
-    borderRadius: 12,
+    width: 52,
+    height: 52,
+    borderRadius: 14,
     backgroundColor: '#F9FAFB',
     justifyContent: 'center',
     alignItems: 'center',
-    borderWidth: 1,
+    borderWidth: 1.5,
     borderColor: '#E5E7EB',
     overflow: 'hidden',
   },
   companyLogoImage: {
-    width: 48,
-    height: 48,
-    borderRadius: 12,
+    width: 52,
+    height: 52,
+    borderRadius: 14,
   },
   jobCardHeaderInfo: {
     flex: 1,
   },
   jobCardTitle: {
-    fontSize: 17,
-    fontFamily: 'Inter-SemiBold',
+    fontSize: 18,
+    fontFamily: 'Inter-Bold',
     color: '#1F2937',
     marginBottom: 4,
-    lineHeight: 24,
+    lineHeight: 26,
+    letterSpacing: -0.3,
   },
   jobCardCompany: {
-    fontSize: 14,
-    fontFamily: 'Inter-Regular',
+    fontSize: 15,
+    fontFamily: 'Inter-Medium',
     color: '#6B7280',
   },
   bookmarkButton: {
-    padding: 4,
+    padding: 8,
+    backgroundColor: '#F9FAFB',
+    borderRadius: 10,
   },
 
   // Job Details
@@ -893,8 +967,8 @@ const styles = StyleSheet.create({
     gap: 4,
   },
   jobDetailText: {
-    fontSize: 13,
-    fontFamily: 'Inter-Regular',
+    fontSize: 14,
+    fontFamily: 'Inter-Medium',
     color: '#6B7280',
   },
 
@@ -906,13 +980,13 @@ const styles = StyleSheet.create({
     marginBottom: 8,
   },
   jobTypeBadge: {
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 10,
   },
   jobTypeBadgeText: {
-    fontSize: 12,
-    fontFamily: 'Inter-SemiBold',
+    fontSize: 13,
+    fontFamily: 'Inter-Bold',
   },
   ownerBadge: {
     flexDirection: 'row',
@@ -953,6 +1027,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     paddingVertical: 60,
+    backgroundColor: '#FFFFFF',
   },
   loadingText: {
     marginTop: 16,
@@ -962,14 +1037,23 @@ const styles = StyleSheet.create({
   },
   emptyState: {
     alignItems: 'center',
-    paddingVertical: 60,
-    paddingHorizontal: 32,
+    paddingVertical: 80,
+    paddingHorizontal: 40,
+    backgroundColor: '#FFFFFF',
+    marginHorizontal: 16,
+    marginTop: 20,
+    borderRadius: 20,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.06,
+    shadowRadius: 8,
+    elevation: 2,
   },
   emptyTitle: {
-    fontSize: 20,
-    fontFamily: 'Inter-SemiBold',
+    fontSize: 22,
+    fontFamily: 'Inter-Bold',
     color: '#1F2937',
-    marginTop: 16,
+    marginTop: 20,
     marginBottom: 8,
   },
   emptySubtitle: {
@@ -995,7 +1079,7 @@ const styles = StyleSheet.create({
   // Filter Modal
   modalOverlay: {
     flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    backgroundColor: 'rgba(0, 0, 0, 0.4)',
     justifyContent: 'flex-end',
   },
   filterBottomSheet: {
@@ -1003,6 +1087,11 @@ const styles = StyleSheet.create({
     borderTopLeftRadius: 24,
     borderTopRightRadius: 24,
     maxHeight: height * 0.8,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: -4 },
+    shadowOpacity: 0.1,
+    shadowRadius: 12,
+    elevation: 8,
   },
   filterModalHeader: {
     flexDirection: 'row',
@@ -1010,9 +1099,9 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     paddingHorizontal: 24,
     paddingTop: 24,
-    paddingBottom: 16,
-    borderBottomWidth: 1,
-    borderBottomColor: '#F3F4F6',
+    paddingBottom: 18,
+    borderBottomWidth: 0,
+    backgroundColor: '#FAFAFA',
   },
   filterModalTitle: {
     fontSize: 20,
@@ -1041,16 +1130,26 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   filterChip: {
-    paddingHorizontal: 16,
-    paddingVertical: 10,
+    paddingHorizontal: 18,
+    paddingVertical: 12,
     borderRadius: 12,
-    backgroundColor: '#F9FAFB',
-    borderWidth: 1,
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1.5,
     borderColor: '#E5E7EB',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.04,
+    shadowRadius: 3,
+    elevation: 1,
   },
   filterChipActive: {
     backgroundColor: '#4169E1',
     borderColor: '#4169E1',
+    shadowColor: '#4169E1',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.2,
+    shadowRadius: 6,
+    elevation: 3,
   },
   filterChipText: {
     fontSize: 14,
@@ -1097,19 +1196,19 @@ const styles = StyleSheet.create({
   // Floating Action Button
   fab: {
     position: 'absolute',
-    bottom: 24,
+    bottom: 28,
     right: 24,
-    borderRadius: 30,
+    borderRadius: 32,
     shadowColor: '#4169E1',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 12,
-    elevation: 8,
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.35,
+    shadowRadius: 16,
+    elevation: 10,
   },
   fabGradient: {
-    width: 60,
-    height: 60,
-    borderRadius: 30,
+    width: 64,
+    height: 64,
+    borderRadius: 32,
     justifyContent: 'center',
     alignItems: 'center',
   },
