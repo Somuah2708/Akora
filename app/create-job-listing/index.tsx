@@ -31,7 +31,7 @@ export default function CreateJobListingScreen() {
   const [location, setLocation] = useState('');
   const [salaryMin, setSalaryMin] = useState('');
   const [salaryMax, setSalaryMax] = useState('');
-  const [currency, setCurrency] = useState('USD'); // USD or GHS (Ghana Cedis)
+  const [currency, setCurrency] = useState('GHS'); // GHS (Ghana Cedis) or USD
   const [salaryPeriod, setSalaryPeriod] = useState('monthly'); // hourly, daily, weekly, monthly, yearly
   const [email, setEmail] = useState('');
   const [deadline, setDeadline] = useState('');
@@ -169,7 +169,7 @@ export default function CreateJobListingScreen() {
           application_deadline: deadline.trim() || null,
           image_url: finalImageUrls.length > 0 ? JSON.stringify(finalImageUrls) : null,
           is_featured: false,
-          is_approved: true,
+          is_approved: false, // Requires admin approval before publishing
         })
         .select()
         .single();
@@ -177,7 +177,7 @@ export default function CreateJobListingScreen() {
       if (listingError) throw listingError;
 
       console.log('✅ Job listing created successfully:', newListing);
-      alert('✅ Success! Your job listing has been created successfully!');
+      alert('✅ Success! Your job listing has been submitted for review. It will be published once approved by an administrator.');
       
       // Navigate to workplace
       debouncedRouter.push('/workplace');
@@ -197,7 +197,7 @@ export default function CreateJobListingScreen() {
     <View style={styles.container}>
       <View style={styles.header}>
         <TouchableOpacity onPress={() => debouncedRouter.back()} style={styles.backButton}>
-          <ArrowLeft size={24} color="#000000" />
+          <ArrowLeft size={24} color="#0F172A" />
         </TouchableOpacity>
         <Text style={styles.title}>Submit Job Listing</Text>
         <View style={{ width: 40 }} />
@@ -205,7 +205,7 @@ export default function CreateJobListingScreen() {
 
       <ScrollView style={styles.formContainer}>
         <View style={styles.infoCard}>
-          <Briefcase size={24} color="#4169E1" />
+          <Briefcase size={24} color="#ffc857" />
           <Text style={styles.infoTitle}>Submit Job Opportunity</Text>
           <Text style={styles.infoText}>
             Your submission will be reviewed by administrators before being published.
@@ -217,7 +217,7 @@ export default function CreateJobListingScreen() {
           <TextInput
             style={styles.input}
             placeholder="Enter the job title"
-            placeholderTextColor="#666666"
+            placeholderTextColor="#94A3B8"
             value={title}
             onChangeText={setTitle}
             maxLength={100}
@@ -229,7 +229,7 @@ export default function CreateJobListingScreen() {
           <TextInput
             style={styles.input}
             placeholder="Enter company name"
-            placeholderTextColor="#666666"
+            placeholderTextColor="#94A3B8"
             value={company}
             onChangeText={setCompany}
             maxLength={100}
@@ -241,7 +241,7 @@ export default function CreateJobListingScreen() {
           <TextInput
             style={styles.input}
             placeholder="Enter job location (e.g., Accra, Ghana or Remote)"
-            placeholderTextColor="#666666"
+            placeholderTextColor="#94A3B8"
             value={location}
             onChangeText={setLocation}
             maxLength={100}
@@ -253,7 +253,7 @@ export default function CreateJobListingScreen() {
           <TextInput
             style={[styles.input, styles.textArea]}
             placeholder="Provide details about the job, responsibilities, etc."
-            placeholderTextColor="#666666"
+            placeholderTextColor="#94A3B8"
             multiline
             value={description}
             onChangeText={setDescription}
@@ -267,7 +267,7 @@ export default function CreateJobListingScreen() {
           <TextInput
             style={[styles.input, styles.textArea]}
             placeholder="List job requirements, qualifications, skills needed, etc."
-            placeholderTextColor="#666666"
+            placeholderTextColor="#94A3B8"
             multiline
             value={requirements}
             onChangeText={setRequirements}
@@ -279,11 +279,11 @@ export default function CreateJobListingScreen() {
         <View style={styles.formGroup}>
           <Text style={styles.label}>Contact Email (Optional)</Text>
           <View style={styles.emailContainer}>
-            <Mail size={20} color="#666666" />
+            <Mail size={20} color="#64748B" />
             <TextInput
               style={styles.emailInput}
               placeholder="Enter contact email for applicants"
-              placeholderTextColor="#666666"
+              placeholderTextColor="#94A3B8"
               keyboardType="email-address"
               autoCapitalize="none"
               value={email}
@@ -295,11 +295,11 @@ export default function CreateJobListingScreen() {
         <View style={styles.formGroup}>
           <Text style={styles.label}>Application Deadline (Optional)</Text>
           <View style={styles.emailContainer}>
-            <Calendar size={20} color="#666666" />
+            <Calendar size={20} color="#64748B" />
             <TextInput
               style={styles.emailInput}
               placeholder="e.g., December 31, 2025 or 30 days"
-              placeholderTextColor="#666666"
+              placeholderTextColor="#94A3B8"
               value={deadline}
               onChangeText={setDeadline}
             />
@@ -341,7 +341,7 @@ export default function CreateJobListingScreen() {
                 <TextInput
                   style={styles.priceInput}
                   placeholder="0"
-                  placeholderTextColor="#666666"
+                  placeholderTextColor="#94A3B8"
                   keyboardType="numeric"
                   value={salaryMin}
                   onChangeText={setSalaryMin}
@@ -360,7 +360,7 @@ export default function CreateJobListingScreen() {
                 <TextInput
                   style={styles.priceInput}
                   placeholder="0"
-                  placeholderTextColor="#666666"
+                  placeholderTextColor="#94A3B8"
                   keyboardType="numeric"
                   value={salaryMax}
                   onChangeText={setSalaryMax}
@@ -452,7 +452,7 @@ export default function CreateJobListingScreen() {
               style={[styles.toggleButton, !useUrlInput && styles.toggleButtonActive]}
               onPress={() => setUseUrlInput(false)}
             >
-              <Upload size={18} color={!useUrlInput ? '#FFFFFF' : '#666666'} />
+              <Upload size={18} color={!useUrlInput ? '#ffc857' : '#64748B'} />
               <Text style={[styles.toggleText, !useUrlInput && styles.toggleTextActive]}>
                 Gallery
               </Text>
@@ -461,7 +461,7 @@ export default function CreateJobListingScreen() {
               style={[styles.toggleButton, useUrlInput && styles.toggleButtonActive]}
               onPress={() => setUseUrlInput(true)}
             >
-              <ImageIcon size={18} color={useUrlInput ? '#FFFFFF' : '#666666'} />
+              <ImageIcon size={18} color={useUrlInput ? '#ffc857' : '#64748B'} />
               <Text style={[styles.toggleText, useUrlInput && styles.toggleTextActive]}>
                 URL
               </Text>
@@ -470,18 +470,18 @@ export default function CreateJobListingScreen() {
 
           {!useUrlInput ? (
             <TouchableOpacity style={styles.uploadButton} onPress={pickImage}>
-              <Upload size={24} color="#4169E1" />
+              <Upload size={24} color="#ffc857" />
               <Text style={styles.uploadButtonText}>
                 {uploadedImages.length > 0 ? `Upload Photos (${uploadedImages.length})` : 'Upload Photos'}
               </Text>
             </TouchableOpacity>
           ) : (
             <View style={styles.imageUrlContainer}>
-              <ImageIcon size={20} color="#666666" />
+              <ImageIcon size={20} color="#64748B" />
               <TextInput
                 style={styles.imageUrlInput}
                 placeholder="Enter image URLs (comma separated, up to 20)"
-                placeholderTextColor="#666666"
+                placeholderTextColor="#94A3B8"
                 value={imageUrl}
                 onChangeText={setImageUrl}
               />
@@ -526,7 +526,7 @@ export default function CreateJobListingScreen() {
         </View>
         
         <View style={styles.infoContainer}>
-          <Info size={20} color="#666666" />
+          <Info size={20} color="#64748B" />
           <Text style={styles.infoText}>
             Your job listing will be published immediately and appear in the Workplace section for job seekers to view.
           </Text>
@@ -542,10 +542,10 @@ export default function CreateJobListingScreen() {
           disabled={!title.trim() || !description.trim() || !company.trim() || !location.trim() || !category || isSubmitting}
         >
           {isSubmitting ? (
-            <ActivityIndicator color="#FFFFFF" size="small" />
+            <ActivityIndicator color="#0F172A" size="small" />
           ) : (
             <>
-              <Send size={20} color="#FFFFFF" />
+              <Send size={20} color="#0F172A" />
               <Text style={styles.postButtonText}>Post Job</Text>
             </>
           )}
@@ -577,7 +577,7 @@ const styles = StyleSheet.create({
   title: {
     fontSize: 20,
     fontFamily: 'Inter-SemiBold',
-    color: '#000000',
+    color: '#0F172A',
   },
   submitButton: {
     width: 40,
@@ -595,23 +595,25 @@ const styles = StyleSheet.create({
     padding: 16,
   },
   infoCard: {
-    backgroundColor: '#EBF0FF',
+    backgroundColor: 'rgba(255, 200, 87, 0.15)',
     borderRadius: 12,
     padding: 16,
     marginBottom: 24,
     alignItems: 'center',
     gap: 8,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 200, 87, 0.4)',
   },
   infoTitle: {
     fontSize: 18,
     fontFamily: 'Inter-SemiBold',
-    color: '#000000',
+    color: '#0F172A',
     textAlign: 'center',
   },
   infoText: {
     fontSize: 14,
     fontFamily: 'Inter-Regular',
-    color: '#666666',
+    color: '#64748B',
     textAlign: 'center',
   },
   formGroup: {
@@ -620,16 +622,18 @@ const styles = StyleSheet.create({
   label: {
     fontSize: 16,
     fontFamily: 'Inter-SemiBold',
-    color: '#000000',
+    color: '#0F172A',
     marginBottom: 8,
   },
   input: {
-    backgroundColor: '#F8F9FA',
+    backgroundColor: '#F8FAFC',
     borderRadius: 12,
     padding: 16,
     fontSize: 16,
     fontFamily: 'Inter-Regular',
-    color: '#000000',
+    color: '#0F172A',
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
   },
   textArea: {
     height: 120,
@@ -637,17 +641,19 @@ const styles = StyleSheet.create({
   priceInputContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#F8F9FA',
+    backgroundColor: '#F8FAFC',
     borderRadius: 12,
     paddingHorizontal: 16,
     flex: 1,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
   },
   priceInput: {
     flex: 1,
     padding: 16,
     fontSize: 16,
     fontFamily: 'Inter-Regular',
-    color: '#000000',
+    color: '#0F172A',
   },
   salaryRangeContainer: {
     flexDirection: 'row',
@@ -661,7 +667,7 @@ const styles = StyleSheet.create({
   salaryInputLabel: {
     fontSize: 12,
     fontFamily: 'Inter-SemiBold',
-    color: '#666666',
+    color: '#64748B',
     marginBottom: 8,
   },
   rangeSeparator: {
@@ -670,7 +676,7 @@ const styles = StyleSheet.create({
   rangeSeparatorText: {
     fontSize: 14,
     fontFamily: 'Inter-Regular',
-    color: '#666666',
+    color: '#64748B',
   },
   periodContainer: {
     flexDirection: 'row',
@@ -678,46 +684,49 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   periodChip: {
-    backgroundColor: '#F8F9FA',
+    backgroundColor: '#F8FAFC',
     paddingHorizontal: 16,
     paddingVertical: 8,
     borderRadius: 20,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
   },
   selectedPeriodChip: {
-    backgroundColor: '#4169E1',
+    backgroundColor: '#0F172A',
+    borderColor: '#0F172A',
   },
   periodChipText: {
     fontSize: 14,
     fontFamily: 'Inter-Regular',
-    color: '#000000',
+    color: '#64748B',
   },
   selectedPeriodChipText: {
-    color: '#FFFFFF',
+    color: '#ffc857',
     fontFamily: 'Inter-SemiBold',
   },
   salaryPreview: {
-    backgroundColor: '#F0F9FF',
+    backgroundColor: 'rgba(255, 200, 87, 0.15)',
     padding: 12,
     borderRadius: 8,
     marginTop: 12,
     borderWidth: 1,
-    borderColor: '#BAE6FD',
+    borderColor: 'rgba(255, 200, 87, 0.4)',
   },
   salaryPreviewLabel: {
     fontSize: 12,
     fontFamily: 'Inter-Regular',
-    color: '#0369A1',
+    color: '#B8860B',
     marginBottom: 4,
   },
   salaryPreviewText: {
     fontSize: 16,
     fontFamily: 'Inter-SemiBold',
-    color: '#0C4A6E',
+    color: '#0F172A',
   },
   salaryPreviewPeriod: {
     fontSize: 14,
     fontFamily: 'Inter-Regular',
-    color: '#0369A1',
+    color: '#64748B',
   },
   categoriesContainer: {
     flexDirection: 'row',
@@ -725,37 +734,42 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   categoryChip: {
-    backgroundColor: '#F8F9FA',
+    backgroundColor: '#F8FAFC',
     paddingHorizontal: 16,
     paddingVertical: 8,
     borderRadius: 20,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
   },
   selectedCategoryChip: {
-    backgroundColor: '#4169E1',
+    backgroundColor: '#0F172A',
+    borderColor: '#0F172A',
   },
   categoryChipText: {
     fontSize: 14,
     fontFamily: 'Inter-Regular',
-    color: '#000000',
+    color: '#64748B',
   },
   selectedCategoryChipText: {
-    color: '#FFFFFF',
+    color: '#ffc857',
     fontFamily: 'Inter-SemiBold',
   },
   imageUrlContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#F8F9FA',
+    backgroundColor: '#F8FAFC',
     borderRadius: 12,
     paddingHorizontal: 16,
     gap: 8,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
   },
   imageUrlInput: {
     flex: 1,
     padding: 16,
     fontSize: 16,
     fontFamily: 'Inter-Regular',
-    color: '#000000',
+    color: '#0F172A',
   },
   imagePreviewContainer: {
     marginTop: 12,
@@ -763,7 +777,7 @@ const styles = StyleSheet.create({
   imagePreviewLabel: {
     fontSize: 14,
     fontFamily: 'Inter-Regular',
-    color: '#666666',
+    color: '#64748B',
     marginBottom: 8,
   },
   imagePreview: {
@@ -797,32 +811,36 @@ const styles = StyleSheet.create({
   },
   infoContainer: {
     flexDirection: 'row',
-    backgroundColor: '#F8F9FA',
+    backgroundColor: '#F8FAFC',
     padding: 16,
     borderRadius: 12,
     marginTop: 8,
     marginBottom: 24,
     gap: 12,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
   },
   emailContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#F8F9FA',
+    backgroundColor: '#F8FAFC',
     borderRadius: 12,
     paddingHorizontal: 16,
     gap: 8,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
   },
   emailInput: {
     flex: 1,
     padding: 16,
     fontSize: 16,
     fontFamily: 'Inter-Regular',
-    color: '#000000',
+    color: '#0F172A',
   },
   helperText: {
     fontSize: 12,
     fontFamily: 'Inter-Regular',
-    color: '#666666',
+    color: '#94A3B8',
     marginTop: 6,
     fontStyle: 'italic',
   },
@@ -836,26 +854,29 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#F8F9FA',
+    backgroundColor: '#F8FAFC',
     paddingVertical: 12,
     borderRadius: 12,
     gap: 8,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
   },
   currencyButtonActive: {
-    backgroundColor: '#4169E1',
+    backgroundColor: '#0F172A',
+    borderColor: '#0F172A',
   },
   currencyText: {
     fontSize: 16,
     fontFamily: 'Inter-SemiBold',
-    color: '#666666',
+    color: '#64748B',
   },
   currencyTextActive: {
-    color: '#FFFFFF',
+    color: '#ffc857',
   },
   currencySymbol: {
     fontSize: 18,
     fontFamily: 'Inter-SemiBold',
-    color: '#666666',
+    color: '#64748B',
     marginRight: 8,
   },
   imageToggleContainer: {
@@ -868,29 +889,32 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#F8F9FA',
+    backgroundColor: '#F8FAFC',
     paddingVertical: 12,
     borderRadius: 12,
     gap: 8,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
   },
   toggleButtonActive: {
-    backgroundColor: '#4169E1',
+    backgroundColor: '#0F172A',
+    borderColor: '#0F172A',
   },
   toggleText: {
     fontSize: 14,
     fontFamily: 'Inter-SemiBold',
-    color: '#666666',
+    color: '#64748B',
   },
   toggleTextActive: {
-    color: '#FFFFFF',
+    color: '#ffc857',
   },
   uploadButton: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#EBF0FF',
+    backgroundColor: '#0F172A',
     borderWidth: 2,
-    borderColor: '#4169E1',
+    borderColor: '#0F172A',
     borderStyle: 'dashed',
     borderRadius: 12,
     padding: 20,
@@ -899,25 +923,31 @@ const styles = StyleSheet.create({
   uploadButtonText: {
     fontSize: 16,
     fontFamily: 'Inter-SemiBold',
-    color: '#4169E1',
+    color: '#ffc857',
   },
   postButton: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#4169E1',
+    backgroundColor: '#ffc857',
     paddingVertical: 16,
     borderRadius: 12,
     gap: 8,
     marginBottom: 32,
     marginHorizontal: 16,
+    shadowColor: '#ffc857',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 6,
   },
   postButtonDisabled: {
-    backgroundColor: '#CBD5E1',
+    backgroundColor: '#E2E8F0',
+    shadowOpacity: 0,
   },
   postButtonText: {
     fontSize: 16,
     fontFamily: 'Inter-SemiBold',
-    color: '#FFFFFF',
+    color: '#0F172A',
   },
 });

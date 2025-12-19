@@ -34,12 +34,10 @@ export default function RecentOpportunitiesScreen() {
   const fetchRecentJobs = async () => {
     try {
       setLoading(true);
-      const jobCategories = ['Full Time Jobs', 'Internships', 'National Service', 'Part Time', 'Remote Work', 'Volunteering'];
       
       const { data, error } = await supabase
-        .from('products_services')
+        .from('jobs')
         .select('*')
-        .in('category_name', jobCategories)
         .eq('is_approved', true)
         .order('created_at', { ascending: false });
 

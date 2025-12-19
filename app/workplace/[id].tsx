@@ -34,7 +34,7 @@ const SAMPLE_JOBS: { [key: string]: JobDetails } = {
     company: 'TechCorp Ghana',
     location: 'Accra, Ghana',
     type: 'Full Time Jobs',
-    salary: '$3,000 - $5,000/month',
+    salary: 'GH₵3,000 - GH₵5,000/month',
     description: 'We are seeking an experienced Software Engineer to join our growing team. You will be responsible for developing and maintaining web applications using modern technologies. This is a great opportunity to work on challenging projects and grow your career in a dynamic environment.\n\nResponsibilities:\n• Develop and maintain web applications\n• Collaborate with cross-functional teams\n• Write clean, maintainable code\n• Participate in code reviews\n• Stay up-to-date with emerging technologies',
     applicationLink: 'https://techcorp.gh/careers/software-engineer',
     postedDate: new Date().toLocaleDateString(),
@@ -68,7 +68,7 @@ const SAMPLE_JOBS: { [key: string]: JobDetails } = {
     company: 'Global Media Ltd',
     location: 'Kumasi, Ghana',
     type: 'Internships',
-    salary: '$500/month',
+    salary: 'GH₵500/month',
     description: 'Join our dynamic marketing team as an intern and gain hands-on experience in digital marketing, content creation, and campaign management. This is a perfect opportunity for students or recent graduates looking to kickstart their marketing career.\n\nWhat you\'ll learn:\n• Social media marketing\n• Content creation and copywriting\n• Marketing analytics\n• Campaign management\n• Brand development',
     applicationLink: 'https://globalmedia.com/careers/marketing-intern',
     postedDate: new Date().toLocaleDateString(),
@@ -102,7 +102,7 @@ const SAMPLE_JOBS: { [key: string]: JobDetails } = {
     company: 'Digital Solutions',
     location: 'Remote',
     type: 'Remote Work',
-    salary: '$2,500 - $4,000/month',
+    salary: 'GH₵2,500 - GH₵4,000/month',
     description: 'We are looking for a talented Frontend Developer to work remotely on exciting projects for international clients. You will build responsive and performant web applications using the latest frontend technologies.\n\nKey Responsibilities:\n• Build responsive web applications\n• Optimize application performance\n• Work with design teams\n• Implement new features\n• Maintain code quality',
     applicationLink: 'https://digitalsolutions.io/apply/frontend',
     postedDate: new Date().toLocaleDateString(),
@@ -136,7 +136,7 @@ const SAMPLE_JOBS: { [key: string]: JobDetails } = {
     company: 'FinTech Solutions',
     location: 'Tema, Ghana',
     type: 'Full Time Jobs',
-    salary: '$2,000 - $3,500/month',
+    salary: 'GH₵2,000 - GH₵3,500/month',
     description: 'We are seeking a skilled Data Analyst to join our fintech team. You will analyze financial data, create reports, and provide insights to drive business decisions. This role requires strong analytical skills and proficiency in data visualization tools.\n\nKey Responsibilities:\n• Analyze large datasets\n• Create data visualizations and dashboards\n• Generate business insights\n• Collaborate with stakeholders\n• Present findings to management',
     applicationLink: 'https://fintechsolutions.com/careers/data-analyst',
     postedDate: new Date().toLocaleDateString(),
@@ -149,7 +149,7 @@ const SAMPLE_JOBS: { [key: string]: JobDetails } = {
     company: 'Media House',
     location: 'Accra, Ghana',
     type: 'Part Time',
-    salary: '$800/month',
+    salary: 'GH₵800/month',
     description: 'Looking for a creative part-time graphic designer to create visual content for our media company. You\'ll work on diverse projects including social media graphics, marketing materials, and brand assets.\n\nWhat you\'ll do:\n• Design social media content\n• Create marketing materials\n• Develop brand assets\n• Edit photos and videos\n• Collaborate with marketing team',
     applicationLink: 'https://mediahouse.com/apply/designer',
     postedDate: new Date().toLocaleDateString(),
@@ -187,7 +187,7 @@ const SAMPLE_JOBS: { [key: string]: JobDetails } = {
     company: 'Creative Studios',
     location: 'Accra, Ghana',
     type: 'Part Time',
-    salary: '$600/month',
+    salary: 'GH₵600/month',
     description: 'We\'re looking for a talented content writer to create engaging articles, blog posts, and website copy. Work flexible hours and contribute to diverse content projects for our clients.\n\nWhat you\'ll create:\n• Blog posts and articles\n• Website copy\n• Social media content\n• Marketing materials\n• Product descriptions',
     applicationLink: 'https://creativestudios.com/jobs/content-writer',
     postedDate: new Date().toLocaleDateString(),
@@ -212,7 +212,7 @@ const SAMPLE_JOBS: { [key: string]: JobDetails } = {
     company: 'Finance Group Ltd',
     location: 'Accra, Ghana',
     type: 'Full Time Jobs',
-    salary: '$4,000 - $6,000/month',
+    salary: 'GH₵4,000 - GH₵6,000/month',
     description: 'Seeking an experienced Senior Accountant to manage financial operations and reporting. You\'ll oversee accounting processes, prepare financial statements, and ensure regulatory compliance.\n\nKey duties:\n• Prepare financial statements\n• Manage accounting team\n• Ensure tax compliance\n• Conduct financial analysis\n• Implement internal controls',
     applicationLink: 'https://financegroup.com/careers/senior-accountant',
     postedDate: new Date().toLocaleDateString(),
@@ -225,7 +225,7 @@ const SAMPLE_JOBS: { [key: string]: JobDetails } = {
     company: 'Tech Manufacturing Co',
     location: 'Tema, Ghana',
     type: 'Internships',
-    salary: '$400/month',
+    salary: 'GH₵400/month',
     description: 'Join our engineering team as an intern and gain practical experience in manufacturing processes. Work on real projects, learn from experienced engineers, and develop your technical skills.\n\nLearning opportunities:\n• Manufacturing processes\n• Quality control\n• Equipment maintenance\n• Technical documentation\n• Project management',
     applicationLink: 'https://techmanufacturing.com/internship',
     postedDate: new Date().toLocaleDateString(),
@@ -238,7 +238,7 @@ const SAMPLE_JOBS: { [key: string]: JobDetails } = {
     company: 'E-Commerce Platform',
     location: 'Remote',
     type: 'Remote Work',
-    salary: '$1,200 - $1,800/month',
+    salary: 'GH₵1,200 - GH₵1,800/month',
     description: 'Provide excellent customer support for our growing e-commerce platform. Work remotely and help customers with inquiries, resolve issues, and ensure customer satisfaction.\n\nResponsibilities:\n• Answer customer inquiries\n• Resolve complaints\n• Process orders and returns\n• Maintain customer records\n• Provide product information',
     applicationLink: 'https://ecommerceplatform.com/jobs/support',
     postedDate: new Date().toLocaleDateString(),
@@ -263,7 +263,7 @@ const SAMPLE_JOBS: { [key: string]: JobDetails } = {
     company: 'Retail Store',
     location: 'Accra Mall',
     type: 'Part Time',
-    salary: '$500/month',
+    salary: 'GH₵500/month',
     description: 'Join our retail team as a part-time sales assistant. Help customers, process transactions, and maintain store presentation. Flexible hours available.\n\nDuties:\n• Assist customers\n• Process sales\n• Maintain store displays\n• Handle inventory\n• Provide product information',
     applicationLink: 'https://retailstore.com/jobs/sales-assistant',
     postedDate: new Date().toLocaleDateString(),
@@ -288,7 +288,7 @@ const SAMPLE_JOBS: { [key: string]: JobDetails } = {
     company: 'Corporate Solutions',
     location: 'Accra, Ghana',
     type: 'Internships',
-    salary: '$450/month',
+    salary: 'GH₵450/month',
     description: 'Gain practical HR experience with our corporate team. Learn recruitment, employee relations, training coordination, and HR administration.\n\nLearning areas:\n• Recruitment and onboarding\n• Employee records management\n• Training coordination\n• HR policy implementation\n• Performance management support',
     applicationLink: 'https://corporatesolutions.com/internships/hr',
     postedDate: new Date().toLocaleDateString(),
@@ -301,7 +301,7 @@ const SAMPLE_JOBS: { [key: string]: JobDetails } = {
     company: 'Construction Ltd',
     location: 'Tema, Ghana',
     type: 'Full Time Jobs',
-    salary: '$3,500 - $5,500/month',
+    salary: 'GH₵3,500 - GH₵5,500/month',
     description: 'Lead construction projects from planning to completion. Manage teams, budgets, and timelines while ensuring quality and safety standards.\n\nKey responsibilities:\n• Plan and schedule projects\n• Manage project budgets\n• Coordinate construction teams\n• Ensure safety compliance\n• Report to stakeholders',
     applicationLink: 'https://constructionltd.com/careers/project-manager',
     postedDate: new Date().toLocaleDateString(),
@@ -314,7 +314,7 @@ const SAMPLE_JOBS: { [key: string]: JobDetails } = {
     company: 'Marketing Agency',
     location: 'Remote',
     type: 'Remote Work',
-    salary: '$1,800 - $2,500/month',
+    salary: 'GH₵1,800 - GH₵2,500/month',
     description: 'Join our digital marketing team and work remotely on campaigns for diverse clients. Create and manage digital marketing strategies across multiple platforms.\n\nWhat you\'ll do:\n• Develop marketing strategies\n• Manage social media campaigns\n• Create content calendars\n• Analyze campaign performance\n• Optimize ad spending',
     applicationLink: 'https://marketingagency.com/remote/digital-marketer',
     postedDate: new Date().toLocaleDateString(),
@@ -331,7 +331,7 @@ const SIMILAR_JOBS = [
     company: 'FinTech Solutions',
     location: 'Tema, Ghana',
     type: 'Full Time Jobs',
-    salary: '$2,000 - $3,500/month',
+    salary: 'GH₵2,000 - GH₵3,500/month',
     image: 'https://images.unsplash.com/photo-1551836022-4c4c79ecde51?w=800&auto=format&fit=crop&q=60',
   },
   {
@@ -340,7 +340,7 @@ const SIMILAR_JOBS = [
     company: 'Creative Hub',
     location: 'Remote',
     type: 'Internships',
-    salary: '$800/month',
+    salary: 'GH₵800/month',
     image: 'https://images.unsplash.com/photo-1581291518857-4e27b48ff24e?w=800&auto=format&fit=crop&q=60',
   },
   {
@@ -349,7 +349,7 @@ const SIMILAR_JOBS = [
     company: 'Growth Partners',
     location: 'Accra, Ghana',
     type: 'Full Time Jobs',
-    salary: '$1,500 - $2,500/month',
+    salary: 'GH₵1,500 - GH₵2,500/month',
     image: 'https://images.unsplash.com/photo-1600880292203-757bb62b4baf?w=800&auto=format&fit=crop&q=60',
   },
 ];
@@ -388,45 +388,20 @@ export default function JobDetailsScreen() {
         return;
       }
       
-      // Otherwise fetch from database
+      // Fetch from jobs table
       const { data, error } = await supabase
-        .from('products_services')
+        .from('jobs')
         .select('*')
         .eq('id', id)
-        .eq('listing_type', 'job') // Only fetch job listings
         .single();
 
       if (error) throw error;
 
       if (data) {
-        // Parse the description to extract company, location, description, and application link
-        const descParts = data.description.split(' | ');
-        const company = descParts[0] || 'Company';
-        const location = descParts[1] || 'Location';
-        const description = descParts[2] || data.description;
-        
-        // Extract application link
-        let applicationLink = '';
-        if (descParts[3] && descParts[3].includes('Application Link:')) {
-          applicationLink = descParts[3].replace('Application Link:', '').trim();
-        }
-
-        // Parse images from image_url (which is stored as JSON array)
+        // Handle image URL
         let images: string[] = [];
         if (data.image_url) {
-          try {
-            if (data.image_url.startsWith('[')) {
-              // It's a JSON array
-              const parsed = JSON.parse(data.image_url);
-              images = Array.isArray(parsed) ? parsed : [data.image_url];
-            } else {
-              // It's a single URL
-              images = [data.image_url];
-            }
-          } catch (e) {
-            console.log('Failed to parse image_url, using as single URL');
-            images = [data.image_url];
-          }
+          images = [data.image_url];
         }
         
         // If no images, use placeholder
@@ -439,13 +414,13 @@ export default function JobDetailsScreen() {
         setJob({
           id: data.id,
           title: data.title,
-          company,
-          location,
-          salary: data.price ? `$${data.price}/month` : undefined,
-          description,
-          applicationLink,
-          type: data.category_name || 'Full Time Jobs',
-          imageUrl: images[0], // First image as main image
+          company: data.company,
+          location: data.location,
+          salary: data.salary || (data.salary_min ? `${data.salary_currency || 'GHS'} ${data.salary_min}` : undefined),
+          description: data.description,
+          applicationLink: data.application_link || '',
+          type: data.job_type || 'Full Time Jobs',
+          imageUrl: images[0],
           postedDate: new Date(data.created_at).toLocaleDateString(),
           images,
         });

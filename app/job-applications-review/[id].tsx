@@ -77,15 +77,7 @@ export default function JobApplicationsReviewScreen() {
       // Fetch applications for this job
       const { data: applicationsData, error: applicationsError } = await supabase
         .from('job_applications')
-        .select(`
-          *,
-          applicant:applicant_id (
-            id,
-            full_name,
-            email,
-            avatar_url
-          )
-        `)
+        .select('*')
         .eq('job_id', id)
         .order('created_at', { ascending: false });
 
@@ -134,18 +126,27 @@ export default function JobApplicationsReviewScreen() {
           reviewing: 'Your application is now under review',
           shortlisted: 'Congratulations! You have been shortlisted',
           rejected: 'Thank you for your application. Unfortunately, we have decided to move forward with other candidates',
-          accepted: 'Congratulations! Your application has been accepted',
+          accepted: 'Congratulations! Your application has been accepted. The employer\'s contact information is now available.',
         };
+
+        // Prepare notification data
+        const notificationData: any = {
+          application_id: applicationId,
+          recipient_id: application.applicant_id,
+          notification_type: 'status_changed',
+          title: newStatus === 'accepted' ? '🎉 Application Accepted!' : 'Application Status Updated',
+          message: statusMessages[newStatus as keyof typeof statusMessages] || 'Your application status has been updated',
+        };
+
+        // Include employer contact info when accepted
+        if (newStatus === 'accepted' && job) {
+          notificationData.employer_contact_email = job.contact_email || user?.email;
+          notificationData.employer_contact_phone = null; // Add if available
+        }
 
         await supabase
           .from('job_application_notifications')
-          .insert({
-            application_id: applicationId,
-            recipient_id: application.applicant_id,
-            notification_type: 'status_changed',
-            title: 'Application Status Updated',
-            message: statusMessages[newStatus as keyof typeof statusMessages] || 'Your application status has been updated',
-          });
+          .insert(notificationData);
       }
 
       // Refresh applications

@@ -1,12 +1,11 @@
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator, RefreshControl } from 'react-native';
 import { Image } from 'expo-image';
-import { LinearGradient } from 'expo-linear-gradient';
-import { useFonts, Inter_400Regular, Inter_600SemiBold, Inter_700Bold } from '@expo-google-fonts/inter';
+import { useFonts, Inter_400Regular, Inter_500Medium, Inter_600SemiBold, Inter_700Bold } from '@expo-google-fonts/inter';
 import { useEffect, useState, useCallback } from 'react';
 import { SplashScreen, useRouter, useFocusEffect } from 'expo-router'
 import { DebouncedTouchable } from '@/components/DebouncedTouchable';
 import { debouncedRouter } from '@/utils/navigationDebounce';;
-import { ArrowLeft, FileText, Clock, CheckCircle, XCircle, Eye, AlertCircle, MapPin, Building2 } from 'lucide-react-native';
+import { ArrowLeft, FileText, Clock, CheckCircle, XCircle, Eye, AlertCircle, MapPin, Building2, Mail, Phone, Briefcase, ChevronRight, Calendar, TrendingUp } from 'lucide-react-native';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/hooks/useAuth';
 
@@ -30,6 +29,7 @@ export default function MyApplicationsScreen() {
   
   const [fontsLoaded] = useFonts({
     'Inter-Regular': Inter_400Regular,
+    'Inter-Medium': Inter_500Medium,
     'Inter-SemiBold': Inter_600SemiBold,
     'Inter-Bold': Inter_700Bold,
   });
@@ -49,6 +49,11 @@ export default function MyApplicationsScreen() {
   );
 
   const fetchApplications = async () => {
+    if (!user?.id) {
+      console.log('No user ID available, skipping fetch');
+      return;
+    }
+    
     try {
       setLoading(true);
       
@@ -56,19 +61,18 @@ export default function MyApplicationsScreen() {
         .from('job_applications')
         .select(`
           *,
-          job:products_services (
+          job:job_id (
             id,
             title,
-            company_name,
+            company,
             location,
-            category_name,
-            salary_max,
-            currency,
-            company_logo,
-            image_url
+            job_type,
+            salary,
+            image_url,
+            contact_email
           )
         `)
-        .eq('applicant_id', user?.id)
+        .eq('applicant_id', user.id)
         .order('created_at', { ascending: false });
 
       if (error) throw error;
@@ -120,169 +124,265 @@ export default function MyApplicationsScreen() {
   return (
     <View style={styles.container}>
       {/* Header */}
-      <LinearGradient
-        colors={['#4169E1', '#6B8FFF']}
-        start={{ x: 0, y: 0 }}
-        end={{ x: 1, y: 1 }}
-        style={styles.header}
-      >
+      <View style={styles.header}>
         <TouchableOpacity onPress={() => debouncedRouter.back()} style={styles.backButton}>
           <ArrowLeft size={24} color="#FFFFFF" />
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>My Applications</Text>
+        <View style={styles.headerCenter}>
+          <Text style={styles.headerTitle}>My Applications</Text>
+          <Text style={styles.headerSubtitle}>{stats.total} total applications</Text>
+        </View>
         <View style={{ width: 40 }} />
-      </LinearGradient>
+      </View>
 
       <ScrollView 
         style={styles.content}
-        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
+        showsVerticalScrollIndicator={false}
+        refreshControl={
+          <RefreshControl 
+            refreshing={refreshing} 
+            onRefresh={onRefresh}
+            tintColor="#ffc857"
+          />
+        }
       >
-        {/* Stats Cards */}
-        <View style={styles.statsRow}>
-          <View style={styles.statCard}>
-            <FileText size={20} color="#4169E1" />
-            <Text style={styles.statNumber}>{stats.total}</Text>
-            <Text style={styles.statLabel}>Total</Text>
-          </View>
-          <View style={styles.statCard}>
-            <Clock size={20} color="#F59E0B" />
-            <Text style={styles.statNumber}>{stats.pending}</Text>
-            <Text style={styles.statLabel}>Pending</Text>
-          </View>
-          <View style={styles.statCard}>
-            <CheckCircle size={20} color="#10B981" />
-            <Text style={styles.statNumber}>{stats.accepted}</Text>
-            <Text style={styles.statLabel}>Accepted</Text>
+        {/* Stats Overview */}
+        <View style={styles.statsSection}>
+          <Text style={styles.sectionTitle}>Overview</Text>
+          <View style={styles.statsGrid}>
+            <View style={[styles.statCard, styles.statCardPrimary]}>
+              <View style={styles.statIconContainer}>
+                <FileText size={22} color="#ffc857" />
+              </View>
+              <Text style={styles.statNumber}>{stats.total}</Text>
+              <Text style={styles.statLabel}>Total Applied</Text>
+            </View>
+            <View style={styles.statCard}>
+              <View style={[styles.statIconContainerSmall, { backgroundColor: 'rgba(245, 158, 11, 0.1)' }]}>
+                <Clock size={18} color="#F59E0B" />
+              </View>
+              <Text style={styles.statNumberSmall}>{stats.pending}</Text>
+              <Text style={styles.statLabelSmall}>Pending</Text>
+            </View>
+            <View style={styles.statCard}>
+              <View style={[styles.statIconContainerSmall, { backgroundColor: 'rgba(16, 185, 129, 0.1)' }]}>
+                <CheckCircle size={18} color="#10B981" />
+              </View>
+              <Text style={styles.statNumberSmall}>{stats.accepted}</Text>
+              <Text style={styles.statLabelSmall}>Accepted</Text>
+            </View>
+            <View style={styles.statCard}>
+              <View style={[styles.statIconContainerSmall, { backgroundColor: 'rgba(239, 68, 68, 0.1)' }]}>
+                <XCircle size={18} color="#EF4444" />
+              </View>
+              <Text style={styles.statNumberSmall}>{stats.rejected}</Text>
+              <Text style={styles.statLabelSmall}>Rejected</Text>
+            </View>
           </View>
         </View>
 
         {/* Filter Chips */}
-        <ScrollView 
-          horizontal 
-          showsHorizontalScrollIndicator={false}
-          contentContainerStyle={styles.filtersContainer}
-        >
-          <TouchableOpacity
-            style={[styles.filterChip, filter === 'all' && styles.filterChipActive]}
-            onPress={() => setFilter('all')}
+        <View style={styles.filterSection}>
+          <Text style={styles.sectionTitle}>Filter by Status</Text>
+          <ScrollView 
+            horizontal 
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.filtersContainer}
           >
-            <Text style={[styles.filterChipText, filter === 'all' && styles.filterChipTextActive]}>
-              All ({stats.total})
-            </Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={[styles.filterChip, filter === 'pending' && styles.filterChipActive]}
-            onPress={() => setFilter('pending')}
-          >
-            <Text style={[styles.filterChipText, filter === 'pending' && styles.filterChipTextActive]}>
-              Pending ({stats.pending})
-            </Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={[styles.filterChip, filter === 'reviewed' && styles.filterChipActive]}
-            onPress={() => setFilter('reviewed')}
-          >
-            <Text style={[styles.filterChipText, filter === 'reviewed' && styles.filterChipTextActive]}>
-              Reviewed ({stats.reviewed})
-            </Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={[styles.filterChip, filter === 'accepted' && styles.filterChipActive]}
-            onPress={() => setFilter('accepted')}
-          >
-            <Text style={[styles.filterChipText, filter === 'accepted' && styles.filterChipTextActive]}>
-              Accepted ({stats.accepted})
-            </Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={[styles.filterChip, filter === 'rejected' && styles.filterChipActive]}
-            onPress={() => setFilter('rejected')}
-          >
-            <Text style={[styles.filterChipText, filter === 'rejected' && styles.filterChipTextActive]}>
-              Rejected ({stats.rejected})
-            </Text>
-          </TouchableOpacity>
-        </ScrollView>
+            <TouchableOpacity
+              style={[styles.filterChip, filter === 'all' && styles.filterChipActive]}
+              onPress={() => setFilter('all')}
+            >
+              <Briefcase size={14} color={filter === 'all' ? '#ffc857' : '#64748B'} />
+              <Text style={[styles.filterChipText, filter === 'all' && styles.filterChipTextActive]}>
+                All
+              </Text>
+              <View style={[styles.filterCount, filter === 'all' && styles.filterCountActive]}>
+                <Text style={[styles.filterCountText, filter === 'all' && styles.filterCountTextActive]}>{stats.total}</Text>
+              </View>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.filterChip, filter === 'pending' && styles.filterChipActive]}
+              onPress={() => setFilter('pending')}
+            >
+              <Clock size={14} color={filter === 'pending' ? '#ffc857' : '#F59E0B'} />
+              <Text style={[styles.filterChipText, filter === 'pending' && styles.filterChipTextActive]}>
+                Pending
+              </Text>
+              <View style={[styles.filterCount, filter === 'pending' && styles.filterCountActive]}>
+                <Text style={[styles.filterCountText, filter === 'pending' && styles.filterCountTextActive]}>{stats.pending}</Text>
+              </View>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.filterChip, filter === 'reviewed' && styles.filterChipActive]}
+              onPress={() => setFilter('reviewed')}
+            >
+              <Eye size={14} color={filter === 'reviewed' ? '#ffc857' : '#8B5CF6'} />
+              <Text style={[styles.filterChipText, filter === 'reviewed' && styles.filterChipTextActive]}>
+                Reviewed
+              </Text>
+              <View style={[styles.filterCount, filter === 'reviewed' && styles.filterCountActive]}>
+                <Text style={[styles.filterCountText, filter === 'reviewed' && styles.filterCountTextActive]}>{stats.reviewed}</Text>
+              </View>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.filterChip, filter === 'accepted' && styles.filterChipActive]}
+              onPress={() => setFilter('accepted')}
+            >
+              <CheckCircle size={14} color={filter === 'accepted' ? '#ffc857' : '#10B981'} />
+              <Text style={[styles.filterChipText, filter === 'accepted' && styles.filterChipTextActive]}>
+                Accepted
+              </Text>
+              <View style={[styles.filterCount, filter === 'accepted' && styles.filterCountActive]}>
+                <Text style={[styles.filterCountText, filter === 'accepted' && styles.filterCountTextActive]}>{stats.accepted}</Text>
+              </View>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.filterChip, filter === 'rejected' && styles.filterChipActive]}
+              onPress={() => setFilter('rejected')}
+            >
+              <XCircle size={14} color={filter === 'rejected' ? '#ffc857' : '#EF4444'} />
+              <Text style={[styles.filterChipText, filter === 'rejected' && styles.filterChipTextActive]}>
+                Rejected
+              </Text>
+              <View style={[styles.filterCount, filter === 'rejected' && styles.filterCountActive]}>
+                <Text style={[styles.filterCountText, filter === 'rejected' && styles.filterCountTextActive]}>{stats.rejected}</Text>
+              </View>
+            </TouchableOpacity>
+          </ScrollView>
+        </View>
 
         {/* Applications List */}
-        {loading ? (
-          <View style={styles.loadingContainer}>
-            <ActivityIndicator size="large" color="#4169E1" />
-            <Text style={styles.loadingText}>Loading applications...</Text>
-          </View>
-        ) : filteredApps.length === 0 ? (
-          <View style={styles.emptyContainer}>
-            <FileText size={64} color="#CCCCCC" />
-            <Text style={styles.emptyText}>No applications yet</Text>
-            <Text style={styles.emptySubtext}>
-              {filter === 'all' 
-                ? 'Start applying to jobs to track them here' 
-                : `No ${filter} applications found`}
-            </Text>
-            <TouchableOpacity 
-              style={styles.browseButton}
-              onPress={() => debouncedRouter.push('/workplace')}
-            >
-              <Text style={styles.browseButtonText}>Browse Jobs</Text>
-            </TouchableOpacity>
-          </View>
-        ) : (
-          filteredApps.map((application) => {
-            const job = application.job;
-            const statusConfig = STATUS_CONFIG[application.status as keyof typeof STATUS_CONFIG];
-            const StatusIcon = statusConfig?.icon || AlertCircle;
-            
-            // Get logo
-            let logo = job.company_logo;
-            if (!logo && job.image_url) {
-              if (typeof job.image_url === 'string' && job.image_url.startsWith('[')) {
-                try {
-                  const parsed = JSON.parse(job.image_url);
-                  logo = parsed[0] || job.image_url;
-                } catch (e) {
+        <View style={styles.applicationsSection}>
+          <Text style={styles.sectionTitle}>
+            {filter === 'all' ? 'All Applications' : `${STATUS_CONFIG[filter as keyof typeof STATUS_CONFIG]?.text || filter} Applications`}
+          </Text>
+          
+          {loading ? (
+            <View style={styles.loadingContainer}>
+              <ActivityIndicator size="large" color="#0F172A" />
+              <Text style={styles.loadingText}>Loading your applications...</Text>
+            </View>
+          ) : filteredApps.length === 0 ? (
+            <View style={styles.emptyContainer}>
+              <View style={styles.emptyIconContainer}>
+                <FileText size={48} color="#94A3B8" />
+              </View>
+              <Text style={styles.emptyText}>No applications found</Text>
+              <Text style={styles.emptySubtext}>
+                {filter === 'all' 
+                  ? 'Start applying to jobs to track your progress here' 
+                  : `You don't have any ${filter} applications yet`}
+              </Text>
+              <TouchableOpacity 
+                style={styles.browseButton}
+                onPress={() => debouncedRouter.push('/workplace')}
+              >
+                <Briefcase size={18} color="#0F172A" />
+                <Text style={styles.browseButtonText}>Browse Jobs</Text>
+              </TouchableOpacity>
+            </View>
+          ) : (
+            filteredApps.map((application, index) => {
+              const job = application.job;
+              const statusConfig = STATUS_CONFIG[application.status as keyof typeof STATUS_CONFIG];
+              const StatusIcon = statusConfig?.icon || AlertCircle;
+              const isAccepted = application.status === 'accepted';
+              const isRejected = application.status === 'rejected';
+              
+              // Get logo
+              let logo = null;
+              if (job?.image_url) {
+                if (typeof job.image_url === 'string' && job.image_url.startsWith('[')) {
+                  try {
+                    const parsed = JSON.parse(job.image_url);
+                    logo = parsed[0] || job.image_url;
+                  } catch (e) {
+                    logo = job.image_url;
+                  }
+                } else {
                   logo = job.image_url;
                 }
-              } else {
-                logo = job.image_url;
               }
-            }
 
-            return (
-              <TouchableOpacity
-                key={application.id}
-                style={styles.applicationCard}
-                onPress={() => debouncedRouter.push(`/job-detail/${job.id}`)}
-              >
-                <View style={styles.cardTop}>
-                  {logo && (
-                    <Image source={{ uri: logo }} style={styles.companyLogo} contentFit="contain" />
-                  )}
-                  <View style={styles.cardInfo}>
-                    <Text style={styles.jobTitle} numberOfLines={2}>{job.title}</Text>
-                    <View style={styles.companyRow}>
-                      <Building2 size={14} color="#666666" />
-                      <Text style={styles.companyText} numberOfLines={1}>{job.company_name}</Text>
+              return (
+                <TouchableOpacity
+                  key={application.id}
+                  style={[
+                    styles.applicationCard, 
+                    isAccepted && styles.acceptedCard,
+                    isRejected && styles.rejectedCard,
+                    index === 0 && styles.firstCard
+                  ]}
+                  onPress={() => debouncedRouter.push(`/job-detail/${job?.id}`)}
+                  activeOpacity={0.7}
+                >
+                  {/* Status Indicator Bar */}
+                  <View style={[styles.statusBar, { backgroundColor: statusConfig?.color }]} />
+                  
+                  <View style={styles.cardContent}>
+                    <View style={styles.cardTop}>
+                      {logo ? (
+                        <Image source={{ uri: logo }} style={styles.companyLogo} contentFit="cover" />
+                      ) : (
+                        <View style={styles.companyLogoPlaceholder}>
+                          <Building2 size={24} color="#94A3B8" />
+                        </View>
+                      )}
+                      <View style={styles.cardInfo}>
+                        <Text style={styles.jobTitle} numberOfLines={2}>{job?.title}</Text>
+                        <View style={styles.companyRow}>
+                          <Building2 size={13} color="#64748B" />
+                          <Text style={styles.companyText} numberOfLines={1}>{job?.company}</Text>
+                        </View>
+                        <View style={styles.locationRow}>
+                          <MapPin size={13} color="#94A3B8" />
+                          <Text style={styles.locationText} numberOfLines={1}>{job?.location}</Text>
+                        </View>
+                      </View>
+                      <ChevronRight size={20} color="#CBD5E1" />
                     </View>
-                    <View style={styles.locationRow}>
-                      <MapPin size={14} color="#999999" />
-                      <Text style={styles.locationText}>{job.location}</Text>
-                    </View>
-                  </View>
-                </View>
 
-                <View style={styles.cardBottom}>
-                  <View style={[styles.statusBadge, { backgroundColor: statusConfig?.bg }]}>
-                    <StatusIcon size={14} color={statusConfig?.color} />
-                    <Text style={[styles.statusText, { color: statusConfig?.color }]}>
-                      {statusConfig?.text}
-                    </Text>
+                    <View style={styles.cardDivider} />
+
+                    <View style={styles.cardBottom}>
+                      <View style={[styles.statusBadge, { backgroundColor: statusConfig?.bg }]}>
+                        <StatusIcon size={13} color={statusConfig?.color} />
+                        <Text style={[styles.statusText, { color: statusConfig?.color }]}>
+                          {statusConfig?.text}
+                        </Text>
+                      </View>
+                      <View style={styles.dateContainer}>
+                        <Calendar size={12} color="#94A3B8" />
+                        <Text style={styles.appliedDate}>{getRelativeTime(application.created_at)}</Text>
+                      </View>
+                    </View>
+
+                    {/* Show employer contact info for accepted applications */}
+                    {isAccepted && job?.contact_email && (
+                      <View style={styles.contactSection}>
+                        <View style={styles.contactHeader}>
+                          <Text style={styles.contactTitle}>🎉 Congratulations!</Text>
+                          <Text style={styles.contactSubtitle}>Contact the employer to proceed</Text>
+                        </View>
+                        <TouchableOpacity 
+                          style={styles.contactButton}
+                          onPress={() => {
+                            const { Linking } = require('react-native');
+                            Linking.openURL(`mailto:${job.contact_email}`);
+                          }}
+                        >
+                          <Mail size={16} color="#FFFFFF" />
+                          <Text style={styles.contactButtonText}>{job.contact_email}</Text>
+                        </TouchableOpacity>
+                      </View>
+                    )}
                   </View>
-                  <Text style={styles.appliedDate}>Applied {getRelativeTime(application.created_at)}</Text>
-                </View>
-              </TouchableOpacity>
-            );
-          })
-        )}
+                </TouchableOpacity>
+              );
+            })
+          )}
+        </View>
 
         <View style={{ height: 40 }} />
       </ScrollView>
@@ -293,201 +393,384 @@ export default function MyApplicationsScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#F8F9FA',
+    backgroundColor: '#FFFFFF',
   },
+  
+  // Header
   header: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: 20,
-    paddingTop: 60,
+    paddingTop: 56,
     paddingBottom: 20,
+    backgroundColor: '#0F172A',
   },
   backButton: {
     width: 40,
     height: 40,
-    borderRadius: 20,
-    backgroundColor: 'rgba(255, 255, 255, 0.2)',
+    borderRadius: 12,
+    backgroundColor: 'rgba(255, 255, 255, 0.1)',
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  headerCenter: {
+    alignItems: 'center',
   },
   headerTitle: {
     fontSize: 20,
     fontFamily: 'Inter-Bold',
     color: '#FFFFFF',
   },
+  headerSubtitle: {
+    fontSize: 13,
+    fontFamily: 'Inter-Regular',
+    color: 'rgba(255, 255, 255, 0.6)',
+    marginTop: 2,
+  },
   content: {
     flex: 1,
   },
-  statsRow: {
-    flexDirection: 'row',
+  
+  // Section Title
+  sectionTitle: {
+    fontSize: 16,
+    fontFamily: 'Inter-SemiBold',
+    color: '#0F172A',
+    marginBottom: 12,
+  },
+  
+  // Stats Section
+  statsSection: {
     paddingHorizontal: 20,
-    paddingTop: 20,
+    paddingTop: 24,
+  },
+  statsGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
     gap: 12,
   },
   statCard: {
-    flex: 1,
-    backgroundColor: '#FFFFFF',
+    backgroundColor: '#F8FAFC',
     borderRadius: 16,
     padding: 16,
     alignItems: 'center',
-    gap: 8,
-    shadowColor: '#000000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.05,
-    shadowRadius: 8,
-    elevation: 2,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    minWidth: '30%',
+    flex: 1,
+  },
+  statCardPrimary: {
+    backgroundColor: '#0F172A',
+    borderColor: '#0F172A',
+    minWidth: '100%',
+    flexDirection: 'row',
+    justifyContent: 'flex-start',
+    gap: 16,
+    paddingVertical: 20,
+    marginBottom: 4,
+  },
+  statIconContainer: {
+    width: 48,
+    height: 48,
+    borderRadius: 14,
+    backgroundColor: 'rgba(255, 200, 87, 0.15)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  statIconContainerSmall: {
+    width: 36,
+    height: 36,
+    borderRadius: 10,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 8,
   },
   statNumber: {
-    fontSize: 24,
+    fontSize: 32,
     fontFamily: 'Inter-Bold',
-    color: '#000000',
+    color: '#FFFFFF',
   },
   statLabel: {
-    fontSize: 12,
-    fontFamily: 'Inter-Regular',
-    color: '#666666',
+    fontSize: 14,
+    fontFamily: 'Inter-Medium',
+    color: 'rgba(255, 255, 255, 0.7)',
+  },
+  statNumberSmall: {
+    fontSize: 22,
+    fontFamily: 'Inter-Bold',
+    color: '#0F172A',
+  },
+  statLabelSmall: {
+    fontSize: 11,
+    fontFamily: 'Inter-Medium',
+    color: '#64748B',
+  },
+  
+  // Filter Section
+  filterSection: {
+    paddingTop: 24,
+    paddingLeft: 20,
   },
   filtersContainer: {
-    paddingHorizontal: 20,
-    paddingVertical: 20,
-    gap: 8,
+    paddingRight: 20,
+    gap: 10,
   },
   filterChip: {
-    backgroundColor: '#FFFFFF',
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#F8FAFC',
     borderWidth: 1,
-    borderColor: '#E5E7EB',
-    paddingHorizontal: 16,
+    borderColor: '#E2E8F0',
+    paddingHorizontal: 14,
     paddingVertical: 10,
-    borderRadius: 20,
+    borderRadius: 12,
+    gap: 8,
   },
   filterChipActive: {
-    backgroundColor: '#4169E1',
-    borderColor: '#4169E1',
+    backgroundColor: '#0F172A',
+    borderColor: '#0F172A',
   },
   filterChipText: {
-    fontSize: 14,
-    fontFamily: 'Inter-Regular',
-    color: '#666666',
+    fontSize: 13,
+    fontFamily: 'Inter-Medium',
+    color: '#64748B',
   },
   filterChipTextActive: {
-    color: '#FFFFFF',
+    color: '#ffc857',
+  },
+  filterCount: {
+    backgroundColor: '#E2E8F0',
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 8,
+  },
+  filterCountActive: {
+    backgroundColor: 'rgba(255, 200, 87, 0.2)',
+  },
+  filterCountText: {
+    fontSize: 11,
     fontFamily: 'Inter-SemiBold',
+    color: '#64748B',
+  },
+  filterCountTextActive: {
+    color: '#ffc857',
+  },
+  
+  // Applications Section
+  applicationsSection: {
+    paddingHorizontal: 20,
+    paddingTop: 24,
   },
   applicationCard: {
     backgroundColor: '#FFFFFF',
     borderRadius: 16,
-    padding: 16,
-    marginHorizontal: 20,
     marginBottom: 12,
-    shadowColor: '#000000',
+    shadowColor: '#0F172A',
     shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.05,
-    shadowRadius: 8,
-    elevation: 2,
+    shadowOpacity: 0.06,
+    shadowRadius: 12,
+    elevation: 3,
+    borderWidth: 1,
+    borderColor: '#F1F5F9',
+    overflow: 'hidden',
+  },
+  firstCard: {
+    marginTop: 4,
+  },
+  statusBar: {
+    height: 4,
+    width: '100%',
+  },
+  cardContent: {
+    padding: 16,
   },
   cardTop: {
     flexDirection: 'row',
-    marginBottom: 12,
+    alignItems: 'center',
     gap: 12,
   },
   companyLogo: {
-    width: 56,
-    height: 56,
+    width: 52,
+    height: 52,
     borderRadius: 12,
-    backgroundColor: '#F8F9FA',
+    backgroundColor: '#F8FAFC',
+  },
+  companyLogoPlaceholder: {
+    width: 52,
+    height: 52,
+    borderRadius: 12,
+    backgroundColor: '#F8FAFC',
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
   },
   cardInfo: {
     flex: 1,
     gap: 4,
   },
   jobTitle: {
-    fontSize: 16,
-    fontFamily: 'Inter-Bold',
-    color: '#000000',
+    fontSize: 15,
+    fontFamily: 'Inter-SemiBold',
+    color: '#0F172A',
+    lineHeight: 20,
   },
   companyRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
+    gap: 5,
   },
   companyText: {
     flex: 1,
-    fontSize: 14,
-    fontFamily: 'Inter-Regular',
-    color: '#666666',
+    fontSize: 13,
+    fontFamily: 'Inter-Medium',
+    color: '#64748B',
   },
   locationRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
+    gap: 5,
   },
   locationText: {
-    fontSize: 13,
+    fontSize: 12,
     fontFamily: 'Inter-Regular',
-    color: '#999999',
+    color: '#94A3B8',
+  },
+  cardDivider: {
+    height: 1,
+    backgroundColor: '#F1F5F9',
+    marginVertical: 12,
   },
   cardBottom: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingTop: 12,
-    borderTopWidth: 1,
-    borderTopColor: '#F0F0F0',
   },
   statusBadge: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 12,
-    gap: 6,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 8,
+    gap: 5,
   },
   statusText: {
-    fontSize: 13,
+    fontSize: 12,
     fontFamily: 'Inter-SemiBold',
   },
-  appliedDate: {
-    fontSize: 13,
-    fontFamily: 'Inter-Regular',
-    color: '#999999',
+  dateContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
   },
+  appliedDate: {
+    fontSize: 12,
+    fontFamily: 'Inter-Regular',
+    color: '#94A3B8',
+  },
+  
+  // Loading & Empty States
   loadingContainer: {
-    padding: 60,
+    paddingVertical: 60,
     alignItems: 'center',
   },
   loadingText: {
     marginTop: 16,
-    fontSize: 15,
-    fontFamily: 'Inter-Regular',
-    color: '#666666',
+    fontSize: 14,
+    fontFamily: 'Inter-Medium',
+    color: '#64748B',
   },
   emptyContainer: {
-    padding: 60,
+    paddingVertical: 60,
     alignItems: 'center',
   },
+  emptyIconContainer: {
+    width: 80,
+    height: 80,
+    borderRadius: 24,
+    backgroundColor: '#F8FAFC',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 16,
+  },
   emptyText: {
-    marginTop: 16,
     fontSize: 18,
     fontFamily: 'Inter-SemiBold',
-    color: '#666666',
+    color: '#0F172A',
   },
   emptySubtext: {
     marginTop: 8,
     fontSize: 14,
     fontFamily: 'Inter-Regular',
-    color: '#999999',
+    color: '#64748B',
     textAlign: 'center',
+    paddingHorizontal: 40,
   },
   browseButton: {
     marginTop: 24,
-    backgroundColor: '#4169E1',
-    paddingHorizontal: 32,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    backgroundColor: '#ffc857',
+    paddingHorizontal: 24,
     paddingVertical: 14,
     borderRadius: 12,
+    shadowColor: '#ffc857',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 4,
   },
   browseButtonText: {
-    fontSize: 16,
+    fontSize: 15,
+    fontFamily: 'Inter-SemiBold',
+    color: '#0F172A',
+  },
+  
+  // Card Status Variants
+  acceptedCard: {
+    borderColor: '#10B981',
+    borderWidth: 1.5,
+  },
+  rejectedCard: {
+    borderColor: '#FEE2E2',
+    borderWidth: 1,
+    opacity: 0.9,
+  },
+  
+  // Contact Section (Accepted)
+  contactSection: {
+    marginTop: 12,
+    paddingTop: 12,
+    borderTopWidth: 1,
+    borderTopColor: '#D1FAE5',
+  },
+  contactHeader: {
+    marginBottom: 12,
+  },
+  contactTitle: {
+    fontSize: 15,
+    fontFamily: 'Inter-SemiBold',
+    color: '#10B981',
+  },
+  contactSubtitle: {
+    fontSize: 12,
+    fontFamily: 'Inter-Regular',
+    color: '#64748B',
+    marginTop: 2,
+  },
+  contactButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    backgroundColor: '#10B981',
+    paddingVertical: 12,
+    borderRadius: 10,
+  },
+  contactButtonText: {
+    fontSize: 14,
     fontFamily: 'Inter-SemiBold',
     color: '#FFFFFF',
   },

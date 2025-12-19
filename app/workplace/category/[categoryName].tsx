@@ -42,11 +42,11 @@ export default function CategoryScreen() {
       const decodedCategory = decodeURIComponent(categoryName);
       console.log('🔍 Fetching jobs for category:', decodedCategory);
       
-      // Fetch jobs by category (without user join to avoid 400 error)
+      // Fetch jobs by category from jobs table
       const { data: jobsData, error: jobsError } = await supabase
-        .from('products_services')
+        .from('jobs')
         .select('*')
-        .eq('category_name', decodedCategory)
+        .eq('job_type', decodedCategory)
         .eq('is_approved', true)
         .order('created_at', { ascending: false });
       
@@ -57,46 +57,12 @@ export default function CategoryScreen() {
       
       console.log('✅ Fetched jobs:', jobsData?.length || 0);
       
-      // Process the job listings
+      // Process the job listings - jobs table already has proper columns
       const processedJobs = (jobsData || []).map(job => {
-        // Parse the description to extract company and location
-        // Format expected: "Company | Location | Description | Email: email"
-        const parts = job.description?.split('|') || [];
-        let company = '';
-        let location = '';
-        let description = job.description || '';
-        
-        if (parts.length >= 2) {
-          company = parts[0]?.trim() || '';
-          location = parts[1]?.trim() || '';
-          // Remove email if present and join remaining parts
-          let remainingDesc = parts.slice(2).join('|').trim();
-          const emailMatch = remainingDesc.match(/Email:\s*(.+?)(?:\s*\||$)/);
-          if (emailMatch) {
-            remainingDesc = remainingDesc.replace(/\s*\|\s*Email:.*$/, '').trim();
-          }
-          description = remainingDesc;
-        }
-        
-        // Parse image URL if it's a JSON array
-        let imageUrl = job.image_url;
-        if (imageUrl && typeof imageUrl === 'string' && imageUrl.startsWith('[')) {
-          try {
-            const parsed = JSON.parse(imageUrl);
-            imageUrl = Array.isArray(parsed) && parsed.length > 0 ? parsed[0] : imageUrl;
-          } catch (e) {
-            // Keep original if parsing fails
-          }
-        }
-        
         return {
           ...job,
-          image_url: imageUrl,
-          company,
-          location,
-          description,
-          salary: job.price ? `₵${job.price}/month` : 'Not specified',
-          jobType: job.category_name
+          salary: job.salary || (job.salary_min ? `${job.salary_currency || 'GHS'} ${job.salary_min}` : 'Not specified'),
+          jobType: job.job_type
         };
       });
       

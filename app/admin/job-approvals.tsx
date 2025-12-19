@@ -23,6 +23,8 @@ interface PendingJob {
   id: string;
   title: string;
   description: string;
+  company?: string;
+  location?: string;
   price: number;
   image_url: string;
   category_name: string;
@@ -157,10 +159,9 @@ export default function JobApprovalsScreen() {
       images = ['https://images.unsplash.com/photo-1486406146926-c627a92ad1ab?w=800'];
     }
 
-    // Parse description
-    const parts = (item.description || '').split('|');
-    const company = parts[0]?.trim() || 'Company';
-    const location = parts[1]?.trim() || 'Location';
+    // Use company and location directly from jobs table
+    const company = item.company || 'Company';
+    const location = item.location || 'Location';
 
     // Calculate time ago
     const createdDate = new Date(item.created_at);

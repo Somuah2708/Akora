@@ -30,7 +30,7 @@ export default function EditJobListingScreen() {
   const [company, setCompany] = useState('');
   const [location, setLocation] = useState('');
   const [salary, setSalary] = useState('');
-  const [currency, setCurrency] = useState('USD');
+  const [currency, setCurrency] = useState('GHS');
   const [email, setEmail] = useState('');
   const [imageUrl, setImageUrl] = useState('');
   const [uploadedImage, setUploadedImage] = useState<string | null>(null);
@@ -66,7 +66,7 @@ export default function EditJobListingScreen() {
     try {
       setLoading(true);
       const { data, error } = await supabase
-        .from('products_services')
+        .from('jobs')
         .select('*')
         .eq('id', id)
         .single();
@@ -82,41 +82,27 @@ export default function EditJobListingScreen() {
         }
 
         setTitle(data.title || '');
-        setCategory(data.category_name || '');
+        setCategory(data.job_type || '');
+        setCompany(data.company || '');
+        setLocation(data.location || '');
+        setDescription(data.description || '');
+        setEmail(data.contact_email || '');
         
-        // Parse description: "Company | Location | Description | Email: email@example.com"
-        const descParts = (data.description || '').split(' | ');
-        setCompany(descParts[0] || '');
-        setLocation(descParts[1] || '');
-        
-        // Check if email is in description
-        let desc = descParts.slice(2).join(' | ');
-        const emailMatch = desc.match(/Email:\s*(.+?)(?:\s*\||$)/);
-        if (emailMatch) {
-          setEmail(emailMatch[1].trim());
-          desc = desc.replace(/\s*\|\s*Email:.*$/, '').trim();
+        // Parse salary
+        if (data.salary_min) {
+          setSalary(data.salary_min.toString());
+        } else if (data.salary) {
+          // Extract number from salary string
+          const salaryMatch = data.salary.match(/[\d,]+/);
+          if (salaryMatch) {
+            setSalary(salaryMatch[0].replace(/,/g, ''));
+          }
         }
-        setDescription(desc);
-        
-        // Parse salary with currency
-        if (data.price) {
-          setSalary(data.price.toString());
-          // You could enhance this to detect currency from description if needed
-          setCurrency('USD');
-        }
+        setCurrency(data.salary_currency || 'GHS');
 
         // Handle image URL
         if (data.image_url) {
-          try {
-            const parsed = JSON.parse(data.image_url);
-            if (Array.isArray(parsed) && parsed.length > 0) {
-              setImageUrl(parsed[0]);
-            } else {
-              setImageUrl(data.image_url);
-            }
-          } catch {
-            setImageUrl(data.image_url);
-          }
+          setImageUrl(data.image_url);
           setUseUrlInput(true);
         }
       }
@@ -176,19 +162,22 @@ export default function EditJobListingScreen() {
       const finalImageUrl = uploadedImage || imageUrl.trim() || null;
       const formattedSalary = salary.trim() ? `${currency} ${salary}` : null;
       
-      let fullDescription = `${company.trim()} | ${location.trim()} | ${description.trim()}`;
-      if (email.trim()) {
-        fullDescription += ` | Email: ${email.trim()}`;
-      }
+      const salaryValue = salary.trim() ? Number(salary) : null;
       
       const { error } = await supabase
-        .from('products_services')
+        .from('jobs')
         .update({
           title: title.trim(),
-          description: fullDescription,
-          price: salary.trim() ? Number(salary) : 0,
+          company: company.trim(),
+          location: location.trim(),
+          description: description.trim(),
+          contact_email: email.trim() || null,
+          salary: salaryValue ? `${currency} ${salary}` : null,
+          salary_min: salaryValue,
+          salary_currency: currency,
           image_url: finalImageUrl,
-          category_name: category,
+          job_type: category,
+          updated_at: new Date().toISOString(),
         })
         .eq('id', id);
 
@@ -212,7 +201,7 @@ export default function EditJobListingScreen() {
         setIsSubmitting(true);
         
         const { error } = await supabase
-          .from('products_services')
+          .from('jobs')
           .delete()
           .eq('id', id);
 

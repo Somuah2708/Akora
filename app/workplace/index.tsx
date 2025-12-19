@@ -4,7 +4,7 @@ import { useEffect, useState, useCallback, useRef } from 'react';
 import { SplashScreen, useRouter, useFocusEffect } from 'expo-router'
 import { DebouncedTouchable } from '@/components/DebouncedTouchable';
 import { debouncedRouter } from '@/utils/navigationDebounce';;
-import { Search, Filter, ArrowLeft, Briefcase, Clock, MapPin, Building2, GraduationCap, ChevronRight, BookOpen, Users, Wallet, Plus, Calendar, Bookmark, TrendingUp, DollarSign, X, Check } from 'lucide-react-native';
+import { Search, Filter, ArrowLeft, Briefcase, Clock, MapPin, Building2, GraduationCap, ChevronRight, BookOpen, Users, Wallet, Plus, Calendar, Bookmark, TrendingUp, DollarSign, X, Check, Shield, AlertCircle, XCircle } from 'lucide-react-native';
 import { supabase, Job } from '@/lib/supabase';
 import { useAuth } from '@/hooks/useAuth';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -26,10 +26,10 @@ const JOB_TYPES = [
 
 const SALARY_RANGES = [
   { id: 'all', label: 'All Salaries', min: 0, max: Infinity },
-  { id: 'under_1k', label: 'Under $1,000', min: 0, max: 1000 },
-  { id: '1k_3k', label: '$1,000 - $3,000', min: 1000, max: 3000 },
-  { id: '3k_5k', label: '$3,000 - $5,000', min: 3000, max: 5000 },
-  { id: 'over_5k', label: 'Over $5,000', min: 5000, max: Infinity },
+  { id: 'under_1k', label: 'Under GH₵1,000', min: 0, max: 1000 },
+  { id: '1k_3k', label: 'GH₵1,000 - GH₵3,000', min: 1000, max: 3000 },
+  { id: '3k_5k', label: 'GH₵3,000 - GH₵5,000', min: 3000, max: 5000 },
+  { id: 'over_5k', label: 'Over GH₵5,000', min: 5000, max: Infinity },
 ];
 
 const POSTED_FILTERS = [
@@ -46,7 +46,7 @@ const FEATURED_JOBS = [
     company: 'TechCorp Ghana',
     location: 'Accra, Ghana',
     type: 'Full-Time',
-    salary: '$3,000 - $5,000/month',
+    salary: 'GH₵3,000 - GH₵5,000/month',
     posted: '2 days ago',
     image: 'https://images.unsplash.com/photo-1486406146926-c627a92ad1ab?w=800&auto=format&fit=crop&q=60',
     requirements: ['3+ years experience', 'React Native', 'Node.js'],
@@ -57,7 +57,7 @@ const FEATURED_JOBS = [
     company: 'Global Media Ltd',
     location: 'Kumasi, Ghana',
     type: 'Internship',
-    salary: '$500/month',
+    salary: 'GH₵500/month',
     posted: '1 day ago',
     image: 'https://images.unsplash.com/photo-1497366216548-37526070297c?w=800&auto=format&fit=crop&q=60',
     requirements: ['Final year student', 'Marketing major', 'Creative mindset'],
@@ -78,7 +78,7 @@ const RECENT_OPPORTUNITIES = [
     title: 'Data Analyst',
     company: 'FinTech Solutions',
     location: 'Tema, Ghana',
-    salary: '$2,000 - $3,500/month',
+    salary: 'GH₵2,000 - GH₵3,500/month',
     posted: '3 days ago',
     image: 'https://images.unsplash.com/photo-1551836022-4c4c79ecde51?w=800&auto=format&fit=crop&q=60',
   },
@@ -87,7 +87,7 @@ const RECENT_OPPORTUNITIES = [
     title: 'Product Design Intern',
     company: 'Creative Hub',
     location: 'Remote',
-    salary: '$800/month',
+    salary: 'GH₵800/month',
     posted: '1 week ago',
     image: 'https://images.unsplash.com/photo-1581291518857-4e27b48ff24e?w=800&auto=format&fit=crop&q=60',
   },
@@ -96,7 +96,7 @@ const RECENT_OPPORTUNITIES = [
     title: 'Business Development',
     company: 'Growth Partners',
     location: 'Accra, Ghana',
-    salary: '$1,500 - $2,500/month',
+    salary: 'GH₵1,500 - GH₵2,500/month',
     posted: '5 days ago',
     image: 'https://images.unsplash.com/photo-1600880292203-757bb62b4baf?w=800&auto=format&fit=crop&q=60',
   },
@@ -122,8 +122,30 @@ export default function WorkplaceScreen() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [savedJobs, setSavedJobs] = useState<string[]>([]);
-  const [myJobs, setMyJobs] = useState<Job[]>([]);
+  const [myJobs, setMyJobs] = useState<Job[]>([]); // Approved user jobs only
+  const [myAllJobs, setMyAllJobs] = useState<Job[]>([]); // All user jobs including pending/rejected
   const [isAdmin, setIsAdmin] = useState(false);
+  const [pendingJobsCount, setPendingJobsCount] = useState(0);
+  const [showRejectionModal, setShowRejectionModal] = useState(false);
+  const [selectedRejectedJob, setSelectedRejectedJob] = useState<Job | null>(null);
+  
+  // Refs to track current values for async functions
+  const activeTabRef = useRef(activeTab);
+  const savedJobsRef = useRef(savedJobs);
+  const myAllJobsRef = useRef(myAllJobs);
+  
+  // Keep refs in sync with state
+  useEffect(() => {
+    activeTabRef.current = activeTab;
+  }, [activeTab]);
+  
+  useEffect(() => {
+    savedJobsRef.current = savedJobs;
+  }, [savedJobs]);
+  
+  useEffect(() => {
+    myAllJobsRef.current = myAllJobs;
+  }, [myAllJobs]);
   
   const [fontsLoaded] = useFonts({
     'Inter-Regular': Inter_400Regular,
@@ -152,17 +174,43 @@ export default function WorkplaceScreen() {
       console.log('💼 Fetched job listings:', data?.length || 0);
       setJobListings(data || []);
       
-      // Filter jobs posted by current user
+      // Filter jobs posted by current user (approved only)
       if (user) {
-        const userJobs = data?.filter(job => job.user_id === user.id) || [];
-        setMyJobs(userJobs);
+        const userApprovedJobs = data?.filter(job => job.user_id === user.id) || [];
+        setMyJobs(userApprovedJobs);
+        
+        // Also fetch ALL jobs by this user (including pending/rejected)
+        await fetchMyAllJobs();
       }
       
-      applyFilters(data || [], searchQuery, selectedJobType, selectedSalaryRange, selectedPostedFilter);
+      applyFilters(data || [], searchQuery, selectedJobType, selectedSalaryRange, selectedPostedFilter, activeTabRef.current, savedJobsRef.current, myAllJobsRef.current);
     } catch (error) {
       console.error('❌ Error:', error);
     } finally {
       setLoading(false);
+    }
+  };
+
+  // Fetch all jobs posted by the user (including pending and rejected)
+  const fetchMyAllJobs = async () => {
+    if (!user) return;
+    
+    try {
+      const { data, error } = await supabase
+        .from('jobs')
+        .select('*')
+        .eq('user_id', user.id)
+        .order('created_at', { ascending: false });
+      
+      if (error) {
+        console.error('❌ Error fetching user jobs:', error);
+        return;
+      }
+      
+      console.log('📋 Fetched all user jobs:', data?.length || 0);
+      setMyAllJobs(data || []);
+    } catch (error) {
+      console.error('❌ Error:', error);
     }
   };
 
@@ -171,15 +219,19 @@ export default function WorkplaceScreen() {
     search: string,
     jobType: string,
     salaryRange: string,
-    postedFilter: string
+    postedFilter: string,
+    currentTab: 'all' | 'my-jobs' | 'saved' = activeTab,
+    currentSavedJobs: string[] = savedJobs,
+    allUserJobs: Job[] = myAllJobs
   ) => {
     let filtered = [...jobs];
 
-    // Filter by tab
-    if (activeTab === 'my-jobs' && user) {
-      filtered = filtered.filter(job => job.user_id === user.id);
-    } else if (activeTab === 'saved') {
-      filtered = filtered.filter(job => savedJobs.includes(job.id));
+    // Filter by tab - for 'my-jobs', use all user jobs (including pending/rejected)
+    if (currentTab === 'my-jobs' && user) {
+      // Use allUserJobs which includes pending and rejected jobs
+      filtered = allUserJobs.length > 0 ? [...allUserJobs] : jobs.filter(job => job.user_id === user.id);
+    } else if (currentTab === 'saved') {
+      filtered = filtered.filter(job => currentSavedJobs.includes(job.id));
     }
 
     // Filter by job type
@@ -269,7 +321,7 @@ export default function WorkplaceScreen() {
     setRefreshing(true);
     await fetchJobListings();
     setRefreshing(false);
-  }, []);
+  }, [activeTab, savedJobs, searchQuery, selectedJobType, selectedSalaryRange, selectedPostedFilter]);
 
   useEffect(() => {
     fetchJobListings();
@@ -289,15 +341,35 @@ export default function WorkplaceScreen() {
       
       if (!error && data) {
         setIsAdmin(data.is_admin || false);
+        
+        // If admin, fetch pending jobs count
+        if (data.is_admin) {
+          fetchPendingJobsCount();
+        }
       }
     } catch (error) {
       console.error('Error checking admin status:', error);
     }
   };
 
+  const fetchPendingJobsCount = async () => {
+    try {
+      const { count, error } = await supabase
+        .from('jobs')
+        .select('*', { count: 'exact', head: true })
+        .eq('is_approved', false);
+      
+      if (!error) {
+        setPendingJobsCount(count || 0);
+      }
+    } catch (error) {
+      console.error('Error fetching pending jobs count:', error);
+    }
+  };
+
   useEffect(() => {
-    applyFilters(jobListings, searchQuery, selectedJobType, selectedSalaryRange, selectedPostedFilter);
-  }, [activeTab, savedJobs]);
+    applyFilters(jobListings, searchQuery, selectedJobType, selectedSalaryRange, selectedPostedFilter, activeTab, savedJobs, myAllJobs);
+  }, [activeTab, savedJobs, myAllJobs]);
 
   useFocusEffect(
     useCallback(() => {
@@ -370,113 +442,157 @@ export default function WorkplaceScreen() {
 
   const formatTimeAgo = (createdAt: string) => {
     const postedDate = new Date(createdAt);
-    const today = new Date();
-    const diffDays = Math.ceil((today.getTime() - postedDate.getTime()) / (1000 * 60 * 60 * 24));
+    const now = new Date();
+    const diffMs = now.getTime() - postedDate.getTime();
+    const diffMinutes = Math.floor(diffMs / (1000 * 60));
+    const diffHours = Math.floor(diffMs / (1000 * 60 * 60));
+    const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
     
-    if (diffDays === 0) return 'Today';
+    if (diffMinutes < 1) return 'Just now';
+    if (diffMinutes < 60) return `${diffMinutes} ${diffMinutes === 1 ? 'minute' : 'minutes'} ago`;
+    if (diffHours < 24) return `${diffHours} ${diffHours === 1 ? 'hour' : 'hours'} ago`;
     if (diffDays === 1) return 'Yesterday';
     if (diffDays < 7) return `${diffDays} days ago`;
-    if (diffDays < 30) return `${Math.floor(diffDays / 7)} weeks ago`;
-    return `${Math.floor(diffDays / 30)} months ago`;
+    if (diffDays < 30) return `${Math.floor(diffDays / 7)} ${Math.floor(diffDays / 7) === 1 ? 'week' : 'weeks'} ago`;
+    if (diffDays < 365) return `${Math.floor(diffDays / 30)} ${Math.floor(diffDays / 30) === 1 ? 'month' : 'months'} ago`;
+    return `${Math.floor(diffDays / 365)} ${Math.floor(diffDays / 365) === 1 ? 'year' : 'years'} ago`;
   };
+
+  const renderHeader = () => (
+    <View style={styles.headerContainer}>
+      {/* Top Bar */}
+      <View style={styles.topBar}>
+        <TouchableOpacity onPress={() => debouncedRouter.back()} style={styles.iconButton}>
+          <ArrowLeft size={22} color="#FFFFFF" />
+        </TouchableOpacity>
+        
+        <Text style={styles.screenTitle}>Jobs & Internships</Text>
+        
+        <View style={styles.topBarRight}>
+          {isAdmin && (
+            <TouchableOpacity 
+              onPress={() => debouncedRouter.push('/admin/job-approvals')} 
+              style={styles.iconButton}
+            >
+              <Shield size={20} color="#ffc857" />
+              {pendingJobsCount > 0 && (
+                <View style={styles.adminBadge}>
+                  <Text style={styles.adminBadgeText}>{pendingJobsCount > 9 ? '9+' : pendingJobsCount}</Text>
+                </View>
+              )}
+            </TouchableOpacity>
+          )}
+          <TouchableOpacity onPress={() => setShowFilterModal(true)} style={styles.iconButton}>
+            <Filter size={20} color={(selectedJobType !== 'all' || selectedSalaryRange !== 'all' || selectedPostedFilter !== 'all') ? '#ffc857' : '#FFFFFF'} />
+          </TouchableOpacity>
+        </View>
+      </View>
+
+      {/* Search Bar */}
+      <View style={styles.searchContainer}>
+        <View style={styles.searchBox}>
+          <Search size={18} color="#9CA3AF" />
+          <TextInput
+            style={styles.searchField}
+            placeholder="Search jobs..."
+            placeholderTextColor="#9CA3AF"
+            value={searchQuery}
+            onChangeText={handleSearch}
+          />
+          {searchQuery !== '' && (
+            <TouchableOpacity onPress={() => handleSearch('')} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
+              <X size={16} color="#9CA3AF" />
+            </TouchableOpacity>
+          )}
+        </View>
+      </View>
+
+      {/* Tab Bar - Horizontal Scroll */}
+      <ScrollView 
+        horizontal 
+        showsHorizontalScrollIndicator={false}
+        contentContainerStyle={styles.tabScrollContainer}
+      >
+        <TouchableOpacity
+          style={[styles.tabItem, activeTab === 'all' && styles.tabItemActive]}
+          onPress={() => setActiveTab('all')}
+        >
+          <Briefcase size={16} color={activeTab === 'all' ? '#0F172A' : '#9CA3AF'} />
+          <Text style={[styles.tabLabel, activeTab === 'all' && styles.tabLabelActive]}>All</Text>
+        </TouchableOpacity>
+        
+        {user && (
+          <TouchableOpacity
+            style={[styles.tabItem, activeTab === 'my-jobs' && styles.tabItemActive]}
+            onPress={() => setActiveTab('my-jobs')}
+          >
+            <Users size={16} color={activeTab === 'my-jobs' ? '#0F172A' : '#9CA3AF'} />
+            <Text style={[styles.tabLabel, activeTab === 'my-jobs' && styles.tabLabelActive]}>Posted</Text>
+            {myAllJobs.length > 0 && (
+              <View style={[styles.tabCount, activeTab === 'my-jobs' && styles.tabCountActive]}>
+                <Text style={[styles.tabCountText, activeTab === 'my-jobs' && styles.tabCountTextActive]}>{myAllJobs.length}</Text>
+              </View>
+            )}
+          </TouchableOpacity>
+        )}
+        
+        <TouchableOpacity
+          style={[styles.tabItem, activeTab === 'saved' && styles.tabItemActive]}
+          onPress={() => setActiveTab('saved')}
+        >
+          <Bookmark size={16} color={activeTab === 'saved' ? '#0F172A' : '#9CA3AF'} />
+          <Text style={[styles.tabLabel, activeTab === 'saved' && styles.tabLabelActive]}>Saved</Text>
+          {savedJobs.length > 0 && (
+            <View style={[styles.tabCount, activeTab === 'saved' && styles.tabCountActive]}>
+              <Text style={[styles.tabCountText, activeTab === 'saved' && styles.tabCountTextActive]}>{savedJobs.length}</Text>
+            </View>
+          )}
+        </TouchableOpacity>
+
+        {user && (
+          <TouchableOpacity
+            style={styles.applicationsButton}
+            onPress={() => debouncedRouter.push('/my-applications')}
+          >
+            <Clock size={16} color="#ffc857" />
+            <Text style={styles.applicationsButtonText}>Applications</Text>
+            <ChevronRight size={14} color="#ffc857" />
+          </TouchableOpacity>
+        )}
+      </ScrollView>
+
+      {/* Category Filters */}
+      <ScrollView
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        contentContainerStyle={styles.categoryContainer}
+      >
+        {JOB_TYPES.map((type) => {
+          const IconComponent = type.icon;
+          const isActive = selectedJobType === type.id;
+          return (
+            <TouchableOpacity
+              key={type.id}
+              style={[styles.categoryChip, isActive && { backgroundColor: type.color }]}
+              onPress={() => handleJobTypeFilter(type.id)}
+            >
+              <IconComponent size={14} color={isActive ? '#FFFFFF' : type.color} />
+              <Text style={[styles.categoryChipText, isActive && styles.categoryChipTextActive]}>
+                {type.name}
+              </Text>
+            </TouchableOpacity>
+          );
+        })}
+      </ScrollView>
+    </View>
+  );
 
   return (
     <View style={styles.container}>
-      {/* Modern Header */}
-      <View style={styles.modernHeader}>
-        <View style={styles.headerTop}>
-          <TouchableOpacity onPress={() => debouncedRouter.back()} style={styles.backButton}>
-            <ArrowLeft size={24} color="#1F2937" />
-          </TouchableOpacity>
-          <Text style={styles.headerTitle}>Internships & Jobs</Text>
-          <TouchableOpacity onPress={() => setShowFilterModal(true)} style={styles.filterButton}>
-            <Filter size={22} color={(selectedJobType !== 'all' || selectedSalaryRange !== 'all' || selectedPostedFilter !== 'all') ? '#4169E1' : '#6B7280'} />
-          </TouchableOpacity>
-        </View>
-
-        {/* Search Bar */}
-        <View style={styles.searchWrapper}>
-          <View style={styles.searchBar}>
-            <Search size={20} color="#9CA3AF" />
-            <TextInput
-              style={styles.searchInput}
-              placeholder="Search by title, company, or location..."
-              placeholderTextColor="#9CA3AF"
-              value={searchQuery}
-              onChangeText={handleSearch}
-            />
-            {searchQuery !== '' && (
-              <TouchableOpacity onPress={() => handleSearch('')}>
-                <X size={18} color="#6B7280" />
-              </TouchableOpacity>
-            )}
-          </View>
-        </View>
-
-        {/* Tabs */}
-        <View style={styles.tabsContainer}>
-          <TouchableOpacity
-            style={[styles.tab, activeTab === 'all' && styles.tabActive]}
-            onPress={() => setActiveTab('all')}
-          >
-            <Text style={[styles.tabText, activeTab === 'all' && styles.tabTextActive]}>
-              All Jobs
-            </Text>
-            {activeTab === 'all' && <View style={styles.tabIndicator} />}
-          </TouchableOpacity>
-          
-          {user && (
-            <TouchableOpacity
-              style={[styles.tab, activeTab === 'my-jobs' && styles.tabActive]}
-              onPress={() => setActiveTab('my-jobs')}
-            >
-              <Text style={[styles.tabText, activeTab === 'my-jobs' && styles.tabTextActive]}>
-                My Jobs ({myJobs.length})
-              </Text>
-              {activeTab === 'my-jobs' && <View style={styles.tabIndicator} />}
-            </TouchableOpacity>
-          )}
-          
-          <TouchableOpacity
-            style={[styles.tab, activeTab === 'saved' && styles.tabActive]}
-            onPress={() => setActiveTab('saved')}
-          >
-            <Text style={[styles.tabText, activeTab === 'saved' && styles.tabTextActive]}>
-              Saved ({savedJobs.length})
-            </Text>
-            {activeTab === 'saved' && <View style={styles.tabIndicator} />}
-          </TouchableOpacity>
-        </View>
-
-        {/* Quick Filters */}
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          contentContainerStyle={styles.quickFiltersContainer}
-        >
-          {JOB_TYPES.map((type) => {
-            const IconComponent = type.icon;
-            const isActive = selectedJobType === type.id;
-            return (
-              <TouchableOpacity
-                key={type.id}
-                style={[styles.quickFilterChip, isActive && { backgroundColor: type.color }]}
-                onPress={() => handleJobTypeFilter(type.id)}
-              >
-                <IconComponent size={16} color={isActive ? '#FFFFFF' : type.color} />
-                <Text style={[styles.quickFilterText, isActive && styles.quickFilterTextActive]}>
-                  {type.name}
-                </Text>
-              </TouchableOpacity>
-            );
-          })}
-        </ScrollView>
-      </View>
-
       {/* Job Listings */}
       {loading ? (
         <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color="#4169E1" />
+          <ActivityIndicator size="large" color="#ffc857" />
           <Text style={styles.loadingText}>Finding opportunities...</Text>
         </View>
       ) : (
@@ -485,11 +601,13 @@ export default function WorkplaceScreen() {
           keyExtractor={(item) => item.id}
           contentContainerStyle={styles.listContainer}
           showsVerticalScrollIndicator={false}
+          ListHeaderComponent={renderHeader}
+          stickyHeaderIndices={[]}
           refreshControl={
             <RefreshControl
               refreshing={refreshing}
               onRefresh={onRefresh}
-              tintColor="#4169E1"
+              tintColor="#ffc857"
             />
           }
           ListEmptyComponent={() => (
@@ -508,110 +626,150 @@ export default function WorkplaceScreen() {
               )}
             </View>
           )}
-          renderItem={({ item: job }) => {
+          renderItem={({ item: job, index }) => {
             const jobColor = getJobTypeColor(job.job_type);
             const timeAgo = formatTimeAgo(job.created_at);
             const isOwner = user && job.user_id === user.id;
             const isSaved = savedJobs.includes(job.id);
+            const isFirst = index === 0;
+            
+            // Job status for owner's posts
+            const isPending = isOwner && !job.is_approved && !job.rejection_reason;
+            const isRejected = isOwner && !job.is_approved && !!job.rejection_reason;
+            const isApproved = job.is_approved;
+            
+            // Parse image URL
+            const imageUrl = job.image_url 
+              ? (typeof job.image_url === 'string' && job.image_url.startsWith('[') 
+                  ? JSON.parse(job.image_url)[0] 
+                  : job.image_url)
+              : null;
 
             return (
               <TouchableOpacity
-                style={styles.jobCard}
-                onPress={() => handleJobPress(job.id)}
+                style={[styles.jobCard, isFirst && styles.jobCardFirst, isRejected && styles.jobCardRejected, isPending && styles.jobCardPending]}
+                onPress={() => {
+                  if (isRejected) {
+                    setSelectedRejectedJob(job);
+                    setShowRejectionModal(true);
+                  } else {
+                    handleJobPress(job.id);
+                  }
+                }}
                 onLongPress={() => handleJobLongPress(job)}
-                activeOpacity={0.7}
+                activeOpacity={0.8}
               >
-                {/* Job Header */}
-                <View style={styles.jobCardHeader}>
-                  <View style={styles.companyLogoContainer}>
-                    {job.image_url ? (
-                      <Image
-                        source={{ uri: typeof job.image_url === 'string' && job.image_url.startsWith('[') 
-                          ? JSON.parse(job.image_url)[0] 
-                          : job.image_url 
-                        }}
-                        style={styles.companyLogoImage}
-                      />
-                    ) : (
-                      <Building2 size={24} color={jobColor} />
-                    )}
+                {/* Featured Image Banner */}
+                <View style={styles.imageBanner}>
+                  {imageUrl ? (
+                    <Image
+                      source={{ uri: imageUrl }}
+                      style={styles.bannerImage}
+                    />
+                  ) : (
+                    <View style={[styles.bannerPlaceholder, { backgroundColor: `${jobColor}10` }]}>
+                      <Building2 size={40} color={jobColor} />
+                    </View>
+                  )}
+                  
+                  {/* Job Type Badge - Overlay */}
+                  <View style={[styles.typeBadgeOverlay, { backgroundColor: jobColor }]}>
+                    <Text style={styles.typeBadgeOverlayText}>{job.job_type}</Text>
                   </View>
                   
-                  <View style={styles.jobCardHeaderInfo}>
-                    <Text style={styles.jobCardTitle} numberOfLines={2}>
-                      {job.title}
-                    </Text>
-                    <Text style={styles.jobCardCompany} numberOfLines={1}>
-                      {job.company}
-                    </Text>
-                  </View>
-
+                  {/* Status Badge Overlay for Pending/Rejected */}
+                  {isPending && (
+                    <View style={styles.statusOverlayPending}>
+                      <AlertCircle size={14} color="#FFFFFF" />
+                      <Text style={styles.statusOverlayText}>Pending</Text>
+                    </View>
+                  )}
+                  {isRejected && (
+                    <View style={styles.statusOverlayRejected}>
+                      <XCircle size={14} color="#FFFFFF" />
+                      <Text style={styles.statusOverlayText}>Rejected</Text>
+                    </View>
+                  )}
+                  
+                  {/* Bookmark Button - Overlay */}
                   <TouchableOpacity
-                    style={styles.bookmarkButton}
+                    style={[styles.bookmarkOverlay, isSaved && styles.bookmarkOverlayActive]}
                     onPress={() => toggleSaveJob(job.id)}
                     hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
                   >
                     <Bookmark
-                      size={20}
-                      color={isSaved ? '#4169E1' : '#9CA3AF'}
-                      fill={isSaved ? '#4169E1' : 'none'}
+                      size={18}
+                      color={isSaved ? '#0F172A' : '#FFFFFF'}
+                      fill={isSaved ? '#ffc857' : 'none'}
                     />
                   </TouchableOpacity>
                 </View>
 
-                {/* Job Details */}
-                <View style={styles.jobCardDetails}>
-                  <View style={styles.jobDetailItem}>
-                    <MapPin size={14} color="#6B7280" />
-                    <Text style={styles.jobDetailText} numberOfLines={1}>
-                      {job.location}
-                    </Text>
-                  </View>
-
-                  <View style={styles.jobDetailItem}>
-                    <Clock size={14} color="#6B7280" />
-                    <Text style={styles.jobDetailText}>{timeAgo}</Text>
-                  </View>
-
-                  {job.salary && (
-                    <View style={styles.jobDetailItem}>
-                      <DollarSign size={14} color="#6B7280" />
-                      <Text style={styles.jobDetailText} numberOfLines={1}>
-                        {job.salary}
-                      </Text>
-                    </View>
-                  )}
-                </View>
-
-                {/* Job Type Badge & Status */}
-                <View style={styles.jobCardFooter}>
-                  <View style={[styles.jobTypeBadge, { backgroundColor: `${jobColor}15` }]}>
-                    <Text style={[styles.jobTypeBadgeText, { color: jobColor }]}>
-                      {job.job_type}
-                    </Text>
-                  </View>
-
-                  {isOwner && (
-                    <View style={styles.ownerBadge}>
-                      <Check size={12} color="#10B981" />
-                      <Text style={styles.ownerBadgeText}>Your Post</Text>
-                    </View>
-                  )}
-
-                  {!isOwner && (
-                    <View style={styles.applyBadge}>
-                      <TrendingUp size={12} color="#4169E1" />
-                      <Text style={styles.applyBadgeText}>Apply Now</Text>
-                    </View>
-                  )}
-                </View>
-
-                {/* Description Preview */}
-                {job.description && (
-                  <Text style={styles.jobCardDescription} numberOfLines={2}>
-                    {job.description}
+                {/* Content Section */}
+                <View style={styles.cardContent}>
+                  {/* Title & Company */}
+                  <Text style={styles.jobTitle} numberOfLines={2}>
+                    {job.title}
                   </Text>
-                )}
+                  <Text style={styles.companyName} numberOfLines={1}>
+                    {job.company}
+                  </Text>
+
+                  {/* Meta Info Row */}
+                  <View style={styles.metaRow}>
+                    <View style={styles.metaItem}>
+                      <MapPin size={13} color="#64748B" />
+                      <Text style={styles.metaText} numberOfLines={1}>{job.location}</Text>
+                    </View>
+                    {job.salary && (
+                      <>
+                        <View style={styles.metaDot} />
+                        <View style={styles.metaItem}>
+                          <Wallet size={13} color="#64748B" />
+                          <Text style={styles.metaText} numberOfLines={1}>{job.salary}</Text>
+                        </View>
+                      </>
+                    )}
+                  </View>
+
+                  {/* Footer: Time + Action */}
+                  <View style={styles.cardFooter}>
+                    <View style={styles.timeTag}>
+                      <Clock size={12} color="#64748B" />
+                      <Text style={styles.timeTagText}>{timeAgo}</Text>
+                    </View>
+
+                    {isOwner ? (
+                      isPending ? (
+                        <View style={styles.pendingTag}>
+                          <AlertCircle size={12} color="#F59E0B" />
+                          <Text style={styles.pendingTagText}>Pending Review</Text>
+                        </View>
+                      ) : isRejected ? (
+                        <TouchableOpacity 
+                          style={styles.rejectedTag}
+                          onPress={() => {
+                            setSelectedRejectedJob(job);
+                            setShowRejectionModal(true);
+                          }}
+                        >
+                          <XCircle size={12} color="#EF4444" />
+                          <Text style={styles.rejectedTagText}>Rejected - Tap for details</Text>
+                        </TouchableOpacity>
+                      ) : (
+                        <View style={styles.ownerTag}>
+                          <Check size={12} color="#10B981" />
+                          <Text style={styles.ownerTagText}>Approved</Text>
+                        </View>
+                      )
+                    ) : (
+                      <View style={styles.applyTag}>
+                        <Text style={styles.applyTagText}>View Details</Text>
+                        <ChevronRight size={14} color="#0F172A" />
+                      </View>
+                    )}
+                  </View>
+                </View>
               </TouchableOpacity>
             );
           }}
@@ -642,7 +800,7 @@ export default function WorkplaceScreen() {
                   onPress={() => setShowFilterModal(false)}
                   style={styles.modalCloseButton}
                 >
-                  <X size={24} color="#1F2937" />
+                  <X size={24} color="#0F172A" />
                 </TouchableOpacity>
               </View>
 
@@ -712,17 +870,85 @@ export default function WorkplaceScreen() {
                     style={styles.filterApplyButton}
                     onPress={() => setShowFilterModal(false)}
                   >
-                    <LinearGradient
-                      colors={['#4169E1', '#3B5DCB']}
-                      style={styles.filterApplyButtonGradient}
-                      start={{ x: 0, y: 0 }}
-                      end={{ x: 1, y: 0 }}
-                    >
+                    <View style={styles.filterApplyButtonGradient}>
                       <Text style={styles.filterApplyButtonText}>Apply Filters</Text>
-                    </LinearGradient>
+                    </View>
                   </TouchableOpacity>
                 </View>
               </ScrollView>
+            </TouchableOpacity>
+          </View>
+        </TouchableOpacity>
+      </Modal>
+
+      {/* Rejection Reason Modal */}
+      <Modal
+        visible={showRejectionModal}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setShowRejectionModal(false)}
+      >
+        <TouchableOpacity
+          style={styles.modalOverlay}
+          activeOpacity={1}
+          onPress={() => setShowRejectionModal(false)}
+        >
+          <View style={styles.rejectionModalContainer}>
+            <TouchableOpacity activeOpacity={1} onPress={(e) => e.stopPropagation()}>
+              <View style={styles.rejectionModalContent}>
+                <View style={styles.rejectionModalHeader}>
+                  <View style={styles.rejectionIconContainer}>
+                    <XCircle size={32} color="#EF4444" />
+                  </View>
+                  <Text style={styles.rejectionModalTitle}>Job Listing Rejected</Text>
+                  <TouchableOpacity
+                    style={styles.rejectionCloseButton}
+                    onPress={() => setShowRejectionModal(false)}
+                  >
+                    <X size={24} color="#64748B" />
+                  </TouchableOpacity>
+                </View>
+                
+                {selectedRejectedJob && (
+                  <>
+                    <Text style={styles.rejectionJobTitle}>{selectedRejectedJob.title}</Text>
+                    <Text style={styles.rejectionCompany}>{selectedRejectedJob.company}</Text>
+                    
+                    <View style={styles.rejectionReasonContainer}>
+                      <Text style={styles.rejectionReasonLabel}>Reason for Rejection:</Text>
+                      <Text style={styles.rejectionReasonText}>
+                        {selectedRejectedJob.rejection_reason || 'No specific reason provided by the administrator.'}
+                      </Text>
+                    </View>
+                    
+                    <View style={styles.rejectionInfoBox}>
+                      <AlertCircle size={16} color="#64748B" />
+                      <Text style={styles.rejectionInfoText}>
+                        You can edit and resubmit this job listing after addressing the feedback above.
+                      </Text>
+                    </View>
+                    
+                    <View style={styles.rejectionModalActions}>
+                      <TouchableOpacity
+                        style={styles.rejectionEditButton}
+                        onPress={() => {
+                          setShowRejectionModal(false);
+                          debouncedRouter.push(`/edit-job-listing/${selectedRejectedJob.id}`);
+                        }}
+                      >
+                        <Text style={styles.rejectionEditButtonText}>Edit & Resubmit</Text>
+                      </TouchableOpacity>
+                      
+                      <TouchableOpacity
+                        style={styles.rejectionDismissButton}
+                        onPress={() => setShowRejectionModal(false)}
+                      >
+                        <Text style={styles.rejectionDismissButtonText}>Dismiss</Text>
+                      </TouchableOpacity>
+                    </View>
+                  </>
+                )}
+              </View>
             </TouchableOpacity>
           </View>
         </TouchableOpacity>
@@ -735,14 +961,9 @@ export default function WorkplaceScreen() {
           onPress={() => debouncedRouter.push('/create-job-listing')}
           activeOpacity={0.9}
         >
-          <LinearGradient
-            colors={['#4169E1', '#3B5DCB']}
-            style={styles.fabGradient}
-            start={{ x: 0, y: 0 }}
-            end={{ x: 1, y: 1 }}
-          >
-            <Plus size={24} color="#FFFFFF" />
-          </LinearGradient>
+          <View style={styles.fabGradient}>
+            <Plus size={26} color="#0F172A" />
+          </View>
         </TouchableOpacity>
       )}
     </View>
@@ -752,63 +973,79 @@ export default function WorkplaceScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#FFFFFF',
+    backgroundColor: '#F8FAFC',
   },
   
-  // Modern Header Styles
-  modernHeader: {
-    backgroundColor: '#FFFFFF',
-    paddingTop: 60,
+  // Header Styles
+  headerContainer: {
+    backgroundColor: '#0F172A',
+    paddingTop: 56,
     paddingBottom: 16,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.05,
-    shadowRadius: 8,
-    elevation: 2,
   },
-  headerTop: {
+  topBar: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: 20,
+    paddingHorizontal: 16,
     marginBottom: 16,
   },
-  backButton: {
-    padding: 10,
-    backgroundColor: '#F9FAFB',
+  iconButton: {
+    width: 40,
+    height: 40,
     borderRadius: 12,
+    backgroundColor: 'rgba(255, 255, 255, 0.1)',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
-  headerTitle: {
-    fontSize: 26,
+  screenTitle: {
+    fontSize: 20,
     fontFamily: 'Inter-Bold',
-    color: '#1F2937',
-    flex: 1,
-    textAlign: 'center',
-    letterSpacing: -0.5,
+    color: '#FFFFFF',
+    letterSpacing: -0.3,
   },
-  filterButton: {
-    padding: 10,
-    backgroundColor: '#F9FAFB',
-    borderRadius: 12,
-  },
-
-  // Search Bar
-  searchWrapper: {
-    paddingHorizontal: 20,
-    marginBottom: 16,
-  },
-  searchBar: {
+  topBarRight: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#F9FAFB',
-    borderRadius: 12,
-    paddingHorizontal: 16,
-    height: 50,
-    gap: 12,
-    borderWidth: 1,
-    borderColor: '#E5E7EB',
+    gap: 8,
   },
-  searchInput: {
+  adminBadge: {
+    position: 'absolute',
+    top: -4,
+    right: -4,
+    backgroundColor: '#EF4444',
+    borderRadius: 8,
+    minWidth: 16,
+    height: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 4,
+  },
+  adminBadgeText: {
+    color: '#FFFFFF',
+    fontSize: 9,
+    fontFamily: 'Inter-Bold',
+  },
+
+  // Search
+  searchContainer: {
+    paddingHorizontal: 16,
+    marginBottom: 14,
+  },
+  searchBox: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#FFFFFF',
+    borderRadius: 12,
+    paddingHorizontal: 14,
+    height: 46,
+    gap: 10,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.06,
+    shadowRadius: 8,
+    elevation: 2,
+  },
+  searchField: {
     flex: 1,
     fontSize: 15,
     fontFamily: 'Inter-Regular',
@@ -816,209 +1053,252 @@ const styles = StyleSheet.create({
   },
 
   // Tabs
-  tabsContainer: {
+  tabScrollContainer: {
+    paddingHorizontal: 16,
+    gap: 8,
+    marginBottom: 14,
+  },
+  tabItem: {
     flexDirection: 'row',
-    paddingHorizontal: 20,
-    gap: 10,
-    marginBottom: 16,
-    backgroundColor: '#F9FAFB',
-    marginHorizontal: 16,
-    borderRadius: 12,
-    padding: 4,
-  },
-  tab: {
-    flex: 1,
     alignItems: 'center',
+    paddingHorizontal: 14,
     paddingVertical: 10,
-    position: 'relative',
     borderRadius: 10,
+    backgroundColor: 'rgba(255, 255, 255, 0.08)',
+    gap: 6,
   },
-  tabActive: {
-    backgroundColor: '#FFFFFF',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.08,
-    shadowRadius: 4,
-    elevation: 2,
+  tabItemActive: {
+    backgroundColor: '#ffc857',
   },
-  tabText: {
-    fontSize: 14,
-    fontFamily: 'Inter-Medium',
-    color: '#6B7280',
+  tabLabel: {
+    fontSize: 13,
+    fontFamily: 'Inter-SemiBold',
+    color: '#9CA3AF',
   },
-  tabTextActive: {
-    color: '#4169E1',
+  tabLabelActive: {
+    color: '#0F172A',
+  },
+  tabCount: {
+    backgroundColor: 'rgba(255, 255, 255, 0.15)',
+    borderRadius: 6,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    marginLeft: 2,
+  },
+  tabCountActive: {
+    backgroundColor: 'rgba(15, 23, 42, 0.15)',
+  },
+  tabCountText: {
+    fontSize: 11,
     fontFamily: 'Inter-Bold',
+    color: '#9CA3AF',
   },
-  tabIndicator: {
-    position: 'absolute',
-    bottom: 0,
-    left: 0,
-    right: 0,
-    height: 0,
-    backgroundColor: 'transparent',
-    borderRadius: 0,
+  tabCountTextActive: {
+    color: '#0F172A',
+  },
+  applicationsButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: '#ffc857',
+    gap: 6,
+  },
+  applicationsButtonText: {
+    fontSize: 13,
+    fontFamily: 'Inter-SemiBold',
+    color: '#ffc857',
   },
 
-  // Quick Filters
-  quickFiltersContainer: {
-    paddingHorizontal: 20,
+  // Category Filters
+  categoryContainer: {
+    paddingHorizontal: 16,
     gap: 8,
+    paddingBottom: 4,
   },
-  quickFilterChip: {
+  categoryChip: {
     flexDirection: 'row',
     alignItems: 'center',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 20,
+    backgroundColor: 'rgba(255, 255, 255, 0.1)',
     gap: 6,
-    paddingHorizontal: 16,
-    paddingVertical: 10,
-    borderRadius: 24,
-    backgroundColor: '#F9FAFB',
-    borderWidth: 1.5,
-    borderColor: '#E5E7EB',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.05,
-    shadowRadius: 2,
-    elevation: 1,
   },
-  quickFilterText: {
-    fontSize: 13,
+  categoryChipText: {
+    fontSize: 12,
     fontFamily: 'Inter-Medium',
-    color: '#374151',
+    color: 'rgba(255, 255, 255, 0.8)',
   },
-  quickFilterTextActive: {
+  categoryChipTextActive: {
     color: '#FFFFFF',
-    fontFamily: 'Inter-SemiBold',
   },
 
   // Job Cards
   listContainer: {
-    paddingHorizontal: 16,
-    paddingTop: 16,
+    paddingHorizontal: 0,
+    paddingTop: 8,
     paddingBottom: 100,
-    backgroundColor: '#F9FAFB',
+    backgroundColor: '#F8FAFC',
   },
   jobCard: {
     backgroundColor: '#FFFFFF',
-    borderRadius: 16,
-    padding: 18,
-    marginBottom: 14,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 3 },
+    borderRadius: 20,
+    marginBottom: 16,
+    marginHorizontal: 16,
+    shadowColor: '#0F172A',
+    shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.08,
-    shadowRadius: 12,
+    shadowRadius: 16,
     elevation: 4,
-    borderWidth: 0,
-  },
-  jobCardHeader: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    marginBottom: 12,
-    gap: 12,
-  },
-  companyLogoContainer: {
-    width: 52,
-    height: 52,
-    borderRadius: 14,
-    backgroundColor: '#F9FAFB',
-    justifyContent: 'center',
-    alignItems: 'center',
-    borderWidth: 1.5,
-    borderColor: '#E5E7EB',
+    borderWidth: 1,
+    borderColor: '#F1F5F9',
     overflow: 'hidden',
   },
-  companyLogoImage: {
-    width: 52,
-    height: 52,
-    borderRadius: 14,
+  jobCardFirst: {
+    marginTop: 12,
   },
-  jobCardHeaderInfo: {
-    flex: 1,
+  
+  // Image Banner
+  imageBanner: {
+    width: '100%',
+    height: 160,
+    backgroundColor: '#F1F5F9',
+    position: 'relative',
   },
-  jobCardTitle: {
+  bannerImage: {
+    width: '100%',
+    height: '100%',
+    resizeMode: 'cover',
+  },
+  bannerPlaceholder: {
+    width: '100%',
+    height: '100%',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  typeBadgeOverlay: {
+    position: 'absolute',
+    top: 12,
+    left: 12,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 8,
+  },
+  typeBadgeOverlayText: {
+    fontSize: 11,
+    fontFamily: 'Inter-Bold',
+    color: '#FFFFFF',
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+  },
+  bookmarkOverlay: {
+    position: 'absolute',
+    top: 12,
+    right: 12,
+    width: 36,
+    height: 36,
+    borderRadius: 10,
+    backgroundColor: 'rgba(15, 23, 42, 0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  bookmarkOverlayActive: {
+    backgroundColor: '#ffc857',
+  },
+  
+  // Card Content
+  cardContent: {
+    padding: 16,
+  },
+  jobTitle: {
     fontSize: 18,
     fontFamily: 'Inter-Bold',
-    color: '#1F2937',
+    color: '#0F172A',
     marginBottom: 4,
-    lineHeight: 26,
+    lineHeight: 24,
     letterSpacing: -0.3,
   },
-  jobCardCompany: {
-    fontSize: 15,
+  companyName: {
+    fontSize: 14,
     fontFamily: 'Inter-Medium',
-    color: '#6B7280',
-  },
-  bookmarkButton: {
-    padding: 8,
-    backgroundColor: '#F9FAFB',
-    borderRadius: 10,
-  },
-
-  // Job Details
-  jobCardDetails: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 16,
+    color: '#64748B',
     marginBottom: 12,
   },
-  jobDetailItem: {
+
+  // Meta Row
+  metaRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flexWrap: 'wrap',
+    marginBottom: 14,
+    gap: 6,
+  },
+  metaItem: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 4,
   },
-  jobDetailText: {
-    fontSize: 14,
-    fontFamily: 'Inter-Medium',
-    color: '#6B7280',
+  metaText: {
+    fontSize: 13,
+    fontFamily: 'Inter-Regular',
+    color: '#64748B',
+  },
+  metaDot: {
+    width: 3,
+    height: 3,
+    borderRadius: 2,
+    backgroundColor: '#CBD5E1',
   },
 
-  // Job Footer
-  jobCardFooter: {
+  // Card Footer
+  cardFooter: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    marginBottom: 8,
+    paddingTop: 14,
+    borderTopWidth: 1,
+    borderTopColor: '#F1F5F9',
   },
-  jobTypeBadge: {
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 10,
-  },
-  jobTypeBadgeText: {
-    fontSize: 13,
-    fontFamily: 'Inter-Bold',
-  },
-  ownerBadge: {
+  timeTag: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 4,
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    backgroundColor: '#ECFDF5',
-    borderRadius: 6,
   },
-  ownerBadgeText: {
-    fontSize: 11,
+  timeTagText: {
+    fontSize: 12,
     fontFamily: 'Inter-Medium',
-    color: '#10B981',
+    color: '#64748B',
   },
-  applyBadge: {
+  ownerTag: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 4,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    backgroundColor: '#ECFDF5',
+    borderRadius: 8,
   },
-  applyBadgeText: {
+  ownerTagText: {
     fontSize: 12,
     fontFamily: 'Inter-SemiBold',
-    color: '#4169E1',
+    color: '#10B981',
   },
-
-  // Description
-  jobCardDescription: {
-    fontSize: 14,
-    fontFamily: 'Inter-Regular',
-    color: '#6B7280',
-    lineHeight: 20,
+  applyTag: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    backgroundColor: '#ffc857',
+    borderRadius: 8,
+  },
+  applyTagText: {
+    fontSize: 12,
+    fontFamily: 'Inter-Bold',
+    color: '#0F172A',
   },
 
   // Loading & Empty States
@@ -1026,54 +1306,56 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    paddingVertical: 60,
-    backgroundColor: '#FFFFFF',
+    paddingVertical: 80,
+    backgroundColor: '#F8FAFC',
   },
   loadingText: {
     marginTop: 16,
     fontSize: 15,
     fontFamily: 'Inter-Medium',
-    color: '#6B7280',
+    color: '#64748B',
   },
   emptyState: {
     alignItems: 'center',
-    paddingVertical: 80,
-    paddingHorizontal: 40,
+    paddingVertical: 60,
+    paddingHorizontal: 32,
     backgroundColor: '#FFFFFF',
     marginHorizontal: 16,
     marginTop: 20,
-    borderRadius: 20,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
+    borderRadius: 24,
+    shadowColor: '#0F172A',
+    shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.06,
-    shadowRadius: 8,
-    elevation: 2,
+    shadowRadius: 16,
+    elevation: 3,
+    borderWidth: 1,
+    borderColor: '#F1F5F9',
   },
   emptyTitle: {
-    fontSize: 22,
+    fontSize: 20,
     fontFamily: 'Inter-Bold',
-    color: '#1F2937',
+    color: '#0F172A',
     marginTop: 20,
     marginBottom: 8,
   },
   emptySubtitle: {
-    fontSize: 15,
+    fontSize: 14,
     fontFamily: 'Inter-Regular',
-    color: '#6B7280',
+    color: '#64748B',
     textAlign: 'center',
-    lineHeight: 22,
+    lineHeight: 21,
   },
   clearFiltersBtn: {
     marginTop: 24,
-    paddingHorizontal: 24,
-    paddingVertical: 12,
-    backgroundColor: '#4169E1',
+    paddingHorizontal: 28,
+    paddingVertical: 14,
+    backgroundColor: '#ffc857',
     borderRadius: 12,
   },
   clearFiltersBtnText: {
-    fontSize: 15,
-    fontFamily: 'Inter-SemiBold',
-    color: '#FFFFFF',
+    fontSize: 14,
+    fontFamily: 'Inter-Bold',
+    color: '#0F172A',
   },
 
   // Filter Modal
@@ -1089,7 +1371,7 @@ const styles = StyleSheet.create({
     maxHeight: height * 0.8,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: -4 },
-    shadowOpacity: 0.1,
+    shadowOpacity: 0.15,
     shadowRadius: 12,
     elevation: 8,
   },
@@ -1100,13 +1382,13 @@ const styles = StyleSheet.create({
     paddingHorizontal: 24,
     paddingTop: 24,
     paddingBottom: 18,
-    borderBottomWidth: 0,
-    backgroundColor: '#FAFAFA',
+    borderBottomWidth: 1,
+    borderBottomColor: '#E2E8F0',
   },
   filterModalTitle: {
     fontSize: 20,
     fontFamily: 'Inter-Bold',
-    color: '#1F2937',
+    color: '#0F172A',
   },
   modalCloseButton: {
     padding: 4,
@@ -1121,7 +1403,7 @@ const styles = StyleSheet.create({
   filterSectionTitle: {
     fontSize: 16,
     fontFamily: 'Inter-SemiBold',
-    color: '#1F2937',
+    color: '#0F172A',
     marginBottom: 12,
   },
   filterChipsGrid: {
@@ -1133,19 +1415,19 @@ const styles = StyleSheet.create({
     paddingHorizontal: 18,
     paddingVertical: 12,
     borderRadius: 12,
-    backgroundColor: '#FFFFFF',
+    backgroundColor: '#F8FAFC',
     borderWidth: 1.5,
-    borderColor: '#E5E7EB',
+    borderColor: '#E2E8F0',
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.04,
+    shadowOpacity: 0.05,
     shadowRadius: 3,
     elevation: 1,
   },
   filterChipActive: {
-    backgroundColor: '#4169E1',
-    borderColor: '#4169E1',
-    shadowColor: '#4169E1',
+    backgroundColor: '#0F172A',
+    borderColor: '#0F172A',
+    shadowColor: '#0F172A',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.2,
     shadowRadius: 6,
@@ -1154,10 +1436,10 @@ const styles = StyleSheet.create({
   filterChipText: {
     fontSize: 14,
     fontFamily: 'Inter-Medium',
-    color: '#374151',
+    color: '#64748B',
   },
   filterChipTextActive: {
-    color: '#FFFFFF',
+    color: '#ffc857',
     fontFamily: 'Inter-SemiBold',
   },
   filterModalActions: {
@@ -1170,46 +1452,242 @@ const styles = StyleSheet.create({
     paddingVertical: 14,
     borderRadius: 12,
     borderWidth: 2,
-    borderColor: '#E5E7EB',
+    borderColor: '#E2E8F0',
     alignItems: 'center',
   },
   filterClearButtonText: {
     fontSize: 15,
     fontFamily: 'Inter-SemiBold',
-    color: '#374151',
+    color: '#64748B',
   },
   filterApplyButton: {
     flex: 1,
     borderRadius: 12,
     overflow: 'hidden',
+    backgroundColor: '#0F172A',
   },
   filterApplyButtonGradient: {
     paddingVertical: 14,
     alignItems: 'center',
+    backgroundColor: '#0F172A',
   },
   filterApplyButtonText: {
     fontSize: 15,
     fontFamily: 'Inter-SemiBold',
-    color: '#FFFFFF',
+    color: '#ffc857',
   },
 
   // Floating Action Button
   fab: {
     position: 'absolute',
-    bottom: 28,
-    right: 24,
-    borderRadius: 32,
-    shadowColor: '#4169E1',
-    shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.35,
+    bottom: 30,
+    right: 20,
+    borderRadius: 18,
+    shadowColor: '#ffc857',
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.4,
     shadowRadius: 16,
     elevation: 10,
   },
   fabGradient: {
+    width: 56,
+    height: 56,
+    borderRadius: 18,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: '#ffc857',
+  },
+  
+  // Status Overlay Badges
+  statusOverlayPending: {
+    position: 'absolute',
+    bottom: 12,
+    left: 12,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 6,
+    backgroundColor: '#F59E0B',
+  },
+  statusOverlayRejected: {
+    position: 'absolute',
+    bottom: 12,
+    left: 12,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 6,
+    backgroundColor: '#EF4444',
+  },
+  statusOverlayText: {
+    fontSize: 11,
+    fontFamily: 'Inter-SemiBold',
+    color: '#FFFFFF',
+    textTransform: 'uppercase',
+  },
+  
+  // Job Card Status Styles
+  jobCardPending: {
+    borderWidth: 2,
+    borderColor: '#F59E0B',
+  },
+  jobCardRejected: {
+    borderWidth: 2,
+    borderColor: '#EF4444',
+  },
+  
+  // Status Tags in Footer
+  pendingTag: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 6,
+    backgroundColor: 'rgba(245, 158, 11, 0.1)',
+  },
+  pendingTagText: {
+    fontSize: 11,
+    fontFamily: 'Inter-SemiBold',
+    color: '#F59E0B',
+  },
+  rejectedTag: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 6,
+    backgroundColor: 'rgba(239, 68, 68, 0.1)',
+  },
+  rejectedTagText: {
+    fontSize: 11,
+    fontFamily: 'Inter-SemiBold',
+    color: '#EF4444',
+  },
+  
+  // Rejection Modal Styles
+  rejectionModalContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 24,
+  },
+  rejectionModalContent: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 20,
+    padding: 24,
+    width: '100%',
+    maxWidth: 360,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.2,
+    shadowRadius: 20,
+    elevation: 15,
+  },
+  rejectionModalHeader: {
+    alignItems: 'center',
+    marginBottom: 16,
+  },
+  rejectionIconContainer: {
     width: 64,
     height: 64,
     borderRadius: 32,
+    backgroundColor: 'rgba(239, 68, 68, 0.1)',
     justifyContent: 'center',
     alignItems: 'center',
+    marginBottom: 12,
+  },
+  rejectionModalTitle: {
+    fontSize: 20,
+    fontFamily: 'Inter-Bold',
+    color: '#0F172A',
+    textAlign: 'center',
+  },
+  rejectionCloseButton: {
+    position: 'absolute',
+    top: 0,
+    right: 0,
+    padding: 4,
+  },
+  rejectionJobTitle: {
+    fontSize: 16,
+    fontFamily: 'Inter-SemiBold',
+    color: '#0F172A',
+    textAlign: 'center',
+  },
+  rejectionCompany: {
+    fontSize: 14,
+    fontFamily: 'Inter-Regular',
+    color: '#64748B',
+    textAlign: 'center',
+    marginBottom: 20,
+  },
+  rejectionReasonContainer: {
+    backgroundColor: '#FEF2F2',
+    borderRadius: 12,
+    padding: 16,
+    marginBottom: 16,
+    borderWidth: 1,
+    borderColor: '#FECACA',
+  },
+  rejectionReasonLabel: {
+    fontSize: 12,
+    fontFamily: 'Inter-SemiBold',
+    color: '#DC2626',
+    marginBottom: 8,
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+  },
+  rejectionReasonText: {
+    fontSize: 14,
+    fontFamily: 'Inter-Regular',
+    color: '#7F1D1D',
+    lineHeight: 20,
+  },
+  rejectionInfoBox: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 10,
+    backgroundColor: '#F8FAFC',
+    borderRadius: 10,
+    padding: 12,
+    marginBottom: 20,
+  },
+  rejectionInfoText: {
+    flex: 1,
+    fontSize: 13,
+    fontFamily: 'Inter-Regular',
+    color: '#64748B',
+    lineHeight: 18,
+  },
+  rejectionModalActions: {
+    gap: 10,
+  },
+  rejectionEditButton: {
+    backgroundColor: '#0F172A',
+    paddingVertical: 14,
+    borderRadius: 12,
+    alignItems: 'center',
+  },
+  rejectionEditButtonText: {
+    fontSize: 15,
+    fontFamily: 'Inter-SemiBold',
+    color: '#ffc857',
+  },
+  rejectionDismissButton: {
+    backgroundColor: '#F1F5F9',
+    paddingVertical: 14,
+    borderRadius: 12,
+    alignItems: 'center',
+  },
+  rejectionDismissButtonText: {
+    fontSize: 15,
+    fontFamily: 'Inter-SemiBold',
+    color: '#64748B',
   },
 });

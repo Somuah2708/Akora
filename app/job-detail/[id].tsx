@@ -1,13 +1,14 @@
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Image, ActivityIndicator, Dimensions, Share, Animated, Linking, Alert } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Image, ActivityIndicator, Dimensions, Animated, Linking, Alert, StatusBar } from 'react-native';
 import { useFonts, Inter_400Regular, Inter_500Medium, Inter_600SemiBold, Inter_700Bold } from '@expo-google-fonts/inter';
 import { useEffect, useState, useRef } from 'react';
 import { SplashScreen, useRouter, useLocalSearchParams } from 'expo-router'
 import { DebouncedTouchable } from '@/components/DebouncedTouchable';
 import { debouncedRouter } from '@/utils/navigationDebounce';;
-import { ArrowLeft, Briefcase, MapPin, Building2, Wallet, Clock, Calendar, Edit, Share2, Bookmark, ChevronRight, TrendingUp, Users, CheckCircle, AlertCircle, Mail, Trash2 } from 'lucide-react-native';
+import { ArrowLeft, Briefcase, MapPin, Building2, Wallet, Clock, Calendar, Edit, Bookmark, ChevronRight, TrendingUp, Users, CheckCircle, AlertCircle, Mail, Trash2, ExternalLink, FileText } from 'lucide-react-native';
 import { supabase, Job } from '@/lib/supabase';
 import { useAuth } from '@/hooks/useAuth';
 import { LinearGradient } from 'expo-linear-gradient';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 SplashScreen.preventAutoHideAsync();
 
@@ -17,6 +18,7 @@ export default function JobDetailScreen() {
   const router = useRouter();
   const { id } = useLocalSearchParams();
   const { user } = useAuth();
+  const insets = useSafeAreaInsets();
   
   const [job, setJob] = useState<Job | null>(null);
   const [loading, setLoading] = useState(true);
@@ -76,17 +78,23 @@ export default function JobDetailScreen() {
       if (error) throw error;
 
       if (data) {
-        // Calculate days since posted
+        // Calculate time since posted (matching the format in workplace/index.tsx)
         const postedDate = new Date(data.created_at);
-        const today = new Date();
-        const diffTime = Math.abs(today.getTime() - postedDate.getTime());
-        const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+        const now = new Date();
+        const diffMs = now.getTime() - postedDate.getTime();
+        const diffMinutes = Math.floor(diffMs / (1000 * 60));
+        const diffHours = Math.floor(diffMs / (1000 * 60 * 60));
+        const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
+        
         let postedAgo = '';
-        if (diffDays === 0) postedAgo = 'Today';
+        if (diffMinutes < 1) postedAgo = 'Just now';
+        else if (diffMinutes < 60) postedAgo = `${diffMinutes} ${diffMinutes === 1 ? 'minute' : 'minutes'} ago`;
+        else if (diffHours < 24) postedAgo = `${diffHours} ${diffHours === 1 ? 'hour' : 'hours'} ago`;
         else if (diffDays === 1) postedAgo = 'Yesterday';
         else if (diffDays < 7) postedAgo = `${diffDays} days ago`;
-        else if (diffDays < 30) postedAgo = `${Math.floor(diffDays / 7)} weeks ago`;
-        else postedAgo = `${Math.floor(diffDays / 30)} months ago`;
+        else if (diffDays < 30) postedAgo = `${Math.floor(diffDays / 7)} ${Math.floor(diffDays / 7) === 1 ? 'week' : 'weeks'} ago`;
+        else if (diffDays < 365) postedAgo = `${Math.floor(diffDays / 30)} ${Math.floor(diffDays / 30) === 1 ? 'month' : 'months'} ago`;
+        else postedAgo = `${Math.floor(diffDays / 365)} ${Math.floor(diffDays / 365) === 1 ? 'year' : 'years'} ago`;
 
         // Calculate application deadline (only if custom deadline is set)
         let deadline: Date | null = null;
@@ -94,7 +102,7 @@ export default function JobDetailScreen() {
         
         if (data.application_deadline) {
           deadline = new Date(data.application_deadline);
-          daysUntilDeadline = Math.ceil((deadline.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
+          daysUntilDeadline = Math.ceil((deadline.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
         }
 
         setJob({
@@ -110,17 +118,6 @@ export default function JobDetailScreen() {
       alert('Failed to load job details');
     } finally {
       setLoading(false);
-    }
-  };
-
-  const handleShare = async () => {
-    try {
-      await Share.share({
-        message: `Check out this job opportunity: ${job?.title} at ${job?.company}`,
-        title: job?.title,
-      });
-    } catch (error) {
-      console.error('Error sharing:', error);
     }
   };
 
@@ -183,7 +180,8 @@ export default function JobDetailScreen() {
   if (!fontsLoaded || loading) {
     return (
       <View style={[styles.container, styles.centerContent]}>
-        <ActivityIndicator size="large" color="#4169E1" />
+        <StatusBar barStyle="light-content" />
+        <ActivityIndicator size="large" color="#ffc857" />
         <Text style={styles.loadingText}>Loading job details...</Text>
       </View>
     );
@@ -192,6 +190,7 @@ export default function JobDetailScreen() {
   if (!job) {
     return (
       <View style={[styles.container, styles.centerContent]}>
+        <StatusBar barStyle="light-content" />
         <Briefcase size={64} color="#E5E7EB" />
         <Text style={styles.errorText}>Job not found</Text>
         <TouchableOpacity style={styles.backButtonAlt} onPress={() => debouncedRouter.back()}>
@@ -207,25 +206,30 @@ export default function JobDetailScreen() {
   const hasDeadline = daysLeft !== null;
   const isUrgent = hasDeadline && daysLeft < 7 && daysLeft > 0;
   const isClosed = hasDeadline && daysLeft <= 0;
+  
+  // Get the image URL
+  const imageUrl = job.image_url 
+    ? (typeof job.image_url === 'string' && job.image_url.startsWith('[') 
+        ? JSON.parse(job.image_url)[0] 
+        : job.image_url)
+    : null;
 
   return (
     <View style={styles.container}>
-      {/* Sticky Header */}
-      <View style={styles.header}>
+      <StatusBar barStyle="light-content" />
+      
+      {/* Dark Header - Floating Over Banner */}
+      <View style={[styles.header, { paddingTop: insets.top + 8 }]}>
         <TouchableOpacity onPress={() => debouncedRouter.back()} style={styles.headerButton}>
-          <ArrowLeft size={24} color="#1F2937" />
+          <ArrowLeft size={24} color="#FFFFFF" />
         </TouchableOpacity>
         
         <View style={styles.headerActions}>
-          <TouchableOpacity onPress={handleShare} style={styles.headerButton}>
-            <Share2 size={22} color="#6B7280" />
-          </TouchableOpacity>
-          
-          <TouchableOpacity onPress={toggleSave} style={styles.headerButton}>
+          <TouchableOpacity onPress={toggleSave} style={[styles.headerButton, isSaved && styles.headerButtonSaved]}>
             <Bookmark
               size={22}
-              color={isSaved ? '#4169E1' : '#6B7280'}
-              fill={isSaved ? '#4169E1' : 'none'}
+              color={isSaved ? '#0F172A' : '#FFFFFF'}
+              fill={isSaved ? '#ffc857' : 'none'}
             />
           </TouchableOpacity>
           
@@ -241,10 +245,10 @@ export default function JobDetailScreen() {
           
           {isOwner && (
             <TouchableOpacity
-              style={styles.headerButton}
+              style={[styles.headerButton, styles.headerButtonEdit]}
               onPress={() => debouncedRouter.push(`/edit-job-listing/${job.id}`)}
             >
-              <Edit size={20} color="#4169E1" />
+              <Edit size={20} color="#ffc857" />
             </TouchableOpacity>
           )}
         </View>
@@ -254,211 +258,207 @@ export default function JobDetailScreen() {
         style={styles.content}
         showsVerticalScrollIndicator={false}
         scrollEventThrottle={16}
+        contentContainerStyle={{ paddingBottom: 100 }}
         onScroll={Animated.event(
           [{ nativeEvent: { contentOffset: { y: scrollY } } }],
           { useNativeDriver: false }
         )}
       >
-        {/* Hero Section with Company Branding */}
-        <LinearGradient
-          colors={[`${jobColor}15`, `${jobColor}05`]}
-          style={styles.heroSection}
-        >
-          <View style={styles.companyLogoContainer}>
-            {job.image_url ? (
-              <Image
-                source={{ uri: typeof job.image_url === 'string' && job.image_url.startsWith('[') 
-                  ? JSON.parse(job.image_url)[0] 
-                  : job.image_url 
-                }}
-                style={styles.companyLogoImage}
-              />
-            ) : (
-              <View style={[styles.companyLogo, { backgroundColor: jobColor + '20' }]}>
-                <Building2 size={40} color={jobColor} />
-              </View>
-            )}
+        {/* Banner Image Section */}
+        <View style={styles.bannerContainer}>
+          {imageUrl ? (
+            <Image source={{ uri: imageUrl }} style={styles.bannerImage} />
+          ) : (
+            <View style={[styles.bannerPlaceholder, { backgroundColor: `${jobColor}15` }]}>
+              <Building2 size={60} color={jobColor} />
+            </View>
+          )}
+          <LinearGradient
+            colors={['transparent', 'rgba(15, 23, 42, 0.95)']}
+            style={styles.bannerGradient}
+          />
+          
+          {/* Job Type Badge on Banner */}
+          <View style={[styles.bannerTypeBadge, { backgroundColor: jobColor }]}>
+            <Text style={styles.bannerTypeBadgeText}>{job.job_type}</Text>
           </View>
-
-          <Text style={styles.jobTitle}>{job.title}</Text>
-          <Text style={styles.companyName}>{job.company}</Text>
-
-          {/* Key Info Pills */}
-          <View style={styles.infoPills}>
-            <View style={[styles.pill, { backgroundColor: jobColor + '15' }]}>
-              <Text style={[styles.pillText, { color: jobColor }]}>{job.job_type}</Text>
-            </View>
-            
-            <View style={styles.pill}>
-              <MapPin size={14} color="#6B7280" />
-              <Text style={styles.pillText}>{job.location}</Text>
-            </View>
-            
-            <View style={styles.pill}>
-              <Clock size={14} color="#6B7280" />
-              <Text style={styles.pillText}>{(job as any).postedAgo}</Text>
+          
+          {/* Title & Company Overlay */}
+          <View style={styles.bannerOverlay}>
+            <Text style={styles.bannerJobTitle}>{job.title}</Text>
+            <View style={styles.bannerCompanyRow}>
+              <Building2 size={16} color="#94A3B8" />
+              <Text style={styles.bannerCompanyName}>{job.company}</Text>
             </View>
           </View>
-        </LinearGradient>
-
-        {/* Quick Stats */}
-        <View style={styles.statsContainer}>
+        </View>
+        
+        {/* Quick Info Bar */}
+        <View style={styles.quickInfoBar}>
+          <View style={styles.quickInfoItem}>
+            <MapPin size={16} color="#ffc857" />
+            <Text style={styles.quickInfoText}>{job.location}</Text>
+          </View>
+          <View style={styles.quickInfoDivider} />
+          <View style={styles.quickInfoItem}>
+            <Clock size={16} color="#ffc857" />
+            <Text style={styles.quickInfoText}>{(job as any).postedAgo}</Text>
+          </View>
           {job.salary && (
-            <View style={styles.statCard}>
-              <View style={styles.statIconContainer}>
-                <Wallet size={20} color="#10B981" />
+            <>
+              <View style={styles.quickInfoDivider} />
+              <View style={styles.quickInfoItem}>
+                <Wallet size={16} color="#ffc857" />
+                <Text style={styles.quickInfoText}>{job.salary}</Text>
               </View>
-              <Text style={styles.statLabel}>Salary</Text>
-              <Text style={styles.statValue}>{job.salary}</Text>
+            </>
+          )}
+        </View>
+
+        {/* Status & Stats Section */}
+        <View style={styles.mainContent}>
+          {/* Deadline Card */}
+          {hasDeadline && (
+            <View style={[styles.deadlineCard, isClosed && styles.deadlineCardClosed, isUrgent && styles.deadlineCardUrgent]}>
+              <View style={styles.deadlineIconWrap}>
+                <Calendar size={22} color={isClosed ? '#EF4444' : isUrgent ? '#F59E0B' : '#ffc857'} />
+              </View>
+              <View style={styles.deadlineContent}>
+                <Text style={styles.deadlineLabel}>Application Deadline</Text>
+                <Text style={[styles.deadlineValue, isClosed && styles.deadlineValueClosed, isUrgent && styles.deadlineValueUrgent]}>
+                  {isClosed ? 'Applications Closed' : isUrgent ? `${daysLeft} days left - Closing Soon!` : `${daysLeft} days remaining`}
+                </Text>
+              </View>
+            </View>
+          )}
+          
+          {!hasDeadline && !isOwner && (
+            <View style={styles.openApplicationCard}>
+              <CheckCircle size={20} color="#10B981" />
+              <Text style={styles.openApplicationText}>Applications Open - No Deadline</Text>
             </View>
           )}
 
-          {(job as any).daysUntilDeadline !== null && (
-            <View style={styles.statCard}>
-              <View style={styles.statIconContainer}>
-                <Calendar size={20} color={isUrgent ? '#EF4444' : '#4169E1'} />
-              </View>
-              <Text style={styles.statLabel}>Deadline</Text>
-              <Text style={[styles.statValue, isUrgent && styles.statValueUrgent]}>
-                {daysLeft > 0 ? `${daysLeft} days left` : 'Closed'}
-              </Text>
-            </View>
-          )}
-
+          {/* Owner Actions Card */}
           {isOwner && (
-            <View style={styles.statCard}>
-              <View style={styles.statIconContainer}>
-                <Users size={20} color="#8B5CF6" />
+            <TouchableOpacity
+              style={styles.ownerCard}
+              onPress={() => debouncedRouter.push(`/job-applications-review/${job.id}`)}
+              activeOpacity={0.8}
+            >
+              <View style={styles.ownerCardLeft}>
+                <View style={styles.ownerIconWrap}>
+                  <Users size={22} color="#FFFFFF" />
+                </View>
+                <View>
+                  <Text style={styles.ownerCardTitle}>Your Posting</Text>
+                  <Text style={styles.ownerCardSubtitle}>View and manage applications</Text>
+                </View>
               </View>
-              <Text style={styles.statLabel}>Applications</Text>
-              <Text style={styles.statValue}>View All</Text>
+              <ChevronRight size={22} color="#ffc857" />
+            </TouchableOpacity>
+          )}
+
+          {/* Job Description */}
+          <View style={styles.section}>
+            <View style={styles.sectionHeader}>
+              <View style={[styles.sectionIconContainer, { backgroundColor: 'rgba(255, 200, 87, 0.1)' }]}>
+                <FileText size={20} color="#ffc857" />
+              </View>
+              <Text style={styles.sectionTitle}>About This Role</Text>
+            </View>
+            <Text style={styles.bodyText}>{job.description}</Text>
+          </View>
+
+          {/* Requirements */}
+          {job.requirements && (
+            <View style={styles.section}>
+              <View style={styles.sectionHeader}>
+                <View style={[styles.sectionIconContainer, { backgroundColor: 'rgba(16, 185, 129, 0.1)' }]}>
+                  <CheckCircle size={20} color="#10B981" />
+                </View>
+                <Text style={styles.sectionTitle}>Requirements</Text>
+              </View>
+              <Text style={styles.bodyText}>{job.requirements}</Text>
+            </View>
+          )}
+
+          {/* Contact Information */}
+          {job.contact_email && (
+            <View style={styles.section}>
+              <View style={styles.sectionHeader}>
+                <View style={[styles.sectionIconContainer, { backgroundColor: 'rgba(255, 200, 87, 0.1)' }]}>
+                  <Mail size={20} color="#ffc857" />
+                </View>
+                <Text style={styles.sectionTitle}>Contact</Text>
+              </View>
+              <TouchableOpacity 
+                style={styles.contactEmailCard}
+                onPress={() => {
+                  const emailUrl = `mailto:${job.contact_email}`;
+                  Linking.openURL(emailUrl).catch(err => console.error('Error opening email:', err));
+                }}
+                activeOpacity={0.8}
+              >
+                <View style={styles.contactIconWrap}>
+                  <Mail size={18} color="#ffc857" />
+                </View>
+                <View style={styles.contactTextWrap}>
+                  <Text style={styles.contactLabel}>Email</Text>
+                  <Text style={styles.contactEmailText}>{job.contact_email}</Text>
+                </View>
+                <ExternalLink size={18} color="#64748B" />
+              </TouchableOpacity>
             </View>
           )}
         </View>
-
-        {/* Status Banner */}
-        {isOwner ? (
-          <TouchableOpacity
-            style={styles.statusBanner}
-            onPress={() => debouncedRouter.push(`/job-applications-review/${job.id}`)}
-          >
-            <LinearGradient
-              colors={['#10B981', '#059669']}
-              style={styles.statusBannerGradient}
-              start={{ x: 0, y: 0 }}
-              end={{ x: 1, y: 0 }}
-            >
-              <CheckCircle size={20} color="#FFFFFF" />
-              <Text style={styles.statusBannerText}>Your Posting - View Applications</Text>
-              <ChevronRight size={20} color="#FFFFFF" />
-            </LinearGradient>
-          </TouchableOpacity>
-        ) : isClosed ? (
-          <View style={styles.closedBanner}>
-            <AlertCircle size={20} color="#EF4444" />
-            <Text style={styles.closedBannerText}>Applications Closed</Text>
-          </View>
-        ) : isUrgent ? (
-          <View style={styles.urgentBanner}>
-            <TrendingUp size={20} color="#F59E0B" />
-            <Text style={styles.urgentBannerText}>Closing Soon - Apply Now!</Text>
-          </View>
-        ) : !hasDeadline ? (
-          <View style={styles.openBanner}>
-            <CheckCircle size={20} color="#10B981" />
-            <Text style={styles.openBannerText}>Applications Open - No Deadline</Text>
-          </View>
-        ) : null}
-
-        {/* Job Description */}
-        <View style={styles.section}>
-          <View style={styles.sectionHeader}>
-            <View style={styles.sectionIconContainer}>
-              <Briefcase size={20} color="#4169E1" />
-            </View>
-            <Text style={styles.sectionTitle}>Job Description</Text>
-          </View>
-          <Text style={styles.bodyText}>{job.description}</Text>
-        </View>
-
-        {/* Requirements */}
-        {job.requirements && (
-          <View style={styles.section}>
-            <View style={styles.sectionHeader}>
-              <View style={styles.sectionIconContainer}>
-                <CheckCircle size={20} color="#10B981" />
-              </View>
-              <Text style={styles.sectionTitle}>Requirements</Text>
-            </View>
-            <Text style={styles.bodyText}>{job.requirements}</Text>
-          </View>
-        )}
-
-        {/* Contact Information */}
-        {job.contact_email && (
-          <View style={styles.section}>
-            <View style={styles.sectionHeader}>
-              <View style={styles.sectionIconContainer}>
-                <Mail size={20} color="#4169E1" />
-              </View>
-              <Text style={styles.sectionTitle}>Contact Information</Text>
-            </View>
-            <TouchableOpacity 
-              style={styles.contactEmailCard}
-              onPress={() => {
-                const emailUrl = `mailto:${job.contact_email}`;
-                Linking.openURL(emailUrl).catch(err => console.error('Error opening email:', err));
-              }}
-            >
-              <Mail size={18} color="#4169E1" />
-              <Text style={styles.contactEmailText}>{job.contact_email}</Text>
-              <ChevronRight size={18} color="#9CA3AF" />
-            </TouchableOpacity>
-          </View>
-        )}
-
-        {/* Bottom Spacing */}
-        <View style={{ height: 120 }} />
       </ScrollView>
 
-      {/* Floating Action Button */}
+      {/* Bottom Action Bar - Dark Theme */}
       {!isOwner && !isClosed && (
-        <View style={styles.fabContainer}>
-          <TouchableOpacity
-            style={styles.fab}
-            onPress={() => debouncedRouter.push(`/job-application/${job.id}`)}
-            activeOpacity={0.9}
-          >
-            <LinearGradient
-              colors={['#4169E1', '#3B5DCB']}
-              style={styles.fabGradient}
-              start={{ x: 0, y: 0 }}
-              end={{ x: 1, y: 1 }}
+        <View style={[styles.bottomBar, { paddingBottom: insets.bottom + 16 }]}>
+          <View style={styles.bottomBarContent}>
+            {job.salary && (
+              <View style={styles.bottomBarSalary}>
+                <Text style={styles.bottomBarSalaryLabel}>Salary</Text>
+                <Text style={styles.bottomBarSalaryValue}>{job.salary}</Text>
+              </View>
+            )}
+            <TouchableOpacity
+              style={styles.applyButton}
+              onPress={() => debouncedRouter.push(`/job-application/${job.id}`)}
+              activeOpacity={0.9}
             >
-              <Text style={styles.fabText}>Apply Now</Text>
-              <ChevronRight size={20} color="#FFFFFF" />
-            </LinearGradient>
-          </TouchableOpacity>
+              <Text style={styles.applyButtonText}>Apply Now</Text>
+              <ChevronRight size={20} color="#0F172A" />
+            </TouchableOpacity>
+          </View>
         </View>
       )}
 
       {isOwner && (
-        <View style={styles.fabContainer}>
-          <TouchableOpacity
-            style={styles.fab}
-            onPress={() => debouncedRouter.push(`/job-applications-review/${job.id}`)}
-            activeOpacity={0.9}
-          >
-            <LinearGradient
-              colors={['#10B981', '#059669']}
-              style={styles.fabGradient}
-              start={{ x: 0, y: 0 }}
-              end={{ x: 1, y: 1 }}
+        <View style={[styles.bottomBar, { paddingBottom: insets.bottom + 16 }]}>
+          <View style={styles.bottomBarContent}>
+            <View style={styles.bottomBarInfo}>
+              <Text style={styles.bottomBarInfoLabel}>Manage Listing</Text>
+              <Text style={styles.bottomBarInfoValue}>Review applicants</Text>
+            </View>
+            <TouchableOpacity
+              style={styles.viewApplicationsButton}
+              onPress={() => debouncedRouter.push(`/job-applications-review/${job.id}`)}
+              activeOpacity={0.9}
             >
-              <Users size={20} color="#FFFFFF" />
-              <Text style={styles.fabText}>View Applications</Text>
-            </LinearGradient>
-          </TouchableOpacity>
+              <Users size={18} color="#0F172A" />
+              <Text style={styles.viewApplicationsButtonText}>Applications</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      )}
+      
+      {isClosed && !isOwner && (
+        <View style={[styles.bottomBarClosed, { paddingBottom: insets.bottom + 16 }]}>
+          <AlertCircle size={20} color="#EF4444" />
+          <Text style={styles.closedText}>Applications are closed for this position</Text>
         </View>
       )}
     </View>
@@ -468,23 +468,24 @@ export default function JobDetailScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#F9FAFB',
+    backgroundColor: '#F8FAFC',
   },
   centerContent: {
     justifyContent: 'center',
     alignItems: 'center',
     padding: 32,
+    backgroundColor: '#0F172A',
   },
   loadingText: {
     fontSize: 16,
     fontFamily: 'Inter-Medium',
-    color: '#6B7280',
+    color: '#94A3B8',
     marginTop: 16,
   },
   errorText: {
     fontSize: 20,
     fontFamily: 'Inter-SemiBold',
-    color: '#1F2937',
+    color: '#FFFFFF',
     marginTop: 16,
     marginBottom: 8,
   },
@@ -492,37 +493,45 @@ const styles = StyleSheet.create({
     marginTop: 24,
     paddingHorizontal: 32,
     paddingVertical: 14,
-    backgroundColor: '#4169E1',
+    backgroundColor: '#ffc857',
     borderRadius: 12,
   },
   backButtonText: {
     fontSize: 16,
     fontFamily: 'Inter-SemiBold',
-    color: '#FFFFFF',
+    color: '#0F172A',
   },
 
-  // Header
+  // Header - Floating Dark
   header: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: 20,
-    paddingTop: 60,
-    paddingBottom: 16,
-    backgroundColor: '#FFFFFF',
-    borderBottomWidth: 1,
-    borderBottomColor: '#E5E7EB',
+    paddingHorizontal: 16,
+    paddingBottom: 12,
+    zIndex: 100,
   },
   headerButton: {
-    padding: 8,
-    borderRadius: 8,
+    padding: 10,
+    borderRadius: 12,
+    backgroundColor: 'rgba(15, 23, 42, 0.6)',
+  },
+  headerButtonSaved: {
+    backgroundColor: '#ffc857',
+  },
+  headerButtonEdit: {
+    backgroundColor: 'rgba(255, 200, 87, 0.2)',
   },
   headerButtonDisabled: {
     opacity: 0.5,
   },
   headerActions: {
     flexDirection: 'row',
-    gap: 4,
+    gap: 8,
   },
 
   // Content
@@ -530,209 +539,225 @@ const styles = StyleSheet.create({
     flex: 1,
   },
 
-  // Hero Section
-  heroSection: {
-    paddingTop: 32,
-    paddingBottom: 24,
-    paddingHorizontal: 24,
-    alignItems: 'center',
+  // Banner Image Section
+  bannerContainer: {
+    width: '100%',
+    height: 280,
+    position: 'relative',
+    backgroundColor: '#1E293B',
   },
-  companyLogoContainer: {
-    marginBottom: 20,
+  bannerImage: {
+    width: '100%',
+    height: '100%',
+    resizeMode: 'cover',
   },
-  companyLogo: {
-    width: 80,
-    height: 80,
-    borderRadius: 20,
+  bannerPlaceholder: {
+    width: '100%',
+    height: '100%',
     justifyContent: 'center',
     alignItems: 'center',
-    borderWidth: 2,
-    borderColor: '#FFFFFF',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.1,
-    shadowRadius: 8,
-    elevation: 4,
   },
-  companyLogoImage: {
-    width: 80,
-    height: 80,
-    borderRadius: 20,
-    borderWidth: 2,
-    borderColor: '#FFFFFF',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.1,
-    shadowRadius: 8,
-    elevation: 4,
+  bannerGradient: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    height: 180,
   },
-  jobTitle: {
+  bannerTypeBadge: {
+    position: 'absolute',
+    top: 100,
+    left: 16,
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 10,
+  },
+  bannerTypeBadgeText: {
+    fontSize: 12,
+    fontFamily: 'Inter-Bold',
+    color: '#FFFFFF',
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+  },
+  bannerOverlay: {
+    position: 'absolute',
+    bottom: 20,
+    left: 16,
+    right: 16,
+  },
+  bannerJobTitle: {
     fontSize: 26,
     fontFamily: 'Inter-Bold',
-    color: '#1F2937',
-    textAlign: 'center',
+    color: '#FFFFFF',
     marginBottom: 8,
-    paddingHorizontal: 16,
+    lineHeight: 32,
+    letterSpacing: -0.5,
   },
-  companyName: {
-    fontSize: 18,
-    fontFamily: 'Inter-SemiBold',
-    color: '#6B7280',
-    textAlign: 'center',
-    marginBottom: 20,
-  },
-
-  // Info Pills
-  infoPills: {
+  bannerCompanyRow: {
     flexDirection: 'row',
-    flexWrap: 'wrap',
-    justifyContent: 'center',
+    alignItems: 'center',
     gap: 8,
   },
-  pill: {
+  bannerCompanyName: {
+    fontSize: 16,
+    fontFamily: 'Inter-SemiBold',
+    color: '#CBD5E1',
+  },
+  
+  // Quick Info Bar
+  quickInfoBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#0F172A',
+    paddingVertical: 14,
+    paddingHorizontal: 16,
+    flexWrap: 'wrap',
+    gap: 8,
+  },
+  quickInfoItem: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
-    paddingHorizontal: 14,
-    paddingVertical: 8,
-    backgroundColor: '#F3F4F6',
-    borderRadius: 20,
   },
-  pillText: {
+  quickInfoText: {
     fontSize: 13,
     fontFamily: 'Inter-Medium',
-    color: '#374151',
+    color: '#E2E8F0',
   },
-
-  // Stats Container
-  statsContainer: {
+  quickInfoDivider: {
+    width: 4,
+    height: 4,
+    borderRadius: 2,
+    backgroundColor: '#475569',
+  },
+  // Main Content Area
+  mainContent: {
+    padding: 16,
+    gap: 16,
+  },
+  
+  // Deadline Card
+  deadlineCard: {
     flexDirection: 'row',
-    paddingHorizontal: 16,
-    paddingVertical: 16,
-    gap: 12,
-  },
-  statCard: {
-    flex: 1,
+    alignItems: 'center',
     backgroundColor: '#FFFFFF',
     padding: 16,
     borderRadius: 16,
-    alignItems: 'center',
+    gap: 14,
     borderWidth: 1,
-    borderColor: '#E5E7EB',
+    borderColor: '#E2E8F0',
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.05,
-    shadowRadius: 4,
+    shadowOpacity: 0.06,
+    shadowRadius: 8,
     elevation: 2,
   },
-  statIconContainer: {
-    width: 40,
-    height: 40,
-    borderRadius: 12,
-    backgroundColor: '#F9FAFB',
+  deadlineCardUrgent: {
+    borderColor: '#FCD34D',
+    backgroundColor: '#FFFBEB',
+  },
+  deadlineCardClosed: {
+    borderColor: '#FCA5A5',
+    backgroundColor: '#FEF2F2',
+  },
+  deadlineIconWrap: {
+    width: 48,
+    height: 48,
+    borderRadius: 14,
+    backgroundColor: 'rgba(255, 200, 87, 0.1)',
     justifyContent: 'center',
     alignItems: 'center',
-    marginBottom: 8,
   },
-  statLabel: {
+  deadlineContent: {
+    flex: 1,
+  },
+  deadlineLabel: {
     fontSize: 12,
-    fontFamily: 'Inter-Regular',
-    color: '#9CA3AF',
+    fontFamily: 'Inter-Medium',
+    color: '#64748B',
     marginBottom: 4,
   },
-  statValue: {
-    fontSize: 15,
-    fontFamily: 'Inter-SemiBold',
-    color: '#1F2937',
-    textAlign: 'center',
+  deadlineValue: {
+    fontSize: 16,
+    fontFamily: 'Inter-Bold',
+    color: '#0F172A',
   },
-  statValueUrgent: {
-    color: '#EF4444',
-  },
-
-  // Status Banners
-  statusBanner: {
-    marginHorizontal: 16,
-    marginBottom: 16,
-    borderRadius: 12,
-    overflow: 'hidden',
-  },
-  statusBannerGradient: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: 16,
-    gap: 8,
-  },
-  statusBannerText: {
-    fontSize: 15,
-    fontFamily: 'Inter-SemiBold',
-    color: '#FFFFFF',
-  },
-  urgentBanner: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 8,
-    backgroundColor: '#FEF3C7',
-    marginHorizontal: 16,
-    marginBottom: 16,
-    paddingVertical: 14,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: '#FCD34D',
-  },
-  urgentBannerText: {
-    fontSize: 14,
-    fontFamily: 'Inter-SemiBold',
+  deadlineValueUrgent: {
     color: '#F59E0B',
   },
-  closedBanner: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 8,
-    backgroundColor: '#FEE2E2',
-    marginHorizontal: 16,
-    marginBottom: 16,
-    paddingVertical: 14,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: '#FCA5A5',
-  },
-  closedBannerText: {
-    fontSize: 14,
-    fontFamily: 'Inter-SemiBold',
+  deadlineValueClosed: {
     color: '#EF4444',
   },
-  openBanner: {
+  
+  openApplicationCard: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 8,
-    backgroundColor: '#D1FAE5',
-    marginHorizontal: 16,
-    marginBottom: 16,
+    gap: 10,
+    backgroundColor: '#ECFDF5',
     paddingVertical: 14,
     borderRadius: 12,
     borderWidth: 1,
-    borderColor: '#6EE7B7',
+    borderColor: '#A7F3D0',
   },
-  openBannerText: {
+  openApplicationText: {
     fontSize: 14,
     fontFamily: 'Inter-SemiBold',
     color: '#10B981',
+  },
+  
+  // Owner Card
+  ownerCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: '#0F172A',
+    padding: 18,
+    borderRadius: 16,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.15,
+    shadowRadius: 12,
+    elevation: 4,
+  },
+  ownerCardLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 14,
+  },
+  ownerIconWrap: {
+    width: 48,
+    height: 48,
+    borderRadius: 14,
+    backgroundColor: '#ffc857',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  ownerCardTitle: {
+    fontSize: 16,
+    fontFamily: 'Inter-Bold',
+    color: '#FFFFFF',
+  },
+  ownerCardSubtitle: {
+    fontSize: 13,
+    fontFamily: 'Inter-Regular',
+    color: '#94A3B8',
+    marginTop: 2,
   },
 
   // Sections
   section: {
     backgroundColor: '#FFFFFF',
-    marginHorizontal: 16,
-    marginBottom: 12,
     padding: 20,
     borderRadius: 16,
     borderWidth: 1,
-    borderColor: '#E5E7EB',
+    borderColor: '#E2E8F0',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.04,
+    shadowRadius: 8,
+    elevation: 2,
   },
   sectionHeader: {
     flexDirection: 'row',
@@ -741,72 +766,156 @@ const styles = StyleSheet.create({
     marginBottom: 16,
   },
   sectionIconContainer: {
-    width: 36,
-    height: 36,
-    borderRadius: 10,
-    backgroundColor: '#F9FAFB',
+    width: 40,
+    height: 40,
+    borderRadius: 12,
     justifyContent: 'center',
     alignItems: 'center',
   },
   sectionTitle: {
     fontSize: 18,
     fontFamily: 'Inter-Bold',
-    color: '#1F2937',
+    color: '#0F172A',
   },
   bodyText: {
     fontSize: 15,
     fontFamily: 'Inter-Regular',
-    color: '#6B7280',
-    lineHeight: 24,
+    color: '#475569',
+    lineHeight: 26,
   },
   contactEmailCard: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#F9FAFB',
-    padding: 14,
-    borderRadius: 12,
+    backgroundColor: '#F8FAFC',
+    padding: 16,
+    borderRadius: 14,
     borderWidth: 1,
-    borderColor: '#E5E7EB',
-    gap: 12,
+    borderColor: '#E2E8F0',
+    gap: 14,
+  },
+  contactIconWrap: {
+    width: 40,
+    height: 40,
+    borderRadius: 10,
+    backgroundColor: 'rgba(255, 200, 87, 0.1)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  contactTextWrap: {
+    flex: 1,
+  },
+  contactLabel: {
+    fontSize: 11,
+    fontFamily: 'Inter-Medium',
+    color: '#64748B',
+    marginBottom: 2,
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
   },
   contactEmailText: {
-    flex: 1,
     fontSize: 15,
     fontFamily: 'Inter-SemiBold',
-    color: '#4169E1',
+    color: '#0F172A',
   },
 
-  // Floating Action Button
-  fabContainer: {
+  // Bottom Action Bar - Dark Theme
+  bottomBar: {
     position: 'absolute',
     bottom: 0,
     left: 0,
     right: 0,
-    paddingHorizontal: 16,
-    paddingVertical: 16,
-    backgroundColor: '#FFFFFF',
-    borderTopWidth: 1,
-    borderTopColor: '#E5E7EB',
+    backgroundColor: '#0F172A',
+    paddingHorizontal: 20,
+    paddingTop: 16,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: -4 },
-    shadowOpacity: 0.1,
-    shadowRadius: 12,
-    elevation: 8,
+    shadowOpacity: 0.15,
+    shadowRadius: 16,
+    elevation: 10,
   },
-  fab: {
-    borderRadius: 12,
-    overflow: 'hidden',
+  bottomBarContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
   },
-  fabGradient: {
+  bottomBarSalary: {
+    flex: 1,
+  },
+  bottomBarSalaryLabel: {
+    fontSize: 11,
+    fontFamily: 'Inter-Medium',
+    color: '#94A3B8',
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+  },
+  bottomBarSalaryValue: {
+    fontSize: 18,
+    fontFamily: 'Inter-Bold',
+    color: '#FFFFFF',
+    marginTop: 2,
+  },
+  bottomBarInfo: {
+    flex: 1,
+  },
+  bottomBarInfoLabel: {
+    fontSize: 11,
+    fontFamily: 'Inter-Medium',
+    color: '#94A3B8',
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+  },
+  bottomBarInfoValue: {
+    fontSize: 14,
+    fontFamily: 'Inter-SemiBold',
+    color: '#FFFFFF',
+    marginTop: 2,
+  },
+  applyButton: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
+    backgroundColor: '#ffc857',
+    paddingHorizontal: 28,
     paddingVertical: 16,
+    borderRadius: 14,
+    gap: 6,
+  },
+  applyButtonText: {
+    fontSize: 16,
+    fontFamily: 'Inter-Bold',
+    color: '#0F172A',
+  },
+  viewApplicationsButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#ffc857',
+    paddingHorizontal: 20,
+    paddingVertical: 16,
+    borderRadius: 14,
     gap: 8,
   },
-  fabText: {
-    fontSize: 17,
+  viewApplicationsButtonText: {
+    fontSize: 15,
     fontFamily: 'Inter-Bold',
-    color: '#FFFFFF',
+    color: '#0F172A',
+  },
+  bottomBarClosed: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 10,
+    backgroundColor: '#0F172A',
+    paddingHorizontal: 20,
+    paddingTop: 20,
+  },
+  closedText: {
+    fontSize: 14,
+    fontFamily: 'Inter-SemiBold',
+    color: '#EF4444',
   },
 });

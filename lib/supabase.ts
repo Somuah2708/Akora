@@ -310,6 +310,9 @@ export type Job = {
   image_url?: string;
   is_featured: boolean;
   is_approved: boolean;
+  rejection_reason?: string | null;
+  admin_reviewed_at?: string | null;
+  admin_reviewed_by?: string | null;
   created_at: string;
   updated_at: string;
   user?: Profile;

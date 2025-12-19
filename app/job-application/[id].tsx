@@ -328,7 +328,7 @@ export default function JobApplicationScreen() {
         {/* Application Form Section */}
         <View style={styles.applicationSection}>
           <View style={styles.sectionHeader}>
-            <FileText size={24} color="#4169E1" />
+            <FileText size={24} color="#ffc857" />
             <Text style={styles.sectionTitle}>Your Application</Text>
           </View>
 
@@ -394,7 +394,7 @@ export default function JobApplicationScreen() {
           <View style={styles.formGroup}>
             <Text style={styles.label}>Upload Resume/CV *</Text>
             <TouchableOpacity style={styles.uploadButton} onPress={pickDocument}>
-              <Upload size={24} color="#4169E1" />
+              <Upload size={24} color="#ffc857" />
               <Text style={styles.uploadButtonText}>
                 {resumeName || 'Choose PDF or Word file'}
               </Text>
@@ -413,7 +413,7 @@ export default function JobApplicationScreen() {
           <View style={styles.formGroup}>
             <Text style={styles.label}>Additional Documents (Optional)</Text>
             <TouchableOpacity style={styles.uploadButton} onPress={pickAdditionalDocs}>
-              <Upload size={24} color="#4169E1" />
+              <Upload size={24} color="#ffc857" />
               <Text style={styles.uploadButtonText}>
                 Upload Certificates, Portfolio, etc.
               </Text>
@@ -431,7 +431,7 @@ export default function JobApplicationScreen() {
 
           {/* Professional Details */}
           <View style={[styles.sectionHeader, { marginTop: 24 }]}>
-            <Briefcase size={20} color="#4169E1" />
+            <Briefcase size={20} color="#ffc857" />
             <Text style={styles.sectionTitle}>Professional Details (Optional)</Text>
           </View>
 
@@ -456,7 +456,7 @@ export default function JobApplicationScreen() {
               <DollarSign size={20} color="#666666" />
               <TextInput
                 style={styles.input}
-                placeholder="e.g., $3,000/month"
+                placeholder="e.g., GH₵3,000/month"
                 placeholderTextColor="#999999"
                 value={expectedSalary}
                 onChangeText={setExpectedSalary}
@@ -520,10 +520,10 @@ export default function JobApplicationScreen() {
             disabled={submitting}
           >
             {submitting ? (
-              <ActivityIndicator color="#FFFFFF" size="small" />
+              <ActivityIndicator color="#ffc857" size="small" />
             ) : (
               <>
-                <Send size={20} color="#FFFFFF" />
+                <Send size={20} color="#ffc857" />
                 <Text style={styles.submitButtonText}>Submit Application</Text>
               </>
             )}
@@ -694,9 +694,9 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#EBF0FF',
+    backgroundColor: '#0F172A',
     borderWidth: 2,
-    borderColor: '#4169E1',
+    borderColor: '#1E293B',
     borderStyle: 'dashed',
     borderRadius: 12,
     padding: 20,
@@ -705,7 +705,7 @@ const styles = StyleSheet.create({
   uploadButtonText: {
     fontSize: 14,
     fontFamily: 'Inter-SemiBold',
-    color: '#4169E1',
+    color: '#ffc857',
   },
   fileInfo: {
     flexDirection: 'row',
@@ -742,18 +742,18 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#4169E1',
+    backgroundColor: '#0F172A',
     paddingVertical: 16,
     borderRadius: 12,
     gap: 8,
   },
   submitButtonDisabled: {
-    backgroundColor: '#CBD5E1',
+    backgroundColor: '#475569',
   },
   submitButtonText: {
     fontSize: 16,
     fontFamily: 'Inter-SemiBold',
-    color: '#FFFFFF',
+    color: '#ffc857',
   },
   backButton: {
     backgroundColor: '#4169E1',
