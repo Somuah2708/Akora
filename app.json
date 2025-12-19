@@ -46,7 +46,8 @@
       [
         "expo-document-picker",
         {}
-      ]
+      ],
+      "expo-web-browser"
     ],
     "experiments": {
       "typedRoutes": true

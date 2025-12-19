@@ -25,90 +25,8 @@ import { registerForPushNotificationsAsync } from '@/lib/pushNotifications';
 import { supabase } from '@/lib/supabase';
 import { Platform } from 'react-native';
 import * as Notifications from 'expo-notifications';
-// import * as Sentry from '@sentry/react-native';
 import ErrorBoundary from '@/lib/errorBoundary';
 import { setupGlobalErrorHandlers } from '@/lib/globalErrorHandler';
-
-/* SENTRY DISABLED
-Sentry.init({
-  dsn: 'https://300dd3fe7142a2a34ca08cf77ce39769@o4510042293731328.ingest.de.sentry.io/4510459892531280',
-
-  // Set tracesSampleRate to 1.0 to capture 100% of transactions for performance monitoring.
-  tracesSampleRate: 1.0, // Always 100% to catch everything
-  
-  // Enable native crash reporting (CRITICAL for iOS/Android crashes)
-  enableNative: true,
-  enableNativeCrashHandling: true,
-  enableNativeNagger: true,
-  
-  // Enable auto session tracking
-  enableAutoSessionTracking: true,
-  
-  // Add environment
-  environment: __DEV__ ? 'development' : 'production',
-  
-  // ALWAYS enable debug mode to see what's being sent
-  debug: true, // Force TRUE to see Sentry logs in terminal
-  
-  // Attach stack traces to errors
-  attachStacktrace: true,
-
-  // Adds more context data to events (IP address, cookies, user, etc.)
-  sendDefaultPii: true,
-
-  // Attach screenshots on errors (CRITICAL for UI bugs)
-  attachScreenshot: true,
-  
-  // Attach view hierarchy (CRITICAL for understanding UI state)
-  attachViewHierarchy: true,
-
-  // Enable Logs
-  enableLogs: true,
-
-  // Configure Session Replay (100% capture in dev)
-  replaysSessionSampleRate: __DEV__ ? 1.0 : 0.1, // 100% in dev, 10% in prod
-  replaysOnErrorSampleRate: 1.0, // Always capture on error
-  
-  // Maximum breadcrumbs to keep
-  maxBreadcrumbs: 100,
-  
-  // beforeSend hook to log EVERY event before sending
-  beforeSend(event, hint) {
-    console.log('🚨 [SENTRY] About to send event:', {
-      type: event.type,
-      level: event.level,
-      message: event.message,
-      exception: event.exception?.values?.[0]?.type,
-      timestamp: new Date().toISOString()
-    });
-    
-    // Log the full error details
-    if (hint?.originalException) {
-      console.log('🚨 [SENTRY] Original exception:', hint.originalException);
-    }
-    
-    // Always send the event
-    return event;
-  },
-  
-  // beforeBreadcrumb hook to log EVERY breadcrumb
-  beforeBreadcrumb(breadcrumb) {
-    console.log('🍞 [SENTRY] Breadcrumb:', breadcrumb);
-    return breadcrumb;
-  },
-  
-  integrations: [
-    Sentry.mobileReplayIntegration({
-      maskAllText: false,
-      maskAllImages: false,
-      maskAllVectors: false,
-    }),
-    Sentry.feedbackIntegration(),
-  ],
-});
-
-console.log('✅ [SENTRY] Initialized successfully');
-*/
 
 // Setup global error handlers to catch ALL errors
 setupGlobalErrorHandlers();
@@ -124,18 +42,6 @@ function RootLayout() {
   // Register push notifications when user logs in
   useEffect(() => {
     console.log('🔐 Push token registration effect triggered. User:', user?.id, 'Loading:', loading);
-    
-    /* SENTRY DISABLED
-    // Set Sentry user context
-    if (user) {
-      Sentry.setUser({
-        id: user.id,
-        email: user.email,
-      });
-    } else {
-      Sentry.setUser(null);
-    }
-    */
     
     // Wait for auth to finish loading AND user to exist
     if (loading) {

@@ -20,7 +20,6 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import { useLocalSearchParams, useRouter } from 'expo-router'
 import { DebouncedTouchable } from '@/components/DebouncedTouchable';
 import { debouncedRouter } from '@/utils/navigationDebounce';;
-import * as Sentry from '@sentry/react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { ArrowLeft, Send, Smile, X, Play, Pause, Check, CheckCheck, FileText, Paperclip, Camera, Image as ImageIcon, File } from 'lucide-react-native';
 import * as ImagePicker from 'expo-image-picker';
@@ -839,10 +838,6 @@ export default function DirectMessageScreen() {
       console.log('✅ [SEND] Message sent successfully!');
     } catch (error) {
       console.error('❌ [SEND] Error sending message:', error);
-      Sentry.captureException(error, {
-        tags: { feature: 'chat', action: 'send-message' },
-        contexts: { message: { friendId, messageLength: messageToSend.length } }
-      });
       
       // Mark message as failed
       setFailedMessages(prev => new Set(prev).add(tempId));
@@ -993,12 +988,6 @@ export default function DirectMessageScreen() {
     if (!user || !friendId) return;
     
     console.log('🖼️ [Photos] User tapped photos button');
-    Sentry.addBreadcrumb({
-      category: 'user-action',
-      message: 'User tapped photos button in chat',
-      level: 'info',
-      data: { userId: user.id, friendId }
-    });
     
     setShowAttachMenu(false);
     
@@ -1046,18 +1035,6 @@ export default function DirectMessageScreen() {
       }
     } catch (error: any) {
       console.error('❌ [Photos] Error in handlePickPhotos:', error);
-      Sentry.captureException(error, {
-        tags: { feature: 'media-picker', action: 'pick-photos' },
-        contexts: {
-          media: {
-            userId: user?.id,
-            friendId,
-            platform: Platform.OS,
-            errorMessage: error?.message,
-            timestamp: new Date().toISOString()
-          }
-        }
-      });
       Alert.alert('Media Error', `Failed to pick media: ${error?.message || 'Unknown error'}`);
     } finally {
       setUploadingMedia(false);
@@ -1069,45 +1046,15 @@ export default function DirectMessageScreen() {
     if (!user || !friendId) return;
     
     console.log('🎥 [Camera] User tapped camera button');
-    Sentry.addBreadcrumb({
-      category: 'user-action',
-      message: 'User tapped camera button in chat',
-      level: 'info',
-      data: { userId: user.id, friendId }
-    });
-    
-    // CRITICAL: Send error to Sentry BEFORE attempting camera (in case of freeze)
-    Sentry.captureMessage('⚠️ CAMERA ATTEMPT STARTED - If you see this without a success message, app froze', {
-      level: 'warning',
-      tags: { 
-        feature: 'camera',
-        action: 'pre-launch',
-        platform: Platform.OS,
-        userId: user.id
-      }
-    });
     
     setShowAttachMenu(false);
     
     try {
       console.log('🎥 [Camera] Calling takeMedia()...');
-      Sentry.addBreadcrumb({
-        category: 'camera',
-        message: 'About to launch camera - FREEZE DETECTION POINT',
-        level: 'warning'
-      });
       
       // Set a timeout to detect freeze (native crashes don't trigger catch)
       const freezeTimeout = setTimeout(() => {
         console.error('⏰ [Camera] CAMERA FREEZE DETECTED - App unresponsive for 5 seconds');
-        Sentry.captureMessage('🚨 CAMERA FREEZE DETECTED - App became unresponsive after launching camera', {
-          level: 'error',
-          tags: { 
-            feature: 'camera',
-            issue: 'freeze',
-            platform: Platform.OS 
-          }
-        });
       }, 5000); // 5 second timeout
       
       const media = await takeMedia();
@@ -1115,18 +1062,7 @@ export default function DirectMessageScreen() {
       // If we get here, camera didn't freeze - clear timeout
       clearTimeout(freezeTimeout);
       
-      // Success message
-      Sentry.captureMessage('✅ CAMERA COMPLETED SUCCESSFULLY', {
-        level: 'info',
-        tags: { feature: 'camera', action: 'success' }
-      });
-      
       console.log('🎥 [Camera] takeMedia() returned:', media ? 'success' : 'cancelled');
-      Sentry.addBreadcrumb({
-        category: 'camera',
-        message: media ? 'Camera returned media - NO FREEZE' : 'Camera cancelled by user',
-        level: 'info'
-      });
       
       if (!media) {
         console.log('🎥 [Camera] User cancelled, returning');
@@ -1168,17 +1104,6 @@ export default function DirectMessageScreen() {
       }
     } catch (error) {
       console.error('❌ [Camera] Error in handleTakeCamera:', error);
-      Sentry.captureException(error, {
-        tags: { feature: 'camera', action: 'take-photo' },
-        contexts: {
-          camera: {
-            userId: user?.id,
-            friendId,
-            platform: Platform.OS,
-            timestamp: new Date().toISOString()
-          }
-        }
-      });
       Alert.alert('Camera Error', 'Failed to open camera. Please try again.');
     } finally {
       setUploadingMedia(false);
@@ -1190,12 +1115,6 @@ export default function DirectMessageScreen() {
     if (!user || !friendId) return;
     
     console.log('📄 [Documents] User tapped documents button');
-    Sentry.addBreadcrumb({
-      category: 'user-action',
-      message: 'User tapped documents button in chat',
-      level: 'info',
-      data: { userId: user.id, friendId }
-    });
     
     setShowAttachMenu(false);
     
@@ -1240,18 +1159,6 @@ export default function DirectMessageScreen() {
       }
     } catch (error: any) {
       console.error('❌ [Documents] Error in handlePickDocument:', error);
-      Sentry.captureException(error, {
-        tags: { feature: 'document-picker', action: 'pick-document' },
-        contexts: {
-          document: {
-            userId: user?.id,
-            friendId,
-            platform: Platform.OS,
-            errorMessage: error?.message,
-            timestamp: new Date().toISOString()
-          }
-        }
-      });
       Alert.alert('Document Error', `Failed to pick document: ${error?.message || 'Unknown error'}`);
     } finally {
       setUploadingMedia(false);

@@ -4,7 +4,6 @@ import * as DocumentPicker from 'expo-document-picker';
 import * as ImageManipulator from 'expo-image-manipulator';
 import { Audio } from 'expo-av';
 import { Platform, Alert } from 'react-native';
-import * as Sentry from '@sentry/react-native';
 
 const IMAGE_MAX_BYTES = 5 * 1024 * 1024; // 5MB
 const VIDEO_MAX_BYTES = 25 * 1024 * 1024; // 25MB
@@ -30,32 +29,13 @@ const getPickerMediaTypes = (): any => {
 // ==================== CAMERA ====================
 export async function takeMedia(): Promise<ImagePicker.ImagePickerAsset | null> {
   console.log('📷 [takeMedia] Function called');
-  
-  Sentry.addBreadcrumb({
-    category: 'media',
-    message: 'takeMedia() called',
-    level: 'info',
-    data: { platform: Platform.OS }
-  });
 
   try {
     console.log('📷 [takeMedia] Checking camera permission...');
-    Sentry.addBreadcrumb({
-      category: 'permissions',
-      message: 'Requesting camera permission',
-      level: 'info'
-    });
 
     // Step 1: Request permission FIRST (this prevents freeze)
     const camPerm = await ImagePicker.requestCameraPermissionsAsync();
     console.log('📷 [takeMedia] Permission result:', camPerm.status);
-    
-    Sentry.addBreadcrumb({
-      category: 'permissions',
-      message: 'Camera permission result',
-      level: camPerm.status === 'granted' ? 'info' : 'warning',
-      data: { status: camPerm.status, canAskAgain: camPerm.canAskAgain }
-    });
 
     if (camPerm.status !== 'granted') {
       console.log('📷 [takeMedia] Permission denied');
@@ -68,29 +48,7 @@ export async function takeMedia(): Promise<ImagePicker.ImagePickerAsset | null> 
 
     // Step 2: NOW launch camera (permission already granted, no freeze)
     console.log('📷 [takeMedia] ✅ Permission granted, launching camera...');
-    
-    // CRITICAL: Capture to Sentry BEFORE the native call that causes freeze
-    // This will show up in Sentry even if app crashes
-    const sentryEventId = Sentry.captureMessage('🚨 NATIVE CAMERA LAUNCH IMMINENT - Next line causes freeze on iOS', {
-      level: 'error',
-      tags: { 
-        feature: 'camera-native',
-        critical: 'freeze-point',
-        platform: Platform.OS,
-        timestamp: new Date().toISOString()
-      },
-      extra: {
-        warning: 'If you see this error without a success message, the app froze during ImagePicker.launchCameraAsync',
-        nextLine: 'ImagePicker.launchCameraAsync',
-        iosVersion: Platform.Version
-      }
-    });
-    
-    // Force Sentry to send this immediately (don't wait for batch)
-    Sentry.flush();
-
     console.log('📷 [takeMedia] 🚨 CALLING ImagePicker.launchCameraAsync NOW...');
-    console.log('📷 [takeMedia] 🚨 IF YOU SEE THIS LOG BUT NOT THE NEXT ONE, APP FROZE HERE');
     
     const result = await ImagePicker.launchCameraAsync({
       mediaTypes: getPickerMediaTypes(),
@@ -98,22 +56,7 @@ export async function takeMedia(): Promise<ImagePicker.ImagePickerAsset | null> 
       allowsEditing: false,
     });
     
-    console.log('📷 [takeMedia] 🎉 launchCameraAsync returned successfully - NO FREEZE!');
-    console.log('📷 [takeMedia] 🎉 THIS LOG PROVES THE APP DID NOT FREEZE');
-    
-    // Send success message to Sentry
-    Sentry.captureMessage('✅ Camera launched successfully - NO FREEZE detected', {
-      level: 'info',
-      tags: { feature: 'camera-native', result: 'success' }
-    });
-    
-    Sentry.addBreadcrumb({
-      category: 'camera',
-      message: 'Camera launched successfully - app did not freeze',
-      level: 'info',
-      data: { cancelled: result.canceled }
-    });
-
+    console.log('📷 [takeMedia] 🎉 launchCameraAsync returned successfully');
     console.log('📷 [takeMedia] Camera result:', result.canceled ? 'cancelled' : 'success');
 
     if (result.canceled) {
@@ -134,17 +77,6 @@ export async function takeMedia(): Promise<ImagePicker.ImagePickerAsset | null> 
       message: error?.message,
       code: error?.code,
       stack: error?.stack
-    });
-    
-    Sentry.captureException(error, {
-      tags: { function: 'takeMedia', platform: Platform.OS },
-      contexts: {
-        camera: {
-          errorMessage: error?.message,
-          errorCode: error?.code,
-          platform: Platform.OS
-        }
-      }
     });
     
     Alert.alert('Camera Error', `Failed to open camera: ${error?.message || 'Unknown error'}`);
@@ -171,13 +103,6 @@ export async function pickMedia(): Promise<ImagePicker.ImagePickerAsset | null> 
 
   // Step 2: NOW launch gallery
   console.log('🖼️ Launching photo library...');
-  
-  Sentry.addBreadcrumb({
-    category: 'gallery',
-    message: 'About to launch image library',
-    level: 'info',
-    data: { platform: Platform.OS }
-  });
 
   try {
     // Use helper so we support both new and old expo-image-picker APIs
@@ -217,10 +142,6 @@ export async function pickMedia(): Promise<ImagePicker.ImagePickerAsset | null> 
     // EXPO GO iOS BUG: Sometimes returns success but no assets
     if (Platform.OS === 'ios' && !result.canceled && !result.assets) {
       console.log('🖼️ [pickMedia] 🐛 iOS Expo Go bug detected - picker returned empty');
-      Sentry.captureMessage('iOS Expo Go gallery picker returned empty assets', {
-        level: 'warning',
-        tags: { platform: 'ios', bug: 'expo-go-gallery' }
-      });
       Alert.alert(
         'Media Library Issue',
         'Expo Go has limited media library access on iOS. For full functionality, please use a development build.\n\nTry selecting the photo again, or use the camera instead.'
@@ -234,17 +155,6 @@ export async function pickMedia(): Promise<ImagePicker.ImagePickerAsset | null> 
       message: error?.message,
       code: error?.code,
       stack: error?.stack
-    });
-    
-    Sentry.captureException(error, {
-      tags: { function: 'pickMedia', platform: Platform.OS },
-      contexts: {
-        gallery: {
-          errorMessage: error?.message,
-          errorCode: error?.code,
-          platform: Platform.OS
-        }
-      }
     });
     
     Alert.alert('Gallery Error', `Failed to open gallery: ${error?.message || 'Unknown error'}`);
@@ -295,7 +205,6 @@ export async function pickDocument(): Promise<{
     };
   } catch (error) {
     console.error('📄 [Documents] Error:', error);
-    Sentry.captureException(error, { extra: { source: 'pickDocument', platform: Platform.OS } });
     Alert.alert('Error', 'Failed to pick document. Please try again.');
     return null;
   }
@@ -415,15 +324,6 @@ export async function uploadMedia(
     return urlData.publicUrl;
   } catch (error: any) {
     console.error('❌ Upload error:', error);
-    Sentry.captureException(error, { 
-      extra: { 
-        source: 'uploadMedia',
-        type,
-        platform: Platform.OS,
-        fileSize: (error as any)?.fileSize,
-        fileName,
-      }
-    });
     Alert.alert('Upload Failed', 'Could not upload media. Please try again.');
     return null;
   }
@@ -488,14 +388,6 @@ export async function uploadDocument(
     return urlData.publicUrl;
   } catch (error: any) {
     console.error('❌ Document upload error:', error);
-    Sentry.captureException(error, { 
-      extra: {
-        source: 'uploadDocument',
-        platform: Platform.OS,
-        fileName,
-        mimeType,
-      }
-    });
     Alert.alert('Upload Failed', 'Could not upload document. Please try again.');
     return null;
   }
@@ -533,7 +425,6 @@ export async function startRecording(): Promise<boolean> {
     return true;
   } catch (error) {
     console.error('Error starting recording:', error);
-    Sentry.captureException(error, { extra: { source: 'startRecording', platform: Platform.OS } });
     Alert.alert('Error', 'Failed to start recording');
     recording = null;
     return false;
@@ -575,7 +466,6 @@ export async function stopRecording(userId: string): Promise<string | null> {
     return urlData.publicUrl;
   } catch (error) {
     console.error('Error stopping recording:', error);
-    Sentry.captureException(error, { extra: { source: 'stopRecording', platform: Platform.OS, userId } });
     Alert.alert('Error', 'Failed to save voice message');
     recording = null;
     return null;

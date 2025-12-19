@@ -11,7 +11,6 @@
 
 import * as ImagePicker from 'expo-image-picker';
 import { Platform, Alert } from 'react-native';
-import * as Sentry from '@sentry/react-native';
 
 /**
  * Safer camera launch with workarounds for Expo Go freeze
@@ -24,13 +23,6 @@ export async function takeCameraSafe(): Promise<ImagePicker.ImagePickerAsset | n
     console.log('📷 [SAFE] Checking current permission status...');
     const { status: currentStatus } = await ImagePicker.getCameraPermissionsAsync();
     console.log('📷 [SAFE] Current permission status:', currentStatus);
-    
-    Sentry.addBreadcrumb({
-      category: 'camera-safe',
-      message: 'Camera permission check',
-      level: 'info',
-      data: { currentStatus, platform: Platform.OS }
-    });
     
     // Step 2: If not granted, request permission with user warning
     if (currentStatus !== 'granted') {
@@ -79,17 +71,6 @@ export async function takeCameraSafe(): Promise<ImagePicker.ImagePickerAsset | n
     
   } catch (error: any) {
     console.error('❌ [SAFE] Error in takeCameraSafe:', error);
-    Sentry.captureException(error, {
-      tags: { function: 'takeCameraSafe', platform: Platform.OS },
-      contexts: {
-        camera: {
-          errorMessage: error?.message,
-          errorCode: error?.code,
-          platform: Platform.OS
-        }
-      }
-    });
-    
     Alert.alert('Camera Error', `Failed to access camera: ${error?.message || 'Unknown error'}`);
     return null;
   }
@@ -101,19 +82,6 @@ export async function takeCameraSafe(): Promise<ImagePicker.ImagePickerAsset | n
 async function launchCameraWithSafety(): Promise<ImagePicker.ImagePickerAsset | null> {
   console.log('📷 [SAFE] 🚨 About to launch camera native module...');
   
-  // Send pre-launch event to Sentry (will show even if app crashes)
-  Sentry.captureMessage('📷 Camera launch initiated - If this is last event, app crashed', {
-    level: 'warning',
-    tags: { 
-      stage: 'pre-camera-launch',
-      platform: Platform.OS,
-      timestamp: new Date().toISOString()
-    }
-  });
-  
-  // Force send immediately
-  await Sentry.flush(2000);
-  
   try {
     // WORKAROUND: Use lower quality to reduce memory pressure
     const result = await ImagePicker.launchCameraAsync({
@@ -124,12 +92,6 @@ async function launchCameraWithSafety(): Promise<ImagePicker.ImagePickerAsset | 
     });
     
     console.log('📷 [SAFE] ✅ Camera returned successfully!');
-    
-    // Send success event
-    Sentry.captureMessage('✅ Camera completed successfully - No crash', {
-      level: 'info',
-      tags: { stage: 'post-camera-launch', success: true }
-    });
     
     if (result.canceled) {
       console.log('📷 [SAFE] User cancelled');
@@ -145,19 +107,6 @@ async function launchCameraWithSafety(): Promise<ImagePicker.ImagePickerAsset | 
     
   } catch (error: any) {
     console.error('❌ [SAFE] Camera launch failed:', error);
-    
-    Sentry.captureException(error, {
-      tags: { function: 'launchCameraWithSafety', platform: Platform.OS },
-      contexts: {
-        camera: {
-          errorMessage: error?.message,
-          errorCode: error?.code,
-          platform: Platform.OS,
-          stage: 'during-launch'
-        }
-      }
-    });
-    
     throw error;
   }
 }

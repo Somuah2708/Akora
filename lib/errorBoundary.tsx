@@ -1,6 +1,5 @@
 import React from 'react';
 import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
-import * as Sentry from '@sentry/react-native';
 
 interface Props {
   children: React.ReactNode;
@@ -13,8 +12,7 @@ interface State {
 
 /**
  * Error Boundary Component
- * Catches React component errors and reports them to Sentry
- * Shows a fallback UI when errors occur
+ * Catches React component errors and shows a fallback UI
  */
 class ErrorBoundary extends React.Component<Props, State> {
   constructor(props: Props) {
@@ -28,15 +26,7 @@ class ErrorBoundary extends React.Component<Props, State> {
   }
 
   componentDidCatch(error: Error, errorInfo: React.ErrorInfo) {
-    // Log error to Sentry with component stack
-    Sentry.captureException(error, {
-      contexts: {
-        react: {
-          componentStack: errorInfo.componentStack,
-        },
-      },
-    });
-
+    // Log error to console for debugging
     console.error('Error Boundary caught an error:', error, errorInfo);
   }
 
@@ -54,7 +44,7 @@ class ErrorBoundary extends React.Component<Props, State> {
               {this.state.error?.message || 'An unexpected error occurred'}
             </Text>
             <Text style={styles.subtitle}>
-              Don't worry - this error has been reported and we'll fix it soon!
+              Please try again or restart the app.
             </Text>
             <TouchableOpacity style={styles.button} onPress={this.handleReset}>
               <Text style={styles.buttonText}>Try Again</Text>
