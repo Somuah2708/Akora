@@ -601,7 +601,7 @@ export default function EducationScreen() {
       {/* Full Screen Refresh Overlay */}
       {refreshing && (
         <View style={styles.loadingOverlay}>
-          <ActivityIndicator size="large" color="#ffc857" />
+          <ActivityIndicator size="large" color="#0F172A" />
         </View>
       )}
 
@@ -653,7 +653,7 @@ export default function EducationScreen() {
             style={styles.bookmarkIconButton}
             onPress={() => setBookmarkMenuVisible(!bookmarkMenuVisible)}
           >
-            <Star size={22} color="#ffc857" fill={bookmarkMenuVisible ? "#ffc857" : "none"} />
+            <Star size={22} color="#0F172A" fill={bookmarkMenuVisible ? "#0F172A" : "none"} />
           </TouchableOpacity>
         </View>
 
@@ -667,7 +667,7 @@ export default function EducationScreen() {
                 debouncedRouter.push('/education/saved-universities');
               }}
             >
-              <Building2 size={18} color="#ffc857" />
+              <Building2 size={18} color="#0F172A" />
               <Text style={styles.bookmarkDropdownText}>Saved Universities</Text>
             </TouchableOpacity>
             <View style={styles.bookmarkDropdownDivider} />
@@ -678,7 +678,7 @@ export default function EducationScreen() {
                 debouncedRouter.push('/education/saved-scholarships');
               }}
             >
-              <Award size={18} color="#ffc857" />
+              <Award size={18} color="#0F172A" />
               <Text style={styles.bookmarkDropdownText}>Saved Scholarships</Text>
             </TouchableOpacity>
             <View style={styles.bookmarkDropdownDivider} />
@@ -689,7 +689,7 @@ export default function EducationScreen() {
                 debouncedRouter.push('/education/saved-mentors');
               }}
             >
-              <Users size={18} color="#ffc857" />
+              <Users size={18} color="#0F172A" />
               <Text style={styles.bookmarkDropdownText}>Saved Alumni Mentors</Text>
             </TouchableOpacity>
           </View>
@@ -734,7 +734,7 @@ export default function EducationScreen() {
           <View style={styles.modernSectionHeader}>
             <View style={styles.headerLeft}>
               <View style={styles.headerIconBox}>
-                <Building2 size={24} color="#ffc857" />
+                <Building2 size={24} color="#0F172A" />
               </View>
               <View>
                 <Text style={styles.modernSectionTitle}>Ghanaian Universities</Text>
@@ -748,7 +748,7 @@ export default function EducationScreen() {
 
           {loading ? (
             <View style={styles.loadingContainer}>
-              <ActivityIndicator size="large" color="#ffc857" />
+              <ActivityIndicator size="large" color="#0F172A" />
               <Text style={styles.loadingText}>Loading universities...</Text>
             </View>
           ) : filteredUniversities.length > 0 ? (
@@ -791,8 +791,8 @@ export default function EducationScreen() {
                       >
                         <Star 
                           size={20} 
-                          color={bookmarkedIds.includes(university.id) ? "#ffc857" : "#FFFFFF"} 
-                          fill={bookmarkedIds.includes(university.id) ? "#ffc857" : "none"}
+                          color={bookmarkedIds.includes(university.id) ? "#0F172A" : "#FFFFFF"} 
+                          fill={bookmarkedIds.includes(university.id) ? "#0F172A" : "none"}
                           strokeWidth={2}
                         />
                       </TouchableOpacity>
@@ -800,7 +800,7 @@ export default function EducationScreen() {
                     <View style={styles.modernCardContent}>
                       <Text style={styles.modernCardTitle} numberOfLines={2}>{university.title}</Text>
                       <View style={styles.modernLocationRow}>
-                        <MapPin size={16} color="#ffc857" />
+                        <MapPin size={16} color="#0F172A" />
                         <Text style={styles.modernLocationText}>{university.location || 'Ghana'}</Text>
                       </View>
                       <Text style={styles.modernCardDescription} numberOfLines={3}>
@@ -968,8 +968,8 @@ export default function EducationScreen() {
                       >
                         <Star 
                           size={20} 
-                          color={bookmarkedIds.includes(scholarship.id) ? "#ffc857" : "#FFFFFF"} 
-                          fill={bookmarkedIds.includes(scholarship.id) ? "#ffc857" : "none"}
+                          color={bookmarkedIds.includes(scholarship.id) ? "#0F172A" : "#FFFFFF"} 
+                          fill={bookmarkedIds.includes(scholarship.id) ? "#0F172A" : "none"}
                           strokeWidth={2}
                         />
                       </TouchableOpacity>
@@ -1037,7 +1037,7 @@ export default function EducationScreen() {
                 style={styles.myRequestsButton}
                 onPress={() => debouncedRouter.push('/my-mentorship-requests')}
               >
-                <FileText size={16} color="#ffc857" />
+                <FileText size={16} color="#0F172A" />
                 <Text style={styles.myRequestsButtonText}>My Requests</Text>
               </TouchableOpacity>
               
@@ -1102,8 +1102,8 @@ export default function EducationScreen() {
                 >
                   <Star
                     size={20}
-                    color={favoriteMentorIds.includes(mentor.id) ? '#ffc857' : '#94A3B8'}
-                    fill={favoriteMentorIds.includes(mentor.id) ? '#ffc857' : 'none'}
+                    color={favoriteMentorIds.includes(mentor.id) ? '#0F172A' : '#94A3B8'}
+                    fill={favoriteMentorIds.includes(mentor.id) ? '#0F172A' : 'none'}
                     strokeWidth={2}
                   />
                 </TouchableOpacity>
@@ -1195,7 +1195,7 @@ export default function EducationScreen() {
         >
           <View style={styles.adminModalContent} onStartShouldSetResponder={() => true}>
             <View style={styles.adminModalHeader}>
-              <Settings size={24} color="#ffc857" />
+              <Settings size={24} color="#0F172A" />
               <Text style={styles.adminModalTitle}>Manage Education</Text>
             </View>
             
@@ -1206,7 +1206,7 @@ export default function EducationScreen() {
                 debouncedRouter.push('/admin-education-universities');
               }}
             >
-              <GraduationCap size={20} color="#ffc857" />
+              <GraduationCap size={20} color="#0F172A" />
               <Text style={styles.adminMenuItemText}>Universities</Text>
               <ChevronRight size={20} color="#94A3B8" />
             </TouchableOpacity>
@@ -1218,7 +1218,7 @@ export default function EducationScreen() {
                 debouncedRouter.push('/admin-education-scholarships');
               }}
             >
-              <Award size={20} color="#ffc857" />
+              <Award size={20} color="#0F172A" />
               <Text style={styles.adminMenuItemText}>Scholarships</Text>
               <ChevronRight size={20} color="#94A3B8" />
             </TouchableOpacity>
@@ -1230,7 +1230,7 @@ export default function EducationScreen() {
                 debouncedRouter.push('/admin-alumni-mentors');
               }}
             >
-              <Users size={20} color="#ffc857" />
+              <Users size={20} color="#0F172A" />
               <Text style={styles.adminMenuItemText}>Alumni Mentors</Text>
               <ChevronRight size={20} color="#94A3B8" />
             </TouchableOpacity>
@@ -1250,7 +1250,7 @@ export default function EducationScreen() {
 }const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#0F172A',
+    backgroundColor: '#FFFFFF',
   },
   loadingOverlay: {
     position: 'absolute',
@@ -1258,7 +1258,7 @@ export default function EducationScreen() {
     left: 0,
     right: 0,
     bottom: 0,
-    backgroundColor: '#0F172A',
+    backgroundColor: '#FFFFFF',
     zIndex: 9999,
     justifyContent: 'center',
     alignItems: 'center',
@@ -1270,13 +1270,13 @@ export default function EducationScreen() {
     paddingHorizontal: 16,
     paddingTop: 60,
     paddingBottom: 16,
-    backgroundColor: '#0F172A',
+    backgroundColor: '#FFFFFF',
   },
   backButton: {
     padding: 8,
   },
   heroHeader: {
-    backgroundColor: '#0F172A',
+    backgroundColor: '#FFFFFF',
     paddingTop: 48,
     paddingBottom: 12,
   },
@@ -1290,14 +1290,14 @@ export default function EducationScreen() {
   heroTitle: {
     fontSize: 20,
     fontFamily: 'Inter-SemiBold',
-    color: '#FFFFFF',
+    color: '#0F172A',
     letterSpacing: -0.4,
   },
   heroSubtitle: {
     paddingHorizontal: 20,
     fontSize: 13,
     fontFamily: 'Inter-Regular',
-    color: '#94A3B8',
+    color: '#64748B',
     marginTop: 4,
     marginBottom: 8,
     lineHeight: 18,
@@ -1306,11 +1306,11 @@ export default function EducationScreen() {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
-    backgroundColor: '#ffc857',
+    backgroundColor: '#0F172A',
     paddingHorizontal: 14,
     paddingVertical: 9,
     borderRadius: 12,
-    shadowColor: '#ffc857',
+    shadowColor: '#0F172A',
     shadowOffset: { width: 0, height: 3 },
     shadowOpacity: 0.4,
     shadowRadius: 8,
@@ -1319,19 +1319,19 @@ export default function EducationScreen() {
   heroManageText: {
     fontSize: 13,
     fontFamily: 'Inter-SemiBold',
-    color: '#0F172A',
+    color: '#FFFFFF',
     letterSpacing: 0.3,
   },
   title: {
     fontSize: 24,
     fontFamily: 'Inter-Bold',
-    color: '#FFFFFF',
+    color: '#0F172A',
     letterSpacing: -0.5,
   },
   subtitle: {
     fontSize: 13,
     fontFamily: 'Inter-Regular',
-    color: '#94A3B8',
+    color: '#64748B',
     marginTop: 4,
     textAlign: 'center',
   },
@@ -1349,29 +1349,29 @@ export default function EducationScreen() {
     flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#1E293B',
+    backgroundColor: '#F1F5F9',
     borderRadius: 16,
     paddingHorizontal: 18,
     height: 52,
     borderWidth: 1,
-    borderColor: '#334155',
+    borderColor: '#E2E8F0',
   },
   bookmarkIconButton: {
     width: 52,
     height: 52,
-    backgroundColor: '#1E293B',
+    backgroundColor: '#F1F5F9',
     borderRadius: 16,
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: 1,
-    borderColor: '#334155',
+    borderColor: '#E2E8F0',
   },
   searchInput: {
     flex: 1,
     marginLeft: 12,
     fontSize: 15,
     fontFamily: 'Inter-Regular',
-    color: '#FFFFFF',
+    color: '#0F172A',
   },
   typesScroll: {
     marginBottom: 24,
@@ -1383,18 +1383,18 @@ export default function EducationScreen() {
   typeButton: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#1E293B',
+    backgroundColor: '#F1F5F9',
     borderRadius: 14,
     paddingHorizontal: 18,
     paddingVertical: 14,
     gap: 8,
     borderWidth: 1.5,
-    borderColor: '#334155',
+    borderColor: '#E2E8F0',
   },
   activeTypeButton: {
-    backgroundColor: '#ffc857',
-    borderColor: '#ffc857',
-    shadowColor: '#ffc857',
+    backgroundColor: '#0F172A',
+    borderColor: '#0F172A',
+    shadowColor: '#0F172A',
     shadowOffset: { width: 0, height: 3 },
     shadowOpacity: 0.35,
     shadowRadius: 8,
@@ -1403,10 +1403,10 @@ export default function EducationScreen() {
   typeName: {
     fontSize: 14,
     fontFamily: 'Inter-SemiBold',
-    color: '#94A3B8',
+    color: '#64748B',
   },
   activeTypeName: {
-    color: '#0F172A',
+    color: '#FFFFFF',
   },
   section: {
     marginBottom: 32,
@@ -1421,7 +1421,7 @@ export default function EducationScreen() {
   sectionTitle: {
     fontSize: 20,
     fontFamily: 'Inter-Bold',
-    color: '#FFFFFF',
+    color: '#0F172A',
     letterSpacing: -0.4,
   },
   seeAllButton: {
@@ -1432,7 +1432,7 @@ export default function EducationScreen() {
   seeAllText: {
     fontSize: 14,
     fontFamily: 'Inter-Medium',
-    color: '#ffc857',
+    color: '#0F172A',
   },
   featuredContent: {
     paddingHorizontal: 20,
@@ -1441,18 +1441,18 @@ export default function EducationScreen() {
   featuredCard: {
     width: CARD_WIDTH,
     borderRadius: 20,
-    backgroundColor: '#1E293B',
+    backgroundColor: '#FFFFFF',
     shadowColor: '#000000',
     shadowOffset: {
       width: 0,
       height: 6,
     },
-    shadowOpacity: 0.3,
+    shadowOpacity: 0.1,
     shadowRadius: 12,
     elevation: 8,
     overflow: 'hidden',
     borderWidth: 1,
-    borderColor: '#334155',
+    borderColor: '#E2E8F0',
   },
   featuredImage: {
     width: '100%',
@@ -1464,7 +1464,7 @@ export default function EducationScreen() {
     right: 16,
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#ffc857',
+    backgroundColor: '#0F172A',
     paddingHorizontal: 14,
     paddingVertical: 8,
     borderRadius: 20,
@@ -1478,7 +1478,7 @@ export default function EducationScreen() {
   rankingText: {
     fontSize: 12,
     fontFamily: 'Inter-Bold',
-    color: '#0F172A',
+    color: '#FFFFFF',
   },
   featuredInfo: {
     padding: 20,
@@ -1487,7 +1487,7 @@ export default function EducationScreen() {
   universityName: {
     fontSize: 18,
     fontFamily: 'Inter-Bold',
-    color: '#FFFFFF',
+    color: '#0F172A',
     letterSpacing: -0.3,
   },
   locationInfo: {
@@ -1498,7 +1498,7 @@ export default function EducationScreen() {
   locationText: {
     fontSize: 14,
     fontFamily: 'Inter-Medium',
-    color: '#ffc857',
+    color: '#0F172A',
   },
   programTags: {
     flexDirection: 'row',
@@ -1506,7 +1506,7 @@ export default function EducationScreen() {
     gap: 10,
   },
   programTag: {
-    backgroundColor: '#334155',
+    backgroundColor: '#F1F5F9',
     paddingHorizontal: 12,
     paddingVertical: 6,
     borderRadius: 8,
@@ -1514,7 +1514,7 @@ export default function EducationScreen() {
   programText: {
     fontSize: 12,
     fontFamily: 'Inter-Medium',
-    color: '#CBD5E1',
+    color: '#64748B',
   },
   deadlineInfo: {
     flexDirection: 'row',
@@ -1524,21 +1524,21 @@ export default function EducationScreen() {
   },
   scholarshipCard: {
     flexDirection: 'row',
-    backgroundColor: '#1E293B',
+    backgroundColor: '#FFFFFF',
     marginHorizontal: 20,
     marginBottom: 20,
     borderRadius: 20,
     overflow: 'hidden',
-    shadowColor: '#ffc857',
+    shadowColor: '#0F172A',
     shadowOffset: {
       width: 0,
       height: 6,
     },
-    shadowOpacity: 0.25,
+    shadowOpacity: 0.15,
     shadowRadius: 12,
     elevation: 8,
     borderWidth: 1,
-    borderColor: '#334155',
+    borderColor: '#E2E8F0',
   },
   scholarshipImage: {
     flex: 1,
@@ -1547,7 +1547,7 @@ export default function EducationScreen() {
   scholarshipImageContainer: {
     width: 130,
     alignSelf: 'stretch',
-    backgroundColor: '#0F172A',
+    backgroundColor: '#F1F5F9',
   },
   scholarshipInfo: {
     flex: 1,
@@ -1558,7 +1558,7 @@ export default function EducationScreen() {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
-    backgroundColor: '#ffc857',
+    backgroundColor: '#0F172A',
     paddingHorizontal: 14,
     paddingVertical: 7,
     borderRadius: 10,
@@ -1567,13 +1567,13 @@ export default function EducationScreen() {
   scholarshipTypeText: {
     fontSize: 12,
     fontFamily: 'Inter-Bold',
-    color: '#0F172A',
+    color: '#FFFFFF',
     letterSpacing: 0.5,
   },
   scholarshipTitle: {
     fontSize: 17,
     fontFamily: 'Inter-Bold',
-    color: '#FFFFFF',
+    color: '#0F172A',
     lineHeight: 24,
     letterSpacing: -0.3,
   },
@@ -1591,7 +1591,7 @@ export default function EducationScreen() {
   detailText: {
     fontSize: 13,
     fontFamily: 'Inter-Medium',
-    color: '#94A3B8',
+    color: '#64748B',
   },
   quickActions: {
     flexDirection: 'row',
@@ -1603,33 +1603,33 @@ export default function EducationScreen() {
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#1E293B',
+    backgroundColor: '#F1F5F9',
     paddingVertical: 14,
     paddingHorizontal: 8,
     borderRadius: 14,
     borderWidth: 1.5,
-    borderColor: '#334155',
+    borderColor: '#E2E8F0',
   },
   quickActionText: {
     fontSize: 12,
     fontFamily: 'Inter-Bold',
-    color: '#ffc857',
+    color: '#0F172A',
     letterSpacing: 0.3,
     textAlign: 'center',
   },
   bookmarkDropdown: {
-    backgroundColor: '#1E293B',
+    backgroundColor: '#FFFFFF',
     borderRadius: 16,
     marginHorizontal: 20,
     marginBottom: 20,
     paddingVertical: 10,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.3,
+    shadowOpacity: 0.15,
     shadowRadius: 12,
     elevation: 8,
     borderWidth: 1,
-    borderColor: '#334155',
+    borderColor: '#E2E8F0',
   },
   bookmarkDropdownItem: {
     flexDirection: 'row',
@@ -1641,11 +1641,11 @@ export default function EducationScreen() {
   bookmarkDropdownText: {
     fontSize: 15,
     fontFamily: 'Inter-Medium',
-    color: '#FFFFFF',
+    color: '#0F172A',
   },
   bookmarkDropdownDivider: {
     height: 1,
-    backgroundColor: '#334155',
+    backgroundColor: '#E2E8F0',
     marginHorizontal: 20,
   },
   loadingText: {
@@ -1653,13 +1653,13 @@ export default function EducationScreen() {
     marginTop: 20,
     fontSize: 16,
     fontFamily: 'Inter-Medium',
-    color: '#94A3B8',
+    color: '#64748B',
   },
   emptyText: {
     textAlign: 'center',
     fontSize: 18,
     fontFamily: 'Inter-Bold',
-    color: '#CBD5E1',
+    color: '#64748B',
     marginTop: 40,
   },
   // Tab styles
@@ -1673,18 +1673,18 @@ export default function EducationScreen() {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#1E293B',
+    backgroundColor: '#F1F5F9',
     paddingVertical: 14,
     paddingHorizontal: 18,
     borderRadius: 16,
     borderWidth: 1.5,
-    borderColor: '#334155',
+    borderColor: '#E2E8F0',
     gap: 8,
   },
   activeTabButton: {
-    backgroundColor: '#ffc857',
-    borderColor: '#ffc857',
-    shadowColor: '#ffc857',
+    backgroundColor: '#0F172A',
+    borderColor: '#0F172A',
+    shadowColor: '#0F172A',
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.35,
     shadowRadius: 10,
@@ -1693,30 +1693,30 @@ export default function EducationScreen() {
   tabText: {
     fontSize: 13,
     fontFamily: 'Inter-Bold',
-    color: '#94A3B8',
+    color: '#64748B',
   },
   activeTabText: {
-    color: '#0F172A',
+    color: '#FFFFFF',
     letterSpacing: 0.3,
   },
   sectionCount: {
     fontSize: 14,
     fontFamily: 'Inter-Medium',
-    color: '#94A3B8',
+    color: '#64748B',
   },
   universityCard: {
-    backgroundColor: '#1E293B',
+    backgroundColor: '#FFFFFF',
     borderRadius: 20,
     marginHorizontal: 20,
     marginBottom: 20,
     overflow: 'hidden',
     shadowColor: '#000000',
     shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.3,
+    shadowOpacity: 0.1,
     shadowRadius: 12,
     elevation: 8,
     borderWidth: 1,
-    borderColor: '#334155',
+    borderColor: '#E2E8F0',
   },
   cardImage: {
     width: '100%',
@@ -1729,7 +1729,7 @@ export default function EducationScreen() {
   cardTitle: {
     fontSize: 19,
     fontFamily: 'Inter-Bold',
-    color: '#FFFFFF',
+    color: '#0F172A',
     lineHeight: 26,
     letterSpacing: -0.3,
   },
@@ -1741,7 +1741,7 @@ export default function EducationScreen() {
   cardDescription: {
     fontSize: 14,
     fontFamily: 'Inter-Regular',
-    color: '#94A3B8',
+    color: '#64748B',
     lineHeight: 22,
   },
   linkRow: {
@@ -1753,55 +1753,55 @@ export default function EducationScreen() {
   linkText: {
     fontSize: 14,
     fontFamily: 'Inter-Bold',
-    color: '#ffc857',
+    color: '#0F172A',
   },
   emptyContainer: {
     alignItems: 'center',
     padding: 50,
     gap: 16,
-    backgroundColor: '#1E293B',
+    backgroundColor: '#F8FAFC',
     marginHorizontal: 20,
     borderRadius: 20,
     borderWidth: 2,
-    borderColor: '#334155',
+    borderColor: '#E2E8F0',
     borderStyle: 'dashed',
   },
   deadlineText: {
     fontSize: 13,
     fontFamily: 'Inter-Bold',
-    color: '#ffc857',
+    color: '#0F172A',
   },
   bookmarkIcon: {
     position: 'absolute',
     top: 12,
     right: 12,
-    backgroundColor: '#1E293B',
+    backgroundColor: '#FFFFFF',
     padding: 8,
     borderRadius: 20,
     shadowColor: '#000000',
     shadowOffset: { width: 0, height: 3 },
-    shadowOpacity: 0.3,
+    shadowOpacity: 0.15,
     shadowRadius: 6,
     elevation: 4,
     zIndex: 10,
     borderWidth: 1,
-    borderColor: '#334155',
+    borderColor: '#E2E8F0',
   },
   bookmarkIconSmall: {
     position: 'absolute',
     top: 8,
     right: 8,
-    backgroundColor: '#1E293B',
+    backgroundColor: '#FFFFFF',
     padding: 6,
     borderRadius: 16,
     shadowColor: '#000000',
     shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.3,
+    shadowOpacity: 0.15,
     shadowRadius: 4,
     elevation: 3,
     zIndex: 10,
     borderWidth: 1,
-    borderColor: '#334155',
+    borderColor: '#E2E8F0',
   },
   segmentedTabs: {
     flexDirection: 'row',
@@ -1819,15 +1819,15 @@ export default function EducationScreen() {
     paddingVertical: 14,
     paddingHorizontal: 12,
     borderRadius: 14,
-    backgroundColor: '#1E293B',
+    backgroundColor: '#F1F5F9',
     borderWidth: 1.5,
-    borderColor: '#334155',
+    borderColor: '#E2E8F0',
     gap: 8,
   },
   segmentedTabActive: {
-    backgroundColor: '#ffc857',
-    borderColor: '#ffc857',
-    shadowColor: '#ffc857',
+    backgroundColor: '#0F172A',
+    borderColor: '#0F172A',
+    shadowColor: '#0F172A',
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.35,
     shadowRadius: 10,
@@ -1836,10 +1836,10 @@ export default function EducationScreen() {
   segmentedTabText: {
     fontSize: 12,
     fontFamily: 'Inter-SemiBold',
-    color: '#94A3B8',
+    color: '#64748B',
   },
   segmentedTabTextActive: {
-    color: '#0F172A',
+    color: '#FFFFFF',
   },
   emptySubtext: {
     fontSize: 14,
@@ -1851,59 +1851,59 @@ export default function EducationScreen() {
   mentorCard: {
     position: 'relative',
     flexDirection: 'row',
-    backgroundColor: '#1E293B',
+    backgroundColor: '#FFFFFF',
     borderRadius: 20,
     marginHorizontal: 20,
     marginBottom: 20,
     padding: 20,
     shadowColor: '#000000',
     shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.3,
+    shadowOpacity: 0.1,
     shadowRadius: 12,
     elevation: 8,
     gap: 16,
     borderWidth: 1,
-    borderColor: '#334155',
+    borderColor: '#E2E8F0',
   },
   mentorFavoriteButton: {
     position: 'absolute',
     top: 12,
     right: 12,
     padding: 8,
-    backgroundColor: '#0F172A',
+    backgroundColor: '#F1F5F9',
     borderRadius: 20,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.3,
+    shadowOpacity: 0.15,
     shadowRadius: 4,
     elevation: 3,
     zIndex: 10,
     borderWidth: 1,
-    borderColor: '#334155',
+    borderColor: '#E2E8F0',
   },
   mentorAvatar: {
     width: 70,
     height: 70,
     borderRadius: 35,
     borderWidth: 3,
-    borderColor: '#ffc857',
+    borderColor: '#0F172A',
   },
   modernMentorCard: {
     position: 'relative',
     flexDirection: 'row',
-    backgroundColor: '#1E293B',
+    backgroundColor: '#FFFFFF',
     borderRadius: 18,
     marginHorizontal: 20,
     marginBottom: 16,
     padding: 18,
     shadowColor: '#000000',
     shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.25,
+    shadowOpacity: 0.1,
     shadowRadius: 10,
     elevation: 6,
     gap: 16,
     borderWidth: 1,
-    borderColor: '#334155',
+    borderColor: '#E2E8F0',
   },
   mentorInfo: {
     flex: 1,
@@ -1912,13 +1912,13 @@ export default function EducationScreen() {
   mentorName: {
     fontSize: 17,
     fontFamily: 'Inter-Bold',
-    color: '#FFFFFF',
+    color: '#0F172A',
     letterSpacing: -0.3,
   },
   mentorRole: {
     fontSize: 14,
     fontFamily: 'Inter-Medium',
-    color: '#94A3B8',
+    color: '#64748B',
     lineHeight: 20,
   },
   mentorLocation: {
@@ -1930,12 +1930,12 @@ export default function EducationScreen() {
     marginTop: 10,
   },
   messageButton: {
-    backgroundColor: '#ffc857',
+    backgroundColor: '#0F172A',
     paddingVertical: 12,
     paddingHorizontal: 22,
     borderRadius: 14,
     alignSelf: 'flex-start',
-    shadowColor: '#ffc857',
+    shadowColor: '#0F172A',
     shadowOffset: { width: 0, height: 3 },
     shadowOpacity: 0.4,
     shadowRadius: 8,
@@ -1960,7 +1960,7 @@ export default function EducationScreen() {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
-    backgroundColor: '#ffc857',
+    backgroundColor: '#0F172A',
     paddingHorizontal: 14,
     paddingVertical: 12,
     borderRadius: 12,
@@ -1968,23 +1968,23 @@ export default function EducationScreen() {
   myRequestsButtonText: {
     fontSize: 13,
     fontFamily: 'Inter-Bold',
-    color: '#0F172A',
+    color: '#FFFFFF',
   },
   filterIconButton: {
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#1E293B',
+    backgroundColor: '#F1F5F9',
     paddingHorizontal: 14,
     paddingVertical: 12,
     borderRadius: 12,
     borderWidth: 1,
-    borderColor: '#334155',
+    borderColor: '#E2E8F0',
   },
   filterBadge: {
     position: 'absolute',
     top: -4,
     right: -4,
-    backgroundColor: '#ffc857',
+    backgroundColor: '#0F172A',
     borderRadius: 10,
     minWidth: 18,
     height: 18,
@@ -1995,27 +1995,27 @@ export default function EducationScreen() {
   filterBadgeText: {
     fontSize: 10,
     fontFamily: 'Inter-Bold',
-    color: '#0F172A',
+    color: '#FFFFFF',
   },
   mentorDashboardButton: {
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#1E293B',
+    backgroundColor: '#F1F5F9',
     paddingHorizontal: 14,
     paddingVertical: 12,
     borderRadius: 12,
     borderWidth: 1,
-    borderColor: '#334155',
+    borderColor: '#E2E8F0',
   },
   volunteerButton: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#ffc857',
+    backgroundColor: '#0F172A',
     paddingVertical: 12,
     paddingHorizontal: 18,
     borderRadius: 14,
     gap: 6,
-    shadowColor: '#ffc857',
+    shadowColor: '#0F172A',
     shadowOffset: { width: 0, height: 3 },
     shadowOpacity: 0.4,
     shadowRadius: 8,
@@ -2025,21 +2025,21 @@ export default function EducationScreen() {
   volunteerButtonText: {
     fontSize: 13,
     fontFamily: 'Inter-Bold',
-    color: '#0F172A',
+    color: '#FFFFFF',
   },
   mentorInfoBanner: {
-    backgroundColor: '#1E293B',
+    backgroundColor: '#F8FAFC',
     borderRadius: 14,
     padding: 16,
     marginHorizontal: 20,
     marginBottom: 20,
     borderWidth: 1,
-    borderColor: '#334155',
+    borderColor: '#E2E8F0',
   },
   mentorInfoText: {
     fontSize: 13,
     fontFamily: 'Inter-Regular',
-    color: '#94A3B8',
+    color: '#64748B',
     lineHeight: 20,
   },
   companyRow: {
@@ -2051,7 +2051,7 @@ export default function EducationScreen() {
   mentorCompany: {
     fontSize: 13,
     fontFamily: 'Inter-Medium',
-    color: '#94A3B8',
+    color: '#64748B',
   },
   mentorFooter: {
     flexDirection: 'row',
@@ -2061,7 +2061,7 @@ export default function EducationScreen() {
     marginTop: 12,
     paddingTop: 12,
     borderTopWidth: 1,
-    borderTopColor: '#334155',
+    borderTopColor: '#E2E8F0',
   },
   mentorFormatsRow: {
     flexDirection: 'row',
@@ -2070,7 +2070,7 @@ export default function EducationScreen() {
     marginTop: 6,
   },
   mentorChip: {
-    backgroundColor: '#334155',
+    backgroundColor: '#F1F5F9',
     paddingHorizontal: 12,
     paddingVertical: 6,
     borderRadius: 10,
@@ -2078,13 +2078,13 @@ export default function EducationScreen() {
   mentorChipText: {
     fontSize: 11,
     fontFamily: 'Inter-Bold',
-    color: '#CBD5E1',
+    color: '#64748B',
   },
   availabilityBadge: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 4,
-    backgroundColor: '#334155',
+    backgroundColor: '#FEF3C7',
     paddingHorizontal: 12,
     paddingVertical: 6,
     borderRadius: 8,
@@ -2095,14 +2095,14 @@ export default function EducationScreen() {
   availabilityText: {
     fontSize: 12,
     fontFamily: 'Inter-Bold',
-    color: '#ffc857',
+    color: '#D97706',
   },
   mentorCTAButton: {
-    backgroundColor: '#ffc857',
+    backgroundColor: '#0F172A',
     paddingVertical: 12,
     paddingHorizontal: 16,
     borderRadius: 12,
-    shadowColor: '#ffc857',
+    shadowColor: '#0F172A',
     shadowOffset: { width: 0, height: 3 },
     shadowOpacity: 0.4,
     shadowRadius: 6,
@@ -2111,16 +2111,16 @@ export default function EducationScreen() {
   mentorCTAButtonText: {
     fontSize: 13,
     fontFamily: 'Inter-Bold',
-    color: '#0F172A',
+    color: '#FFFFFF',
     letterSpacing: 0.3,
   },
   emptyButton: {
-    backgroundColor: '#ffc857',
+    backgroundColor: '#0F172A',
     paddingVertical: 14,
     paddingHorizontal: 26,
     borderRadius: 14,
     marginTop: 16,
-    shadowColor: '#ffc857',
+    shadowColor: '#0F172A',
     shadowOffset: { width: 0, height: 3 },
     shadowOpacity: 0.4,
     shadowRadius: 8,
@@ -2129,12 +2129,12 @@ export default function EducationScreen() {
   emptyButtonText: {
     fontSize: 14,
     fontFamily: 'Inter-Bold',
-    color: '#0F172A',
+    color: '#FFFFFF',
   },
   // Resource Card Styles
   resourceCard: {
     flexDirection: 'row',
-    backgroundColor: '#1E293B',
+    backgroundColor: '#FFFFFF',
     borderRadius: 20,
     marginHorizontal: 20,
     marginBottom: 16,
@@ -2142,20 +2142,20 @@ export default function EducationScreen() {
     alignItems: 'center',
     shadowColor: '#000000',
     shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.25,
+    shadowOpacity: 0.1,
     shadowRadius: 10,
     elevation: 6,
     gap: 16,
     borderLeftWidth: 4,
-    borderLeftColor: '#ffc857',
+    borderLeftColor: '#0F172A',
     borderWidth: 1,
-    borderColor: '#334155',
+    borderColor: '#E2E8F0',
   },
   resourceIcon: {
     width: 56,
     height: 56,
     borderRadius: 28,
-    backgroundColor: '#334155',
+    backgroundColor: '#FEF3C7',
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -2166,12 +2166,12 @@ export default function EducationScreen() {
   resourceTitle: {
     fontSize: 16,
     fontFamily: 'Inter-Bold',
-    color: '#FFFFFF',
+    color: '#0F172A',
   },
   resourceDescription: {
     fontSize: 13,
     fontFamily: 'Inter-Regular',
-    color: '#94A3B8',
+    color: '#64748B',
     lineHeight: 20,
   },
   resourcePrice: {
@@ -2182,18 +2182,18 @@ export default function EducationScreen() {
   },
   // Course Card Styles
   courseCard: {
-    backgroundColor: '#1E293B',
+    backgroundColor: '#FFFFFF',
     borderRadius: 20,
     marginHorizontal: 20,
     marginBottom: 20,
     overflow: 'hidden',
     shadowColor: '#000000',
     shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.3,
+    shadowOpacity: 0.1,
     shadowRadius: 12,
     elevation: 8,
     borderWidth: 1,
-    borderColor: '#334155',
+    borderColor: '#E2E8F0',
   },
   courseImage: {
     width: '100%',
@@ -2202,19 +2202,19 @@ export default function EducationScreen() {
   courseInfo: {
     padding: 18,
     gap: 10,
-    backgroundColor: '#1E293B',
+    backgroundColor: '#FFFFFF',
   },
   courseTitle: {
     fontSize: 17,
     fontFamily: 'Inter-Bold',
-    color: '#FFFFFF',
+    color: '#0F172A',
     lineHeight: 24,
     letterSpacing: -0.3,
   },
   courseDescription: {
     fontSize: 14,
     fontFamily: 'Inter-Regular',
-    color: '#94A3B8',
+    color: '#64748B',
     lineHeight: 20,
   },
   courseFooter: {
@@ -2242,19 +2242,19 @@ export default function EducationScreen() {
   },
   // Study Group Card Styles
   studyGroupCard: {
-    backgroundColor: '#1E293B',
+    backgroundColor: '#FFFFFF',
     borderRadius: 20,
     marginHorizontal: 20,
     marginBottom: 20,
     padding: 20,
     shadowColor: '#000000',
     shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.3,
+    shadowOpacity: 0.1,
     shadowRadius: 12,
     elevation: 8,
     gap: 16,
     borderWidth: 1,
-    borderColor: '#334155',
+    borderColor: '#E2E8F0',
   },
   studyGroupHeader: {
     flexDirection: 'row',
@@ -2280,13 +2280,13 @@ export default function EducationScreen() {
   studyGroupTitle: {
     fontSize: 17,
     fontFamily: 'Inter-Bold',
-    color: '#FFFFFF',
+    color: '#0F172A',
     letterSpacing: -0.3,
   },
   studyGroupDescription: {
     fontSize: 14,
     fontFamily: 'Inter-Regular',
-    color: '#94A3B8',
+    color: '#64748B',
     lineHeight: 20,
   },
   studyGroupFooter: {
@@ -2322,25 +2322,25 @@ export default function EducationScreen() {
   // Event Card Styles
   eventCard: {
     flexDirection: 'row',
-    backgroundColor: '#1E293B',
+    backgroundColor: '#FFFFFF',
     borderRadius: 20,
     marginHorizontal: 20,
     marginBottom: 20,
     padding: 20,
     shadowColor: '#000000',
     shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.3,
+    shadowOpacity: 0.1,
     shadowRadius: 12,
     elevation: 8,
     gap: 18,
     borderWidth: 1,
-    borderColor: '#334155',
+    borderColor: '#E2E8F0',
   },
   eventDateBox: {
     width: 70,
     height: 70,
     borderRadius: 16,
-    backgroundColor: '#ffc857',
+    backgroundColor: '#0F172A',
     alignItems: 'center',
     justifyContent: 'center',
     shadowColor: '#FF5722',
@@ -2368,14 +2368,14 @@ export default function EducationScreen() {
   eventTitle: {
     fontSize: 17,
     fontFamily: 'Inter-Bold',
-    color: '#FFFFFF',
+    color: '#0F172A',
     lineHeight: 24,
     letterSpacing: -0.3,
   },
   eventDescription: {
     fontSize: 14,
     fontFamily: 'Inter-Regular',
-    color: '#94A3B8',
+    color: '#64748B',
     lineHeight: 20,
   },
   eventLocation: {
@@ -2392,7 +2392,7 @@ export default function EducationScreen() {
     paddingHorizontal: 20,
     paddingVertical: 16,
     marginBottom: 8,
-    backgroundColor: '#0F172A',
+    backgroundColor: '#FFFFFF',
   },
   headerLeft: {
     flexDirection: 'row',
@@ -2404,22 +2404,22 @@ export default function EducationScreen() {
     width: 48,
     height: 48,
     borderRadius: 14,
-    backgroundColor: '#1E293B',
+    backgroundColor: '#FEF3C7',
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: 1,
-    borderColor: '#334155',
+    borderColor: '#FCD34D',
   },
   modernSectionTitle: {
     fontSize: 20,
     fontFamily: 'Inter-SemiBold',
-    color: '#FFFFFF',
+    color: '#0F172A',
     letterSpacing: -0.3,
   },
   modernSectionSubtitle: {
     fontSize: 13,
     fontFamily: 'Inter-Regular',
-    color: '#94A3B8',
+    color: '#64748B',
     marginTop: 2,
   },
   countBadge: {
@@ -2450,28 +2450,28 @@ export default function EducationScreen() {
     paddingBottom: 20,
   },
   modernUniversityCard: {
-    backgroundColor: '#1E293B',
+    backgroundColor: '#FFFFFF',
     borderRadius: 20,
     overflow: 'hidden',
     shadowColor: '#000000',
     shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.3,
+    shadowOpacity: 0.1,
     shadowRadius: 12,
     elevation: 8,
     borderWidth: 1,
-    borderColor: '#334155',
+    borderColor: '#E2E8F0',
   },
   modernScholarshipCard: {
-    backgroundColor: '#1E293B',
+    backgroundColor: '#FFFFFF',
     borderRadius: 24,
     overflow: 'hidden',
     shadowColor: '#000000',
     shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.3,
+    shadowOpacity: 0.1,
     shadowRadius: 16,
     elevation: 10,
     borderWidth: 1,
-    borderColor: '#334155',
+    borderColor: '#E2E8F0',
   },
   modernCardImageContainer: {
     width: '100%',
@@ -2539,7 +2539,7 @@ export default function EducationScreen() {
   modernCardTitle: {
     fontSize: 20,
     fontFamily: 'Inter-Bold',
-    color: '#FFFFFF',
+    color: '#0F172A',
     lineHeight: 28,
     letterSpacing: -0.4,
   },
@@ -2551,12 +2551,12 @@ export default function EducationScreen() {
   modernLocationText: {
     fontSize: 14,
     fontFamily: 'Inter-Regular',
-    color: '#ffc857',
+    color: '#0F172A',
   },
   modernCardDescription: {
     fontSize: 14,
     fontFamily: 'Inter-Regular',
-    color: '#94A3B8',
+    color: '#64748B',
     lineHeight: 22,
   },
   modernApplicationBadge: {
@@ -2631,7 +2631,7 @@ export default function EducationScreen() {
   deadlineInfoText: {
     fontSize: 11,
     fontFamily: 'Inter-SemiBold',
-    color: '#94A3B8',
+    color: '#64748B',
   },
   urgentDeadline: {
     color: '#EF4444',
@@ -2727,7 +2727,7 @@ export default function EducationScreen() {
     width: 52,
     height: 52,
     borderRadius: 14,
-    backgroundColor: '#ffc857',
+    backgroundColor: '#0F172A',
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -2747,7 +2747,7 @@ export default function EducationScreen() {
     width: 36,
     height: 36,
     borderRadius: 18,
-    backgroundColor: '#ffc857',
+    backgroundColor: '#0F172A',
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -2781,18 +2781,18 @@ export default function EducationScreen() {
     padding: 20,
   },
   adminModalContent: {
-    backgroundColor: '#1E293B',
+    backgroundColor: '#FFFFFF',
     borderRadius: 16,
     padding: 20,
     width: '100%',
     maxWidth: 400,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.4,
+    shadowOpacity: 0.2,
     shadowRadius: 12,
     elevation: 8,
     borderWidth: 1,
-    borderColor: '#334155',
+    borderColor: '#E2E8F0',
   },
   adminModalHeader: {
     flexDirection: 'row',
@@ -2837,6 +2837,6 @@ export default function EducationScreen() {
   adminModalCancelText: {
     fontSize: 16,
     fontFamily: 'Inter-SemiBold',
-    color: '#94A3B8',
+    color: '#64748B',
   },
 });

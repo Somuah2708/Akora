@@ -9,7 +9,7 @@ import {
   Alert,
   StyleSheet,
 } from 'react-native';
-import { Plus, Search, Users, Lock, Globe, Calendar, GraduationCap, ArrowLeft, X, MessageCircle } from 'lucide-react-native';
+import { Plus, Search, Users, Lock, Globe, Calendar, GraduationCap, ArrowLeft, X, MessageCircle, CheckCircle, Shield } from 'lucide-react-native';
 import { useAuth } from '@/hooks/useAuth';
 import { supabase } from '@/lib/supabase';
 import { useRouter } from 'expo-router'
@@ -22,10 +22,14 @@ interface Circle {
   description: string;
   category: string;
   image_url?: string;
+  cover_image?: string;
   is_private: boolean;
+  is_official?: boolean;
+  is_featured?: boolean;
   created_by: string;
   created_at: string;
   member_count?: number;
+  post_count?: number;
   is_member?: boolean;
   has_pending_request?: boolean;
   group_chat_id?: string;
@@ -44,8 +48,16 @@ interface JoinRequest {
   };
 }
 
+// Tier System: Define which categories are admin-only vs user-created
+const ADMIN_ONLY_CATEGORIES = ['Year Groups', 'Class Pages', 'House Groups'];
+const USER_CATEGORIES = ['Fun Clubs', 'Study Groups', 'Sports', 'Arts'];
+const ALL_CATEGORIES = ['All', ...ADMIN_ONLY_CATEGORIES, ...USER_CATEGORIES];
+
 export default function CirclesScreen() {
-  const { user } = useAuth();
+  const { user, profile } = useAuth();
+  
+  // Check if user is admin
+  const isAdmin = profile?.is_admin === true || profile?.role === 'admin';
   const router = useRouter();
   const [circles, setCircles] = useState<Circle[]>([]);
   const [filteredCircles, setFilteredCircles] = useState<Circle[]>([]);
@@ -63,7 +75,13 @@ export default function CirclesScreen() {
     is_private: false,
   });
 
-  const categories = ['All', 'Fun Clubs', 'Year Groups', 'Class Pages', 'House Groups', 'Study Groups', 'Sports', 'Arts'];
+  // Categories for filtering (show all categories)
+  const categories = ALL_CATEGORIES;
+  
+  // Categories available for creation (depends on admin status)
+  const availableCreateCategories = isAdmin 
+    ? [...ADMIN_ONLY_CATEGORIES, ...USER_CATEGORIES] 
+    : USER_CATEGORIES;
 
   useEffect(() => {
     fetchCircles();
@@ -196,10 +214,20 @@ export default function CirclesScreen() {
       return;
     }
 
+    // Check if trying to create admin-only category without admin privileges
+    if (ADMIN_ONLY_CATEGORIES.includes(newCircle.category) && !isAdmin) {
+      Alert.alert('Permission Denied', 'Only administrators can create Year Groups, Class Pages, and House Groups.');
+      return;
+    }
+
     try {
+      // Determine if this is an official circle (admin-created or admin-only category)
+      const isOfficialCircle = isAdmin && ADMIN_ONLY_CATEGORIES.includes(newCircle.category);
+      
       console.log('Creating circle with data:', {
         ...newCircle,
         created_by: user.id,
+        is_official: isOfficialCircle,
       });
       
       const { data, error } = await supabase
@@ -208,6 +236,7 @@ export default function CirclesScreen() {
           {
             ...newCircle,
             created_by: user.id,
+            is_official: isOfficialCircle,
           }
         ])
         .select()
@@ -440,26 +469,52 @@ export default function CirclesScreen() {
     }
   };
 
-  const renderCircleCard = (circle: Circle) => (
-    <TouchableOpacity 
-      key={circle.id} 
-      style={styles.circleCard}
-      onPress={() => {
-        console.log('🔵 Circle card pressed, navigating to:', `/circles/${circle.id}`);
-        debouncedRouter.push(`/circles/${circle.id}`);
-      }}
-      activeOpacity={0.7}
-    >
-      <View style={styles.circleHeader}>
-        <View style={styles.circleInfo}>
-          <View style={styles.circleTitleRow}>
-            <Text style={styles.circleTitle}>{circle.name}</Text>
-            {circle.is_private && <Lock size={16} color="#666" />}
+  const renderCircleCard = (circle: Circle) => {
+    // Determine if this is an official/admin-created circle
+    const isOfficialCircle = circle.is_official || ADMIN_ONLY_CATEGORIES.includes(circle.category);
+    
+    return (
+      <TouchableOpacity 
+        key={circle.id} 
+        style={[styles.circleCard, isOfficialCircle && styles.officialCircleCard]}
+        onPress={() => {
+          console.log('🔵 Circle card pressed, navigating to:', `/circles/${circle.id}`);
+          debouncedRouter.push(`/circles/${circle.id}`);
+        }}
+        activeOpacity={0.7}
+      >
+        {/* Official Badge */}
+        {isOfficialCircle && (
+          <View style={styles.officialBadge}>
+            <Shield size={12} color="#FFFFFF" />
+            <Text style={styles.officialBadgeText}>Official</Text>
           </View>
-          <Text style={styles.circleCategory}>{circle.category}</Text>
-          <Text style={styles.circleDescription} numberOfLines={2}>{circle.description}</Text>
+        )}
+        
+        <View style={styles.circleHeader}>
+          <View style={styles.circleInfo}>
+            <View style={styles.circleTitleRow}>
+              <Text style={styles.circleTitle}>{circle.name}</Text>
+              {isOfficialCircle && (
+                <CheckCircle size={18} color="#ffc857" style={{ marginLeft: 6 }} />
+              )}
+              {circle.is_private && <Lock size={16} color="#666" style={{ marginLeft: 4 }} />}
+            </View>
+            <View style={styles.categoryBadgeRow}>
+              <View style={[styles.categoryBadge, isOfficialCircle && styles.officialCategoryBadge]}>
+                <Text style={[styles.categoryBadgeText, isOfficialCircle && styles.officialCategoryBadgeText]}>
+                  {circle.category}
+                </Text>
+              </View>
+              {circle.is_featured && (
+                <View style={styles.featuredBadge}>
+                  <Text style={styles.featuredBadgeText}>Featured</Text>
+                </View>
+              )}
+            </View>
+            <Text style={styles.circleDescription} numberOfLines={2}>{circle.description}</Text>
+          </View>
         </View>
-      </View>
       
       <View style={styles.circleFooter}>
         <View style={styles.memberCount}>
@@ -504,7 +559,8 @@ export default function CirclesScreen() {
         </View>
       </View>
     </TouchableOpacity>
-  );
+    );
+  };
 
   const myCircles = filteredCircles.filter(circle => circle.created_by === user?.id);
   const otherCircles = filteredCircles.filter(circle => circle.created_by !== user?.id);
@@ -715,24 +771,37 @@ export default function CirclesScreen() {
 
             <View style={styles.formGroup}>
               <Text style={styles.label}>Category</Text>
+              {!isAdmin && (
+                <View style={styles.adminOnlyNotice}>
+                  <Shield size={14} color="#D97706" />
+                  <Text style={styles.adminOnlyNoticeText}>
+                    Year Groups, Class Pages, and House Groups can only be created by admins
+                  </Text>
+                </View>
+              )}
               <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-                {categories.slice(1).map((category) => (
-                  <TouchableOpacity
-                    key={category}
-                    style={[
-                      styles.categoryOption,
-                      newCircle.category === category && styles.categoryOptionActive
-                    ]}
-                    onPress={() => setNewCircle({ ...newCircle, category })}
-                  >
-                    <Text style={[
-                      styles.categoryOptionText,
-                      newCircle.category === category && styles.categoryOptionTextActive
-                    ]}>
-                      {category}
-                    </Text>
-                  </TouchableOpacity>
-                ))}
+                {availableCreateCategories.map((category) => {
+                  const isAdminCategory = ADMIN_ONLY_CATEGORIES.includes(category);
+                  return (
+                    <TouchableOpacity
+                      key={category}
+                      style={[
+                        styles.categoryOption,
+                        newCircle.category === category && styles.categoryOptionActive,
+                        isAdminCategory && styles.adminCategoryOption
+                      ]}
+                      onPress={() => setNewCircle({ ...newCircle, category })}
+                    >
+                      {isAdminCategory && <Shield size={12} color={newCircle.category === category ? '#FFFFFF' : '#ffc857'} style={{ marginRight: 4 }} />}
+                      <Text style={[
+                        styles.categoryOptionText,
+                        newCircle.category === category && styles.categoryOptionTextActive
+                      ]}>
+                        {category}
+                      </Text>
+                    </TouchableOpacity>
+                  );
+                })}
               </ScrollView>
             </View>
 
@@ -898,6 +967,66 @@ const styles = StyleSheet.create({
     padding: 16,
     borderWidth: 1,
     borderColor: '#e0e0e0',
+    position: 'relative',
+  },
+  officialCircleCard: {
+    borderColor: '#ffc857',
+    borderWidth: 2,
+    backgroundColor: '#FFFDF7',
+  },
+  officialBadge: {
+    position: 'absolute',
+    top: -1,
+    right: 12,
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#ffc857',
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderBottomLeftRadius: 8,
+    borderBottomRightRadius: 8,
+    gap: 4,
+    zIndex: 10,
+  },
+  officialBadgeText: {
+    fontSize: 10,
+    fontWeight: '700',
+    color: '#FFFFFF',
+    letterSpacing: 0.5,
+  },
+  categoryBadgeRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginBottom: 8,
+  },
+  categoryBadge: {
+    backgroundColor: '#EFF6FF',
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 12,
+  },
+  categoryBadgeText: {
+    fontSize: 12,
+    color: '#007AFF',
+    fontWeight: '600',
+  },
+  officialCategoryBadge: {
+    backgroundColor: '#FEF3C7',
+  },
+  officialCategoryBadgeText: {
+    color: '#D97706',
+  },
+  featuredBadge: {
+    backgroundColor: '#D1FAE5',
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 10,
+  },
+  featuredBadgeText: {
+    fontSize: 10,
+    color: '#059669',
+    fontWeight: '700',
   },
   circleHeader: {
     marginBottom: 12,
@@ -1143,6 +1272,8 @@ const styles = StyleSheet.create({
     textAlignVertical: 'top',
   },
   categoryOption: {
+    flexDirection: 'row',
+    alignItems: 'center',
     paddingHorizontal: 16,
     paddingVertical: 8,
     marginRight: 8,
@@ -1155,6 +1286,10 @@ const styles = StyleSheet.create({
     backgroundColor: '#007AFF',
     borderColor: '#007AFF',
   },
+  adminCategoryOption: {
+    borderColor: '#ffc857',
+    backgroundColor: '#FFFBEB',
+  },
   categoryOptionText: {
     fontSize: 14,
     color: '#666',
@@ -1162,6 +1297,21 @@ const styles = StyleSheet.create({
   },
   categoryOptionTextActive: {
     color: '#fff',
+  },
+  adminOnlyNotice: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#FFFBEB',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 8,
+    marginBottom: 12,
+    gap: 8,
+  },
+  adminOnlyNoticeText: {
+    fontSize: 12,
+    color: '#D97706',
+    flex: 1,
   },
   privacyToggle: {
     flexDirection: 'row',
