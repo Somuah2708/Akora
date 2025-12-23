@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { View, Text, FlatList, TextInput, TouchableOpacity, Image, Modal, Pressable, ActivityIndicator, StyleSheet, Linking, Alert, KeyboardAvoidingView, Platform, Keyboard } from "react-native";
+import { View, Text, FlatList, TextInput, TouchableOpacity, Image, Modal, Pressable, ActivityIndicator, StyleSheet, Linking, Alert, KeyboardAvoidingView, Platform, Keyboard, Animated, Vibration } from "react-native";
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { debouncedRouter } from '@/utils/navigationDebounce';
@@ -7,17 +7,22 @@ import { supabase } from "../../../lib/supabase";
 import { useAuth } from "../../../hooks/useAuth";
 import dayjs from "dayjs";
 import EmojiSelector from 'react-native-emoji-selector';
-import { ArrowLeft, Send, Smile, X, Play, Pause, FileText, Camera, Paperclip, Image as ImageIcon, File } from 'lucide-react-native';
+import { ArrowLeft, Send, Smile, X, Play, Pause, FileText, Camera, Paperclip, Image as ImageIcon, File, Mic, Reply, Trash2, CornerUpLeft, ChevronDown, Check, CheckCheck } from 'lucide-react-native';
 import { Audio } from 'expo-av';
 import * as ImagePicker from 'expo-image-picker';
 import * as DocumentPicker from 'expo-document-picker';
 import * as MediaLibrary from 'expo-media-library';
 import * as FileSystem from 'expo-file-system/legacy';
 import * as Sharing from 'expo-sharing';
+import * as Haptics from 'expo-haptics';
+
+// Reaction emojis
+const REACTION_EMOJIS = ['👍', '❤️', '😂', '😮', '😢', '🔥', '👏', '🙏'];
 
 type Profile = { id: string; full_name?: string | null; avatar_url?: string | null };
 type Group = { id: string; name: string; avatar_url?: string | null };
 type GroupMember = { user_id: string; role: string; profiles?: Profile };
+type MessageReaction = { emoji: string; count: number; users: { id: string; name: string }[]; hasReacted: boolean };
 type GroupMessage = {
   id: string;
   group_id: string;
@@ -27,6 +32,11 @@ type GroupMessage = {
   message_type: string;
   created_at: string;
   read_by: string[];
+  reply_to_id?: string | null;
+  reply_to?: GroupMessage | null;
+  is_edited?: boolean;
+  is_deleted?: boolean;
+  reactions?: MessageReaction[];
 };
 
 export default function GroupChatScreen() {
@@ -52,6 +62,20 @@ export default function GroupChatScreen() {
   const [playingSound, setPlayingSound] = useState<{ [key: string]: boolean }>({});
   const [isKeyboardVisible, setIsKeyboardVisible] = useState(false);
   const soundObjects = useRef<{ [key: string]: Audio.Sound }>({});
+  
+  // New states for professional features
+  const [replyingTo, setReplyingTo] = useState<GroupMessage | null>(null);
+  const [selectedMessage, setSelectedMessage] = useState<GroupMessage | null>(null);
+  const [showMessageOptions, setShowMessageOptions] = useState(false);
+  const [showReactionPicker, setShowReactionPicker] = useState(false);
+  const [isRecording, setIsRecording] = useState(false);
+  const [recordingDuration, setRecordingDuration] = useState(0);
+  const [showScrollButton, setShowScrollButton] = useState(false);
+  const [unreadCount, setUnreadCount] = useState(0);
+  const recordingRef = useRef<Audio.Recording | null>(null);
+  const recordingTimer = useRef<NodeJS.Timeout | null>(null);
+  const pulseAnim = useRef(new Animated.Value(1)).current;
+  const scrollButtonAnim = useRef(new Animated.Value(0)).current;
 
   const meId = user?.id as string | undefined;
 
@@ -71,14 +95,29 @@ export default function GroupChatScreen() {
       .eq("group_id", groupId);
     setMembers((memberRows as any) || []);
 
-    // Recent messages
+    // Recent messages with reply_to data
     const { data: msgs } = await supabase
       .from("group_messages")
-      .select("*")
+      .select("*, reply_to:reply_to_id(id, content, message_type, sender_id)")
       .eq("group_id", groupId)
       .order("created_at", { ascending: true })
       .limit(200);
-    setMessages((msgs as GroupMessage[]) || []);
+    
+    // Fetch reactions for each message
+    const messagesWithReactions = await Promise.all(
+      (msgs || []).map(async (msg) => {
+        try {
+          const { data: reactions } = await supabase.rpc('get_message_reactions', {
+            p_message_id: msg.id
+          });
+          return { ...msg, reactions: reactions || [] };
+        } catch {
+          return { ...msg, reactions: [] };
+        }
+      })
+    );
+    
+    setMessages(messagesWithReactions as GroupMessage[]);
 
     // Mark read for me
     if (meId) {
@@ -114,11 +153,23 @@ export default function GroupChatScreen() {
       .on(
         "postgres_changes",
         { event: "INSERT", schema: "public", table: "group_messages", filter: `group_id=eq.${groupId}` },
-        (payload) => {
+        async (payload) => {
           const msg = payload.new as GroupMessage;
+          
+          // Fetch the reply_to data if this message is a reply
+          let enrichedMsg = msg;
+          if (msg.reply_to_id) {
+            const { data: replyTo } = await supabase
+              .from("group_messages")
+              .select("id, content, message_type, sender_id")
+              .eq("id", msg.reply_to_id)
+              .single();
+            enrichedMsg = { ...msg, reply_to: replyTo };
+          }
+          
           setMessages((prev) => {
             if (prev.find((m) => m.id === msg.id)) return prev;
-            return [...prev, msg];
+            return [...prev, enrichedMsg];
           });
           // Auto-scroll
           requestAnimationFrame(() => listRef.current?.scrollToEnd({ animated: true }));
@@ -129,7 +180,7 @@ export default function GroupChatScreen() {
         { event: "UPDATE", schema: "public", table: "group_messages", filter: `group_id=eq.${groupId}` },
         (payload) => {
           const msg = payload.new as GroupMessage;
-          setMessages((prev) => prev.map((m) => (m.id === msg.id ? msg : m)));
+          setMessages((prev) => prev.map((m) => (m.id === msg.id ? { ...m, ...msg } : m)));
         }
       )
       .subscribe();
@@ -442,6 +493,8 @@ export default function GroupChatScreen() {
     setSending(true);
     setInput("");
     setAttachment(null);
+    const replyToId = replyingTo?.id || null;
+    setReplyingTo(null);
     
     const { error } = await supabase
       .from("group_messages")
@@ -450,7 +503,8 @@ export default function GroupChatScreen() {
         sender_id: meId, 
         content, 
         message_type: messageType,
-        media_url: mediaUrl 
+        media_url: mediaUrl,
+        reply_to_id: replyToId
       });
     
     setSending(false);
@@ -459,39 +513,242 @@ export default function GroupChatScreen() {
       Alert.alert('Send Failed', 'Could not send message. Please try again.');
     }
     // Message will arrive via realtime
-  }, [groupId, meId, input, attachment, sending, uploading]);
+  }, [groupId, meId, input, attachment, sending, uploading, replyingTo]);
 
-  // Recording functionality disabled - state variable not defined
-  // const handleStartRecording = async () => {
-  //   const success = await startRecording();
-  //   if (success) {
-  //     setRecording(true);
-  //   }
-  // };
+  // ============================================================
+  // VOICE RECORDING
+  // ============================================================
+  const startRecording = async () => {
+    try {
+      const permission = await Audio.requestPermissionsAsync();
+      if (permission.status !== 'granted') {
+        Alert.alert('Permission needed', 'Please grant microphone permissions');
+        return;
+      }
 
-  // const handleStopRecording = async () => {
-  //   if (!meId || !groupId) return;
-  //   setRecording(false);
-  //   try {
-  //     setUploadingMedia(true);
-  //     const voiceUrl = await stopRecording(meId);
-  //     if (voiceUrl) {
-  //       await supabase
-  //         .from("group_messages")
-  //         .insert({ 
-  //           group_id: groupId, 
-  //           sender_id: meId, 
-  //           content: '🎤 Voice message',
-  //           media_url: voiceUrl, 
-  //           message_type: 'voice' 
-  //         });
-  //     }
-  //   } catch (error) {
-  //     console.error("Error sending voice message:", error);
-  //   } finally {
-  //     setUploadingMedia(false);
-  //   }
-  // };
+      await Audio.setAudioModeAsync({
+        allowsRecordingIOS: true,
+        playsInSilentModeIOS: true,
+      });
+
+      const { recording } = await Audio.Recording.createAsync(
+        Audio.RecordingOptionsPresets.HIGH_QUALITY
+      );
+      
+      recordingRef.current = recording;
+      setIsRecording(true);
+      setRecordingDuration(0);
+      
+      // Start duration timer
+      recordingTimer.current = setInterval(() => {
+        setRecordingDuration(prev => prev + 1);
+      }, 1000);
+      
+      // Pulse animation
+      Animated.loop(
+        Animated.sequence([
+          Animated.timing(pulseAnim, { toValue: 1.2, duration: 500, useNativeDriver: true }),
+          Animated.timing(pulseAnim, { toValue: 1, duration: 500, useNativeDriver: true }),
+        ])
+      ).start();
+      
+      // Haptic feedback
+      if (Platform.OS !== 'web') {
+        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+      }
+    } catch (error) {
+      console.error('Failed to start recording:', error);
+      Alert.alert('Error', 'Failed to start recording');
+    }
+  };
+
+  const stopRecording = async () => {
+    if (!recordingRef.current || !meId || !groupId) return;
+    
+    try {
+      setUploadingMedia(true);
+      
+      // Stop timer and animation
+      if (recordingTimer.current) {
+        clearInterval(recordingTimer.current);
+        recordingTimer.current = null;
+      }
+      pulseAnim.stopAnimation();
+      pulseAnim.setValue(1);
+      
+      await recordingRef.current.stopAndUnloadAsync();
+      const uri = recordingRef.current.getURI();
+      recordingRef.current = null;
+      setIsRecording(false);
+      setRecordingDuration(0);
+      
+      if (!uri) {
+        throw new Error('No recording URI');
+      }
+      
+      // Upload voice message
+      const fileName = `voice_${meId}_${Date.now()}.m4a`;
+      const filePath = `voice-messages/${fileName}`;
+      
+      const response = await fetch(uri);
+      const arrayBuffer = await response.arrayBuffer();
+      const fileBuffer = new Uint8Array(arrayBuffer);
+      
+      const { error: uploadError } = await supabase.storage
+        .from('chat-media')
+        .upload(filePath, fileBuffer, { contentType: 'audio/m4a' });
+      
+      if (uploadError) throw uploadError;
+      
+      const { data: urlData } = supabase.storage
+        .from('chat-media')
+        .getPublicUrl(filePath);
+      
+      // Send voice message
+      await supabase
+        .from("group_messages")
+        .insert({
+          group_id: groupId,
+          sender_id: meId,
+          content: '🎤 Voice message',
+          media_url: urlData.publicUrl,
+          message_type: 'voice'
+        });
+      
+      // Haptic feedback
+      if (Platform.OS !== 'web') {
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      }
+    } catch (error) {
+      console.error('Failed to send voice message:', error);
+      Alert.alert('Error', 'Failed to send voice message');
+    } finally {
+      setUploadingMedia(false);
+    }
+  };
+
+  const cancelRecording = async () => {
+    if (!recordingRef.current) return;
+    
+    try {
+      if (recordingTimer.current) {
+        clearInterval(recordingTimer.current);
+        recordingTimer.current = null;
+      }
+      pulseAnim.stopAnimation();
+      pulseAnim.setValue(1);
+      
+      await recordingRef.current.stopAndUnloadAsync();
+      recordingRef.current = null;
+      setIsRecording(false);
+      setRecordingDuration(0);
+    } catch (error) {
+      console.error('Failed to cancel recording:', error);
+    }
+  };
+
+  const formatRecordingDuration = (seconds: number) => {
+    const mins = Math.floor(seconds / 60);
+    const secs = seconds % 60;
+    return `${mins}:${secs.toString().padStart(2, '0')}`;
+  };
+
+  // ============================================================
+  // MESSAGE ACTIONS (Reply, React, Delete)
+  // ============================================================
+  const handleLongPressMessage = (message: GroupMessage) => {
+    if (Platform.OS !== 'web') {
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    }
+    setSelectedMessage(message);
+    setShowMessageOptions(true);
+  };
+
+  const handleReplyToMessage = (message: GroupMessage) => {
+    setReplyingTo(message);
+    setShowMessageOptions(false);
+    setSelectedMessage(null);
+  };
+
+  const handleReactToMessage = async (emoji: string) => {
+    if (!selectedMessage || !meId) return;
+    
+    try {
+      const { data, error } = await supabase.rpc('toggle_message_reaction', {
+        p_message_id: selectedMessage.id,
+        p_emoji: emoji
+      });
+      
+      if (error) throw error;
+      
+      // Haptic feedback
+      if (Platform.OS !== 'web') {
+        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+      }
+      
+      // Refresh messages to show updated reactions
+      // The realtime subscription will handle this
+    } catch (error) {
+      console.error('Failed to react to message:', error);
+    }
+    
+    setShowReactionPicker(false);
+    setShowMessageOptions(false);
+    setSelectedMessage(null);
+  };
+
+  const handleDeleteMessage = async () => {
+    if (!selectedMessage || !meId) return;
+    
+    // Only allow deleting own messages
+    if (selectedMessage.sender_id !== meId) {
+      Alert.alert('Error', 'You can only delete your own messages');
+      return;
+    }
+    
+    Alert.alert(
+      'Delete Message',
+      'Are you sure you want to delete this message?',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              const { error } = await supabase
+                .from('group_messages')
+                .update({ is_deleted: true, deleted_at: new Date().toISOString(), content: 'This message was deleted' })
+                .eq('id', selectedMessage.id);
+              
+              if (error) throw error;
+              
+              // Update local state
+              setMessages(prev => prev.map(m => 
+                m.id === selectedMessage.id 
+                  ? { ...m, is_deleted: true, content: 'This message was deleted' }
+                  : m
+              ));
+              
+              if (Platform.OS !== 'web') {
+                Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+              }
+            } catch (error) {
+              console.error('Failed to delete message:', error);
+              Alert.alert('Error', 'Failed to delete message');
+            }
+          }
+        }
+      ]
+    );
+    
+    setShowMessageOptions(false);
+    setSelectedMessage(null);
+  };
+
+  const handleCancelReply = () => {
+    setReplyingTo(null);
+  };
 
   const toggleVoicePlayback = async (messageId: string, voiceUrl: string) => {
     try {
@@ -576,31 +833,15 @@ export default function GroupChatScreen() {
     if (!meId || !groupId) return;
     
     console.log('🎥 [Group Camera] User tapped camera button');
-    Sentry.addBreadcrumb({
-      category: 'user-action',
-      message: 'User tapped camera button in group chat',
-      level: 'info',
-      data: { userId: meId, groupId }
-    });
     
     setShowAttachMenu(false);
     
     try {
       console.log('🎥 [Group Camera] Calling takeMedia()...');
-      Sentry.addBreadcrumb({
-        category: 'camera',
-        message: 'About to launch camera in group chat',
-        level: 'info'
-      });
       
       const media = await takeMedia();
       
       console.log('🎥 [Group Camera] takeMedia() returned:', media ? 'success' : 'cancelled');
-      Sentry.addBreadcrumb({
-        category: 'camera',
-        message: media ? 'Camera returned media' : 'Camera cancelled',
-        level: 'info'
-      });
       
       if (!media) {
         return;
@@ -633,17 +874,6 @@ export default function GroupChatScreen() {
       }
     } catch (error) {
       console.error('❌ [Group Camera] Error in handleTakeCamera:', error);
-      Sentry.captureException(error, {
-        tags: { feature: 'camera', action: 'group-chat-camera' },
-        contexts: {
-          camera: {
-            userId: meId,
-            groupId,
-            platform: Platform.OS,
-            timestamp: new Date().toISOString()
-          }
-        }
-      });
       Alert.alert('Camera Error', 'Failed to open camera. Please try again.');
     } finally {
       setUploadingMedia(false);
@@ -702,10 +932,39 @@ export default function GroupChatScreen() {
     mark();
   }, [groupId, meId]);
 
+  // Double-tap detection for quick react
+  const lastTapRef = useRef<{ [key: string]: number }>({});
+  
+  const handleDoubleTap = useCallback((message: GroupMessage) => {
+    if (message.is_deleted) return;
+    
+    const now = Date.now();
+    const lastTap = lastTapRef.current[message.id] || 0;
+    const DOUBLE_TAP_DELAY = 300;
+    
+    if (now - lastTap < DOUBLE_TAP_DELAY) {
+      // Double tap detected - react with ❤️
+      setSelectedMessage(message);
+      handleReactToMessage('❤️');
+      lastTapRef.current[message.id] = 0;
+      
+      // Haptic feedback
+      if (Platform.OS !== 'web') {
+        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+      }
+    } else {
+      lastTapRef.current[message.id] = now;
+    }
+  }, [handleReactToMessage]);
+
   const renderItem = useCallback(
     ({ item }: { item: GroupMessage }) => {
       const mine = item.sender_id === meId;
       const sender = members.find((m) => m.user_id === item.sender_id)?.profiles;
+      const isDeleted = item.is_deleted;
+      const replyToMessage = item.reply_to;
+      const replySender = replyToMessage ? members.find((m) => m.user_id === replyToMessage.sender_id)?.profiles : null;
+      
       return (
         <View style={{ paddingHorizontal: 12, marginVertical: 6, alignItems: mine ? "flex-end" : "flex-start" }}>
           {!mine && (
@@ -716,26 +975,61 @@ export default function GroupChatScreen() {
               <Text style={{ fontSize: 12, color: "#666" }}>{sender?.full_name || "Member"}</Text>
             </View>
           )}
-          <View
+          
+          {/* Reply Preview - shows what message this is replying to */}
+          {replyToMessage && !isDeleted && (
+            <View style={{
+              backgroundColor: mine ? 'rgba(255,255,255,0.1)' : 'rgba(15,23,42,0.05)',
+              borderLeftWidth: 3,
+              borderLeftColor: '#ffc857',
+              borderRadius: 8,
+              paddingHorizontal: 10,
+              paddingVertical: 6,
+              marginBottom: 4,
+              maxWidth: '80%',
+            }}>
+              <Text style={{ fontSize: 11, color: '#ffc857', fontWeight: '600', marginBottom: 2 }}>
+                ↩ {replySender?.full_name || 'Someone'}
+              </Text>
+              <Text style={{ fontSize: 12, color: mine ? 'rgba(255,255,255,0.7)' : '#666' }} numberOfLines={1}>
+                {replyToMessage.message_type === 'voice' ? '🎤 Voice message' : 
+                 replyToMessage.message_type === 'image' ? '📷 Photo' :
+                 replyToMessage.message_type === 'video' ? '📹 Video' :
+                 replyToMessage.message_type === 'document' ? '📄 Document' :
+                 replyToMessage.content || ''}
+              </Text>
+            </View>
+          )}
+          
+          <TouchableOpacity
+            activeOpacity={0.8}
+            onPress={() => handleDoubleTap(item)}
+            onLongPress={() => !isDeleted && handleLongPressMessage(item)}
+            delayLongPress={400}
             style={{
-              backgroundColor: mine ? "#0F172A" : "#FFFFFF",
+              backgroundColor: isDeleted ? '#F3F4F6' : (mine ? "#0F172A" : "#FFFFFF"),
               borderRadius: 18,
               paddingHorizontal: 14,
               paddingVertical: 9,
               maxWidth: "80%",
               shadowColor: "#000",
-              shadowOpacity: 0.05,
+              shadowOpacity: isDeleted ? 0 : 0.05,
               shadowOffset: { width: 0, height: 1 },
               shadowRadius: 3,
-              elevation: 1,
+              elevation: isDeleted ? 0 : 1,
               borderWidth: mine ? 0 : 1,
-              borderColor: mine ? "transparent" : "#F0F0F0",
+              borderColor: isDeleted ? '#E5E7EB' : (mine ? "transparent" : "#F0F0F0"),
               borderBottomRightRadius: mine ? 4 : 18,
               borderBottomLeftRadius: mine ? 18 : 4,
+              opacity: isDeleted ? 0.7 : 1,
             }}
           >
             {/* Text content - only show for text messages or if there's text with media (except voice) */}
-            {item.message_type === 'text' && item.content ? (
+            {isDeleted ? (
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                <Text style={{ fontSize: 14, color: '#9CA3AF', fontStyle: 'italic' }}>🚫 This message was deleted</Text>
+              </View>
+            ) : item.message_type === 'text' && item.content ? (
               <Text style={{ fontSize: 15, color: mine ? "#FFFFFF" : "#1a1a1a", lineHeight: 20, letterSpacing: -0.2 }}>{item.content}</Text>
             ) : null}
             
@@ -832,14 +1126,64 @@ export default function GroupChatScreen() {
               </TouchableOpacity>
             ) : null}
             
-            <Text style={{ fontSize: 10, color: "#888", marginTop: 6 }}>
-              {dayjs(item.created_at).format("h:mm A")}
-            </Text>
-          </View>
+            {/* Timestamp, edited indicator, and read receipts */}
+            <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 6, gap: 4 }}>
+              <Text style={{ fontSize: 10, color: mine ? "rgba(255,255,255,0.6)" : "#888" }}>
+                {dayjs(item.created_at).format("h:mm A")}
+              </Text>
+              {item.is_edited && !isDeleted && (
+                <Text style={{ fontSize: 10, color: mine ? "rgba(255,255,255,0.6)" : "#888", fontStyle: 'italic' }}>• edited</Text>
+              )}
+              {/* Read receipts for own messages */}
+              {mine && !isDeleted && (
+                <View style={{ marginLeft: 4 }}>
+                  {item.read_by && item.read_by.length > 1 ? (
+                    <CheckCheck size={14} color="#25D366" strokeWidth={2.5} />
+                  ) : (
+                    <Check size={14} color="rgba(255,255,255,0.5)" strokeWidth={2.5} />
+                  )}
+                </View>
+              )}
+            </View>
+            
+            {/* Reactions Display */}
+            {item.reactions && item.reactions.length > 0 && !isDeleted && (
+              <View style={{
+                flexDirection: 'row',
+                flexWrap: 'wrap',
+                gap: 4,
+                marginTop: 6,
+                marginBottom: -4,
+              }}>
+                {item.reactions.map((reaction, idx) => (
+                  <TouchableOpacity
+                    key={`${reaction.emoji}-${idx}`}
+                    onPress={() => {
+                      setSelectedMessage(item);
+                      handleReactToMessage(reaction.emoji);
+                    }}
+                    style={{
+                      flexDirection: 'row',
+                      alignItems: 'center',
+                      backgroundColor: reaction.hasReacted ? 'rgba(255,200,87,0.2)' : 'rgba(0,0,0,0.05)',
+                      borderRadius: 12,
+                      paddingHorizontal: 8,
+                      paddingVertical: 3,
+                      borderWidth: reaction.hasReacted ? 1 : 0,
+                      borderColor: '#ffc857',
+                    }}
+                  >
+                    <Text style={{ fontSize: 14 }}>{reaction.emoji}</Text>
+                    <Text style={{ fontSize: 11, color: '#666', marginLeft: 3 }}>{reaction.count}</Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+            )}
+          </TouchableOpacity>
         </View>
       );
     },
-    [meId, members]
+    [meId, members, playingSound, handleLongPressMessage, handleReactToMessage, handleDoubleTap]
   );
 
   const typingText = useMemo(() => {
@@ -883,20 +1227,98 @@ export default function GroupChatScreen() {
       </View>
 
       {/* Messages */}
-      <FlatList
-        ref={listRef}
-        data={messages}
-        renderItem={renderItem}
-        keyExtractor={(item) => item.id}
-        contentContainerStyle={{ paddingVertical: 12 }}
-        onContentSizeChange={() => listRef.current?.scrollToEnd({ animated: true })}
-      />
+      <View style={{ flex: 1 }}>
+        <FlatList
+          ref={listRef}
+          data={messages}
+          renderItem={renderItem}
+          keyExtractor={(item) => item.id}
+          contentContainerStyle={{ paddingVertical: 12 }}
+          onContentSizeChange={() => {
+            if (!showScrollButton) {
+              listRef.current?.scrollToEnd({ animated: true });
+            }
+          }}
+          onScroll={(e) => {
+            const { contentOffset, contentSize, layoutMeasurement } = e.nativeEvent;
+            const distanceFromBottom = contentSize.height - contentOffset.y - layoutMeasurement.height;
+            const shouldShow = distanceFromBottom > 150;
+            
+            if (shouldShow !== showScrollButton) {
+              setShowScrollButton(shouldShow);
+              Animated.spring(scrollButtonAnim, {
+                toValue: shouldShow ? 1 : 0,
+                useNativeDriver: true,
+                tension: 50,
+                friction: 7,
+              }).start();
+            }
+          }}
+          scrollEventThrottle={16}
+          showsVerticalScrollIndicator={false}
+        />
+        
+        {/* Scroll to Bottom Button */}
+        <Animated.View style={[
+          styles.scrollToBottomButton,
+          {
+            opacity: scrollButtonAnim,
+            transform: [{ 
+              translateY: scrollButtonAnim.interpolate({
+                inputRange: [0, 1],
+                outputRange: [60, 0],
+              })
+            }],
+          }
+        ]}>
+          <TouchableOpacity
+            onPress={() => {
+              listRef.current?.scrollToEnd({ animated: true });
+              setShowScrollButton(false);
+              setUnreadCount(0);
+            }}
+            style={styles.scrollToBottomTouchable}
+            activeOpacity={0.8}
+          >
+            {unreadCount > 0 && (
+              <View style={styles.unreadBadge}>
+                <Text style={styles.unreadBadgeText}>{unreadCount > 99 ? '99+' : unreadCount}</Text>
+              </View>
+            )}
+            <ChevronDown size={24} color="#FFFFFF" strokeWidth={2.5} />
+          </TouchableOpacity>
+        </Animated.View>
+      </View>
 
       {/* Input Wrapper - ensures background color covers bottom area */}
       <View style={{ 
         backgroundColor: '#FFFFFF',
         paddingBottom: isKeyboardVisible ? (Platform.OS === 'android' ? 8 : 0) : (Platform.OS === 'android' ? 20 : 10)
       }}>
+        {/* Reply Bar - shows when replying to a message */}
+        {replyingTo && (
+          <View style={styles.replyBar}>
+            <View style={styles.replyBarContent}>
+              <View style={styles.replyBarIndicator} />
+              <View style={{ flex: 1 }}>
+                <Text style={styles.replyBarName}>
+                  Replying to {members.find(m => m.user_id === replyingTo.sender_id)?.profiles?.full_name || 'someone'}
+                </Text>
+                <Text style={styles.replyBarMessage} numberOfLines={1}>
+                  {replyingTo.message_type === 'voice' ? '🎤 Voice message' :
+                   replyingTo.message_type === 'image' ? '📷 Photo' :
+                   replyingTo.message_type === 'video' ? '📹 Video' :
+                   replyingTo.message_type === 'document' ? '📄 Document' :
+                   replyingTo.content || ''}
+                </Text>
+              </View>
+              <TouchableOpacity onPress={handleCancelReply} style={styles.replyBarClose}>
+                <X size={18} color="#6B7280" strokeWidth={2.5} />
+              </TouchableOpacity>
+            </View>
+          </View>
+        )}
+
         {/* Attachment Preview */}
         {attachment && (
           <View style={styles.attachmentPreview}>
@@ -954,21 +1376,40 @@ export default function GroupChatScreen() {
             <Smile size={22} color="#6b7280" strokeWidth={2} />
           </TouchableOpacity>
 
-          {/* Text Input */}
-          <TextInput
-            style={styles.input}
-            placeholder="Type a message..."
-            placeholderTextColor="#A3A3A3"
-            value={input}
-            onChangeText={onChangeText}
-            multiline
-            maxLength={1000}
-            cursorColor="#ffc857"
-            selectionColor="#ffc857"
-          />
+          {/* Voice Recording or Text Input */}
+          {isRecording ? (
+            <View style={styles.recordingContainer}>
+              <Animated.View style={[styles.recordingIndicator, { transform: [{ scale: pulseAnim }] }]}>
+                <View style={styles.recordingDot} />
+              </Animated.View>
+              <Text style={styles.recordingTime}>{formatRecordingDuration(recordingDuration)}</Text>
+              <TouchableOpacity onPress={cancelRecording} style={styles.cancelRecordingButton}>
+                <X size={20} color="#EF4444" strokeWidth={2.5} />
+              </TouchableOpacity>
+            </View>
+          ) : (
+            <TextInput
+              style={styles.input}
+              placeholder="Type a message..."
+              placeholderTextColor="#A3A3A3"
+              value={input}
+              onChangeText={onChangeText}
+              multiline
+              maxLength={1000}
+              cursorColor="#ffc857"
+              selectionColor="#ffc857"
+            />
+          )}
 
-          {/* Send Button */}
-          {(input.trim() || attachment) && (
+          {/* Voice Recording / Send Button */}
+          {isRecording ? (
+            <TouchableOpacity
+              style={[styles.sendButton, { backgroundColor: '#EF4444' }]}
+              onPress={stopRecording}
+            >
+              <Send size={20} color="#FFFFFF" />
+            </TouchableOpacity>
+          ) : (input.trim() || attachment) ? (
             <TouchableOpacity
               style={[styles.sendButton, sending && styles.sendButtonDisabled]}
               onPress={sendText}
@@ -979,6 +1420,14 @@ export default function GroupChatScreen() {
               ) : (
                 <Send size={20} color="#FFFFFF" />
               )}
+            </TouchableOpacity>
+          ) : (
+            <TouchableOpacity
+              style={[styles.iconButton, styles.micButton]}
+              onPress={startRecording}
+              activeOpacity={0.7}
+            >
+              <Mic size={22} color="#FFFFFF" strokeWidth={2} />
             </TouchableOpacity>
           )}
         </View>
@@ -1020,6 +1469,77 @@ export default function GroupChatScreen() {
             />
           </View>
         </View>
+      </Modal>
+
+      {/* Message Options Modal */}
+      <Modal
+        visible={showMessageOptions}
+        animationType="fade"
+        transparent={true}
+        onRequestClose={() => {
+          setShowMessageOptions(false);
+          setSelectedMessage(null);
+        }}
+      >
+        <Pressable 
+          style={styles.modalOverlay} 
+          onPress={() => {
+            setShowMessageOptions(false);
+            setSelectedMessage(null);
+          }}
+        >
+          <View style={styles.messageOptionsContainer}>
+            <Text style={styles.messageOptionsTitle}>Message Options</Text>
+            
+            {/* Quick Reactions Row */}
+            <View style={styles.quickReactionsRow}>
+              {REACTION_EMOJIS.map((emoji) => (
+                <TouchableOpacity
+                  key={emoji}
+                  style={styles.quickReactionButton}
+                  onPress={() => handleReactToMessage(emoji)}
+                >
+                  <Text style={{ fontSize: 24 }}>{emoji}</Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+            
+            {/* Reply Option */}
+            <TouchableOpacity 
+              style={styles.messageOption}
+              onPress={() => selectedMessage && handleReplyToMessage(selectedMessage)}
+            >
+              <View style={[styles.messageOptionIcon, { backgroundColor: '#DBEAFE' }]}>
+                <CornerUpLeft size={20} color="#1E40AF" strokeWidth={2} />
+              </View>
+              <Text style={styles.messageOptionText}>Reply</Text>
+            </TouchableOpacity>
+            
+            {/* Delete Option - only for own messages */}
+            {selectedMessage?.sender_id === meId && (
+              <TouchableOpacity 
+                style={styles.messageOption}
+                onPress={handleDeleteMessage}
+              >
+                <View style={[styles.messageOptionIcon, { backgroundColor: '#FEE2E2' }]}>
+                  <Trash2 size={20} color="#DC2626" strokeWidth={2} />
+                </View>
+                <Text style={[styles.messageOptionText, { color: '#DC2626' }]}>Delete</Text>
+              </TouchableOpacity>
+            )}
+            
+            {/* Cancel */}
+            <TouchableOpacity 
+              style={[styles.messageOption, { marginTop: 8, backgroundColor: '#F3F4F6' }]}
+              onPress={() => {
+                setShowMessageOptions(false);
+                setSelectedMessage(null);
+              }}
+            >
+              <Text style={[styles.messageOptionText, { color: '#6B7280', textAlign: 'center', flex: 1 }]}>Cancel</Text>
+            </TouchableOpacity>
+          </View>
+        </Pressable>
       </Modal>
 
       {/* Mentions suggestions */}
@@ -1252,5 +1772,168 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '600',
     color: '#1F2937',
+  },
+  // Reply Bar Styles
+  replyBar: {
+    backgroundColor: '#F9FAFB',
+    borderTopWidth: 1,
+    borderTopColor: '#E5E7EB',
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+  },
+  replyBarContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  replyBarIndicator: {
+    width: 3,
+    height: 36,
+    backgroundColor: '#ffc857',
+    borderRadius: 2,
+    marginRight: 12,
+  },
+  replyBarName: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#ffc857',
+    marginBottom: 2,
+  },
+  replyBarMessage: {
+    fontSize: 13,
+    color: '#6B7280',
+  },
+  replyBarClose: {
+    padding: 6,
+    marginLeft: 8,
+  },
+  // Voice Recording Styles
+  micButton: {
+    backgroundColor: '#0F172A',
+  },
+  recordingContainer: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#FEE2E2',
+    borderRadius: 24,
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    marginRight: 12,
+    gap: 12,
+  },
+  recordingIndicator: {
+    width: 12,
+    height: 12,
+    borderRadius: 6,
+    backgroundColor: '#EF4444',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  recordingDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: '#DC2626',
+  },
+  recordingTime: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#DC2626',
+    flex: 1,
+  },
+  cancelRecordingButton: {
+    padding: 4,
+  },
+  // Message Options Modal Styles
+  messageOptionsContainer: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 20,
+    padding: 20,
+    width: '85%',
+    maxWidth: 360,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.25,
+    shadowRadius: 16,
+    elevation: 10,
+  },
+  messageOptionsTitle: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#1F2937',
+    textAlign: 'center',
+    marginBottom: 16,
+  },
+  quickReactionsRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-around',
+    paddingVertical: 12,
+    paddingHorizontal: 8,
+    backgroundColor: '#F9FAFB',
+    borderRadius: 12,
+    marginBottom: 16,
+  },
+  quickReactionButton: {
+    padding: 6,
+  },
+  messageOption: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 14,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 12,
+    gap: 12,
+    marginBottom: 8,
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+  },
+  messageOptionIcon: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  messageOptionText: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: '#1F2937',
+  },
+  // Scroll to Bottom Button Styles
+  scrollToBottomButton: {
+    position: 'absolute',
+    bottom: 16,
+    right: 16,
+    zIndex: 100,
+  },
+  scrollToBottomTouchable: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: '#0F172A',
+    justifyContent: 'center',
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.3,
+    shadowRadius: 6,
+    elevation: 6,
+  },
+  unreadBadge: {
+    position: 'absolute',
+    top: -6,
+    right: -6,
+    minWidth: 20,
+    height: 20,
+    borderRadius: 10,
+    backgroundColor: '#ffc857',
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 6,
+  },
+  unreadBadgeText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#0F172A',
   },
 });

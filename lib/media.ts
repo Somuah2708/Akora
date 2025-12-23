@@ -7,7 +7,7 @@ import { Platform, Alert } from 'react-native';
 
 const IMAGE_MAX_BYTES = 5 * 1024 * 1024; // 5MB
 const VIDEO_MAX_BYTES = 25 * 1024 * 1024; // 25MB
-const DOCUMENT_MAX_BYTES = 10 * 1024 * 1024; // 10MB
+const DOCUMENT_MAX_BYTES = 50 * 1024 * 1024; // 50MB
 
 // Helper to provide mediaTypes in a way that works with both
 // new and old expo-image-picker APIs across iOS/Android.

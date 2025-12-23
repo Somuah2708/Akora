@@ -8,13 +8,19 @@ import {
   Modal,
   Alert,
   StyleSheet,
+  RefreshControl,
+  ActivityIndicator,
+  Image,
+  Platform,
 } from 'react-native';
-import { Plus, Search, Users, Lock, Globe, Calendar, GraduationCap, ArrowLeft, X, MessageCircle, CheckCircle, Shield } from 'lucide-react-native';
+import { Plus, Search, Users, Lock, Globe, Calendar, GraduationCap, ArrowLeft, X, MessageCircle, CheckCircle, Shield, Camera } from 'lucide-react-native';
 import { useAuth } from '@/hooks/useAuth';
-import { supabase } from '@/lib/supabase';
+import { supabase, AVATAR_BUCKET } from '@/lib/supabase';
 import { useRouter } from 'expo-router'
 import { DebouncedTouchable } from '@/components/DebouncedTouchable';
-import { debouncedRouter } from '@/utils/navigationDebounce';;
+import { debouncedRouter } from '@/utils/navigationDebounce';
+import CachedImage from '@/components/CachedImage';
+import * as ImagePicker from 'expo-image-picker';
 
 interface Circle {
   id: string;
@@ -66,6 +72,7 @@ export default function CirclesScreen() {
   const [isCreateModalVisible, setIsCreateModalVisible] = useState(false);
   const [pendingRequests, setPendingRequests] = useState<JoinRequest[]>([]);
   const [showRequests, setShowRequests] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
   
   // Form state
   const [newCircle, setNewCircle] = useState({
@@ -74,6 +81,8 @@ export default function CirclesScreen() {
     category: 'Fun Clubs',
     is_private: false,
   });
+  const [circleAvatarUri, setCircleAvatarUri] = useState<string | null>(null);
+  const [uploadingAvatar, setUploadingAvatar] = useState(false);
 
   // Categories for filtering (show all categories)
   const categories = ALL_CATEGORIES;
@@ -141,25 +150,30 @@ export default function CirclesScreen() {
           let has_pending_request = false;
 
           if (user) {
-            // Check membership
-            const { data: memberData } = await supabase
+            // Check membership - use maybeSingle() to avoid error when not found
+            const { data: memberData, error: memberError } = await supabase
               .from('circle_members')
-              .select('*')
+              .select('id, role')
               .eq('circle_id', circle.id)
               .eq('user_id', user.id)
-              .single();
+              .maybeSingle();
+
+            if (memberError) {
+              console.error('❌ Error checking membership for circle', circle.id, ':', memberError);
+            }
 
             is_member = !!memberData;
+            console.log('🔍 Membership check:', { circleId: circle.id, circleName: circle.name, userId: user.id, isMember: is_member, memberData });
 
             // Check pending requests
             if (!is_member && circle.is_private) {
               const { data: requestData } = await supabase
                 .from('circle_join_requests')
-                .select('*')
+                .select('id')
                 .eq('circle_id', circle.id)
                 .eq('user_id', user.id)
                 .eq('status', 'pending')
-                .single();
+                .maybeSingle();
 
               has_pending_request = !!requestData;
             }
@@ -181,6 +195,15 @@ export default function CirclesScreen() {
     }
   };
 
+  const onRefresh = async () => {
+    setRefreshing(true);
+    await fetchCircles();
+    if (user) {
+      await fetchPendingRequests();
+    }
+    setRefreshing(false);
+  };
+
   const fetchPendingRequests = async () => {
     if (!user) return;
 
@@ -190,7 +213,7 @@ export default function CirclesScreen() {
         .select(`
           *,
           profiles!circle_join_requests_user_id_fkey(username, full_name, avatar_url),
-          circles!circle_join_requests_circle_id_fkey(name, created_by)
+          circles!circle_join_requests_circle_id_fkey(name, created_by, group_chat_id)
         `)
         .eq('status', 'pending')
         .eq('circles.created_by', user.id);
@@ -200,6 +223,79 @@ export default function CirclesScreen() {
       setPendingRequests(data || []);
     } catch (error) {
       console.error('Error fetching pending requests:', error);
+    }
+  };
+
+  const pickCircleAvatar = async () => {
+    try {
+      // Request permissions
+      if (Platform.OS !== 'web') {
+        const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+        if (status !== 'granted') {
+          Alert.alert('Permission Denied', 'We need camera roll permissions to upload a circle avatar');
+          return;
+        }
+      }
+      
+      // Launch image picker
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        allowsEditing: true,
+        aspect: [1, 1],
+        quality: 0.8,
+      });
+      
+      if (!result.canceled && result.assets && result.assets.length > 0) {
+        setCircleAvatarUri(result.assets[0].uri);
+      }
+    } catch (error) {
+      console.error('Error picking image:', error);
+      Alert.alert('Error', 'Failed to select image');
+    }
+  };
+
+  const uploadCircleAvatar = async (circleId: string): Promise<string | null> => {
+    if (!circleAvatarUri) return null;
+    
+    try {
+      setUploadingAvatar(true);
+      
+      // Use expo-file-system to read file as base64
+      const { readAsStringAsync } = await import('expo-file-system/legacy');
+      const base64 = await readAsStringAsync(circleAvatarUri, { encoding: 'base64' });
+      
+      // Determine file extension
+      const uriParts = circleAvatarUri.split('.');
+      const ext = uriParts.length > 1 ? uriParts[uriParts.length - 1].toLowerCase() : 'jpg';
+      const mime = ext === 'png' ? 'image/png' : ext === 'webp' ? 'image/webp' : 'image/jpeg';
+      
+      // Decode base64 to ArrayBuffer
+      const { decode } = await import('base64-arraybuffer');
+      const arrayBuffer = decode(base64);
+      
+      const filePath = `circles/${circleId}/${Date.now()}.${ext}`;
+      
+      // Upload to Supabase Storage
+      const { error: uploadError } = await supabase.storage
+        .from(AVATAR_BUCKET)
+        .upload(filePath, arrayBuffer, { upsert: true, contentType: mime });
+      
+      if (uploadError) {
+        console.error('Error uploading circle avatar:', uploadError);
+        return null;
+      }
+      
+      // Get the public URL
+      const { data } = supabase.storage
+        .from(AVATAR_BUCKET)
+        .getPublicUrl(filePath);
+      
+      return data.publicUrl;
+    } catch (error) {
+      console.error('Error uploading circle avatar:', error);
+      return null;
+    } finally {
+      setUploadingAvatar(false);
     }
   };
 
@@ -229,7 +325,23 @@ export default function CirclesScreen() {
         created_by: user.id,
         is_official: isOfficialCircle,
       });
-      
+
+      // Step 1: Create the group chat first
+      const { data: groupChatId, error: groupError } = await supabase.rpc('create_group', {
+        p_name: `${newCircle.name} Chat`,
+        p_avatar_url: null,
+        p_creator_id: user.id,
+        p_member_ids: null, // Creator is added automatically
+      });
+
+      if (groupError) {
+        console.error('Error creating group chat:', groupError);
+        // Continue without group chat - we can link it later
+      }
+
+      console.log('Group chat created:', groupChatId);
+
+      // Step 2: Create the circle with the group chat linked
       const { data, error } = await supabase
         .from('circles')
         .insert([
@@ -237,6 +349,7 @@ export default function CirclesScreen() {
             ...newCircle,
             created_by: user.id,
             is_official: isOfficialCircle,
+            group_chat_id: groupChatId || null,
           }
         ])
         .select()
@@ -256,7 +369,7 @@ export default function CirclesScreen() {
       console.log('Circle created successfully:', data);
 
       // Add creator as member
-      const { error: memberError } = await supabase
+      const { data: memberData, error: memberError } = await supabase
         .from('circle_members')
         .insert([
           {
@@ -264,12 +377,31 @@ export default function CirclesScreen() {
             user_id: user.id,
             role: 'admin',
           }
-        ]);
+        ])
+        .select()
+        .single();
 
       if (memberError) {
-        console.error('Error adding creator as member:', memberError);
+        console.error('❌ Error adding creator as member:', memberError);
         Alert.alert('Warning', `Circle created but failed to add you as admin: ${memberError.message}`);
-        // Continue with success flow since circle was created
+      } else {
+        console.log('✅ Creator added as admin member:', memberData);
+      }
+
+      // Upload avatar if selected
+      if (circleAvatarUri) {
+        const avatarUrl = await uploadCircleAvatar(data.id);
+        if (avatarUrl) {
+          // Update circle with avatar URL
+          const { error: avatarError } = await supabase
+            .from('circles')
+            .update({ image_url: avatarUrl })
+            .eq('id', data.id);
+          
+          if (avatarError) {
+            console.error('Error updating circle avatar:', avatarError);
+          }
+        }
       }
 
       Alert.alert('Success', 'Circle created successfully!');
@@ -280,6 +412,7 @@ export default function CirclesScreen() {
         category: 'Fun Clubs',
         is_private: false,
       });
+      setCircleAvatarUri(null);
       fetchCircles();
     } catch (error) {
       console.error('Unexpected error creating circle:', error);
@@ -330,7 +463,37 @@ export default function CirclesScreen() {
     }
 
     try {
+      // First check if already a member
+      const { data: existingMember, error: memberCheckError } = await supabase
+        .from('circle_members')
+        .select('id')
+        .eq('circle_id', circle.id)
+        .eq('user_id', user.id)
+        .maybeSingle();
+
+      console.log('🔍 Join check - existing member:', { existingMember, memberCheckError });
+
+      if (existingMember) {
+        Alert.alert('Already a Member', 'You are already a member of this circle');
+        fetchCircles();
+        return;
+      }
+
       if (circle.is_private) {
+        // Check for existing pending request
+        const { data: existingRequest } = await supabase
+          .from('circle_join_requests')
+          .select('id, status')
+          .eq('circle_id', circle.id)
+          .eq('user_id', user.id)
+          .eq('status', 'pending')
+          .maybeSingle();
+
+        if (existingRequest) {
+          Alert.alert('Request Pending', 'You already have a pending join request for this circle');
+          return;
+        }
+
         // Create join request
         const { error } = await supabase
           .from('circle_join_requests')
@@ -348,17 +511,35 @@ export default function CirclesScreen() {
 
         Alert.alert('Success', 'Join request sent! The group admin will review your request.');
       } else {
-        // Join directly
+        // Join directly using upsert to handle race conditions
         const { error } = await supabase
           .from('circle_members')
-          .insert([
+          .upsert([
             {
               circle_id: circle.id,
               user_id: user.id,
+              role: 'member',
             }
-          ]);
+          ], {
+            onConflict: 'circle_id,user_id',
+            ignoreDuplicates: true,
+          });
 
         if (error) throw error;
+
+        // Also add to group chat if it exists
+        if (circle.group_chat_id) {
+          await supabase
+            .from('group_members')
+            .upsert({
+              group_id: circle.group_chat_id,
+              user_id: user.id,
+              role: 'member',
+            }, {
+              onConflict: 'group_id,user_id',
+              ignoreDuplicates: true,
+            });
+        }
 
         // Send notification to circle admin about new member
         await sendJoinRequestNotification(circle.id, circle.name, circle.created_by, false);
@@ -367,9 +548,15 @@ export default function CirclesScreen() {
       }
 
       fetchCircles();
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error joining circle:', error);
-      Alert.alert('Error', 'Failed to join circle');
+      // Handle duplicate key error gracefully
+      if (error.code === '23505') {
+        Alert.alert('Already a Member', 'You are already a member of this circle');
+        fetchCircles();
+      } else {
+        Alert.alert('Error', error.message || 'Failed to join circle');
+      }
     }
   };
 
@@ -425,6 +612,23 @@ export default function CirclesScreen() {
             }
           ]);
 
+        // Also add to the circle's group chat if it exists
+        const circleData = (request as any).circles;
+        if (circleData?.group_chat_id) {
+          const { error: groupError } = await supabase
+            .from('group_members')
+            .insert({
+              group_id: circleData.group_chat_id,
+              user_id: request.user_id,
+              role: 'member',
+            });
+          
+          if (groupError) {
+            console.error('Error adding approved user to group chat:', groupError);
+            // Don't fail the whole operation
+          }
+        }
+
         // Send approval notification to user
         await supabase
           .from('notifications')
@@ -433,7 +637,7 @@ export default function CirclesScreen() {
               recipient_id: request.user_id,
               actor_id: user?.id,
               type: 'circle_join_approved',
-              content: `approved your request to join "${(request as any).circles?.name || 'the circle'}"`,
+              content: `approved your request to join "${circleData?.name || 'the circle'}"`,
               post_id: null,
               comment_id: null,
             }
@@ -473,6 +677,8 @@ export default function CirclesScreen() {
     // Determine if this is an official/admin-created circle
     const isOfficialCircle = circle.is_official || ADMIN_ONLY_CATEGORIES.includes(circle.category);
     
+    console.log('🎨 Rendering circle card:', { name: circle.name, image_url: circle.image_url });
+    
     return (
       <TouchableOpacity 
         key={circle.id} 
@@ -492,6 +698,21 @@ export default function CirclesScreen() {
         )}
         
         <View style={styles.circleHeader}>
+          {/* Circle Avatar */}
+          <View style={styles.circleAvatarContainer}>
+            {circle.image_url ? (
+              <CachedImage 
+                source={{ uri: circle.image_url }} 
+                style={styles.circleAvatar}
+                onError={(e: any) => console.log('❌ Circle list avatar error:', circle.name, e)}
+              />
+            ) : (
+              <View style={styles.circleAvatarPlaceholder}>
+                <Users size={24} color="#ffc857" />
+              </View>
+            )}
+          </View>
+          
           <View style={styles.circleInfo}>
             <View style={styles.circleTitleRow}>
               <Text style={styles.circleTitle}>{circle.name}</Text>
@@ -565,9 +786,31 @@ export default function CirclesScreen() {
   const myCircles = filteredCircles.filter(circle => circle.created_by === user?.id);
   const otherCircles = filteredCircles.filter(circle => circle.created_by !== user?.id);
 
+  // Show blank screen with centered spinner when refreshing
+  if (refreshing) {
+    return (
+      <View style={styles.container}>
+        <View style={styles.refreshingContainer}>
+          <ActivityIndicator size="large" color="#ffc857" />
+        </View>
+      </View>
+    );
+  }
+
   return (
     <View style={styles.container}>
-      <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
+      <ScrollView 
+        style={styles.content} 
+        showsVerticalScrollIndicator={false}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={onRefresh}
+            tintColor="#ffc857"
+            colors={['#ffc857']}
+          />
+        }
+      >
         {/* Header */}
         <View style={styles.header}>
           <TouchableOpacity onPress={() => debouncedRouter.push('/(tabs)')} style={styles.backButton}>
@@ -726,7 +969,7 @@ export default function CirclesScreen() {
         style={styles.floatingButton}
         onPress={() => setIsCreateModalVisible(true)}
       >
-        <Plus size={24} color="#fff" />
+        <Plus size={24} color="#0F172A" />
       </TouchableOpacity>
 
       {/* Create Circle Modal */}
@@ -737,16 +980,56 @@ export default function CirclesScreen() {
       >
         <View style={styles.modalContainer}>
           <View style={styles.modalHeader}>
-            <TouchableOpacity onPress={() => setIsCreateModalVisible(false)}>
+            <TouchableOpacity onPress={() => {
+              setIsCreateModalVisible(false);
+              setCircleAvatarUri(null);
+            }}>
               <Text style={styles.cancelButton}>Cancel</Text>
             </TouchableOpacity>
             <Text style={styles.modalTitle}>Create Circle</Text>
-            <TouchableOpacity onPress={createCircle}>
-              <Text style={styles.createButton}>Create</Text>
+            <TouchableOpacity onPress={createCircle} disabled={uploadingAvatar}>
+              <Text style={[styles.createButton, uploadingAvatar && { opacity: 0.5 }]}>
+                {uploadingAvatar ? 'Creating...' : 'Create'}
+              </Text>
             </TouchableOpacity>
           </View>
 
           <ScrollView style={styles.modalContent}>
+            {/* Avatar Picker */}
+            <View style={styles.formGroup}>
+              <Text style={styles.label}>Circle Avatar</Text>
+              <TouchableOpacity 
+                style={styles.avatarPickerContainer} 
+                onPress={pickCircleAvatar}
+                disabled={uploadingAvatar}
+              >
+                {circleAvatarUri ? (
+                  <Image 
+                    source={{ uri: circleAvatarUri }} 
+                    style={styles.avatarPreview} 
+                  />
+                ) : (
+                  <View style={styles.avatarPlaceholder}>
+                    <Camera size={32} color="#666" />
+                    <Text style={styles.avatarPlaceholderText}>Add Photo</Text>
+                  </View>
+                )}
+                {uploadingAvatar && (
+                  <View style={styles.avatarUploadingOverlay}>
+                    <ActivityIndicator color="#fff" />
+                  </View>
+                )}
+              </TouchableOpacity>
+              {circleAvatarUri && (
+                <TouchableOpacity 
+                  style={styles.removeAvatarButton}
+                  onPress={() => setCircleAvatarUri(null)}
+                >
+                  <Text style={styles.removeAvatarText}>Remove Photo</Text>
+                </TouchableOpacity>
+              )}
+            </View>
+
             <View style={styles.formGroup}>
               <Text style={styles.label}>Circle Name *</Text>
               <TextInput
@@ -847,6 +1130,12 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: '#f5f5f5',
   },
+  refreshingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: '#f5f5f5',
+  },
   header: {
     padding: 20,
     paddingTop: 60,
@@ -923,8 +1212,8 @@ const styles = StyleSheet.create({
     borderColor: '#e0e0e0',
   },
   categoryButtonActive: {
-    backgroundColor: '#007AFF',
-    borderColor: '#007AFF',
+    backgroundColor: '#0F172A',
+    borderColor: '#0F172A',
   },
   categoryButtonText: {
     fontSize: 14,
@@ -956,7 +1245,7 @@ const styles = StyleSheet.create({
   },
   toggleText: {
     fontSize: 16,
-    color: '#007AFF',
+    color: '#ffc857',
     fontWeight: '500',
   },
   circleCard: {
@@ -1001,14 +1290,14 @@ const styles = StyleSheet.create({
     marginBottom: 8,
   },
   categoryBadge: {
-    backgroundColor: '#EFF6FF',
+    backgroundColor: '#FFF8E7',
     paddingHorizontal: 10,
     paddingVertical: 4,
     borderRadius: 12,
   },
   categoryBadgeText: {
     fontSize: 12,
-    color: '#007AFF',
+    color: '#B8860B',
     fontWeight: '600',
   },
   officialCategoryBadge: {
@@ -1030,6 +1319,24 @@ const styles = StyleSheet.create({
   },
   circleHeader: {
     marginBottom: 12,
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+  },
+  circleAvatarContainer: {
+    marginRight: 12,
+  },
+  circleAvatar: {
+    width: 50,
+    height: 50,
+    borderRadius: 25,
+  },
+  circleAvatarPlaceholder: {
+    width: 50,
+    height: 50,
+    borderRadius: 25,
+    backgroundColor: '#FFF8E7',
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   circleInfo: {
     flex: 1,
@@ -1047,7 +1354,7 @@ const styles = StyleSheet.create({
   },
   circleCategory: {
     fontSize: 14,
-    color: '#007AFF',
+    color: '#0F172A',
     fontWeight: '500',
     marginBottom: 8,
   },
@@ -1078,21 +1385,21 @@ const styles = StyleSheet.create({
   chatButton: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#EFF6FF',
+    backgroundColor: '#FFF8E7',
     paddingHorizontal: 12,
     paddingVertical: 8,
     borderRadius: 8,
     gap: 6,
     borderWidth: 1,
-    borderColor: '#007AFF',
+    borderColor: '#ffc857',
   },
   chatButtonText: {
-    color: '#007AFF',
+    color: '#0F172A',
     fontSize: 14,
     fontWeight: '600',
   },
   joinButton: {
-    backgroundColor: '#007AFF',
+    backgroundColor: '#0F172A',
     paddingHorizontal: 16,
     paddingVertical: 8,
     borderRadius: 8,
@@ -1190,7 +1497,7 @@ const styles = StyleSheet.create({
     marginBottom: 16,
   },
   clearFiltersButton: {
-    backgroundColor: '#007AFF',
+    backgroundColor: '#0F172A',
     paddingHorizontal: 20,
     paddingVertical: 10,
     borderRadius: 20,
@@ -1208,7 +1515,7 @@ const styles = StyleSheet.create({
     width: 56,
     height: 56,
     borderRadius: 28,
-    backgroundColor: '#007AFF',
+    backgroundColor: '#ffc857',
     justifyContent: 'center',
     alignItems: 'center',
     elevation: 8,
@@ -1242,12 +1549,57 @@ const styles = StyleSheet.create({
   },
   createButton: {
     fontSize: 16,
-    color: '#007AFF',
+    color: '#ffc857',
     fontWeight: '600',
   },
   modalContent: {
     flex: 1,
     padding: 16,
+  },
+  avatarPickerContainer: {
+    alignSelf: 'center',
+    width: 120,
+    height: 120,
+    borderRadius: 60,
+    overflow: 'hidden',
+    marginBottom: 8,
+  },
+  avatarPreview: {
+    width: 120,
+    height: 120,
+    borderRadius: 60,
+  },
+  avatarPlaceholder: {
+    width: 120,
+    height: 120,
+    borderRadius: 60,
+    backgroundColor: '#f0f0f0',
+    borderWidth: 2,
+    borderColor: '#e0e0e0',
+    borderStyle: 'dashed',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  avatarPlaceholderText: {
+    fontSize: 14,
+    color: '#666',
+    marginTop: 8,
+  },
+  avatarUploadingOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderRadius: 60,
+  },
+  removeAvatarButton: {
+    alignSelf: 'center',
+    paddingVertical: 8,
+  },
+  removeAvatarText: {
+    color: '#FF3B30',
+    fontSize: 14,
+    fontWeight: '500',
   },
   formGroup: {
     marginBottom: 24,
@@ -1283,8 +1635,8 @@ const styles = StyleSheet.create({
     borderColor: '#e0e0e0',
   },
   categoryOptionActive: {
-    backgroundColor: '#007AFF',
-    borderColor: '#007AFF',
+    backgroundColor: '#0F172A',
+    borderColor: '#0F172A',
   },
   adminCategoryOption: {
     borderColor: '#ffc857',
@@ -1351,7 +1703,7 @@ const styles = StyleSheet.create({
     padding: 2,
   },
   toggleActive: {
-    backgroundColor: '#007AFF',
+    backgroundColor: '#ffc857',
   },
   toggleThumb: {
     width: 26,

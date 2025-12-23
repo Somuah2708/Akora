@@ -21,7 +21,7 @@ import { useLocalSearchParams, useRouter } from 'expo-router'
 import { DebouncedTouchable } from '@/components/DebouncedTouchable';
 import { debouncedRouter } from '@/utils/navigationDebounce';;
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { ArrowLeft, Send, Smile, X, Play, Pause, Check, CheckCheck, FileText, Paperclip, Camera, Image as ImageIcon, File } from 'lucide-react-native';
+import { ArrowLeft, Send, Smile, X, Play, Pause, Check, CheckCheck, FileText, Paperclip, Camera, Image as ImageIcon, File, Mic } from 'lucide-react-native';
 import * as ImagePicker from 'expo-image-picker';
 import * as DocumentPicker from 'expo-document-picker';
 import * as MediaLibrary from 'expo-media-library';
@@ -1594,8 +1594,8 @@ export default function DirectMessageScreen() {
             selectionColor="#ffc857"
           />
 
-          {/* Send Button */}
-          {(messageText.trim() || attachment) && (
+          {/* Send or Mic Button */}
+          {(messageText.trim() || attachment) ? (
             <TouchableOpacity
               style={[styles.sendButton, sending && styles.sendButtonDisabled]}
               onPress={handleSend}
@@ -1606,6 +1606,32 @@ export default function DirectMessageScreen() {
               ) : (
                 <Send size={20} color="#FFFFFF" />
               )}
+            </TouchableOpacity>
+          ) : recording ? (
+            <View style={styles.recordingControls}>
+              <TouchableOpacity
+                style={styles.cancelRecordButton}
+                onPress={handleCancelRecording}
+              >
+                <X size={20} color="#EF4444" />
+              </TouchableOpacity>
+              <View style={styles.recordingIndicator}>
+                <View style={styles.recordingDot} />
+                <Text style={styles.recordingText}>Recording...</Text>
+              </View>
+              <TouchableOpacity
+                style={styles.sendButton}
+                onPress={handleStopRecording}
+              >
+                <Send size={20} color="#FFFFFF" />
+              </TouchableOpacity>
+            </View>
+          ) : (
+            <TouchableOpacity
+              style={styles.micButton}
+              onPress={handleStartRecording}
+            >
+              <Mic size={22} color="#4169E1" />
             </TouchableOpacity>
           )}
         </View>
@@ -2019,6 +2045,47 @@ const styles = StyleSheet.create({
   sendButtonDisabled: {
     backgroundColor: '#9CA3AF',
     opacity: 0.5,
+  },
+  micButton: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    backgroundColor: '#F1F5F9',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  recordingControls: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  cancelRecordButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: '#FEE2E2',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  recordingIndicator: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    backgroundColor: '#FEF2F2',
+    borderRadius: 20,
+  },
+  recordingDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: '#EF4444',
+  },
+  recordingText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#EF4444',
   },
   messageImage: {
     width: 220,

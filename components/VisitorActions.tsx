@@ -74,6 +74,16 @@ export default function VisitorActions({ userId, onMessage, onFollow, following,
   };
 
   const handleMessage = () => {
+    // Check if they're friends first
+    if (friendshipStatus !== 'friends') {
+      Alert.alert(
+        'Not Friends Yet',
+        'You need to be friends with this person before you can send them a message.',
+        [{ text: 'OK' }]
+      );
+      return;
+    }
+    
     if (onMessage) {
       onMessage();
     } else {

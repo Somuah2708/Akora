@@ -1,12 +1,16 @@
-import { View, Text, StyleSheet, ScrollView, TextInput, TouchableOpacity, KeyboardAvoidingView, Platform, Alert } from 'react-native';
-import { ArrowLeft, Send } from 'lucide-react-native';
+import { View, Text, StyleSheet, ScrollView, TextInput, TouchableOpacity, KeyboardAvoidingView, Platform, Alert, Animated } from 'react-native';
+import { ArrowLeft, Send, Mic, X, Play, Pause } from 'lucide-react-native';
 import { useFonts, Inter_400Regular, Inter_600SemiBold } from '@expo-google-fonts/inter';
 import { useEffect, useState, useRef } from 'react';
 import { SplashScreen, useRouter, useLocalSearchParams } from 'expo-router'
 import { DebouncedTouchable } from '@/components/DebouncedTouchable';
 import { debouncedRouter } from '@/utils/navigationDebounce';;
 import { fetchChatMessages, sendMessage as sendMessageHelper, subscribeToMessages as subscribeToMessagesHelper, getChatInfo, markChatAsRead } from '@/lib/chats';
+import { startRecording, stopRecording, cancelRecording } from '@/lib/media';
 import { useAuth } from '@/hooks/useAuth';
+import { supabase } from '@/lib/supabase';
+import { Audio } from 'expo-av';
+import * as Haptics from 'expo-haptics';
 import type { Message, Profile } from '@/lib/supabase';
 
 SplashScreen.preventAutoHideAsync();
@@ -26,6 +30,15 @@ export default function ChatDetailScreen() {
     avatar_url?: string;
     type: 'direct' | 'group';
   } | null>(null);
+  
+  // Voice recording state
+  const [isRecording, setIsRecording] = useState(false);
+  const [recordingDuration, setRecordingDuration] = useState(0);
+  const [uploadingVoice, setUploadingVoice] = useState(false);
+  const [playingSound, setPlayingSound] = useState<{ [key: string]: boolean }>({});
+  const recordingTimer = useRef<NodeJS.Timeout | null>(null);
+  const pulseAnim = useRef(new Animated.Value(1)).current;
+  const soundObjects = useRef<{ [key: string]: Audio.Sound }>({});
 
   const [fontsLoaded] = useFonts({
     'Inter-Regular': Inter_400Regular,
@@ -123,6 +136,157 @@ export default function ChatDetailScreen() {
     }
   };
 
+  // Voice recording functions
+  const handleStartRecording = async () => {
+    const success = await startRecording();
+    if (success) {
+      setIsRecording(true);
+      setRecordingDuration(0);
+      
+      // Start duration timer
+      recordingTimer.current = setInterval(() => {
+        setRecordingDuration(prev => prev + 1);
+      }, 1000);
+      
+      // Pulse animation
+      Animated.loop(
+        Animated.sequence([
+          Animated.timing(pulseAnim, { toValue: 1.2, duration: 500, useNativeDriver: true }),
+          Animated.timing(pulseAnim, { toValue: 1, duration: 500, useNativeDriver: true }),
+        ])
+      ).start();
+      
+      // Haptic feedback
+      if (Platform.OS !== 'web') {
+        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+      }
+    }
+  };
+
+  const handleStopRecording = async () => {
+    if (!user || !chatId) return;
+    
+    setIsRecording(false);
+    setUploadingVoice(true);
+    
+    // Stop timer and animation
+    if (recordingTimer.current) {
+      clearInterval(recordingTimer.current);
+      recordingTimer.current = null;
+    }
+    pulseAnim.stopAnimation();
+    pulseAnim.setValue(1);
+    
+    try {
+      const voiceUrl = await stopRecording(user.id);
+      
+      if (voiceUrl) {
+        // Send voice message through the chat system
+        // We need to insert directly since sendMessageHelper doesn't support media
+        const { error } = await supabase
+          .from('messages')
+          .insert({
+            chat_id: chatId,
+            sender_id: user.id,
+            content: '🎤 Voice message',
+            message_type: 'voice',
+            media_url: voiceUrl
+          });
+        
+        if (error) throw error;
+        
+        // Haptic feedback
+        if (Platform.OS !== 'web') {
+          Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+        }
+        
+        // Scroll to bottom
+        setTimeout(() => {
+          scrollViewRef.current?.scrollToEnd({ animated: true });
+        }, 100);
+      }
+    } catch (error) {
+      console.error('Error sending voice message:', error);
+      Alert.alert('Error', 'Failed to send voice message');
+    } finally {
+      setUploadingVoice(false);
+      setRecordingDuration(0);
+    }
+  };
+
+  const handleCancelRecording = async () => {
+    await cancelRecording();
+    setIsRecording(false);
+    setRecordingDuration(0);
+    
+    // Stop timer and animation
+    if (recordingTimer.current) {
+      clearInterval(recordingTimer.current);
+      recordingTimer.current = null;
+    }
+    pulseAnim.stopAnimation();
+    pulseAnim.setValue(1);
+  };
+
+  const formatRecordingDuration = (seconds: number) => {
+    const mins = Math.floor(seconds / 60);
+    const secs = seconds % 60;
+    return `${mins}:${secs.toString().padStart(2, '0')}`;
+  };
+
+  const toggleVoicePlayback = async (messageId: string, voiceUrl: string) => {
+    try {
+      if (playingSound[messageId]) {
+        // Stop playing
+        const sound = soundObjects.current[messageId];
+        if (sound) {
+          await sound.stopAsync();
+          await sound.unloadAsync();
+          delete soundObjects.current[messageId];
+        }
+        setPlayingSound(prev => ({ ...prev, [messageId]: false }));
+      } else {
+        // Start playing
+        const { sound } = await Audio.Sound.createAsync(
+          { uri: voiceUrl },
+          { shouldPlay: true }
+        );
+        soundObjects.current[messageId] = sound;
+        setPlayingSound(prev => ({ ...prev, [messageId]: true }));
+        
+        sound.setOnPlaybackStatusUpdate((status) => {
+          if (status.isLoaded && status.didJustFinish) {
+            setPlayingSound(prev => ({ ...prev, [messageId]: false }));
+            sound.unloadAsync();
+            delete soundObjects.current[messageId];
+          }
+        });
+      }
+    } catch (error) {
+      console.error('Error playing voice message:', error);
+      Alert.alert('Error', 'Failed to play voice message');
+    }
+  };
+
+  // Cleanup audio on unmount
+  useEffect(() => {
+    return () => {
+      Object.values(soundObjects.current).forEach(async (sound) => {
+        try {
+          await sound.stopAsync();
+          await sound.unloadAsync();
+        } catch (e) {
+          console.log('Error cleaning up sound:', e);
+        }
+      });
+      
+      // Cleanup recording timer
+      if (recordingTimer.current) {
+        clearInterval(recordingTimer.current);
+      }
+    };
+  }, []);
+
   const formatTime = (timestamp: string) => {
     const date = new Date(timestamp);
     return date.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit', hour12: true });
@@ -148,6 +312,7 @@ export default function ChatDetailScreen() {
     const prevMessage = index > 0 ? messages[index - 1] : null;
     const showDateSeparator = !prevMessage || 
       new Date(message.created_at).toDateString() !== new Date(prevMessage.created_at).toDateString();
+    const isVoiceMessage = (message as any).message_type === 'voice' && (message as any).media_url;
 
     return (
       <View key={message.id}>
@@ -169,12 +334,44 @@ export default function ChatDetailScreen() {
                 {message.profiles?.full_name || message.profiles?.username || 'Unknown'}
               </Text>
             )}
-            <Text style={[
-              styles.messageText,
-              isMyMessage ? styles.myMessageText : styles.otherMessageText
-            ]}>
-              {message.content}
-            </Text>
+            {isVoiceMessage ? (
+              <TouchableOpacity 
+                style={styles.voiceMessageContainer}
+                onPress={() => toggleVoicePlayback(message.id, (message as any).media_url)}
+              >
+                <View style={[styles.voicePlayButton, isMyMessage && styles.myVoicePlayButton]}>
+                  {playingSound[message.id] ? (
+                    <Pause size={20} color={isMyMessage ? '#4169E1' : '#FFFFFF'} />
+                  ) : (
+                    <Play size={20} color={isMyMessage ? '#4169E1' : '#FFFFFF'} />
+                  )}
+                </View>
+                <View style={styles.voiceWaveform}>
+                  {[...Array(12)].map((_, i) => (
+                    <View 
+                      key={i} 
+                      style={[
+                        styles.voiceBar,
+                        { 
+                          height: 8 + Math.random() * 16,
+                          backgroundColor: isMyMessage ? 'rgba(255,255,255,0.6)' : '#94A3B8'
+                        }
+                      ]} 
+                    />
+                  ))}
+                </View>
+                <Text style={[styles.voiceDuration, isMyMessage && styles.myVoiceDuration]}>
+                  0:30
+                </Text>
+              </TouchableOpacity>
+            ) : (
+              <Text style={[
+                styles.messageText,
+                isMyMessage ? styles.myMessageText : styles.otherMessageText
+              ]}>
+                {message.content}
+              </Text>
+            )}
             <View style={styles.messageFooter}>
               <Text style={[
                 styles.messageTime,
@@ -242,25 +439,63 @@ export default function ChatDetailScreen() {
 
       {/* Input */}
       <View style={styles.inputContainer}>
-        <TextInput
-          style={styles.textInput}
-          placeholder="Type a message..."
-          placeholderTextColor="#64748B"
-          value={newMessage}
-          onChangeText={setNewMessage}
-          multiline
-          maxLength={1000}
-        />
-        <TouchableOpacity 
-          style={[
-            styles.sendButton,
-            (!newMessage.trim() || sending) && styles.sendButtonDisabled
-          ]}
-          onPress={sendMessage}
-          disabled={!newMessage.trim() || sending}
-        >
-          <Send size={20} color="#FFFFFF" />
-        </TouchableOpacity>
+        {isRecording ? (
+          // Recording UI
+          <View style={styles.recordingContainer}>
+            <TouchableOpacity 
+              style={styles.cancelRecordingButton}
+              onPress={handleCancelRecording}
+            >
+              <X size={20} color="#EF4444" />
+            </TouchableOpacity>
+            <View style={styles.recordingInfo}>
+              <Animated.View style={[styles.recordingPulse, { transform: [{ scale: pulseAnim }] }]}>
+                <View style={styles.recordingDot} />
+              </Animated.View>
+              <Text style={styles.recordingText}>Recording</Text>
+              <Text style={styles.recordingDuration}>{formatRecordingDuration(recordingDuration)}</Text>
+            </View>
+            <TouchableOpacity 
+              style={styles.stopRecordingButton}
+              onPress={handleStopRecording}
+              disabled={uploadingVoice}
+            >
+              <Send size={20} color="#FFFFFF" />
+            </TouchableOpacity>
+          </View>
+        ) : (
+          // Normal input UI
+          <>
+            <TextInput
+              style={styles.textInput}
+              placeholder="Type a message..."
+              placeholderTextColor="#64748B"
+              value={newMessage}
+              onChangeText={setNewMessage}
+              multiline
+              maxLength={1000}
+            />
+            {newMessage.trim() ? (
+              <TouchableOpacity 
+                style={[
+                  styles.sendButton,
+                  sending && styles.sendButtonDisabled
+                ]}
+                onPress={sendMessage}
+                disabled={sending}
+              >
+                <Send size={20} color="#FFFFFF" />
+              </TouchableOpacity>
+            ) : (
+              <TouchableOpacity 
+                style={styles.micButton}
+                onPress={handleStartRecording}
+              >
+                <Mic size={22} color="#4169E1" />
+              </TouchableOpacity>
+            )}
+          </>
+        )}
       </View>
     </KeyboardAvoidingView>
   );
@@ -432,5 +667,110 @@ const styles = StyleSheet.create({
   },
   sendButtonDisabled: {
     backgroundColor: '#CBD5E1',
+  },
+  // Voice recording styles
+  micButton: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    backgroundColor: '#F1F5F9',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  recordingContainer: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#FEF2F2',
+    borderRadius: 24,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+  },
+  cancelRecordingButton: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: '#FEE2E2',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 12,
+  },
+  recordingInfo: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  recordingPulse: {
+    width: 12,
+    height: 12,
+    borderRadius: 6,
+    backgroundColor: '#FEE2E2',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 8,
+  },
+  recordingDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: '#EF4444',
+  },
+  recordingText: {
+    fontSize: 14,
+    fontFamily: 'Inter-SemiBold',
+    color: '#EF4444',
+    marginRight: 8,
+  },
+  recordingDuration: {
+    fontSize: 14,
+    fontFamily: 'Inter-Regular',
+    color: '#64748B',
+  },
+  stopRecordingButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: '#4169E1',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginLeft: 12,
+  },
+  // Voice message styles
+  voiceMessageContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    minWidth: 180,
+  },
+  voicePlayButton: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: '#4169E1',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 10,
+  },
+  myVoicePlayButton: {
+    backgroundColor: 'rgba(255, 255, 255, 0.3)',
+  },
+  voiceWaveform: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    height: 32,
+    gap: 2,
+  },
+  voiceBar: {
+    width: 3,
+    borderRadius: 1.5,
+  },
+  voiceDuration: {
+    fontSize: 12,
+    fontFamily: 'Inter-Regular',
+    color: '#64748B',
+    marginLeft: 8,
+  },
+  myVoiceDuration: {
+    color: 'rgba(255, 255, 255, 0.8)',
   },
 });

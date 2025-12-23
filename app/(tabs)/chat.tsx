@@ -1,5 +1,5 @@
 import { View, Text, StyleSheet, ScrollView, Image, TouchableOpacity, TextInput, Modal, FlatList, Alert, RefreshControl, ActivityIndicator } from 'react-native';
-import { Search, Plus, MoveVertical as MoreVertical, X, MessageCircle, UserPlus, Check, CheckCheck, Users, ArrowLeft } from 'lucide-react-native';
+import { Search, Plus, MoveVertical as MoreVertical, X, MessageCircle, UserPlus, Check, CheckCheck, Users, ArrowLeft, Circle } from 'lucide-react-native';
 import { useFonts, Inter_400Regular, Inter_600SemiBold } from '@expo-google-fonts/inter';
 import { useEffect, useState } from 'react';
 import { SplashScreen, useRouter } from 'expo-router'
@@ -40,7 +40,7 @@ export default function ChatScreen() {
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [loading, setLoading] = useState(true);
   // Groups state
-  type GroupItem = { group: { id: string; name: string; avatar_url?: string | null }, lastMessage: any | null, unreadCount: number };
+  type GroupItem = { group: { id: string; name: string; avatar_url?: string | null }, lastMessage: any | null, unreadCount: number, isCircle?: boolean };
   const [groups, setGroups] = useState<GroupItem[]>([]);
   const [groupsLoading, setGroupsLoading] = useState(true);
   const [supportConversations, setSupportConversations] = useState<any[]>([]);
@@ -509,8 +509,22 @@ export default function ChatScreen() {
         .eq('user_id', user.id);
       if (error) throw error;
       const groupList = (memberships || []).map((m: any) => m.groups).filter(Boolean);
-      // Compose base items
-      const base: GroupItem[] = groupList.map((g: any) => ({ group: { id: g.id, name: g.name, avatar_url: g.avatar_url }, lastMessage: null, unreadCount: 0 }));
+      
+      // Fetch circle group IDs to identify which groups are circle chats
+      const groupIds = groupList.map((g: any) => g.id);
+      const { data: circleGroups } = await supabase
+        .from('circles')
+        .select('group_chat_id')
+        .in('group_chat_id', groupIds);
+      const circleGroupIds = new Set((circleGroups || []).map((c: any) => c.group_chat_id));
+      
+      // Compose base items with isCircle flag
+      const base: GroupItem[] = groupList.map((g: any) => ({ 
+        group: { id: g.id, name: g.name, avatar_url: g.avatar_url }, 
+        lastMessage: null, 
+        unreadCount: 0,
+        isCircle: circleGroupIds.has(g.id)
+      }));
       // Fetch unread counts for all groups in one call
       const { data: unreadRows } = await supabase.rpc('group_unread_counts', { p_user_id: user.id });
       const unreadMap = new Map<string, number>();
@@ -898,6 +912,7 @@ export default function ChatScreen() {
                       const others = groups.filter((g) => !pinnedGroupIds.has(g.group.id));
                       const renderRow = (g: GroupItem) => {
                         const isPinned = pinnedGroupIds.has(g.group.id);
+                        const isCircleChat = g.isCircle;
                         return (
                           <TouchableOpacity 
                             key={g.group.id} 
@@ -913,8 +928,12 @@ export default function ChatScreen() {
                                 }} 
                                 style={styles.avatar} 
                               />
-                              <View style={styles.groupBadge}>
-                                <Users size={14} color="#FFFFFF" strokeWidth={2.5} />
+                              <View style={[styles.groupBadge, isCircleChat && styles.circleBadge]}>
+                                {isCircleChat ? (
+                                  <Circle size={14} color="#FFFFFF" strokeWidth={2.5} fill="#FFFFFF" />
+                                ) : (
+                                  <Users size={14} color="#FFFFFF" strokeWidth={2.5} />
+                                )}
                               </View>
                             </View>
                             <View style={styles.chatInfo}>
@@ -1403,6 +1422,9 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     borderWidth: 2,
     borderColor: '#FFFFFF',
+  },
+  circleBadge: {
+    backgroundColor: '#8B5CF6',
   },
   chatInfo: {
     flex: 1,
