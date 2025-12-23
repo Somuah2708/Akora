@@ -52,6 +52,11 @@ interface JoinRequest {
     full_name: string;
     avatar_url?: string;
   };
+  circle?: {
+    name: string;
+    created_by: string;
+    group_chat_id?: string;
+  };
 }
 
 // Tier System: Define which categories are admin-only vs user-created
@@ -71,6 +76,7 @@ export default function CirclesScreen() {
   const [selectedCategory, setSelectedCategory] = useState('All');
   const [isCreateModalVisible, setIsCreateModalVisible] = useState(false);
   const [pendingRequests, setPendingRequests] = useState<JoinRequest[]>([]);
+  const [approvedRequests, setApprovedRequests] = useState<{id: string; circleName: string; circleId: string}[]>([]);
   const [showRequests, setShowRequests] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   
@@ -96,6 +102,7 @@ export default function CirclesScreen() {
     fetchCircles();
     if (user) {
       fetchPendingRequests();
+      fetchApprovedRequests();
     }
   }, [user]);
 
@@ -200,6 +207,7 @@ export default function CirclesScreen() {
     await fetchCircles();
     if (user) {
       await fetchPendingRequests();
+      await fetchApprovedRequests();
     }
     setRefreshing(false);
   };
@@ -208,21 +216,86 @@ export default function CirclesScreen() {
     if (!user) return;
 
     try {
+      // First get circles created by the current user
+      const { data: myCircles, error: circlesError } = await supabase
+        .from('circles')
+        .select('id')
+        .eq('created_by', user.id);
+
+      if (circlesError) throw circlesError;
+      
+      if (!myCircles || myCircles.length === 0) {
+        setPendingRequests([]);
+        return;
+      }
+
+      const myCircleIds = myCircles.map(c => c.id);
+
+      // Then get pending requests only for those circles
       const { data, error } = await supabase
         .from('circle_join_requests')
         .select(`
           *,
-          profiles!circle_join_requests_user_id_fkey(username, full_name, avatar_url),
-          circles!circle_join_requests_circle_id_fkey(name, created_by, group_chat_id)
+          user_profile:profiles!circle_join_requests_user_id_fkey(username, full_name, avatar_url),
+          circle:circles!circle_join_requests_circle_id_fkey(name, created_by, group_chat_id)
         `)
         .eq('status', 'pending')
-        .eq('circles.created_by', user.id);
+        .in('circle_id', myCircleIds);
 
       if (error) throw error;
 
       setPendingRequests(data || []);
     } catch (error) {
       console.error('Error fetching pending requests:', error);
+    }
+  };
+
+  // Fetch approved requests for the current user (to show acceptance notifications)
+  const fetchApprovedRequests = async () => {
+    if (!user) return;
+
+    try {
+      const { data, error } = await supabase
+        .from('circle_join_requests')
+        .select(`
+          id,
+          circle_id,
+          circle:circles!circle_join_requests_circle_id_fkey(name)
+        `)
+        .eq('user_id', user.id)
+        .eq('status', 'approved');
+
+      if (error) throw error;
+
+      if (data && data.length > 0) {
+        setApprovedRequests(
+          data.map(req => ({
+            id: req.id,
+            circleName: (req.circle as any)?.name || 'the circle',
+            circleId: req.circle_id,
+          }))
+        );
+      } else {
+        setApprovedRequests([]);
+      }
+    } catch (error) {
+      console.error('Error fetching approved requests:', error);
+    }
+  };
+
+  // Dismiss an approval notification
+  const dismissApproval = async (requestId: string) => {
+    try {
+      // Delete the approved request from database
+      await supabase
+        .from('circle_join_requests')
+        .delete()
+        .eq('id', requestId);
+
+      // Remove from local state
+      setApprovedRequests(prev => prev.filter(r => r.id !== requestId));
+    } catch (error) {
+      console.error('Error dismissing approval:', error);
     }
   };
 
@@ -613,14 +686,16 @@ export default function CirclesScreen() {
           ]);
 
         // Also add to the circle's group chat if it exists
-        const circleData = (request as any).circles;
-        if (circleData?.group_chat_id) {
+        if (request.circle?.group_chat_id) {
           const { error: groupError } = await supabase
             .from('group_members')
-            .insert({
-              group_id: circleData.group_chat_id,
+            .upsert({
+              group_id: request.circle.group_chat_id,
               user_id: request.user_id,
               role: 'member',
+            }, {
+              onConflict: 'group_id,user_id',
+              ignoreDuplicates: true,
             });
           
           if (groupError) {
@@ -637,7 +712,7 @@ export default function CirclesScreen() {
               recipient_id: request.user_id,
               actor_id: user?.id,
               type: 'circle_join_approved',
-              content: `approved your request to join "${circleData?.name || 'the circle'}"`,
+              content: `approved your request to join "${request.circle?.name || 'the circle'}"`,
               post_id: null,
               comment_id: null,
             }
@@ -651,7 +726,7 @@ export default function CirclesScreen() {
               recipient_id: request.user_id,
               actor_id: user?.id,
               type: 'circle_join_rejected',
-              content: `declined your request to join "${(request as any).circles?.name || 'the circle'}"`,
+              content: `declined your request to join "${request.circle?.name || 'the circle'}"`,
               post_id: null,
               comment_id: null,
             }
@@ -882,6 +957,40 @@ export default function CirclesScreen() {
             </TouchableOpacity>
           ))}
         </ScrollView>
+
+        {/* Approved Requests Banner - Show when user's join request was accepted */}
+        {approvedRequests.length > 0 && (
+          <View style={styles.approvalBannersContainer}>
+            {approvedRequests.map((approval) => (
+              <View key={approval.id} style={styles.approvalBanner}>
+                <View style={styles.approvalBannerContent}>
+                  <CheckCircle size={20} color="#FFFFFF" />
+                  <Text style={styles.approvalBannerText}>
+                    Your request to join "{approval.circleName}" was approved!
+                  </Text>
+                </View>
+                <View style={styles.approvalBannerActions}>
+                  <TouchableOpacity 
+                    style={styles.approvalViewButton}
+                    onPress={() => {
+                      dismissApproval(approval.id);
+                      debouncedRouter.push(`/circles/${approval.circleId}`);
+                    }}
+                  >
+                    <Text style={styles.approvalViewButtonText}>View</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity 
+                    style={styles.approvalBannerClose}
+                    onPress={() => dismissApproval(approval.id)}
+                  >
+                    <X size={18} color="#FFFFFF" />
+                  </TouchableOpacity>
+                </View>
+              </View>
+            ))}
+          </View>
+        )}
+
         {/* Pending Requests */}
         {pendingRequests.length > 0 && (
           <View style={styles.section}>
@@ -899,12 +1008,27 @@ export default function CirclesScreen() {
               <View style={styles.requestsList}>
                 {pendingRequests.map((request) => (
                   <View key={request.id} style={styles.requestCard}>
-                    <View style={styles.requestInfo}>
-                      <Text style={styles.requestUser}>
-                        {request.user_profile?.full_name || request.user_profile?.username}
-                      </Text>
-                      <Text style={styles.requestCircle}>wants to join your circle</Text>
-                    </View>
+                    <TouchableOpacity
+                      style={styles.requestUserSection}
+                      onPress={() => debouncedRouter.push(`/user-profile/${request.user_id}`)}
+                      activeOpacity={0.7}
+                    >
+                      <Image
+                        source={{
+                          uri: request.user_profile?.avatar_url || 
+                            `https://ui-avatars.com/api/?name=${encodeURIComponent(request.user_profile?.full_name || 'U')}&background=6366F1&color=fff`
+                        }}
+                        style={styles.requestAvatar}
+                      />
+                      <View style={styles.requestInfo}>
+                        <Text style={styles.requestUser} numberOfLines={1}>
+                          {request.user_profile?.full_name || request.user_profile?.username || 'Unknown User'}
+                        </Text>
+                        <Text style={styles.requestCircle} numberOfLines={1}>
+                          wants to join "{request.circle?.name || 'your circle'}"
+                        </Text>
+                      </View>
+                    </TouchableOpacity>
                     <View style={styles.requestActions}>
                       <TouchableOpacity
                         style={styles.approveButton}
@@ -1436,53 +1560,68 @@ const styles = StyleSheet.create({
   },
   requestCard: {
     backgroundColor: '#fff',
-    padding: 16,
+    padding: 12,
     borderRadius: 12,
     marginBottom: 8,
     flexDirection: 'row',
-    justifyContent: 'space-between',
     alignItems: 'center',
+    justifyContent: 'space-between',
     borderWidth: 1,
     borderColor: '#e0e0e0',
+    gap: 10,
+  },
+  requestUserSection: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  requestAvatar: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: '#E5E7EB',
   },
   requestInfo: {
     flex: 1,
   },
   requestUser: {
-    fontSize: 16,
+    fontSize: 15,
     fontWeight: '600',
     color: '#333',
   },
   requestCircle: {
-    fontSize: 14,
+    fontSize: 12,
     color: '#666',
     marginTop: 2,
   },
   requestActions: {
-    flexDirection: 'row',
-    gap: 8,
+    flexDirection: 'column',
+    gap: 6,
   },
   approveButton: {
     backgroundColor: '#34C759',
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 6,
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 8,
   },
   approveButtonText: {
     color: '#fff',
-    fontSize: 12,
-    fontWeight: '500',
+    fontSize: 13,
+    fontWeight: '600',
+    textAlign: 'center',
   },
   rejectButton: {
     backgroundColor: '#FF3B30',
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 6,
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 8,
   },
   rejectButtonText: {
     color: '#fff',
-    fontSize: 12,
-    fontWeight: '500',
+    fontSize: 13,
+    fontWeight: '600',
+    textAlign: 'center',
   },
   emptyStateContainer: {
     alignItems: 'center',
@@ -1718,5 +1857,50 @@ const styles = StyleSheet.create({
   },
   toggleThumbActive: {
     transform: [{ translateX: 20 }],
+  },
+  approvalBannersContainer: {
+    paddingHorizontal: 16,
+    marginTop: 12,
+    gap: 8,
+  },
+  approvalBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: '#10B981',
+    paddingVertical: 12,
+    paddingHorizontal: 14,
+    borderRadius: 12,
+  },
+  approvalBannerContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    flex: 1,
+  },
+  approvalBannerText: {
+    color: '#FFFFFF',
+    fontSize: 14,
+    fontWeight: '500',
+    flex: 1,
+  },
+  approvalBannerActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  approvalViewButton: {
+    backgroundColor: 'rgba(255,255,255,0.2)',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 6,
+  },
+  approvalViewButtonText: {
+    color: '#FFFFFF',
+    fontSize: 13,
+    fontWeight: '600',
+  },
+  approvalBannerClose: {
+    padding: 4,
   },
 });

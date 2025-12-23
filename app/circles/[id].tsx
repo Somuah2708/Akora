@@ -46,7 +46,7 @@ import {
 } from 'lucide-react-native';
 import { useAuth } from '@/hooks/useAuth';
 import { supabase } from '@/lib/supabase';
-import { useRouter, useLocalSearchParams } from 'expo-router';
+import { useRouter, useLocalSearchParams, useFocusEffect } from 'expo-router';
 import { DebouncedTouchable } from '@/components/DebouncedTouchable';
 import { debouncedRouter } from '@/utils/navigationDebounce';
 import CachedImage from '@/components/CachedImage';
@@ -185,6 +185,10 @@ export default function CircleDetailScreen() {
   // Avatar upload state
   const [uploadingAvatar, setUploadingAvatar] = useState(false);
   const [showImageViewer, setShowImageViewer] = useState(false);
+  
+  // Approval banner state
+  const [showApprovalBanner, setShowApprovalBanner] = useState(false);
+  const [approvalBannerMessage, setApprovalBannerMessage] = useState('');
 
   const isAdmin = profile?.is_admin === true || profile?.role === 'admin';
   const isCircleAdmin = circle?.user_role === 'admin' || circle?.created_by === user?.id;
@@ -200,6 +204,16 @@ export default function CircleDetailScreen() {
       console.log('📍 useEffect waiting - id:', id, 'user:', user?.id || 'null');
     }
   }, [id, user]);
+
+  // Refresh data when screen comes back into focus
+  useFocusEffect(
+    useCallback(() => {
+      if (id && user) {
+        console.log('📍 useFocusEffect - screen focused, refreshing');
+        fetchCircleDetails();
+      }
+    }, [id, user])
+  );
 
   useEffect(() => {
     if (circle?.is_member) {
@@ -295,13 +309,43 @@ export default function CircleDetailScreen() {
         if (!isMember && circleData.is_private) {
           const { data: requestData } = await supabase
             .from('circle_join_requests')
-            .select('id')
+            .select('id, status')
             .eq('circle_id', id)
             .eq('user_id', user.id)
-            .eq('status', 'pending')
             .maybeSingle();
           
-          hasPendingRequest = !!requestData;
+          // Check if request was approved (user became member but request still exists)
+          if (requestData?.status === 'approved' && isMember) {
+            // Show approval banner
+            setShowApprovalBanner(true);
+            setApprovalBannerMessage(`Your request to join "${circleData.name}" was approved!`);
+          }
+          
+          hasPendingRequest = requestData?.status === 'pending';
+        }
+        
+        // Also check if user just became a member (approved request scenario)
+        if (isMember && circleData.is_private) {
+          const { data: approvedRequest } = await supabase
+            .from('circle_join_requests')
+            .select('id, status')
+            .eq('circle_id', id)
+            .eq('user_id', user.id)
+            .eq('status', 'approved')
+            .maybeSingle();
+          
+          if (approvedRequest) {
+            // Show approval banner
+            setShowApprovalBanner(true);
+            setApprovalBannerMessage(`Your request to join "${circleData.name}" was approved!`);
+            
+            // Clean up - delete the approved request after showing banner
+            // We do this so the banner doesn't show every time
+            await supabase
+              .from('circle_join_requests')
+              .delete()
+              .eq('id', approvedRequest.id);
+          }
         }
       }
 
@@ -444,25 +488,47 @@ export default function CircleDetailScreen() {
 
       if (action === 'approve') {
         // Add user to circle members
-        const { error: memberError } = await supabase
+        console.log('🔧 Approving request - adding user to circle_members:', { 
+          circle_id: circle.id, 
+          user_id: request.user_id 
+        });
+        
+        const { data: memberData, error: memberError } = await supabase
           .from('circle_members')
           .insert([{
             circle_id: circle.id,
             user_id: request.user_id,
             role: 'member',
-          }]);
+          }])
+          .select();
 
-        if (memberError) throw memberError;
+        console.log('🔧 circle_members insert result:', { memberData, memberError });
+        
+        if (memberError) {
+          console.error('❌ Failed to add member:', memberError);
+          throw memberError;
+        }
+        
+        console.log('✅ Successfully added user to circle_members');
 
         // Also add to the circle's group chat if it exists
         if (circle.group_chat_id) {
-          await supabase
+          const { error: groupError } = await supabase
             .from('group_members')
-            .insert({
+            .upsert({
               group_id: circle.group_chat_id,
               user_id: request.user_id,
               role: 'member',
+            }, {
+              onConflict: 'group_id,user_id',
+              ignoreDuplicates: true,
             });
+          
+          if (groupError) {
+            console.error('⚠️ Failed to add to group chat:', groupError);
+          } else {
+            console.log('✅ Successfully added user to group_members');
+          }
         }
 
         // Send approval notification
@@ -979,21 +1045,34 @@ export default function CircleDetailScreen() {
       }
 
       if (circle.is_private) {
-        // Check for existing pending request
+        // Check for any existing request (pending or rejected)
         const { data: existingRequest } = await supabase
           .from('circle_join_requests')
           .select('id, status')
           .eq('circle_id', circle.id)
           .eq('user_id', user.id)
-          .eq('status', 'pending')
           .maybeSingle();
 
         if (existingRequest) {
-          Alert.alert('Request Pending', 'You already have a pending join request for this circle');
-          return;
+          if (existingRequest.status === 'pending') {
+            Alert.alert('Request Pending', 'You already have a pending join request for this circle');
+            return;
+          } else if (existingRequest.status === 'rejected') {
+            // Update the rejected request back to pending
+            const { error } = await supabase
+              .from('circle_join_requests')
+              .update({ status: 'pending', created_at: new Date().toISOString() })
+              .eq('id', existingRequest.id);
+
+            if (error) throw error;
+
+            Alert.alert('Request Sent', 'Your join request has been re-submitted to the circle admin');
+            fetchCircleDetails();
+            return;
+          }
         }
 
-        // Send join request
+        // Send new join request
         const { error } = await supabase
           .from('circle_join_requests')
           .insert({
@@ -1047,7 +1126,11 @@ export default function CircleDetailScreen() {
       console.error('Error joining circle:', error);
       // Handle duplicate key error gracefully
       if (error.code === '23505') {
-        Alert.alert('Already a Member', 'You are already a member of this circle');
+        if (error.message?.includes('circle_join_requests')) {
+          Alert.alert('Request Exists', 'You already have a join request for this circle');
+        } else {
+          Alert.alert('Already a Member', 'You are already a member of this circle');
+        }
         fetchCircleDetails();
       } else {
         Alert.alert('Error', error.message || 'Failed to join circle');
@@ -1556,6 +1639,22 @@ export default function CircleDetailScreen() {
         )}
       </View>
 
+      {/* Approval Banner */}
+      {showApprovalBanner && (
+        <View style={styles.approvalBanner}>
+          <View style={styles.approvalBannerContent}>
+            <CheckCircle size={20} color="#FFFFFF" />
+            <Text style={styles.approvalBannerText}>{approvalBannerMessage}</Text>
+          </View>
+          <TouchableOpacity 
+            style={styles.approvalBannerClose}
+            onPress={() => setShowApprovalBanner(false)}
+          >
+            <X size={18} color="#FFFFFF" />
+          </TouchableOpacity>
+        </View>
+      )}
+
       {/* Circle Info Header - Now Scrollable */}
       <ScrollView 
         style={styles.mainScrollView}
@@ -2055,19 +2154,7 @@ export default function CircleDetailScreen() {
                 </TouchableOpacity>
               )}
               
-              {selectedMember?.role !== 'moderator' && (
-                <TouchableOpacity 
-                  style={styles.memberMenuOption}
-                  onPress={() => selectedMember && updateMemberRole(selectedMember, 'moderator')}
-                >
-                  <Shield size={20} color="#6366F1" />
-                  <Text style={styles.memberMenuOptionText}>
-                    {selectedMember?.role === 'admin' ? 'Demote to Moderator' : 'Promote to Moderator'}
-                  </Text>
-                </TouchableOpacity>
-              )}
-              
-              {selectedMember?.role !== 'member' && (
+              {selectedMember?.role === 'admin' && (isCreator || isAdmin) && (
                 <TouchableOpacity 
                   style={styles.memberMenuOption}
                   onPress={() => selectedMember && updateMemberRole(selectedMember, 'member')}
@@ -3170,5 +3257,28 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '600',
     color: '#6B7280',
+  },
+  approvalBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: '#10B981',
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+  },
+  approvalBannerContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    flex: 1,
+  },
+  approvalBannerText: {
+    color: '#FFFFFF',
+    fontSize: 14,
+    fontWeight: '500',
+    flex: 1,
+  },
+  approvalBannerClose: {
+    padding: 4,
   },
 });
