@@ -15,6 +15,7 @@ import ExpandableText from '@/components/ExpandableText';
 import { useVideoSettings } from '@/contexts/VideoSettingsContext';
 import { useNotifications } from '@/contexts/NotificationContext';
 import NotificationBellIcon from '@/components/NotificationBellIcon';
+import TrendingSection from '@/components/TrendingSection';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 const { width, height } = Dimensions.get('window');
@@ -1441,76 +1442,26 @@ export default function HomeScreen() {
         </View>
       </View>
 
-      {/* Featured Items / Trending Section */}
-      <View style={styles.trendingContainer}>
-        <View style={styles.trendingSectionHeader}>
-          <Text style={styles.trendingSectionTitle}>Trending</Text>
-          {(profile?.role === 'admin' || profile?.is_admin) && (
-            <TouchableOpacity 
-              style={styles.trendingAdminButton}
-              onPress={() => debouncedRouter.push('/trending-create')}
-              activeOpacity={0.7}
-            >
-              <Plus size={20} color="#0EA5E9" strokeWidth={2.5} />
-              <Text style={styles.trendingAdminButtonText}>Add</Text>
-            </TouchableOpacity>
-          )}
-        </View>
-        <ScrollView 
-          horizontal 
-          showsHorizontalScrollIndicator={false} 
-          style={styles.featuredScroll}
-          contentContainerStyle={styles.featuredContent}
-        >
-          {(trendingArticles.length > 0 ? trendingArticles : DEFAULT_FEATURED_ITEMS.map((item) => ({
-            ...item,
-            summary: item.description || '',
-            subtitle: '',
-            article_content: '',
-            author_id: null,
-            category: 'alumni_news',
-            link_url: null,
-            is_active: true,
-            is_featured: true,
-            view_count: 0,
-            order_index: 0,
-            published_at: new Date().toISOString(),
-            updated_at: new Date().toISOString(),
-          }))).map((article) => (
-            <TouchableOpacity 
-              key={article.id} 
-              style={styles.featuredItem}
-              onPress={() => debouncedRouter.push(`/trending-article/${article.id}`)}
-              onLongPress={() => {
-                if (profile?.is_admin || profile?.role === 'admin') {
-                  showTrendingMenu(article.id);
-                }
-              }}
-              activeOpacity={0.9}
-            >
-              <Image source={{ uri: article.image_url }} style={styles.featuredImage} />
-              <View style={styles.featuredOverlay}>
-                <Text style={styles.featuredTitle}>{article.title}</Text>
-                {article.summary && (
-                  <Text style={styles.featuredDescription}>{article.summary}</Text>
-                )}
-              </View>
-              {(profile?.is_admin || profile?.role === 'admin') && (
-                <TouchableOpacity 
-                  style={styles.trendingCardMenu}
-                  onPress={(e) => {
-                    e.stopPropagation();
-                    showTrendingMenu(article.id);
-                  }}
-                  hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-                >
-                  <MoreHorizontal size={20} color="#FFFFFF" strokeWidth={2} />
-                </TouchableOpacity>
-              )}
-            </TouchableOpacity>
-          ))}
-        </ScrollView>
-      </View>
+      {/* Trending Section - New unified trending system */}
+      <TrendingSection 
+        isAdmin={profile?.is_admin || profile?.role === 'admin'}
+        onAddPress={() => debouncedRouter.push('/admin/manage-trending')}
+        onLongPress={(itemId) => {
+          if (profile?.is_admin || profile?.role === 'admin') {
+            Alert.alert(
+              'Manage Item',
+              'What would you like to do?',
+              [
+                { text: 'Cancel', style: 'cancel' },
+                { 
+                  text: 'Manage Trending', 
+                  onPress: () => debouncedRouter.push('/admin/manage-trending')
+                },
+              ]
+            );
+          }
+        }}
+      />
 
       {/* Category Tabs */}
       <View style={styles.categoriesSection}>
