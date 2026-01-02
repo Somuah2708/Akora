@@ -12,6 +12,7 @@ import {
   ActivityIndicator,
   Image,
   Platform,
+  KeyboardAvoidingView,
 } from 'react-native';
 import { Plus, Search, Users, Lock, Globe, Calendar, GraduationCap, ArrowLeft, X, MessageCircle, CheckCircle, Shield, Camera } from 'lucide-react-native';
 import { useAuth } from '@/hooks/useAuth';
@@ -378,8 +379,8 @@ export default function CirclesScreen() {
       return;
     }
 
-    if (!newCircle.name.trim() || !newCircle.description.trim()) {
-      Alert.alert('Error', 'Please fill in all required fields');
+    if (!newCircle.name.trim()) {
+      Alert.alert('Error', 'Please enter a circle name');
       return;
     }
 
@@ -1102,7 +1103,11 @@ export default function CirclesScreen() {
         animationType="slide"
         presentationStyle="pageSheet"
       >
-        <View style={styles.modalContainer}>
+        <KeyboardAvoidingView 
+          style={styles.modalContainer}
+          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+          keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 20}
+        >
           <View style={styles.modalHeader}>
             <TouchableOpacity onPress={() => {
               setIsCreateModalVisible(false);
@@ -1118,7 +1123,11 @@ export default function CirclesScreen() {
             </TouchableOpacity>
           </View>
 
-          <ScrollView style={styles.modalContent}>
+          <ScrollView 
+            style={styles.modalContent}
+            keyboardShouldPersistTaps="handled"
+            showsVerticalScrollIndicator={true}
+          >
             {/* Avatar Picker */}
             <View style={styles.formGroup}>
               <Text style={styles.label}>Circle Avatar</Text>
@@ -1165,7 +1174,7 @@ export default function CirclesScreen() {
             </View>
 
             <View style={styles.formGroup}>
-              <Text style={styles.label}>Description *</Text>
+              <Text style={styles.label}>Description (Optional)</Text>
               <TextInput
                 style={[styles.input, styles.textArea]}
                 placeholder="Describe your circle"
@@ -1189,20 +1198,27 @@ export default function CirclesScreen() {
               <ScrollView horizontal showsHorizontalScrollIndicator={false}>
                 {availableCreateCategories.map((category) => {
                   const isAdminCategory = ADMIN_ONLY_CATEGORIES.includes(category);
+                  const isSelected = newCircle.category === category;
                   return (
                     <TouchableOpacity
                       key={category}
                       style={[
                         styles.categoryOption,
-                        newCircle.category === category && styles.categoryOptionActive,
-                        isAdminCategory && styles.adminCategoryOption
+                        isAdminCategory && styles.adminCategoryOption,
+                        isSelected && (isAdminCategory ? styles.adminCategoryOptionActive : styles.categoryOptionActive),
                       ]}
                       onPress={() => setNewCircle({ ...newCircle, category })}
                     >
-                      {isAdminCategory && <Shield size={12} color={newCircle.category === category ? '#FFFFFF' : '#ffc857'} style={{ marginRight: 4 }} />}
+                      {isAdminCategory && (
+                        <Shield 
+                          size={12} 
+                          color={isSelected ? '#0F172A' : '#ffc857'} 
+                          style={{ marginRight: 4 }} 
+                        />
+                      )}
                       <Text style={[
                         styles.categoryOptionText,
-                        newCircle.category === category && styles.categoryOptionTextActive
+                        isSelected && (isAdminCategory ? styles.adminCategoryOptionTextActive : styles.categoryOptionTextActive)
                       ]}>
                         {category}
                       </Text>
@@ -1243,7 +1259,7 @@ export default function CirclesScreen() {
               </TouchableOpacity>
             </View>
           </ScrollView>
-        </View>
+        </KeyboardAvoidingView>
       </Modal>
     </View>
   );
@@ -1768,10 +1784,10 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingVertical: 8,
     marginRight: 8,
-    backgroundColor: '#fff',
+    backgroundColor: '#F8FAFC',
     borderRadius: 20,
-    borderWidth: 1,
-    borderColor: '#e0e0e0',
+    borderWidth: 1.5,
+    borderColor: '#E2E8F0',
   },
   categoryOptionActive: {
     backgroundColor: '#0F172A',
@@ -1781,13 +1797,20 @@ const styles = StyleSheet.create({
     borderColor: '#ffc857',
     backgroundColor: '#FFFBEB',
   },
+  adminCategoryOptionActive: {
+    backgroundColor: '#ffc857',
+    borderColor: '#ffc857',
+  },
   categoryOptionText: {
     fontSize: 14,
-    color: '#666',
+    color: '#334155',
     fontWeight: '500',
   },
   categoryOptionTextActive: {
-    color: '#fff',
+    color: '#FFFFFF',
+  },
+  adminCategoryOptionTextActive: {
+    color: '#0F172A',
   },
   adminOnlyNotice: {
     flexDirection: 'row',

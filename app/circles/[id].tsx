@@ -43,6 +43,7 @@ import {
   UserCheck,
   Play,
   Film,
+  Edit2,
 } from 'lucide-react-native';
 import { useAuth } from '@/hooks/useAuth';
 import { supabase } from '@/lib/supabase';
@@ -189,6 +190,12 @@ export default function CircleDetailScreen() {
   // Approval banner state
   const [showApprovalBanner, setShowApprovalBanner] = useState(false);
   const [approvalBannerMessage, setApprovalBannerMessage] = useState('');
+  
+  // Edit circle state
+  const [showEditModal, setShowEditModal] = useState(false);
+  const [editCircleName, setEditCircleName] = useState('');
+  const [editCircleDescription, setEditCircleDescription] = useState('');
+  const [savingCircleEdit, setSavingCircleEdit] = useState(false);
 
   const isAdmin = profile?.is_admin === true || profile?.role === 'admin';
   const isCircleAdmin = circle?.user_role === 'admin' || circle?.created_by === user?.id;
@@ -1264,6 +1271,57 @@ export default function CircleDetailScreen() {
     );
   };
 
+  const openEditModal = () => {
+    if (!circle) return;
+    setEditCircleName(circle.name);
+    setEditCircleDescription(circle.description || '');
+    setShowEditModal(true);
+  };
+
+  const saveCircleEdit = async () => {
+    if (!user || !circle) return;
+
+    // Only creator or app admin can edit
+    if (circle.created_by !== user.id && !isAdmin) {
+      Alert.alert('Permission Denied', 'Only the circle creator can edit this circle');
+      return;
+    }
+
+    if (!editCircleName.trim()) {
+      Alert.alert('Error', 'Circle name is required');
+      return;
+    }
+
+    try {
+      setSavingCircleEdit(true);
+
+      const { error } = await supabase
+        .from('circles')
+        .update({
+          name: editCircleName.trim(),
+          description: editCircleDescription.trim(),
+        })
+        .eq('id', circle.id);
+
+      if (error) throw error;
+
+      // Update local state
+      setCircle(prev => prev ? {
+        ...prev,
+        name: editCircleName.trim(),
+        description: editCircleDescription.trim(),
+      } : null);
+
+      setShowEditModal(false);
+      Alert.alert('Success', 'Circle updated successfully');
+    } catch (error: any) {
+      console.error('Error updating circle:', error);
+      Alert.alert('Error', error.message || 'Failed to update circle');
+    } finally {
+      setSavingCircleEdit(false);
+    }
+  };
+
   const openGroupChat = () => {
     if (!circle?.group_chat_id) {
       Alert.alert('No Chat', 'This circle does not have a group chat yet');
@@ -1629,7 +1687,7 @@ export default function CircleDetailScreen() {
         <View style={styles.headerTitleContainer}>
           <Text style={styles.headerTitle} numberOfLines={1}>{circle.name}</Text>
           {circle.is_official && (
-            <CheckCircle size={18} color="#6366F1" fill="#6366F1" />
+            <CheckCircle size={18} color="#ffc857" style={{ marginLeft: 6 }} />
           )}
         </View>
         {circle.is_member && (
@@ -2011,6 +2069,14 @@ export default function CircleDetailScreen() {
                 </View>
               </View>
 
+              {/* Edit Circle - Only for creator or app admin */}
+              {(circle.created_by === user?.id || isAdmin) && (
+                <TouchableOpacity style={styles.editCircleButton} onPress={openEditModal}>
+                  <Edit2 size={20} color="#0F172A" />
+                  <Text style={styles.editCircleButtonText}>Edit Circle</Text>
+                </TouchableOpacity>
+              )}
+
               <TouchableOpacity style={styles.leaveButton} onPress={leaveCircle}>
                 <X size={20} color="#EF4444" />
                 <Text style={styles.leaveButtonText}>Leave Circle</Text>
@@ -2081,6 +2147,69 @@ export default function CircleDetailScreen() {
           )}
         </View>
       )}
+
+      {/* Edit Circle Modal */}
+      <Modal
+        visible={showEditModal}
+        animationType="slide"
+        presentationStyle="pageSheet"
+        onRequestClose={() => setShowEditModal(false)}
+      >
+        <KeyboardAvoidingView 
+          style={styles.editModalContainer}
+          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+          keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 20}
+        >
+          <View style={styles.editModalHeader}>
+            <TouchableOpacity onPress={() => setShowEditModal(false)}>
+              <Text style={styles.editModalCancelButton}>Cancel</Text>
+            </TouchableOpacity>
+            <Text style={styles.editModalTitle}>Edit Circle</Text>
+            <TouchableOpacity onPress={saveCircleEdit} disabled={savingCircleEdit}>
+              <Text style={[styles.editModalSaveButton, savingCircleEdit && { opacity: 0.5 }]}>
+                {savingCircleEdit ? 'Saving...' : 'Save'}
+              </Text>
+            </TouchableOpacity>
+          </View>
+
+          <ScrollView 
+            style={styles.editModalContent}
+            keyboardShouldPersistTaps="handled"
+            showsVerticalScrollIndicator={true}
+          >
+            <View style={styles.editFormGroup}>
+              <Text style={styles.editFormLabel}>Circle Name *</Text>
+              <TextInput
+                style={styles.editFormInput}
+                placeholder="Enter circle name"
+                value={editCircleName}
+                onChangeText={setEditCircleName}
+                placeholderTextColor="#9CA3AF"
+              />
+            </View>
+
+            <View style={styles.editFormGroup}>
+              <Text style={styles.editFormLabel}>Description (Optional)</Text>
+              <TextInput
+                style={[styles.editFormInput, styles.editFormTextArea]}
+                placeholder="Describe your circle"
+                value={editCircleDescription}
+                onChangeText={setEditCircleDescription}
+                multiline
+                numberOfLines={4}
+                textAlignVertical="top"
+                placeholderTextColor="#9CA3AF"
+              />
+            </View>
+
+            <View style={styles.editFormNote}>
+              <Text style={styles.editFormNoteText}>
+                To change the circle avatar, go to the main circle page and tap on the avatar.
+              </Text>
+            </View>
+          </ScrollView>
+        </KeyboardAvoidingView>
+      </Modal>
 
       {/* Full Screen Image Viewer Modal */}
       <Modal
@@ -3052,6 +3181,88 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '600',
     color: '#FFFFFF',
+  },
+  editCircleButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    backgroundColor: '#ffc857',
+    paddingVertical: 14,
+    borderRadius: 12,
+    marginTop: 8,
+  },
+  editCircleButtonText: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#0F172A',
+  },
+  // Edit Circle Modal Styles
+  editModalContainer: {
+    flex: 1,
+    backgroundColor: '#FFFFFF',
+  },
+  editModalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingVertical: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: '#E5E7EB',
+    paddingTop: Platform.OS === 'ios' ? 16 : 16,
+  },
+  editModalCancelButton: {
+    fontSize: 16,
+    color: '#6B7280',
+  },
+  editModalTitle: {
+    fontSize: 18,
+    fontWeight: '600',
+    color: '#0F172A',
+  },
+  editModalSaveButton: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#ffc857',
+  },
+  editModalContent: {
+    flex: 1,
+    padding: 16,
+  },
+  editFormGroup: {
+    marginBottom: 20,
+  },
+  editFormLabel: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#374151',
+    marginBottom: 8,
+  },
+  editFormInput: {
+    backgroundColor: '#F9FAFB',
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+    borderRadius: 12,
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    fontSize: 16,
+    color: '#0F172A',
+  },
+  editFormTextArea: {
+    minHeight: 120,
+    textAlignVertical: 'top',
+  },
+  editFormNote: {
+    backgroundColor: '#FEF3C7',
+    padding: 12,
+    borderRadius: 8,
+    marginTop: 8,
+  },
+  editFormNoteText: {
+    fontSize: 14,
+    color: '#92400E',
+    lineHeight: 20,
   },
   bottomAction: {
     padding: 16,
