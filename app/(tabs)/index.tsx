@@ -18,6 +18,16 @@ import NotificationBellIcon from '@/components/NotificationBellIcon';
 import TrendingSection from '@/components/TrendingSection';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+// Local hub images for Quick Access tabs
+const HUB_IMAGES: Record<string, any> = {
+  History: require('@/assets/images/hub/history.png'),
+  Centenary: require('@/assets/images/hub/centenary.png'),
+  Calendar: require('@/assets/images/hub/calendar.png'),
+  News: require('@/assets/images/hub/news.png'),
+  Trending: require('@/assets/images/hub/news.png'),
+  Community: require('@/assets/images/hub/clubs.png'),
+};
+
 const { width, height } = Dimensions.get('window');
 const CARD_WIDTH = width - 48;
 
@@ -61,11 +71,11 @@ const DEFAULT_FEATURED_ITEMS = [
 
 // Default category tabs (fallback)
 const DEFAULT_CATEGORY_TABS = [
-  { id: '1', title: 'History', icon_name: 'BookOpen', color: '#FF6B6B', image_url: 'https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcRWnZZyJTcu5Kxq6JgO2-0ePitSN7IiRZKm_w&s', route: '/heritage' },
-  { id: '2', title: 'Centenary', icon_name: 'PartyPopper', color: '#4ECDC4', image_url: 'https://images.unsplash.com/photo-1492684223066-81342ee5ff30?w=400&auto=format&fit=crop&q=60', route: '/centenary' },
-  { id: '3', title: 'Calendar', icon_name: 'Calendar', color: '#45B7D1', image_url: 'https://images.unsplash.com/photo-1506784983877-45594efa4cbe?w=400&auto=format&fit=crop&q=60', route: '/secretariat/event-calendar' },
-  { id: '4', title: 'Trending', icon_name: 'TrendingUp', color: '#F7B731', image_url: 'https://images.unsplash.com/photo-1504711434969-e33886168f5c?w=400&auto=format&fit=crop&q=60', route: '/news' },
-  { id: '5', title: 'Community', icon_name: 'Users', color: '#A55EEA', image_url: 'https://images.unsplash.com/photo-1529156069898-49953e39b3ac?w=400&auto=format&fit=crop&q=60', route: '/circles' },
+  { id: '1', title: 'History', icon_name: 'BookOpen', color: '#FF6B6B', image_url: require('@/assets/images/hub/history.png'), route: '/heritage' },
+  { id: '2', title: 'Centenary', icon_name: 'PartyPopper', color: '#4ECDC4', image_url: require('@/assets/images/hub/centenary.png'), route: '/centenary' },
+  { id: '3', title: 'Calendar', icon_name: 'Calendar', color: '#45B7D1', image_url: require('@/assets/images/hub/calendar.png'), route: '/secretariat/event-calendar' },
+  { id: '4', title: 'News', icon_name: 'Newspaper', color: '#F7B731', image_url: require('@/assets/images/hub/news.png'), route: '/news' },
+  { id: '5', title: 'Community', icon_name: 'Users', color: '#A55EEA', image_url: require('@/assets/images/hub/clubs.png'), route: '/circles' },
 ];
 
 // Placeholder posts for when there's no data
@@ -186,6 +196,7 @@ export default function HomeScreen() {
   const [featured, setFeatured] = useState<HomeFeaturedItem[]>([]);
   const [categoryTabs, setCategoryTabs] = useState<HomeCategoryTab[]>([]);
   const [trendingArticles, setTrendingArticles] = useState<TrendingArticle[]>([]);
+  const [failedCategoryImages, setFailedCategoryImages] = useState<Set<string>>(new Set());
   
   // Video viewport detection
   const [visibleVideos, setVisibleVideos] = useState<Set<string>>(new Set());
@@ -626,6 +637,9 @@ export default function HomeScreen() {
     useCallback(() => {
       // Screen is focused
       setIsScreenFocused(true);
+      
+      // Reset quick access tab highlight when returning to home
+      setActiveCategoryId(null);
 
       // Refresh badge count when screen becomes focused
       refreshUnreadCount().catch((e) => console.error('Error refreshing unread count on focus', e));
@@ -1593,21 +1607,40 @@ export default function HomeScreen() {
           const ICON_MAP: any = { BookOpen, PartyPopper, Calendar, TrendingUp, Users, Newspaper };
           // Ensure routes are correct for OAA alumni app
           const tabsToUse = (categoryTabs.length > 0 ? categoryTabs : DEFAULT_CATEGORY_TABS)
-            .filter((t: any) => t?.title !== 'News') // Remove News tab
             .map((t: any) => {
+              // Get the local image for this tab title
+              const localImage = HUB_IMAGES[t?.title];
+              
+              // Build the updated tab object
+              let updated = { ...t };
+              
+              // Always use local images if available
+              if (localImage) {
+                updated.image_url = localImage;
+              }
+              
               // Fix Centenary route
               if (t?.title === 'Centenary' && t?.route === '/events') {
-                return { ...t, route: '/centenary' };
+                updated.route = '/centenary';
               }
               // Fix Calendar route to show OAA events instead of academic calendar
               if (t?.title === 'Calendar' && t?.route === '/calendar') {
-                return { ...t, route: '/secretariat/event-calendar' };
+                updated.route = '/secretariat/event-calendar';
               }
-              return t;
+              // Rename Trending to News
+              if (t?.title === 'Trending') {
+                updated.title = 'News';
+                updated.icon_name = 'Newspaper';
+              }
+              
+              return updated;
             });
           return tabsToUse.map((category: any) => {
           const IconComponent = ICON_MAP[(category as any).icon_name] || Users;
           const isActiveCategory = activeCategoryId === category.id;
+          // Get the image source - use local image from HUB_IMAGES or the category's image_url
+          const imageSource = (category as any).image_url;
+          
           return (
             <TouchableOpacity 
               key={category.id} 
@@ -1620,23 +1653,26 @@ export default function HomeScreen() {
                 }
               }}
             >
-              <Image 
-                source={
-                  typeof (category as any).image_url === 'string' 
-                    ? { uri: (category as any).image_url }
-                    : (category as any).image_url
-                } 
-                style={styles.categoryImage}
-                resizeMode="cover"
-              />
+              {imageSource ? (
+                <Image 
+                  source={
+                    typeof imageSource === 'string' 
+                      ? { uri: imageSource }
+                      : imageSource
+                  } 
+                  style={styles.categoryImage}
+                  resizeMode="cover"
+                />
+              ) : (
+                <View style={[styles.categoryImage, { backgroundColor: '#0F172A' }]} />
+              )}
               <View
                 style={[
                   styles.categoryOverlay,
-                  { backgroundColor: (category as any).color + '95' },
                   isActiveCategory && styles.categoryOverlayActive,
                 ]}
               >
-                <IconComponent size={16} color="#FFFFFF" strokeWidth={2} />
+                <IconComponent size={16} color="#FFFFFF" strokeWidth={2.5} />
                 <Text style={styles.categoryTitle}>{category.title}</Text>
               </View>
             </TouchableOpacity>
@@ -2357,15 +2393,19 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     gap: 4,
+    backgroundColor: 'rgba(0, 0, 0, 0.55)',
   },
   categoryOverlayActive: {
-    backgroundColor: '#0095F6',
+    backgroundColor: 'rgba(255, 200, 87, 0.85)',
   },
   categoryTitle: {
     fontSize: 10,
     fontFamily: 'Inter-SemiBold',
     color: '#FFFFFF',
     textAlign: 'center',
+    textShadowColor: 'rgba(0, 0, 0, 0.5)',
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 2,
   },
   searchBar: {
     flexDirection: 'row',

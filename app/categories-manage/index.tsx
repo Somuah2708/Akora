@@ -15,6 +15,7 @@ export default function CategoriesManageScreen() {
   const [saving, setSaving] = useState(false);
   const [categories, setCategories] = useState<HomeCategoryTab[]>([]);
   const [uploadingId, setUploadingId] = useState<string | null>(null);
+  const [failedImages, setFailedImages] = useState<Set<string>>(new Set());
 
   useEffect(() => {
     fetchCategories();
@@ -207,12 +208,16 @@ export default function CategoriesManageScreen() {
                 onPress={() => pickImageForCategory(category.id)}
                 disabled={uploadingId === category.id}
               >
-                {category.image_url ? (
+                {category.image_url && !failedImages.has(category.id) ? (
                   <>
                     <Image
                       source={{ uri: category.image_url }}
                       style={styles.imagePreview}
                       resizeMode="cover"
+                      onError={() => {
+                        console.log('Category image failed to load:', category.id, category.image_url);
+                        setFailedImages(prev => new Set([...prev, category.id]));
+                      }}
                     />
                     <View
                       style={[
@@ -225,9 +230,9 @@ export default function CategoriesManageScreen() {
                     </View>
                   </>
                 ) : (
-                  <View style={styles.noImagePlaceholder}>
+                  <View style={[styles.noImagePlaceholder, category.color && !failedImages.has(category.id) ? {} : { backgroundColor: category.color || '#6366F1' }]}>
                     <Upload size={32} color="#9CA3AF" strokeWidth={2} />
-                    <Text style={styles.noImageText}>No image</Text>
+                    <Text style={styles.noImageText}>{failedImages.has(category.id) ? 'Image failed to load' : 'No image'}</Text>
                   </View>
                 )}
                 {uploadingId === category.id && (

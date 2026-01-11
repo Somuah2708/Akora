@@ -150,6 +150,7 @@ export default function TrendingSection({ isAdmin, onAddPress, onLongPress }: Tr
   const router = useRouter();
   const [trendingItems, setTrendingItems] = useState<TrendingItem[]>([]);
   const [loading, setLoading] = useState(true);
+  const [failedImages, setFailedImages] = useState<Set<string>>(new Set());
 
   // Refresh data every time the screen comes into focus
   useFocusEffect(
@@ -255,12 +256,17 @@ export default function TrendingSection({ isAdmin, onAddPress, onLongPress }: Tr
     const diffInMins = Math.floor(diffInMs / (1000 * 60));
     const diffInHours = Math.floor(diffInMs / (1000 * 60 * 60));
     const diffInDays = Math.floor(diffInMs / (1000 * 60 * 60 * 24));
+    const diffInWeeks = Math.floor(diffInDays / 7);
+    const diffInMonths = Math.floor(diffInDays / 30);
+    const diffInYears = Math.floor(diffInDays / 365);
 
     if (diffInMins < 1) return 'Just now';
     if (diffInMins < 60) return `${diffInMins}m ago`;
     if (diffInHours < 24) return `${diffInHours}h ago`;
     if (diffInDays < 7) return `${diffInDays}d ago`;
-    return date.toLocaleDateString();
+    if (diffInWeeks < 5) return `${diffInWeeks}w ago`;
+    if (diffInMonths < 12) return `${diffInMonths}mo ago`;
+    return `${diffInYears}y ago`;
   };
 
   if (loading) {
@@ -336,8 +342,15 @@ export default function TrendingSection({ isAdmin, onAddPress, onLongPress }: Tr
                 <View style={styles.cardInner}>
                   {/* Image Section */}
                   <View style={styles.imageContainer}>
-                    {item.image_url ? (
-                      <Image source={{ uri: item.image_url }} style={styles.image} />
+                    {item.image_url && !failedImages.has(item.id) ? (
+                      <Image 
+                        source={{ uri: item.image_url }} 
+                        style={styles.image}
+                        onError={() => {
+                          console.log('Trending image failed to load:', item.id, item.image_url);
+                          setFailedImages(prev => new Set([...prev, item.id]));
+                        }}
+                      />
                     ) : (
                       <View style={[styles.placeholderImage, { backgroundColor: config.color }]}>
                         <IconComponent size={40} color="#FFFFFF" strokeWidth={1.5} />
