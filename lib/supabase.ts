@@ -74,6 +74,50 @@ console.log('Supabase client initialized successfully');
 // Storage buckets
 export const AVATAR_BUCKET = process.env.EXPO_PUBLIC_SUPABASE_AVATAR_BUCKET || 'avatars';
 
+/**
+ * Get the display name for a user (first_name + surname only)
+ * This should be used throughout the app instead of full_name
+ * Full name (including other_names) should only be shown on profile pages
+ */
+export const getDisplayName = (profile: { first_name?: string | null; surname?: string | null; full_name?: string | null } | null | undefined): string => {
+  if (!profile) return 'Unknown User';
+  
+  // If first_name and surname exist, use them
+  if (profile.first_name && profile.surname) {
+    return `${profile.first_name} ${profile.surname}`;
+  }
+  
+  // Fallback to full_name if first_name/surname not available
+  if (profile.full_name) {
+    return profile.full_name;
+  }
+  
+  return 'Unknown User';
+};
+
+/**
+ * Get the full legal name for a user (first_name + other_names + surname)
+ * This should ONLY be used on profile pages
+ */
+export const getFullLegalName = (profile: { first_name?: string | null; surname?: string | null; other_names?: string | null; full_name?: string | null } | null | undefined): string => {
+  if (!profile) return 'Unknown User';
+  
+  // Use full_name which already contains the complete name
+  if (profile.full_name) {
+    return profile.full_name;
+  }
+  
+  // Fallback to constructing from parts
+  if (profile.first_name && profile.surname) {
+    if (profile.other_names) {
+      return `${profile.first_name} ${profile.other_names} ${profile.surname}`;
+    }
+    return `${profile.first_name} ${profile.surname}`;
+  }
+  
+  return 'Unknown User';
+};
+
 // Types for our database
 export type Profile = {
   id: string;
@@ -81,6 +125,7 @@ export type Profile = {
   full_name: string;
   first_name?: string;
   surname?: string;
+  other_names?: string;
   email?: string;
   avatar_url?: string;
   bio?: string;

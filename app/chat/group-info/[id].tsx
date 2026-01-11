@@ -2,7 +2,7 @@ import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { View, Text, TouchableOpacity, Image, FlatList, TextInput, Alert } from "react-native";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { debouncedRouter } from '@/utils/navigationDebounce';
-import { supabase } from "../../../lib/supabase";
+import { supabase, getDisplayName } from "../../../lib/supabase";
 import { useAuth } from "../../../hooks/useAuth";
 import { uploadMedia, pickMedia } from "../../../lib/media";
 
@@ -194,7 +194,7 @@ export default function GroupInfoScreen() {
               <View style={{ width: 48, height: 48, borderRadius: 24, backgroundColor: "#eee", marginRight: 12 }} />
             )}
             <View style={{ flex: 1 }}>
-              <Text style={{ fontWeight: "600" }}>{item.profiles?.full_name || item.user_id.slice(0, 6)}</Text>
+              <Text style={{ fontWeight: "600" }}>{getDisplayName(item.profiles)}</Text>
               <Text style={{ color: "#64748B", fontSize: 12 }}>{item.role}</Text>
             </View>
             {isAdmin && item.user_id !== meId && (
@@ -242,7 +242,7 @@ export default function GroupInfoScreen() {
                   ) : (
                     <View style={{ width: 36, height: 36, borderRadius: 18, backgroundColor: "#eee", marginRight: 10 }} />
                   )}
-                  <Text style={{ flex: 1 }}>{item.full_name || item.id.slice(0, 6)}</Text>
+                  <Text style={{ flex: 1 }}>{getDisplayName(item)}</Text>
                   <Text style={{ color: "#64748B" }}>Add</Text>
                 </TouchableOpacity>
               )}

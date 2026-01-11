@@ -5,7 +5,7 @@ import { DebouncedTouchable } from '@/components/DebouncedTouchable';
 import { debouncedRouter } from '@/utils/navigationDebounce';;
 import { ArrowLeft, Bookmark, MessageCircle, ThumbsUp, Star, MessagesSquare } from 'lucide-react-native';
 import { useAuth } from '@/hooks/useAuth';
-import { supabase } from '@/lib/supabase';
+import { supabase, getDisplayName } from '@/lib/supabase';
 import { on } from '@/lib/eventBus';
 
 type Discussion = {
@@ -167,7 +167,7 @@ export default function SavedDiscussionsScreen() {
               <View style={styles.cardHeader}>
                 <Image source={{ uri: d.profiles?.avatar_url || 'https://via.placeholder.com/40' }} style={styles.avatar} />
                 <View style={{ flex: 1 }}>
-                  <Text style={styles.name}>{d.profiles?.full_name || 'User'}</Text>
+                  <Text style={styles.name}>{getDisplayName(d.profiles) || 'User'}</Text>
                   <Text style={styles.meta}>{getTimeAgo(d.created_at)}</Text>
                 </View>
                 <TouchableOpacity onPress={() => unsave(d.id)} style={styles.unsaveButton} accessibilityLabel="Unsave discussion">

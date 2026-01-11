@@ -12,7 +12,7 @@ import {
   Modal,
   ScrollView,
 } from 'react-native';
-import { supabase } from '../../lib/supabase';
+import { supabase, getDisplayName } from '../../lib/supabase';
 import { useAuth } from '../../hooks/useAuth';
 import { Ionicons } from '@expo/vector-icons';
 
@@ -158,7 +158,7 @@ export default function PaymentVerificationsScreen() {
         {/* User Info */}
         <View style={styles.cardHeader}>
           <View style={styles.userInfo}>
-            <Text style={styles.userName}>{item.profiles?.full_name || 'Unknown User'}</Text>
+            <Text style={styles.userName}>{getDisplayName(item.profiles) || 'Unknown User'}</Text>
             <Text style={styles.userEmail}>{item.profiles?.email}</Text>
             <Text style={styles.currentTier}>
               Current: {item.profiles?.package_tier?.toUpperCase() || 'FREE'}
@@ -275,7 +275,7 @@ export default function PaymentVerificationsScreen() {
             {selectedVerification && (
               <View style={styles.modalInfo}>
                 <Text style={styles.modalLabel}>User:</Text>
-                <Text style={styles.modalValue}>{selectedVerification.profiles?.full_name}</Text>
+                <Text style={styles.modalValue}>{getDisplayName(selectedVerification.profiles)}</Text>
                 <Text style={styles.modalLabel}>Package:</Text>
                 <Text style={styles.modalValue}>{selectedVerification.package_tier.toUpperCase()}</Text>
                 <Text style={styles.modalLabel}>Amount:</Text>

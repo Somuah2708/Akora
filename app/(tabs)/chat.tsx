@@ -13,6 +13,7 @@ import { formatProfileSubtitle } from '@/lib/display';
 import { supabase } from '@/lib/supabase';
 import { formatChatListTime } from '@/lib/timeUtils';
 import type { Profile } from '@/lib/supabase';
+import { getDisplayName } from '@/lib/supabase';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 // Cache freshness threshold (5 minutes)
@@ -756,7 +757,7 @@ export default function ChatScreen() {
                         <View style={styles.avatarContainer}>
                           <View style={[styles.avatar, { backgroundColor: '#FCD34D', justifyContent: 'center', alignItems: 'center' }]}>
                             <Text style={{ fontSize: 24, fontFamily: 'Inter-Bold', color: '#92400E' }}>
-                              {(friend?.full_name || 'U')[0].toUpperCase()}
+                              {(getDisplayName(friend) || 'U')[0].toUpperCase()}
                             </Text>
                           </View>
                           <View style={[styles.onlineIndicator, { backgroundColor: '#F59E0B' }]} />
@@ -765,7 +766,7 @@ export default function ChatScreen() {
                           <View style={styles.chatHeader}>
                             <View style={{ flexDirection: 'row', alignItems: 'center', flex: 1 }}>
                               <Text style={styles.chatName} numberOfLines={1}>
-                                {friend?.full_name || 'Unknown User'}
+                                {getDisplayName(friend) || 'Unknown User'}
                               </Text>
                               <View style={[styles.adminBadge, { backgroundColor: '#F59E0B', marginLeft: 8 }]}>
                                 <Text style={styles.adminBadgeText}>Support</Text>
@@ -836,7 +837,7 @@ export default function ChatScreen() {
                             <View style={styles.chatHeader}>
                               <View style={{ flexDirection: 'row', alignItems: 'center', flex: 1 }}>
                                 <Text style={styles.chatName} numberOfLines={1}>
-                                  {friend?.full_name || 'Unknown'}{isPinned ? '  •  Pinned' : ''}
+                                  {getDisplayName(friend) || 'Unknown'}{isPinned ? '  •  Pinned' : ''}
                                 </Text>
                                 {(friend as any)?.is_admin && (
                                   <View style={styles.adminBadge}>
@@ -1086,7 +1087,7 @@ export default function ChatScreen() {
                   />
                   <View style={styles.userInfo}>
                     <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-                      <Text style={styles.userName}>{item.full_name || 'Unknown'}</Text>
+                      <Text style={styles.userName}>{getDisplayName(item) || 'Unknown'}</Text>
                       {(item as any)?.is_admin && (
                         <View style={styles.adminBadge}>
                           <Text style={styles.adminBadgeText}>Admin</Text>

@@ -10,6 +10,7 @@
     "newArchEnabled": true,
     "ios": {
       "supportsTablet": true,
+      "deploymentTarget": "13.0",
       "infoPlist": {
         "NSPhotoLibraryUsageDescription": "We need access to your photos to let you share images and videos in chat.",
         "NSCameraUsageDescription": "We need access to your camera to let you capture photos and videos in chat.",
@@ -64,6 +65,7 @@
     },
     "android": {
       "package": "com.somuah_2708.boltexponativewind",
+      "minSdkVersion": 23,
       "permissions": [
         "android.permission.CAMERA",
         "android.permission.READ_EXTERNAL_STORAGE",

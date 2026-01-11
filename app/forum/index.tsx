@@ -6,7 +6,7 @@ import { DebouncedTouchable } from '@/components/DebouncedTouchable';
 import { debouncedRouter } from '@/utils/navigationDebounce';;
 import { ArrowLeft, Search, Filter, MessageCircle, MessagesSquare, Users, ThumbsUp, Share2, Bookmark, Clock, Hash, Briefcase, Code, ChartLine as LineChart, Brain, Microscope, Palette, Building2, Globe, ChevronRight, Plus, Bell, TrendingUp, Activity, Star } from 'lucide-react-native';
 import { on } from '@/lib/eventBus';
-import { supabase } from '@/lib/supabase';
+import { supabase, getDisplayName } from '@/lib/supabase';
 import { useAuth } from '@/hooks/useAuth';
 
 SplashScreen.preventAutoHideAsync();
@@ -484,7 +484,7 @@ export default function ForumScreen() {
               <Text style={styles.trendingTitle} numberOfLines={2}>{discussion.title}</Text>
               <View style={styles.authorRow}>
                 <Image source={{ uri: discussion.profiles?.avatar_url || 'https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?w=400&auto=format&fit=crop&q=60' }} style={styles.authorAvatar} />
-                <Text style={styles.authorNameDark} numberOfLines={1}>{discussion.profiles?.full_name || 'Anonymous'}</Text>
+                <Text style={styles.authorNameDark} numberOfLines={1}>{getDisplayName(discussion.profiles) || 'Anonymous'}</Text>
                 <Text style={styles.dot}>•</Text>
                 <Text style={styles.timeText}>{getTimeAgo(discussion.last_activity_at)}</Text>
               </View>
@@ -512,7 +512,7 @@ export default function ForumScreen() {
             <View style={styles.discussionHeader}>
               <Image source={{ uri: discussion.profiles?.avatar_url || 'https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?w=400&auto=format&fit=crop&q=60' }} style={styles.discussionAvatar} />
               <View style={styles.discussionAuthorInfo}>
-                <Text style={styles.discussionAuthorName}>{discussion.profiles?.full_name || 'Anonymous'}</Text>
+                <Text style={styles.discussionAuthorName}>{getDisplayName(discussion.profiles) || 'Anonymous'}</Text>
                 <Text style={styles.discussionAuthorRole}>Member</Text>
               </View>
               <View style={styles.discussionCategory}>
@@ -581,7 +581,7 @@ export default function ForumScreen() {
           {activeUsers.map(u => (
             <TouchableOpacity key={u.user_id} style={styles.memberCard} onPress={() => debouncedRouter.push(`/user-profile/${u.user_id}`)}>
               <Image source={{ uri: u.profile?.avatar_url || 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=400&auto=format&fit=crop&q=60' }} style={styles.memberAvatar} />
-              <Text style={styles.memberName} numberOfLines={1}>{u.profile?.full_name || 'Member'}</Text>
+              <Text style={styles.memberName} numberOfLines={1}>{getDisplayName(u.profile) || 'Member'}</Text>
               <Text style={styles.memberRole}>{getTimeAgo(u.last_activity_at)}</Text>
             </TouchableOpacity>
           ))}

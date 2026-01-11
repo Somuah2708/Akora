@@ -18,7 +18,7 @@ import { DebouncedTouchable } from '@/components/DebouncedTouchable';
 import { debouncedRouter } from '@/utils/navigationDebounce';;
 import { Ionicons } from '@expo/vector-icons';
 import * as DocumentPicker from 'expo-document-picker';
-import { supabase } from '@/lib/supabase';
+import { supabase, getDisplayName } from '@/lib/supabase';
 import { useAuth } from '@/hooks/useAuth';
 import { EXPERTISE_OPTIONS, MEETING_FORMATS, DAYS_OPTIONS } from '@/constants/mentorConstants';
 import ProfilePhotoUpload from '@/components/ProfilePhotoUpload';
@@ -524,7 +524,7 @@ export default function AdminAlumniMentorsScreen() {
         });
       }
 
-      Alert.alert('Success', `${application.full_name} is now an approved mentor!`);
+      Alert.alert('Success', `${getDisplayName(application)} is now an approved mentor!`);
       setSelectedApplication(null);
       fetchAllData();
     } catch (error) {
@@ -677,11 +677,11 @@ export default function AdminAlumniMentorsScreen() {
                     <Image source={{ uri: mentor.profile_photo_url }} style={styles.mentorPhoto} />
                   ) : (
                     <View style={styles.avatarPlaceholder}>
-                      <Text style={styles.avatarText}>{mentor.full_name.charAt(0)}</Text>
+                      <Text style={styles.avatarText}>{getDisplayName(mentor).charAt(0)}</Text>
                     </View>
                   )}
                   <View style={styles.cardInfo}>
-                    <Text style={styles.cardTitle}>{mentor.full_name}</Text>
+                    <Text style={styles.cardTitle}>{getDisplayName(mentor)}</Text>
                     <Text style={styles.cardSubtitle}>{mentor.current_title}</Text>
                     {mentor.company && (
                       <Text style={styles.cardCompany}>{mentor.company}</Text>
@@ -804,10 +804,10 @@ export default function AdminAlumniMentorsScreen() {
               >
                 <View style={styles.cardHeader}>
                   <View style={styles.avatarPlaceholder}>
-                    <Text style={styles.avatarText}>{app.full_name.charAt(0)}</Text>
+                    <Text style={styles.avatarText}>{getDisplayName(app).charAt(0)}</Text>
                   </View>
                   <View style={styles.cardInfo}>
-                    <Text style={styles.cardTitle}>{app.full_name}</Text>
+                    <Text style={styles.cardTitle}>{getDisplayName(app)}</Text>
                     <Text style={styles.cardSubtitle}>{app.current_title}</Text>
                     {app.company && <Text style={styles.cardCompany}>{app.company}</Text>}
                   </View>
@@ -888,7 +888,7 @@ export default function AdminAlumniMentorsScreen() {
               </View>
 
               <ScrollView style={styles.modalBody}>
-                <Text style={styles.modalName}>{selectedApplication.full_name}</Text>
+                <Text style={styles.modalName}>{getDisplayName(selectedApplication)}</Text>
                 <Text style={styles.modalTitle2}>{selectedApplication.current_title}</Text>
                 {selectedApplication.company && (
                   <Text style={styles.modalCompany}>{selectedApplication.company}</Text>

@@ -46,7 +46,7 @@ import {
   Edit2,
 } from 'lucide-react-native';
 import { useAuth } from '@/hooks/useAuth';
-import { supabase } from '@/lib/supabase';
+import { supabase, getDisplayName } from '@/lib/supabase';
 import { useRouter, useLocalSearchParams, useFocusEffect } from 'expo-router';
 import { DebouncedTouchable } from '@/components/DebouncedTouchable';
 import { debouncedRouter } from '@/utils/navigationDebounce';
@@ -161,6 +161,9 @@ export default function CircleDetailScreen() {
   const [selectedMedia, setSelectedMedia] = useState<MediaItem[]>([]);
   const [selectedDocuments, setSelectedDocuments] = useState<{ uri: string; name: string; type: string }[]>([]);
   const [uploadingMedia, setUploadingMedia] = useState(false);
+  
+  // Lock to prevent double-tap race conditions on likes
+  const likingInProgressRef = useRef<Set<string>>(new Set());
   
   // Media viewer state
   const [showMediaViewer, setShowMediaViewer] = useState(false);
@@ -592,7 +595,7 @@ export default function CircleDetailScreen() {
 
     Alert.alert(
       'Remove Member',
-      `Are you sure you want to remove ${member.profile?.full_name || 'this member'} from the circle?`,
+      `Are you sure you want to remove ${getDisplayName(member.profile) || 'this member'} from the circle?`,
       [
         { text: 'Cancel', style: 'cancel' },
         {
@@ -678,7 +681,7 @@ export default function CircleDetailScreen() {
           content: `made you ${roleText} of "${circle.name}"`,
         }]);
 
-      Alert.alert('Success', `${member.profile?.full_name || 'Member'} is now ${roleText}`);
+      Alert.alert('Success', `${getDisplayName(member.profile) || 'Member'} is now ${roleText}`);
       setShowMemberMenu(false);
       setSelectedMember(null);
       fetchMembers();
@@ -880,6 +883,28 @@ export default function CircleDetailScreen() {
   const toggleLike = async (postId: string, isLiked: boolean) => {
     if (!user) return;
 
+    // Prevent double-tap race condition (especially on Android)
+    if (likingInProgressRef.current.has(postId)) {
+      console.log('⏳ Like already in progress for post:', postId);
+      return;
+    }
+    likingInProgressRef.current.add(postId);
+
+    const originalPost = posts.find(p => p.id === postId);
+    const originalLikesCount = originalPost?.likes_count ?? 0;
+
+    // Optimistic update
+    setPosts(prev => prev.map(post => {
+      if (post.id === postId) {
+        return {
+          ...post,
+          is_liked: !isLiked,
+          likes_count: isLiked ? Math.max(0, post.likes_count - 1) : post.likes_count + 1,
+        };
+      }
+      return post;
+    }));
+
     try {
       if (isLiked) {
         await supabase
@@ -887,19 +912,64 @@ export default function CircleDetailScreen() {
           .delete()
           .eq('post_id', postId)
           .eq('user_id', user.id);
+        console.log('✅ Circle post unliked successfully');
       } else {
-        await supabase
+        // Like: First check if already liked to avoid duplicate issues
+        console.log('❤️ Liking circle post...');
+        
+        // Check if like already exists (handles race condition from multiple devices)
+        const { data: existingLike } = await supabase
           .from('circle_post_likes')
-          .insert({ post_id: postId, user_id: user.id });
+          .select('id')
+          .eq('post_id', postId)
+          .eq('user_id', user.id)
+          .maybeSingle();
+        
+        if (existingLike) {
+          // Already liked - skip insert, just fetch accurate count
+          console.log('⚠️ Like already exists, skipping insert');
+        } else {
+          // Insert new like
+          const { error } = await supabase
+            .from('circle_post_likes')
+            .insert({
+              post_id: postId,
+              user_id: user.id,
+            });
+
+          if (error) {
+            // If we get a unique constraint error, it means another device just liked
+            // This is fine - we'll fetch the accurate count below
+            if (!error.code?.includes('23505')) {
+              throw error;
+            }
+            console.log('⚠️ Duplicate like detected (race condition), continuing...');
+          } else {
+            console.log('✅ Circle post liked successfully');
+          }
+        }
       }
 
-      // Update local state
+      // Fetch accurate count and status after toggle
+      const { count } = await supabase
+        .from('circle_post_likes')
+        .select('*', { count: 'exact', head: true })
+        .eq('post_id', postId);
+      
+      const { data: userLike } = await supabase
+        .from('circle_post_likes')
+        .select('id')
+        .eq('post_id', postId)
+        .eq('user_id', user.id)
+        .maybeSingle();
+
+      // Update with accurate count
       setPosts(prev => prev.map(post => {
         if (post.id === postId) {
           return {
             ...post,
-            is_liked: !isLiked,
-            likes_count: isLiked ? Math.max(0, post.likes_count - 1) : post.likes_count + 1,
+            is_liked: !!userLike,
+            likes_count: count || 0,
           };
         }
         return post;
@@ -907,6 +977,19 @@ export default function CircleDetailScreen() {
         
     } catch (error) {
       console.error('Error toggling like:', error);
+      // Revert on error
+      setPosts(prev => prev.map(post => {
+        if (post.id === postId) {
+          return {
+            ...post,
+            is_liked: isLiked,
+            likes_count: originalLikesCount,
+          };
+        }
+        return post;
+      }));
+    } finally {
+      likingInProgressRef.current.delete(postId);
     }
   };
 
@@ -1451,12 +1534,12 @@ export default function CircleDetailScreen() {
             ) : (
               <View style={styles.authorAvatarPlaceholder}>
                 <Text style={styles.authorAvatarText}>
-                  {item.user_profile?.full_name?.charAt(0) || '?'}
+                  {getDisplayName(item.user_profile)?.charAt(0) || '?'}
                 </Text>
               </View>
             )}
             <View style={styles.authorInfo}>
-              <Text style={styles.authorName}>{item.user_profile?.full_name || 'Unknown'}</Text>
+              <Text style={styles.authorName}>{getDisplayName(item.user_profile) || 'Unknown'}</Text>
               <Text style={styles.postTime}>{formatTimeAgo(item.created_at)}</Text>
             </View>
           </TouchableOpacity>
@@ -1612,14 +1695,14 @@ export default function CircleDetailScreen() {
           ) : (
             <View style={styles.memberAvatarPlaceholder}>
               <Text style={styles.memberAvatarText}>
-                {item.profile?.full_name?.charAt(0) || '?'}
+                {getDisplayName(item.profile)?.charAt(0) || '?'}
               </Text>
             </View>
           )}
           
           <View style={styles.memberInfo}>
             <View style={styles.memberNameRow}>
-              <Text style={styles.memberName}>{item.profile?.full_name || 'Unknown'}</Text>
+              <Text style={styles.memberName}>{getDisplayName(item.profile) || 'Unknown'}</Text>
               {isMemberCreator && (
                 <View style={styles.creatorBadge}>
                   <Shield size={12} color="#F59E0B" />
@@ -1968,13 +2051,13 @@ export default function CircleDetailScreen() {
                             ) : (
                               <View style={styles.requestAvatarPlaceholder}>
                                 <Text style={styles.requestAvatarText}>
-                                  {request.user_profile?.full_name?.charAt(0) || '?'}
+                                  {getDisplayName(request.user_profile)?.charAt(0) || '?'}
                                 </Text>
                               </View>
                             )}
                             <View>
                               <Text style={styles.requestName}>
-                                {request.user_profile?.full_name || request.user_profile?.username || 'Unknown'}
+                                {getDisplayName(request.user_profile) || request.user_profile?.username || 'Unknown'}
                               </Text>
                               <Text style={styles.requestTime}>
                                 {formatTimeAgo(request.created_at)}
@@ -2045,12 +2128,12 @@ export default function CircleDetailScreen() {
                     ) : (
                       <View style={styles.creatorAvatarPlaceholder}>
                         <Text style={styles.creatorAvatarText}>
-                          {circle.creator_profile.full_name?.charAt(0) || '?'}
+                          {getDisplayName(circle.creator_profile)?.charAt(0) || '?'}
                         </Text>
                       </View>
                     )}
                     <View>
-                      <Text style={styles.creatorInfoName}>{circle.creator_profile.full_name}</Text>
+                      <Text style={styles.creatorInfoName}>{getDisplayName(circle.creator_profile)}</Text>
                     </View>
                   </TouchableOpacity>
                 </View>
@@ -2116,12 +2199,12 @@ export default function CircleDetailScreen() {
                 ) : (
                   <View style={styles.creatorAvatarPlaceholder}>
                     <Text style={styles.creatorAvatarText}>
-                      {circle.creator_profile.full_name?.charAt(0) || '?'}
+                      {getDisplayName(circle.creator_profile)?.charAt(0) || '?'}
                     </Text>
                   </View>
                 )}
                 <View>
-                  <Text style={styles.creatorInfoName}>{circle.creator_profile.full_name}</Text>
+                  <Text style={styles.creatorInfoName}>{getDisplayName(circle.creator_profile)}</Text>
                 </View>
               </TouchableOpacity>
             </View>
@@ -2264,7 +2347,7 @@ export default function CircleDetailScreen() {
           <View style={styles.memberMenuContainer}>
             <View style={styles.memberMenuHeader}>
               <Text style={styles.memberMenuTitle}>
-                {selectedMember?.profile?.full_name || 'Member'}
+                {getDisplayName(selectedMember?.profile) || 'Member'}
               </Text>
               <Text style={styles.memberMenuSubtitle}>
                 Current role: {selectedMember?.role || 'member'}

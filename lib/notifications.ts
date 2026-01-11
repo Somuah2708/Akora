@@ -1,4 +1,4 @@
-import { supabase } from './supabase';
+import { supabase, getDisplayName } from './supabase';
 
 export type NotificationType = 'like' | 'comment' | 'follow' | 'mention' | 'post' | 'friend_request' | 'friend_accept';
 
@@ -217,7 +217,7 @@ export function subscribeToNotifications(
  * Get notification message text
  */
 export function getNotificationMessage(notification: Notification): string {
-  const actorName = notification.actor?.full_name || notification.actor?.username || 'Someone';
+  const actorName = getDisplayName(notification.actor) || notification.actor?.username || 'Someone';
   
   switch (notification.type) {
     case 'like':

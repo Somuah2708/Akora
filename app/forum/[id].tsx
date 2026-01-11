@@ -32,7 +32,7 @@ import * as FileSystem from 'expo-file-system/legacy';
 import * as LinkingExpo from 'expo-linking';
 import { decode } from 'base64-arraybuffer';
 import { useAuth } from '@/hooks/useAuth';
-import { supabase } from '@/lib/supabase';
+import { supabase, getDisplayName } from '@/lib/supabase';
 import * as Clipboard from 'expo-clipboard';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { emit } from '@/lib/eventBus';
@@ -627,14 +627,14 @@ export default function DiscussionDetailScreen() {
         <View style={[styles.commentCard]}>
           <View style={styles.commentHeader}>
             <TouchableOpacity
-              accessibilityLabel={`View ${comment.profiles?.full_name || 'user'} profile`}
+              accessibilityLabel={`View ${getDisplayName(comment.profiles) || 'user'} profile`}
               onPress={() => comment.profiles?.id && debouncedRouter.push({ pathname: '/user-profile/[id]', params: { id: comment.profiles.id } })}
               style={{ flexDirection: 'row', alignItems: 'center', flex: 1 }}
               hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
             >
               <Image source={{ uri: comment.profiles?.avatar_url || 'https://via.placeholder.com/40' }} style={styles.commentAvatar} />
               <View style={styles.commentAuthorInfo}>
-                <Text style={styles.commentAuthorName}>{comment.profiles?.full_name || 'Anonymous'}</Text>
+                <Text style={styles.commentAuthorName}>{getDisplayName(comment.profiles) || 'Anonymous'}</Text>
                 <Text style={styles.commentAuthorRole}>Member</Text>
               </View>
             </TouchableOpacity>
@@ -738,7 +738,7 @@ export default function DiscussionDetailScreen() {
                 setReplyTo(comment);
                 setTimeout(() => inputRef.current?.focus(), 50);
               }}
-              accessibilityLabel={`Reply to ${comment.profiles?.full_name || 'comment'}`}
+              accessibilityLabel={`Reply to ${getDisplayName(comment.profiles) || 'comment'}`}
               accessible
               hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
             >
@@ -1361,14 +1361,14 @@ export default function DiscussionDetailScreen() {
         <View style={styles.originalPost}>
           <View style={styles.postHeader}>
             <TouchableOpacity
-              accessibilityLabel={`View ${discussion.profiles?.full_name || 'user'} profile`}
+              accessibilityLabel={`View ${getDisplayName(discussion.profiles) || 'user'} profile`}
               onPress={() => discussion.profiles?.id && debouncedRouter.push({ pathname: '/user-profile/[id]', params: { id: discussion.profiles.id } })}
               style={{ flexDirection: 'row', alignItems: 'center', flex: 1 }}
               hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
             >
               <Image source={{ uri: discussion.profiles?.avatar_url || 'https://via.placeholder.com/40' }} style={styles.authorAvatar} />
               <View style={styles.authorInfo}>
-                <Text style={styles.authorName}>{discussion.profiles?.full_name || 'Anonymous'}</Text>
+                <Text style={styles.authorName}>{getDisplayName(discussion.profiles) || 'Anonymous'}</Text>
                 <Text style={styles.authorRole}>Member</Text>
               </View>
             </TouchableOpacity>
@@ -1525,7 +1525,7 @@ export default function DiscussionDetailScreen() {
         {/* Selected Attachments Preview */}
           {replyTo && (
             <View style={styles.replyContextBar}>
-              <Text style={styles.replyContextText}>Replying to {replyTo.profiles?.full_name || 'comment'}</Text>
+              <Text style={styles.replyContextText}>Replying to {getDisplayName(replyTo.profiles) || 'comment'}</Text>
               <TouchableOpacity onPress={() => setReplyTo(null)} accessibilityLabel="Cancel reply" hitSlop={{top:8,bottom:8,left:8,right:8}}>
                 <Text style={styles.replyCancelText}>Cancel</Text>
               </TouchableOpacity>

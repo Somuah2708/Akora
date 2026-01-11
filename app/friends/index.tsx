@@ -4,6 +4,7 @@ import { useRouter } from 'expo-router'
 import { DebouncedTouchable } from '@/components/DebouncedTouchable';
 import { debouncedRouter } from '@/utils/navigationDebounce';;
 import { formatProfileSubtitle } from '@/lib/display';
+import { getDisplayName } from '@/lib/supabase';
 import { Search, UserPlus, Check, X, MessageCircle, ArrowLeft } from 'lucide-react-native';
 import { useAuth } from '@/hooks/useAuth';
 import {
@@ -134,13 +135,13 @@ export default function FriendsScreen() {
         ) : (
           <View style={[styles.avatar, styles.avatarPlaceholder]}>
             <Text style={styles.avatarText}>
-              {item.friend?.full_name?.[0]?.toUpperCase() || 'U'}
+              {getDisplayName(item.friend)?.[0]?.toUpperCase() || 'U'}
             </Text>
           </View>
         )}
         <View style={styles.userDetails}>
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-            <Text style={styles.userName}>{item.friend?.full_name}</Text>
+            <Text style={styles.userName}>{getDisplayName(item.friend)}</Text>
             {(item.friend as any)?.is_admin && (
               <View style={styles.adminBadge}>
                 <Text style={styles.adminBadgeText}>Admin</Text>
@@ -172,13 +173,13 @@ export default function FriendsScreen() {
         ) : (
           <View style={[styles.avatar, styles.avatarPlaceholder]}>
             <Text style={styles.avatarText}>
-              {item.sender?.full_name?.[0]?.toUpperCase() || 'U'}
+              {getDisplayName(item.sender)?.[0]?.toUpperCase() || 'U'}
             </Text>
           </View>
         )}
         <View style={styles.userDetails}>
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-            <Text style={styles.userName}>{item.sender?.full_name}</Text>
+            <Text style={styles.userName}>{getDisplayName(item.sender)}</Text>
               {(item.sender as any)?.is_admin && (
               <View style={styles.adminBadge}>
                 <Text style={styles.adminBadgeText}>Admin</Text>
@@ -234,13 +235,13 @@ export default function FriendsScreen() {
           ) : (
             <View style={[styles.avatar, styles.avatarPlaceholder]}>
               <Text style={styles.avatarText}>
-                {item.full_name?.[0]?.toUpperCase() || 'U'}
+                {getDisplayName(item)?.[0]?.toUpperCase() || 'U'}
               </Text>
             </View>
           )}
           <View style={styles.userDetails}>
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-              <Text style={styles.userName}>{item.full_name}</Text>
+              <Text style={styles.userName}>{getDisplayName(item)}</Text>
               {item.is_admin && (
                 <View style={styles.adminBadge}>
                   <Text style={styles.adminBadgeText}>Admin</Text>
@@ -384,12 +385,12 @@ export default function FriendsScreen() {
                           ) : (
                             <View style={[styles.avatar, styles.avatarPlaceholder]}>
                               <Text style={styles.avatarText}>
-                                {item.receiver?.full_name?.[0]?.toUpperCase() || 'U'}
+                                {getDisplayName(item.receiver)?.[0]?.toUpperCase() || 'U'}
                               </Text>
                             </View>
                           )}
                           <View style={styles.userDetails}>
-                            <Text style={styles.userName}>{item.receiver?.full_name}</Text>
+                            <Text style={styles.userName}>{getDisplayName(item.receiver)}</Text>
                             {!!formatProfileSubtitle(item.receiver) && (
                               <Text style={styles.userHandle}>{formatProfileSubtitle(item.receiver)}</Text>
                             )}

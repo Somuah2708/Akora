@@ -5,7 +5,7 @@ import { SplashScreen, useRouter, useLocalSearchParams, useFocusEffect } from 'e
 import { DebouncedTouchable } from '@/components/DebouncedTouchable';
 import { debouncedRouter } from '@/utils/navigationDebounce';;
 import { ArrowLeft, ThumbsUp, MapPin, Clock, ShieldAlert, Share2, MessagesSquare, Phone, MessageSquareMore } from 'lucide-react-native';
-import { supabase, type ProductService, type Profile } from '@/lib/supabase';
+import { supabase, type ProductService, type Profile, getDisplayName } from '@/lib/supabase';
 import { SAMPLE_PRODUCTS } from '@/lib/marketplace';
 import { useAuth } from '@/hooks/useAuth';
 
@@ -366,7 +366,7 @@ export default function ProductDetailScreen() {
                 style={styles.sellerAvatar}
               />
               <View style={styles.sellerInfo}>
-                <Text style={styles.sellerName}>{product.user?.full_name || product.user?.username || 'Akora seller'}</Text>
+                <Text style={styles.sellerName}>{product.user ? getDisplayName(product.user) : 'Akora seller'}</Text>
                 <Text style={styles.sellerMeta}>Member of Akora community</Text>
               </View>
             </View>

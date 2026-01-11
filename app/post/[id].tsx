@@ -2,8 +2,8 @@ import { View, Text, StyleSheet, ScrollView, Image, TouchableOpacity, ActivityIn
 import { useLocalSearchParams, useRouter } from 'expo-router'
 import { DebouncedTouchable } from '@/components/DebouncedTouchable';
 import { debouncedRouter } from '@/utils/navigationDebounce';;
-import { useEffect, useState } from 'react';
-import { supabase } from '@/lib/supabase';
+import { useEffect, useState, useRef } from 'react';
+import { supabase, getDisplayName } from '@/lib/supabase';
 import { useAuth } from '@/hooks/useAuth';
 import { ArrowLeft, ThumbsUp, MessagesSquare, Star, Share2 } from 'lucide-react-native';
 import { Video, ResizeMode } from 'expo-av';
@@ -44,6 +44,9 @@ export default function PostDetailScreen() {
   const [currentMediaIndex, setCurrentMediaIndex] = useState(0);
   const [mediaAspectRatios, setMediaAspectRatios] = useState<{[key: string]: number}>({});
   const [mediaLoading, setMediaLoading] = useState<{[key: string]: boolean}>({});
+  
+  // Lock to prevent double-tap race conditions on likes
+  const likingInProgressRef = useRef(false);
 
   // Handle media load to get actual dimensions (same as home screen)
   const handleMediaLoad = (mediaId: string, width: number, height: number) => {
@@ -200,21 +203,83 @@ export default function PostDetailScreen() {
 
   const toggleLike = async () => {
     if (!user?.id || !post) return;
+    
+    // Prevent double-tap race condition (especially on Android)
+    if (likingInProgressRef.current) {
+      console.log('⏳ Like already in progress');
+      return;
+    }
+    likingInProgressRef.current = true;
+    
     const next = !isLiked;
+    const originalLikes = post.likes_count || 0;
+    
     setIsLiked(next);
     setPost(prev => prev ? { ...prev, likes_count: (prev.likes_count || 0) + (next ? 1 : -1) } : prev);
+    
     try {
       if (next) {
-        const { error } = await supabase.from('post_likes').insert({ post_id: post.id, user_id: user.id });
-        if (error) throw error;
+        // Like: First check if already liked to avoid duplicate issues
+        console.log('❤️ Liking post...');
+        
+        // Check if like already exists (handles race condition from multiple devices)
+        const { data: existingLike } = await supabase
+          .from('post_likes')
+          .select('id')
+          .eq('post_id', post.id)
+          .eq('user_id', user.id)
+          .maybeSingle();
+        
+        if (existingLike) {
+          // Already liked - skip insert, just fetch accurate count
+          console.log('⚠️ Like already exists, skipping insert');
+        } else {
+          // Insert new like
+          const { error } = await supabase
+            .from('post_likes')
+            .insert({
+              post_id: post.id,
+              user_id: user.id,
+            });
+
+          if (error) {
+            // If we get a unique constraint error, it means another device just liked
+            // This is fine - we'll fetch the accurate count below
+            if (!error.code?.includes('23505')) {
+              throw error;
+            }
+            console.log('⚠️ Duplicate like detected (race condition), continuing...');
+          } else {
+            console.log('✅ Post liked successfully');
+          }
+        }
       } else {
         const { error } = await supabase.from('post_likes').delete().eq('post_id', post.id).eq('user_id', user.id);
         if (error) throw error;
+        console.log('✅ Post unliked successfully');
       }
+      
+      // Fetch accurate count and status after toggle
+      const { count } = await supabase
+        .from('post_likes')
+        .select('*', { count: 'exact', head: true })
+        .eq('post_id', post.id);
+      
+      const { data: userLike } = await supabase
+        .from('post_likes')
+        .select('id')
+        .eq('post_id', post.id)
+        .eq('user_id', user.id)
+        .maybeSingle();
+      
+      setIsLiked(!!userLike);
+      setPost(prev => prev ? { ...prev, likes_count: count || 0 } : prev);
     } catch (e) {
       setIsLiked(!next);
-      setPost(prev => prev ? { ...prev, likes_count: (prev.likes_count || 0) + (next ? -1 : 1) } : prev);
+      setPost(prev => prev ? { ...prev, likes_count: originalLikes } : prev);
       Alert.alert('Error', 'Failed to update like');
+    } finally {
+      likingInProgressRef.current = false;
     }
   };
 
@@ -240,7 +305,7 @@ export default function PostDetailScreen() {
     if (!post) return;
     try {
       await Share.share({
-        message: `${post.user?.full_name || 'Someone'} shared: ${post.content || 'Check out this post'}`,
+        message: `${getDisplayName(post.user) || 'Someone'} shared: ${post.content || 'Check out this post'}`,
       });
     } catch (error) {
       console.error('Error sharing:', error);
@@ -497,7 +562,7 @@ export default function PostDetailScreen() {
 
         {/* Caption */}
         <View style={styles.captionBox}>
-          <Text style={styles.author}>{post.user?.full_name || 'User'}</Text>
+          <Text style={styles.author}>{getDisplayName(post.user) || 'User'}</Text>
           <ExpandableText
             text={post.content}
             numberOfLines={3}

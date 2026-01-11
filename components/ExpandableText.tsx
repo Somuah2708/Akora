@@ -2,7 +2,7 @@
 // Robust two-phase expandable caption with accurate line measurement.
 // Phase 1: Render full text (no numberOfLines) to measure actual line count.
 // Phase 2: Render truncated text (numberOfLines = collapsed limit) + toggle button if needed.
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useMemo } from 'react';
 import {
   Text,
   View,
@@ -13,11 +13,43 @@ import {
   TextLayoutEventData,
 } from 'react-native';
 
+// Helper function to render text with @mention styled differently
+// Only highlights the exact username that was replied to
+const renderTextWithMention = (text: string, mentionedUser?: string) => {
+  // If no mentioned user provided, don't try to parse mentions
+  if (!mentionedUser) {
+    return null;
+  }
+
+  // Check if text starts with @username (the exact replied-to user)
+  const expectedMention = `@${mentionedUser}`;
+  
+  if (!text.startsWith(expectedMention)) {
+    return null;
+  }
+
+  // Check that the mention is followed by a space or end of string (not part of a longer word)
+  const charAfterMention = text[expectedMention.length];
+  if (charAfterMention && charAfterMention !== ' ') {
+    return null;
+  }
+
+  const restOfText = text.slice(expectedMention.length).trimStart();
+
+  return (
+    <>
+      <Text style={styles.mention}>{expectedMention}</Text>
+      {restOfText.length > 0 && <Text> {restOfText}</Text>}
+    </>
+  );
+};
+
 type ExpandableTextProps = {
   text: string;
   numberOfLines?: number; // collapsed line limit
   captionStyle?: TextStyle;
   buttonStyle?: TextStyle;
+  mentionedUser?: string; // The username being replied to (for highlighting @mentions)
 };
 
 export default function ExpandableText({
@@ -25,6 +57,7 @@ export default function ExpandableText({
   numberOfLines = 2,
   captionStyle,
   buttonStyle,
+  mentionedUser,
 }: ExpandableTextProps) {
   const [expanded, setExpanded] = useState(false);
   const [showToggle, setShowToggle] = useState(false);
@@ -64,6 +97,9 @@ export default function ExpandableText({
     setExpanded(prev => !prev);
   };
 
+  // Memoize the mention rendering to avoid recalculating on every render
+  const renderedText = useMemo(() => renderTextWithMention(text, mentionedUser), [text, mentionedUser]);
+
   // Phase 1: Measure full text (no truncation) – invisible to user except identical styling.
   if (!measured) {
     return (
@@ -73,7 +109,7 @@ export default function ExpandableText({
           style={[styles.caption, captionStyle]}
           accessibilityLabel="post-caption-measure"
         >
-          {text}
+          {renderedText || text}
         </Text>
       </View>
     );
@@ -95,7 +131,7 @@ export default function ExpandableText({
           style={[styles.caption, captionStyle]}
           accessibilityLabel="post-caption"
         >
-          {text}
+          {renderedText || text}
         </Text>
       </TouchableOpacity>
       {showToggle && (
@@ -129,5 +165,9 @@ const styles = StyleSheet.create({
     color: '#ffc857',
     fontFamily: 'Inter-SemiBold',
     fontSize: 14,
+  },
+  mention: {
+    color: '#64748B', // Subtle gray color for @mentions - distinguishable but not distracting
+    fontWeight: '600',
   },
 });

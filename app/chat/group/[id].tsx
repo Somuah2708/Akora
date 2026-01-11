@@ -1,9 +1,9 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { View, Text, FlatList, TextInput, TouchableOpacity, Image, Modal, Pressable, ActivityIndicator, StyleSheet, Linking, Alert, KeyboardAvoidingView, Platform, Keyboard, Animated, Vibration } from "react-native";
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { debouncedRouter } from '@/utils/navigationDebounce';
-import { supabase } from "../../../lib/supabase";
+import { supabase, getDisplayName } from "../../../lib/supabase";
 import { useAuth } from "../../../hooks/useAuth";
 import dayjs from "dayjs";
 import EmojiSelector from 'react-native-emoji-selector';
@@ -43,6 +43,7 @@ export default function GroupChatScreen() {
   const { id: groupId } = useLocalSearchParams<{ id: string }>();
   const { user } = useAuth();
   const router = useRouter();
+  const insets = useSafeAreaInsets();
 
   const [group, setGroup] = useState<Group | null>(null);
   const [members, setMembers] = useState<GroupMember[]>([]);
@@ -253,7 +254,7 @@ export default function GroupChatScreen() {
         const results = members
           .map((m) => m.profiles)
           .filter((p): p is Profile => !!p)
-          .filter((p) => !q || (p.full_name || "").toLowerCase().includes(q))
+          .filter((p) => !q || (getDisplayName(p) || "").toLowerCase().includes(q))
           .slice(0, 5);
         setMentionResults(results);
       } else {
@@ -972,7 +973,7 @@ export default function GroupChatScreen() {
               {sender?.avatar_url ? (
                 <Image source={{ uri: sender.avatar_url }} style={{ width: 18, height: 18, borderRadius: 9, marginRight: 6 }} />
               ) : null}
-              <Text style={{ fontSize: 12, color: "#666" }}>{sender?.full_name || "Member"}</Text>
+              <Text style={{ fontSize: 12, color: "#666" }}>{getDisplayName(sender) || "Member"}</Text>
             </View>
           )}
           
@@ -989,7 +990,7 @@ export default function GroupChatScreen() {
               maxWidth: '80%',
             }}>
               <Text style={{ fontSize: 11, color: '#ffc857', fontWeight: '600', marginBottom: 2 }}>
-                ↩ {replySender?.full_name || 'Someone'}
+                ↩ {getDisplayName(replySender) || 'Someone'}
               </Text>
               <Text style={{ fontSize: 12, color: mine ? 'rgba(255,255,255,0.7)' : '#666' }} numberOfLines={1}>
                 {replyToMessage.message_type === 'voice' ? '🎤 Voice message' : 
@@ -1189,7 +1190,7 @@ export default function GroupChatScreen() {
   const typingText = useMemo(() => {
     const names = members
       .filter((m) => m.user_id !== meId && typingMembers[m.user_id])
-      .map((m) => m.profiles?.full_name || "Someone");
+      .map((m) => getDisplayName(m.profiles) || "Someone");
     if (!names.length) return "";
     if (names.length === 1) return `${names[0]} is typing…`;
     return `${names.slice(0, 2).join(", ")}${names.length > 2 ? " and others" : ""} are typing…`;
@@ -1302,7 +1303,7 @@ export default function GroupChatScreen() {
               <View style={styles.replyBarIndicator} />
               <View style={{ flex: 1 }}>
                 <Text style={styles.replyBarName}>
-                  Replying to {members.find(m => m.user_id === replyingTo.sender_id)?.profiles?.full_name || 'someone'}
+                  Replying to {getDisplayName(members.find(m => m.user_id === replyingTo.sender_id)?.profiles) || 'someone'}
                 </Text>
                 <Text style={styles.replyBarMessage} numberOfLines={1}>
                   {replyingTo.message_type === 'voice' ? '🎤 Voice message' :
@@ -1356,7 +1357,7 @@ export default function GroupChatScreen() {
         
         <View style={[
           styles.inputContainer,
-          { paddingBottom: isKeyboardVisible ? 12 : (Platform.OS === 'android' ? 16 : 16) }
+          { paddingBottom: isKeyboardVisible ? 12 : Math.max(insets.bottom, 16) }
         ]}>
           {/* Paperclip Attachment Button */}
           <TouchableOpacity
@@ -1550,14 +1551,14 @@ export default function GroupChatScreen() {
               key={p.id}
               onPress={() => {
                 // replace tailing @query with the full name mention
-                const replaced = input.replace(/(^|\s)@([\w .-]{0,30})$/, (m, g1) => `${g1}@${(p.full_name || '').trim()} `);
+                const replaced = input.replace(/(^|\s)@([\w .-]{0,30})$/, (m, g1) => `${g1}@${(getDisplayName(p) || '').trim()} `);
                 setInput(replaced);
                 setMentionQuery(null);
                 setMentionResults([]);
               }}
               style={{ paddingHorizontal: 12, paddingVertical: 10 }}
             >
-              <Text>@{p.full_name || p.id.slice(0,6)}</Text>
+              <Text>@{getDisplayName(p) || p.id.slice(0,6)}</Text>
             </TouchableOpacity>
           ))}
         </View>

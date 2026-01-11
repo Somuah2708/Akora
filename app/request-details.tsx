@@ -12,7 +12,7 @@ import { useRouter, useLocalSearchParams } from 'expo-router'
 import { DebouncedTouchable } from '@/components/DebouncedTouchable';
 import { debouncedRouter } from '@/utils/navigationDebounce';;
 import { ArrowLeft, User, MessageCircle, CheckCircle, XCircle } from 'lucide-react-native';
-import { supabase } from '@/lib/supabase';
+import { supabase, getDisplayName } from '@/lib/supabase';
 import { useAuth } from '@/hooks/useAuth';
 import MessageThread from '@/components/MessageThread';
 
@@ -181,7 +181,7 @@ export default function RequestDetailsScreen() {
               {userType === 'mentee' ? 'Mentor' : 'Mentee'}:
             </Text>
             <Text style={styles.infoValue}>
-              {userType === 'mentee' ? request.mentor.full_name : request.mentee_name}
+              {userType === 'mentee' ? getDisplayName(request.mentor) : request.mentee_name}
             </Text>
           </View>
 

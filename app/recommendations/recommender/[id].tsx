@@ -4,7 +4,7 @@ import { useRouter, useLocalSearchParams } from 'expo-router'
 import { DebouncedTouchable } from '@/components/DebouncedTouchable';
 import { debouncedRouter } from '@/utils/navigationDebounce';;
 import { ArrowLeft, Check, XCircle, Send, Link as LinkIcon } from 'lucide-react-native';
-import { supabase } from '@/lib/supabase';
+import { supabase, getDisplayName } from '@/lib/supabase';
 import { getSignedEvidenceUrls } from '@/lib/evidence';
 import { formatPrice } from '@/config/academicPricing';
 import { useAuth } from '@/hooks/useAuth';
@@ -167,7 +167,7 @@ export default function RecommenderPortalScreen() {
           <View style={styles.section}>
             <Text style={styles.label}>Requester Identity</Text>
             <Text style={styles.value}>
-              {[req.full_name, req.class_name, req.graduation_year ? `Class of ${req.graduation_year}` : null]
+              {[getDisplayName(req), req.class_name, req.graduation_year ? `Class of ${req.graduation_year}` : null]
                 .filter(Boolean)
                 .join(' · ') || '—'}
             </Text>

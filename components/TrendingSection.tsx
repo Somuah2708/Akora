@@ -365,11 +365,9 @@ export default function TrendingSection({ isAdmin, onAddPress, onLongPress }: Tr
                       {item.title}
                     </Text>
                     
-                    {item.subtitle && (
-                      <Text style={styles.cardSubtitle} numberOfLines={1}>
-                        {item.subtitle}
-                      </Text>
-                    )}
+                    <Text style={styles.cardSubtitle} numberOfLines={1}>
+                      {item.subtitle || ' '}
+                    </Text>
                   </View>
                 </View>
               </TouchableOpacity>
@@ -526,6 +524,7 @@ const styles = StyleSheet.create({
   },
   content: {
     padding: 12,
+    minHeight: 70, // Ensures space for title (2 lines) + subtitle
   },
   cardTitle: {
     fontSize: 14,
@@ -533,11 +532,13 @@ const styles = StyleSheet.create({
     color: '#0F172A',
     lineHeight: 19,
     letterSpacing: -0.2,
+    minHeight: 38, // Reserve space for 2 lines
   },
   cardSubtitle: {
     fontSize: 12,
     color: '#64748B',
     marginTop: 4,
     lineHeight: 16,
+    minHeight: 16, // Reserve space even when empty
   },
 });

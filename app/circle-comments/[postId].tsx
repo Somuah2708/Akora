@@ -1,11 +1,12 @@
 import { View, Text, StyleSheet, TextInput, TouchableOpacity, ScrollView, KeyboardAvoidingView, Platform, ActivityIndicator, Alert } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useFonts, Inter_400Regular, Inter_600SemiBold } from '@expo-google-fonts/inter';
 import { useEffect, useState, useCallback } from 'react';
 import { SplashScreen, useRouter, useLocalSearchParams } from 'expo-router';
 import { DebouncedTouchable } from '@/components/DebouncedTouchable';
 import { debouncedRouter } from '@/utils/navigationDebounce';
 import { ArrowLeft, ThumbsUp, MoreVertical, Send, Trash2 } from 'lucide-react-native';
-import { supabase } from '@/lib/supabase';
+import { supabase, getDisplayName } from '@/lib/supabase';
 import { useAuth } from '@/hooks/useAuth';
 import { Image } from 'react-native';
 import ExpandableText from '@/components/ExpandableText';
@@ -38,6 +39,7 @@ interface CircleComment {
 
 export default function CircleCommentsScreen() {
   const router = useRouter();
+  const insets = useSafeAreaInsets();
   const { user: authUser, profile: userProfile } = useAuth();
   const { postId } = useLocalSearchParams<{ postId: string }>();
   const [comments, setComments] = useState<CircleComment[]>([]);
@@ -341,7 +343,7 @@ export default function CircleCommentsScreen() {
 
   const handleReplyComment = (comment: CircleComment) => {
     setReplyingTo(comment.id);
-    setCommentText(`@${comment.user.full_name} `);
+    setCommentText(`@${getDisplayName(comment.user)} `);
     setShowOptions(null);
   };
 
@@ -407,7 +409,7 @@ export default function CircleCommentsScreen() {
                 >
                   <Image
                     source={{ 
-                      uri: comment.user.avatar_url || 'https://ui-avatars.com/api/?name=' + encodeURIComponent(comment.user.full_name || 'User') + '&background=6366F1&color=fff'
+                      uri: comment.user.avatar_url || 'https://ui-avatars.com/api/?name=' + encodeURIComponent(getDisplayName(comment.user)) + '&background=6366F1&color=fff'
                     }}
                     style={styles.commentAvatar}
                   />
@@ -419,7 +421,7 @@ export default function CircleCommentsScreen() {
                       activeOpacity={0.7}
                       style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}
                     >
-                      <Text style={styles.commentUsername}>{comment.user.full_name}</Text>
+                      <Text style={styles.commentUsername}>{getDisplayName(comment.user)}</Text>
                       {(comment.user.is_admin || comment.user.role === 'admin') && (
                         <View style={styles.verifiedBadge}>
                           <Text style={styles.verifiedCheck}>✓</Text>
@@ -493,7 +495,7 @@ export default function CircleCommentsScreen() {
                       >
                         <Image
                           source={{ 
-                            uri: reply.user.avatar_url || 'https://ui-avatars.com/api/?name=' + encodeURIComponent(reply.user.full_name || 'User') + '&background=6366F1&color=fff'
+                            uri: reply.user.avatar_url || 'https://ui-avatars.com/api/?name=' + encodeURIComponent(getDisplayName(reply.user)) + '&background=6366F1&color=fff'
                           }}
                           style={styles.replyAvatar}
                         />
@@ -505,7 +507,7 @@ export default function CircleCommentsScreen() {
                             activeOpacity={0.7}
                             style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}
                           >
-                            <Text style={styles.commentUsername}>{reply.user.full_name}</Text>
+                            <Text style={styles.commentUsername}>{getDisplayName(reply.user)}</Text>
                             {(reply.user.is_admin || reply.user.role === 'admin') && (
                               <View style={styles.verifiedBadge}>
                                 <Text style={styles.verifiedCheck}>✓</Text>
@@ -518,6 +520,7 @@ export default function CircleCommentsScreen() {
                           text={reply.content}
                           numberOfLines={3}
                           captionStyle={styles.commentText}
+                          mentionedUser={getDisplayName(comment.user)}
                         />
                         <View style={styles.commentActions}>
                           <TouchableOpacity 
@@ -576,7 +579,7 @@ export default function CircleCommentsScreen() {
       </ScrollView>
 
       {authUser && (
-        <View style={styles.inputContainer}>
+        <View style={[styles.inputContainer, { paddingBottom: Math.max(insets.bottom, 12) }]}>
           {replyingTo && (
             <View style={styles.replyingIndicator}>
               <Text style={styles.replyingText}>
@@ -593,7 +596,7 @@ export default function CircleCommentsScreen() {
           <View style={styles.inputRow}>
             <Image
               source={{ 
-                uri: (userProfile as any)?.avatar_url || (userProfile as any)?.profile_photo_url || 'https://ui-avatars.com/api/?name=' + encodeURIComponent((userProfile as any)?.full_name || 'User') + '&background=6366F1&color=fff'
+                uri: (userProfile as any)?.avatar_url || (userProfile as any)?.profile_photo_url || 'https://ui-avatars.com/api/?name=' + encodeURIComponent(getDisplayName(userProfile)) + '&background=6366F1&color=fff'
               }}
               style={styles.inputAvatar}
             />
@@ -789,7 +792,6 @@ const styles = StyleSheet.create({
     backgroundColor: '#FFFFFF',
     paddingHorizontal: 16,
     paddingVertical: 12,
-    paddingBottom: Platform.OS === 'ios' ? 34 : 12,
     borderTopWidth: 1,
     borderTopColor: '#E2E8F0',
   },

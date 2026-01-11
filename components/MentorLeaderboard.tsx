@@ -9,7 +9,7 @@ import {
   ActivityIndicator,
 } from 'react-native';
 import { Trophy, Medal, Award, Star, Users, TrendingUp } from 'lucide-react-native';
-import { supabase } from '@/lib/supabase';
+import { supabase, getDisplayName } from '@/lib/supabase';
 import { useRouter } from 'expo-router';
 
 interface LeaderboardEntry {
@@ -171,7 +171,7 @@ export default function MentorLeaderboard() {
               {/* Mentor Info */}
               <View style={styles.mentorInfo}>
                 <Text style={styles.mentorName} numberOfLines={1}>
-                  {entry.full_name}
+                  {getDisplayName(entry)}
                 </Text>
                 <Text style={styles.mentorTitle} numberOfLines={1}>
                   {entry.current_title}

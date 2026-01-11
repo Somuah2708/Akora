@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState, useRef } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Dimensions, ActivityIndicator, RefreshControl, Modal, TextInput } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Dimensions, ActivityIndicator, RefreshControl, Modal, TextInput, Platform } from 'react-native';
 import { useFonts, Inter_400Regular, Inter_600SemiBold } from '@expo-google-fonts/inter';
 import { useRouter, useLocalSearchParams, useFocusEffect } from 'expo-router';
 import { DebouncedTouchable } from '@/components/DebouncedTouchable';
@@ -8,7 +8,7 @@ import { HEADER_COLOR } from '@/constants/Colors';
 import { Compass, ThumbsUp, MessagesSquare, Lightbulb, SlidersHorizontal, Check, X, Users, Camera, Share2, Star } from 'lucide-react-native';
 import type { LucideIcon } from 'lucide-react-native';
 import { useAuth } from '@/hooks/useAuth';
-import { supabase } from '@/lib/supabase';
+import { supabase, getDisplayName } from '@/lib/supabase';
 import { fetchDiscoverFeed, type DiscoverItem } from '@/lib/discover';
 import { useDiscoverFeed, useUserInterests, useFriendIds } from '@/lib/queries';
 import { INTEREST_LIBRARY, type InterestCategoryDefinition, type InterestOptionId } from '@/lib/interest-data';
@@ -194,6 +194,10 @@ export default function DiscoverScreen() {
   const [postLayouts, setPostLayouts] = useState<PostLayout[]>([]);
   const [scrollY, setScrollY] = useState(0);
   const scrollViewRef = useRef<ScrollView>(null);
+  
+  // Lock to prevent double-tap race conditions on likes
+  const likingInProgressRef = useRef<Set<string>>(new Set());
+  
   const [interestModalVisible, setInterestModalVisible] = useState(false);
   const [interestSearch, setInterestSearch] = useState('');
   const [shareModalVisible, setShareModalVisible] = useState(false);
@@ -687,7 +691,15 @@ export default function DiscoverScreen() {
     const item = discoverFeed.find((i) => i.id === itemId);
     if (!item || item.type !== 'post' || !item.sourceId) return;
 
+    // Prevent double-tap race condition (especially on Android)
+    if (likingInProgressRef.current.has(itemId)) {
+      console.log('⏳ Like already in progress for item:', itemId);
+      return;
+    }
+    likingInProgressRef.current.add(itemId);
+
     const isLiked = item.isLiked || false;
+    const originalLikes = item.likes || 0;
 
     // Optimistically update UI
     setDiscoverFeed((prev) =>
@@ -707,17 +719,48 @@ export default function DiscoverScreen() {
           .eq('post_id', item.sourceId)
           .eq('user_id', user.id);
         if (error) throw error;
+        console.log('✅ Post unliked successfully');
       } else {
-        const { error } = await supabase
+        // Like: First check if already liked to avoid duplicate issues
+        console.log('❤️ Liking post...');
+        
+        // Check if like already exists (handles race condition from multiple devices)
+        const { data: existingLike } = await supabase
           .from('post_likes')
-          .insert({ post_id: item.sourceId, user_id: user.id });
-        if (error) throw error;
+          .select('id')
+          .eq('post_id', item.sourceId)
+          .eq('user_id', user.id)
+          .maybeSingle();
+        
+        if (existingLike) {
+          // Already liked - skip insert, just fetch accurate count
+          console.log('⚠️ Like already exists, skipping insert');
+        } else {
+          // Insert new like
+          const { error } = await supabase
+            .from('post_likes')
+            .insert({
+              post_id: item.sourceId,
+              user_id: user.id,
+            });
+
+          if (error) {
+            // If we get a unique constraint error, it means another device just liked
+            // This is fine - we'll fetch the accurate count below
+            if (!error.code?.includes('23505')) {
+              throw error;
+            }
+            console.log('⚠️ Duplicate like detected (race condition), continuing...');
+          } else {
+            console.log('✅ Post liked successfully');
+          }
+        }
       }
 
       // Fetch accurate count after toggle
-      const { data: likesData, count } = await supabase
+      const { count } = await supabase
         .from('post_likes')
-        .select('*', { count: 'exact' })
+        .select('*', { count: 'exact', head: true })
         .eq('post_id', item.sourceId);
       
       const actualLikesCount = count || 0;
@@ -744,10 +787,13 @@ export default function DiscoverScreen() {
       setDiscoverFeed((prev) =>
         prev.map((i) =>
           i.id === itemId
-            ? { ...i, isLiked: isLiked, likes: item.likes || 0 }
+            ? { ...i, isLiked: isLiked, likes: originalLikes }
             : i
         )
       );
+    } finally {
+      // Always release the lock
+      likingInProgressRef.current.delete(itemId);
     }
   };
 
@@ -830,7 +876,7 @@ export default function DiscoverScreen() {
       const uniqueFriends = Array.from(new Map(allFriends.map(f => [f.id, f])).values());
       
       console.log('✅ Unique friends to display:', uniqueFriends.length);
-      console.log('Friends list:', uniqueFriends.map(f => f.full_name || f.username).join(', '));
+      console.log('Friends list:', uniqueFriends.map(f => getDisplayName(f)).join(', '));
       
       setFriendsList(uniqueFriends);
       
@@ -943,7 +989,7 @@ export default function DiscoverScreen() {
       
       // Show success feedback
       const friend = friendsList.find(f => f.id === friendId);
-      alert(`Sent to ${friend?.full_name || 'friend'}!`);
+      alert(`Sent to ${getDisplayName(friend)}!`);
       
     } catch (error) {
       console.error('Error sharing post:', error);
@@ -985,7 +1031,7 @@ export default function DiscoverScreen() {
         if (item.type === 'post' && item.author) {
           const isFriend = friendIds.has(item.author.id);
           if (!isFriend) {
-            console.log('❌ [DISCOVER] Filtering out post from non-friend:', item.author.full_name);
+            console.log('❌ [DISCOVER] Filtering out post from non-friend:', getDisplayName(item.author));
           }
           return isFriend;
         }
@@ -1160,7 +1206,7 @@ export default function DiscoverScreen() {
                   {(() => {
                     const filteredFriends = friendsList.filter(friend => 
                       searchFriends === '' || 
-                      friend.full_name?.toLowerCase().includes(searchFriends.toLowerCase()) ||
+                      getDisplayName(friend).toLowerCase().includes(searchFriends.toLowerCase()) ||
                       friend.username?.toLowerCase().includes(searchFriends.toLowerCase())
                     );
                     console.log('🎯 Rendering friends:', filteredFriends.length, 'of', friendsList.length);
@@ -1181,12 +1227,12 @@ export default function DiscoverScreen() {
                           ) : (
                             <View style={[styles.shareFriendAvatar, styles.shareFriendAvatarPlaceholder]}>
                               <Text style={styles.shareFriendAvatarText}>
-                                {friend.full_name?.[0]?.toUpperCase() || 'U'}
+                                {getDisplayName(friend)[0]?.toUpperCase() || 'U'}
                               </Text>
                             </View>
                           )}
                           <View style={styles.shareFriendInfo}>
-                            <Text style={styles.shareFriendName}>{friend.full_name || 'Unknown'}</Text>
+                            <Text style={styles.shareFriendName}>{getDisplayName(friend)}</Text>
                           </View>
                         </View>
                         <View style={styles.shareSendButton}>
@@ -1205,7 +1251,10 @@ export default function DiscoverScreen() {
       <ScrollView 
         ref={scrollViewRef}
         style={styles.scrollView}
-        showsVerticalScrollIndicator={false} 
+        showsVerticalScrollIndicator={false}
+        // Android performance optimizations
+        removeClippedSubviews={Platform.OS === 'android'}
+        overScrollMode="never"
         refreshControl={
           <RefreshControl 
             refreshing={refreshing} 
@@ -1217,7 +1266,8 @@ export default function DiscoverScreen() {
         onScroll={(event) => {
           setScrollY(event.nativeEvent.contentOffset.y);
         }}
-        scrollEventThrottle={16}
+        // Reduce scroll events on Android for better performance
+        scrollEventThrottle={Platform.OS === 'android' ? 32 : 16}
       >
         {/* FIX: Dark background filler for pull-to-refresh gap */}
         <View style={{ position: 'absolute', top: -1000, left: 0, right: 0, height: 1000, backgroundColor: HEADER_COLOR }} />
@@ -1307,7 +1357,7 @@ export default function DiscoverScreen() {
                 id: item.id.substring(0, 20),
                 created_at: item.created_at,
                 timeAgo: timeAgo,
-                author: item.author?.full_name
+                author: getDisplayName(item.author)
               });
               
               return (
@@ -1336,7 +1386,7 @@ export default function DiscoverScreen() {
                   <View>
                     <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
                       <Text style={styles.postUsername}>
-                        {item.author?.full_name || 'Anonymous'}
+                        {getDisplayName(item.author)}
                       </Text>
                       {((item.author as any)?.is_admin || (item.author as any)?.role === 'admin') && (
                         <View style={styles.verifiedBadge}>
@@ -1632,6 +1682,8 @@ export default function DiscoverScreen() {
                   <TouchableOpacity 
                     style={styles.actionButtonWithCount}
                     onPress={() => handleLikeToggle(item.id)}
+                    activeOpacity={0.6}
+                    hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
                   >
                     <ThumbsUp 
                       size={24} 
@@ -1646,6 +1698,8 @@ export default function DiscoverScreen() {
                   <TouchableOpacity 
                     style={styles.actionButtonWithCount}
                     onPress={() => item.sourceId && debouncedRouter.push(`/post-comments/${item.sourceId}`)}
+                    activeOpacity={0.6}
+                    hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
                   >
                     <MessagesSquare size={24} color="#000000" strokeWidth={2} />
                     {item.comments !== undefined && item.comments > 0 && (
@@ -1655,11 +1709,18 @@ export default function DiscoverScreen() {
                   <TouchableOpacity 
                     style={styles.actionButton}
                     onPress={() => handleSharePress(item)}
+                    activeOpacity={0.6}
+                    hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
                   >
                     <Share2 size={24} color="#000000" strokeWidth={2} />
                   </TouchableOpacity>
                 </View>
-                <TouchableOpacity style={styles.actionButton} onPress={() => handleBookmarkToggle(item.id)}>
+                <TouchableOpacity 
+                  style={styles.actionButton} 
+                  onPress={() => handleBookmarkToggle(item.id)}
+                  activeOpacity={0.6}
+                  hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                >
                   <Star size={24} color={(item as any).isBookmarked ? '#ffc857' : '#000000'} fill={(item as any).isBookmarked ? '#ffc857' : 'none'} strokeWidth={2} />
                 </TouchableOpacity>
               </View>
@@ -1668,7 +1729,7 @@ export default function DiscoverScreen() {
               {item.description && (
                 <View style={styles.postCaption}>
                   <Text style={styles.postCaptionUsername}>
-                    {item.author?.full_name || 'Anonymous'}
+                    {getDisplayName(item.author)}
                   </Text>
                   <ExpandableText
                     text={item.description}

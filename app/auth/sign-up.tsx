@@ -1,4 +1,5 @@
-import { View, Text, StyleSheet, TextInput, TouchableOpacity, ScrollView, Image, Alert, ActivityIndicator } from 'react-native';
+import { View, Text, StyleSheet, TextInput, TouchableOpacity, ScrollView, Image, Alert, ActivityIndicator, KeyboardAvoidingView, Platform } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFonts, Inter_400Regular, Inter_600SemiBold } from '@expo-google-fonts/inter';
 import { useEffect, useState } from 'react';
 import { SplashScreen, useRouter } from 'expo-router'
@@ -50,6 +51,7 @@ export default function SignUpScreen() {
   // Required Form state
   const [firstName, setFirstName] = useState('');
   const [surname, setSurname] = useState('');
+  const [otherNames, setOtherNames] = useState('');
   const [classGroup, setClassGroup] = useState('');
   const [yearGroup, setYearGroup] = useState('');
   const [house, setHouse] = useState('');
@@ -148,7 +150,10 @@ export default function SignUpScreen() {
       
       // Generate a username from first name and surname
       const username = `${firstName.toLowerCase()}.${surname.toLowerCase()}`;
-      const fullName = `${firstName} ${surname}`;
+      // Full name includes other names if provided
+      const fullName = otherNames.trim() 
+        ? `${firstName} ${otherNames.trim()} ${surname}`
+        : `${firstName} ${surname}`;
       
       const { data, error } = await signUp(
         email.trim(),
@@ -157,6 +162,7 @@ export default function SignUpScreen() {
         fullName,
         firstName.trim(),
         surname.trim(),
+        otherNames.trim(),
         classGroup.trim(),
         yearGroup.trim(),
         house,
@@ -193,7 +199,17 @@ export default function SignUpScreen() {
   }
 
   return (
-    <ScrollView contentContainerStyle={styles.container}>
+    <SafeAreaView style={styles.keyboardAvoid} edges={['bottom']}>
+      <KeyboardAvoidingView 
+        style={styles.keyboardAvoid}
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        keyboardVerticalOffset={Platform.OS === 'ios' ? 10 : 0}
+      >
+        <ScrollView 
+          contentContainerStyle={styles.container}
+          keyboardShouldPersistTaps="handled"
+          showsVerticalScrollIndicator={false}
+        >
       <View style={styles.header}>
         <TouchableOpacity 
           style={styles.backButton}
@@ -231,6 +247,17 @@ export default function SignUpScreen() {
             placeholderTextColor="#666666"
             value={surname}
             onChangeText={setSurname}
+          />
+        </View>
+        
+        <View style={styles.inputContainer}>
+          <User size={20} color="#666666" />
+          <TextInput
+            style={styles.input}
+            placeholder="Other Names (Optional)"
+            placeholderTextColor="#666666"
+            value={otherNames}
+            onChangeText={setOtherNames}
           />
         </View>
         
@@ -407,7 +434,7 @@ export default function SignUpScreen() {
           <MapPin size={20} color="#666666" />
           <TextInput
             style={styles.input}
-            placeholder="Location (Optional)"
+            placeholder="Current Location (e.g., Accra)"
             placeholderTextColor="#666666"
             value={location}
             onChangeText={setLocation}
@@ -526,11 +553,17 @@ export default function SignUpScreen() {
           <Text style={styles.signInButtonText}>Sign In</Text>
         </TouchableOpacity>
       </View>
-    </ScrollView>
+        </ScrollView>
+      </KeyboardAvoidingView>
+    </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
+  keyboardAvoid: {
+    flex: 1,
+    backgroundColor: '#FFFFFF',
+  },
   container: {
     flexGrow: 1,
     backgroundColor: '#FFFFFF',

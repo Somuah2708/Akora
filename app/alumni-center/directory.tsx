@@ -24,7 +24,7 @@ import {
   Linkedin,
 } from 'lucide-react-native';
 import { LinearGradient } from 'expo-linear-gradient';
-import { supabase } from '@/lib/supabase';
+import { supabase, getDisplayName } from '@/lib/supabase';
 
 interface AlumniProfile {
   id: string;
@@ -105,7 +105,7 @@ export default function AlumniDirectoryScreen() {
       const query = searchQuery.toLowerCase();
       filtered = filtered.filter(
         (person) =>
-          person.full_name?.toLowerCase().includes(query) ||
+          getDisplayName(person)?.toLowerCase().includes(query) ||
           person.job_title?.toLowerCase().includes(query) ||
           person.company?.toLowerCase().includes(query) ||
           person.location?.toLowerCase().includes(query)
@@ -290,7 +290,7 @@ function AlumniCard({ alumni, router }: { alumni: AlumniProfile; router: any }) 
         style={styles.alumniImage}
       />
       <View style={styles.alumniInfo}>
-        <Text style={styles.alumniName}>{alumni.full_name}</Text>
+        <Text style={styles.alumniName}>{getDisplayName(alumni)}</Text>
         <Text style={styles.alumniYear}>Class of {alumni.graduation_year}</Text>
         
         {alumni.job_title && alumni.company && (

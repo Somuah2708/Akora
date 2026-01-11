@@ -10,7 +10,7 @@ import {
   Modal,
 } from 'react-native';
 import { Quote, Send, X, Star } from 'lucide-react-native';
-import { supabase } from '@/lib/supabase';
+import { supabase, getDisplayName } from '@/lib/supabase';
 import { useAuth } from '@/hooks/useAuth';
 
 interface Testimonial {
@@ -65,7 +65,7 @@ export default function MentorTestimonials({
 
       const formattedData = (data || []).map((t: any) => ({
         ...t,
-        mentee_name: t.profiles?.full_name || 'Anonymous',
+        mentee_name: t.profiles ? getDisplayName(t.profiles) : 'Anonymous',
       }));
 
       setTestimonials(formattedData);

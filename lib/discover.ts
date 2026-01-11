@@ -108,14 +108,35 @@ export async function fetchDiscoverFeed(
           });
           console.log('🔄 [DISCOVER] Re-sorted posts to match database order (newest first)');
           
-          // Use counts from posts table directly
+          // Fetch accurate like counts directly from post_likes table
+          // This is more reliable than the likes_count column which depends on triggers
+          const postIds = nonAdminPosts.map((p: any) => p.id);
+          const { data: allLikes } = await supabase
+            .from('post_likes')
+            .select('post_id')
+            .in('post_id', postIds);
+          
+          // Build accurate counts map from post_likes table
           const countsMap = new Map<string, { likes: number; comments: number }>();
+          
+          // Initialize with comment counts from posts table
           nonAdminPosts.forEach((post: any) => {
             countsMap.set(post.id, {
-              likes: post.likes_count || 0,
+              likes: 0, // Will be updated with accurate count
               comments: post.comments_count || 0,
             });
           });
+          
+          // Count likes per post from post_likes table
+          if (allLikes) {
+            allLikes.forEach(like => {
+              const existing = countsMap.get(like.post_id);
+              if (existing) {
+                existing.likes += 1;
+              }
+            });
+            console.log('📊 [DISCOVER] Accurate like counts fetched for', postIds.length, 'posts');
+          }
           
           items.push(
             ...nonAdminPosts.map((post) => {
@@ -194,14 +215,34 @@ export async function fetchDiscoverFeed(
         });
         console.log('📊 [DISCOVER-PUBLIC] Filtered to', nonAdminPosts.length, 'non-admin posts (from', posts.length, 'total)');
         
-        // Use counts from posts table directly
+        // Fetch accurate like counts directly from post_likes table
+        const postIds = nonAdminPosts.map((p: any) => p.id);
+        const { data: allLikes } = await supabase
+          .from('post_likes')
+          .select('post_id')
+          .in('post_id', postIds);
+        
+        // Build accurate counts map from post_likes table
         const countsMap = new Map<string, { likes: number; comments: number }>();
+        
+        // Initialize with comment counts from posts table
         nonAdminPosts.forEach((post: any) => {
           countsMap.set(post.id, {
-            likes: post.likes_count || 0,
+            likes: 0, // Will be updated with accurate count
             comments: post.comments_count || 0,
           });
         });
+        
+        // Count likes per post from post_likes table
+        if (allLikes) {
+          allLikes.forEach(like => {
+            const existing = countsMap.get(like.post_id);
+            if (existing) {
+              existing.likes += 1;
+            }
+          });
+          console.log('📊 [DISCOVER-PUBLIC] Accurate like counts fetched for', postIds.length, 'posts');
+        }
         
         items.push(
           ...nonAdminPosts.map((post) => {

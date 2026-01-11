@@ -27,7 +27,7 @@ import {
 import type { LucideIcon } from 'lucide-react-native';
 import { useAuth } from '@/hooks/useAuth';
 import { useToast } from '@/components/Toast';
-import { supabase } from '@/lib/supabase';
+import { supabase, getFullLegalName } from '@/lib/supabase';
 import { INTEREST_LIBRARY, type InterestOptionId } from '@/lib/interest-data';
 import VisitorActions from '@/components/VisitorActions';
 import { Video, ResizeMode } from 'expo-av';
@@ -300,7 +300,7 @@ const ProfileScreen = React.memo(function ProfileScreen() {
 
   const shareSystem = async () => {
     const url = buildProfileLink();
-    const message = `${profile?.full_name ?? 'My'} Akora profile\n${url}`;
+    const message = `${getFullLegalName(profile) || 'My'} Akora profile\n${url}`;
     try {
       await Share.share({ message, url });
     } catch (e) {}
@@ -480,7 +480,7 @@ const ProfileScreen = React.memo(function ProfileScreen() {
       <View style={styles.header}>
         <View style={styles.headerTop}>
           <View style={styles.nameRow}>
-            <Text style={styles.username}>{profile.full_name || 'User'}</Text>
+            <Text style={styles.username}>{getFullLegalName(profile) || 'User'}</Text>
             {profile.is_admin && (
               <View style={styles.adminBadge}>
                 <Text style={styles.adminBadgeText}>Admin</Text>
@@ -504,7 +504,7 @@ const ProfileScreen = React.memo(function ProfileScreen() {
             ) : (
               <View style={[styles.avatar, styles.avatarPlaceholder]}>
                 <Text style={styles.avatarText}>
-                  {profile.full_name?.[0]?.toUpperCase() || 'U'}
+                  {getFullLegalName(profile)?.[0]?.toUpperCase() || 'U'}
                 </Text>
               </View>
             )}
@@ -526,7 +526,7 @@ const ProfileScreen = React.memo(function ProfileScreen() {
         </View>
 
         <View style={styles.bioSection}>
-          <Text style={styles.displayName}>{profile.full_name || 'User'}</Text>
+          <Text style={styles.displayName}>{getFullLegalName(profile) || 'User'}</Text>
 
           {/* Bio Card (collapsible) */}
           <View style={styles.card}>

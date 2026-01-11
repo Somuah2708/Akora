@@ -5,7 +5,7 @@ import { SplashScreen, useRouter, useLocalSearchParams } from 'expo-router'
 import { DebouncedTouchable } from '@/components/DebouncedTouchable';
 import { debouncedRouter } from '@/utils/navigationDebounce';;
 import { ArrowLeft, Star, MessageCircle, Share2, Edit, Trash2, Save, X, MapPin, Mail, Phone, Camera, Plus, ChevronDown, Bookmark } from 'lucide-react-native';
-import { supabase, type ProductService, type Profile, type Region, type City } from '@/lib/supabase';
+import { supabase, type ProductService, type Profile, type Region, type City, getDisplayName } from '@/lib/supabase';
 import { useAuth } from '@/hooks/useAuth';
 import * as ImagePicker from 'expo-image-picker';
 
@@ -857,12 +857,12 @@ export default function ListingDetailScreen() {
                     />
                   ) : (
                     <Text style={styles.sellerInitial}>
-                      {listing.user?.full_name?.[0] || 'A'}
+                      {getDisplayName(listing.user)?.[0] || 'A'}
                     </Text>
                   )}
                 </View>
                 <View style={styles.sellerDetails}>
-                  <Text style={styles.sellerName}>{listing.user?.full_name || 'Unknown'}</Text>
+                  <Text style={styles.sellerName}>{getDisplayName(listing.user)}</Text>
                 </View>
               </TouchableOpacity>
 

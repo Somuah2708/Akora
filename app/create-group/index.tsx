@@ -3,7 +3,7 @@ import { View, Text, TextInput, TouchableOpacity, Image, FlatList, ActivityIndic
 import { useRouter } from "expo-router";
 import { DebouncedTouchable } from '@/components/DebouncedTouchable';
 import { debouncedRouter } from '@/utils/navigationDebounce';
-import { supabase } from "../../lib/supabase";
+import { supabase, getDisplayName } from "../../lib/supabase";
 import { useAuth } from "../../hooks/useAuth";
 import { pickMedia, uploadMedia } from "../../lib/media";
 import { getFriends } from "../../lib/friends";
@@ -141,7 +141,7 @@ export default function CreateGroupScreen() {
               ) : (
                 <View style={{ width: 36, height: 36, borderRadius: 18, backgroundColor: "#eee", marginRight: 10 }} />
               )}
-              <Text style={{ flex: 1 }}>{item.full_name || item.id.slice(0, 6)}</Text>
+              <Text style={{ flex: 1 }}>{getDisplayName(item) || item.id.slice(0, 6)}</Text>
               <View
                 style={{
                   width: 18,

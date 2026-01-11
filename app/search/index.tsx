@@ -23,7 +23,7 @@ import {
   sendFriendRequest,
   checkFriendshipStatus,
 } from '@/lib/friends';
-import type { Profile } from '@/lib/supabase';
+import { getDisplayName, type Profile } from '@/lib/supabase';
 
 SplashScreen.preventAutoHideAsync();
 
@@ -105,7 +105,7 @@ export default function SearchScreen() {
     setSendingRequest(targetUser.id);
     try {
       await sendFriendRequest(targetUser.id, user.id);
-      Alert.alert('Success', `Friend request sent to ${targetUser.full_name}`);
+      Alert.alert('Success', `Friend request sent to ${getDisplayName(targetUser)}`);
 
       // Update the user's friendship status in the list
       setUsers((prev) =>
@@ -203,7 +203,7 @@ export default function SearchScreen() {
         <View style={[styles.avatar, styles.avatarPlaceholder]} />
       )}
       <View style={styles.userInfo}>
-        <Text style={styles.userName}>{item.full_name || item.username}</Text>
+        <Text style={styles.userName}>{getDisplayName(item)}</Text>
         {item.bio && <Text style={styles.userBio} numberOfLines={2}>{item.bio}</Text>}
       </View>
       {renderConnectionButton(item)}

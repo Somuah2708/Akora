@@ -5,6 +5,7 @@ import { Heart, MessageCircle, UserPlus, AtSign, Share2, UserCheck } from 'lucid
 import { Audio } from 'expo-av';
 import * as Haptics from 'expo-haptics';
 import { Notification, NotificationType } from '@/lib/notifications';
+import { getDisplayName } from '@/lib/supabase';
 
 interface NotificationBannerProps {
   notification: Notification | null;
@@ -135,7 +136,7 @@ export default function NotificationBanner({ notification, onDismiss }: Notifica
   const getMessage = () => {
     if (!notification) return '';
     
-    const actorName = notification.actor?.full_name || notification.actor?.username || 'Someone';
+    const actorName = notification.actor ? getDisplayName(notification.actor) : 'Someone';
     
     switch (notification.type) {
       case 'like':

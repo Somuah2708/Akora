@@ -2,6 +2,7 @@ import React, { createContext, useContext, useState, useEffect, ReactNode, useCa
 import * as Notifications from 'expo-notifications';
 import { Platform } from 'react-native';
 import { Notification, subscribeToNotifications, getUnreadCount, markNotificationRead, markAllNotificationsRead } from '@/lib/notifications';
+import { getDisplayName } from '@/lib/supabase';
 import { useAuth } from '@/hooks/useAuth';
 import NotificationBanner from '@/components/NotificationBanner';
 
@@ -94,7 +95,7 @@ export function NotificationProvider({ children }: { children: ReactNode }) {
             if (window.Notification.permission === 'granted') {
               // Best-effort display; service workers not required for simple notifications
               new window.Notification(
-                notification.actor?.full_name || notification.actor?.username || 'New activity',
+                getDisplayName(notification.actor) || 'New activity',
                 {
                   body: notification.content || `You have a new ${notification.type} notification`,
                   // Badge/sound are not standardized in browser notifications
@@ -110,7 +111,7 @@ export function NotificationProvider({ children }: { children: ReactNode }) {
         // Native (iOS/Android): use Expo notifications
         await Notifications.scheduleNotificationAsync({
           content: {
-            title: notification.actor?.full_name || notification.actor?.username || 'New activity',
+            title: getDisplayName(notification.actor) || 'New activity',
             body: notification.content || `You have a new ${notification.type} notification`,
             sound: 'default',
             data: { notificationId: notification.id, type: notification.type, postId: notification.post_id },

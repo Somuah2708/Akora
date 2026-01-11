@@ -1,6 +1,6 @@
 import { useEffect, useState, useCallback } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator, Alert, TextInput, Linking } from 'react-native';
-import { supabase } from '@/lib/supabase';
+import { supabase, getDisplayName } from '@/lib/supabase';
 import { useAuth } from '@/hooks/useAuth';
 
 type Status = 'pending' | 'accepted' | 'declined' | 'in_progress' | 'submitted';
@@ -189,7 +189,7 @@ export default function AdminRecommendationsScreen() {
       ) : (
         <ScrollView contentContainerStyle={{ padding: 16 }}>
           {items.map((it) => {
-            const identityLine = [it.full_name, it.class_name, it.graduation_year ? `Class of ${it.graduation_year}` : null].filter(Boolean).join(' · ');
+            const identityLine = [getDisplayName(it), it.class_name, it.graduation_year ? `Class of ${it.graduation_year}` : null].filter(Boolean).join(' · ');
             const priceLine = (it.price_currency && typeof it.price_amount === 'number') ? `${it.price_currency} ${it.price_amount}` : '—';
             const evidenceSigned = signedEvidenceMap[it.id];
             return (

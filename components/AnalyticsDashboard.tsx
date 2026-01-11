@@ -9,7 +9,7 @@ import {
   Dimensions,
 } from 'react-native';
 import { TrendingUp, TrendingDown, Users, CheckCircle, Clock, Star, Award, Target } from 'lucide-react-native';
-import { supabase } from '@/lib/supabase';
+import { supabase, getDisplayName } from '@/lib/supabase';
 
 const { width } = Dimensions.get('window');
 
@@ -222,7 +222,7 @@ export default function AnalyticsDashboard() {
                 <Text style={styles.rankNumber}>#{index + 1}</Text>
               </View>
               <View style={styles.mentorInfo}>
-                <Text style={styles.mentorName}>{mentor.full_name}</Text>
+                <Text style={styles.mentorName}>{getDisplayName(mentor)}</Text>
                 <Text style={styles.mentorTitle}>{mentor.current_title}</Text>
                 {mentor.company && <Text style={styles.mentorCompany}>{mentor.company}</Text>}
               </View>

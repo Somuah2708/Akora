@@ -4,7 +4,7 @@ import { DebouncedTouchable } from '@/components/DebouncedTouchable';
 import { debouncedRouter } from '@/utils/navigationDebounce';;
 import { ArrowLeft, Share2, ExternalLink, Eye, Calendar, User as UserIcon } from 'lucide-react-native';
 import { useEffect, useState } from 'react';
-import { supabase, type TrendingArticle, type Profile } from '@/lib/supabase';
+import { supabase, getDisplayName, type TrendingArticle, type Profile } from '@/lib/supabase';
 import { useAuth } from '@/hooks/useAuth';
 
 const { width } = Dimensions.get('window');
@@ -187,7 +187,7 @@ export default function TrendingArticleScreen() {
             {article.author && (
               <View style={styles.metaRow}>
                 <UserIcon size={16} color="#6B7280" strokeWidth={2} />
-                <Text style={styles.metaText}>{article.author.full_name || 'Admin'}</Text>
+                <Text style={styles.metaText}>{getDisplayName(article.author) || 'Admin'}</Text>
               </View>
             )}
             <View style={styles.metaRow}>

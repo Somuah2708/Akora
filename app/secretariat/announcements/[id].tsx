@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   View,
   Text,
@@ -80,6 +80,9 @@ export default function AnnouncementDetailScreen() {
   const [submittingComment, setSubmittingComment] = useState(false);
   const [isLiked, setIsLiked] = useState(false);
   const [isBookmarked, setIsBookmarked] = useState(false);
+  
+  // Lock to prevent double-tap race conditions on likes
+  const likingInProgressRef = useRef(false);
 
   useEffect(() => {
     if (announcementId && user?.id) {
@@ -358,26 +361,54 @@ export default function AnnouncementDetailScreen() {
   const toggleLike = async () => {
     if (!user?.id) return;
 
+    // Prevent double-tap race condition (especially on Android)
+    if (likingInProgressRef.current) {
+      console.log('⏳ Like already in progress');
+      return;
+    }
+    likingInProgressRef.current = true;
+
+    const wasLiked = isLiked;
+
+    // Optimistic update
+    setIsLiked(!wasLiked);
+
     try {
-      if (isLiked) {
+      if (wasLiked) {
         await supabase
           .from('announcement_likes')
           .delete()
           .eq('announcement_id', announcementId)
           .eq('user_id', user.id);
-        setIsLiked(false);
       } else {
+        // Use upsert to handle potential race conditions
         await supabase
           .from('announcement_likes')
-          .insert({
+          .upsert({
             announcement_id: announcementId,
             user_id: user.id,
+          }, {
+            onConflict: 'announcement_id,user_id',
+            ignoreDuplicates: true
           });
-        setIsLiked(true);
       }
+      
+      // Verify actual state from database
+      const { data: userLike } = await supabase
+        .from('announcement_likes')
+        .select('id')
+        .eq('announcement_id', announcementId)
+        .eq('user_id', user.id)
+        .maybeSingle();
+      
+      setIsLiked(!!userLike);
       loadAnnouncement(); // Refresh to get updated like count
     } catch (error) {
       console.error('Error toggling like:', error);
+      // Revert on error
+      setIsLiked(wasLiked);
+    } finally {
+      likingInProgressRef.current = false;
     }
   };
 

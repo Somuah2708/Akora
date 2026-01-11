@@ -1,11 +1,12 @@
 import { View, Text, StyleSheet, TextInput, TouchableOpacity, ScrollView, KeyboardAvoidingView, Platform, ActivityIndicator, Alert } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useFonts, Inter_400Regular, Inter_600SemiBold } from '@expo-google-fonts/inter';
 import { useEffect, useState, useCallback } from 'react';
 import { SplashScreen, useRouter, useLocalSearchParams } from 'expo-router'
 import { DebouncedTouchable } from '@/components/DebouncedTouchable';
 import { debouncedRouter } from '@/utils/navigationDebounce';;
 import { ArrowLeft, Share2, ThumbsUp, MoreVertical } from 'lucide-react-native';
-import { supabase, type PostComment, type Profile } from '@/lib/supabase';
+import { supabase, type PostComment, type Profile, getDisplayName } from '@/lib/supabase';
 import { useAuth } from '@/hooks/useAuth';
 import { Image } from 'react-native';
 import ExpandableText from '@/components/ExpandableText';
@@ -22,6 +23,7 @@ interface CommentWithUser extends PostComment {
 
 export default function PostCommentsScreen() {
   const router = useRouter();
+  const insets = useSafeAreaInsets();
   const { user: authUser } = useAuth();
   const { postId } = useLocalSearchParams<{ postId: string }>();
   const [comments, setComments] = useState<CommentWithUser[]>([]);
@@ -345,7 +347,7 @@ export default function PostCommentsScreen() {
   const handleReplyComment = (comment: CommentWithUser) => {
     console.log('Reply to comment:', comment.id);
     setReplyingTo(comment.id);
-    setCommentText(`${comment.user.full_name ?? ''} `);
+    setCommentText(`@${getDisplayName(comment.user)} `);
   };
 
   const getTimeAgo = (dateString: string) => {
@@ -411,7 +413,7 @@ export default function PostCommentsScreen() {
                 >
                   <Image
                     source={{ 
-                      uri: comment.user.avatar_url || 'https://ui-avatars.com/api/?name=' + encodeURIComponent(comment.user.full_name || 'User') + '&background=random'
+                      uri: comment.user.avatar_url || 'https://ui-avatars.com/api/?name=' + encodeURIComponent(getDisplayName(comment.user) || 'User') + '&background=random'
                     }}
                     style={styles.commentAvatar}
                   />
@@ -423,7 +425,7 @@ export default function PostCommentsScreen() {
                       activeOpacity={0.7}
                       style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}
                     >
-                      <Text style={styles.commentUsername}>{comment.user.full_name}</Text>
+                      <Text style={styles.commentUsername}>{getDisplayName(comment.user)}</Text>
                       {((comment.user as any).is_admin || (comment.user as any).role === 'admin') && (
                         <View style={styles.verifiedBadge}>
                           <Text style={styles.verifiedCheck}>✓</Text>
@@ -483,7 +485,7 @@ export default function PostCommentsScreen() {
                       >
                         <Image
                           source={{ 
-                            uri: reply.user.avatar_url || 'https://ui-avatars.com/api/?name=' + encodeURIComponent(reply.user.full_name || 'User') + '&background=random'
+                            uri: reply.user.avatar_url || 'https://ui-avatars.com/api/?name=' + encodeURIComponent(getDisplayName(reply.user)) + '&background=random'
                           }}
                           style={styles.replyAvatar}
                         />
@@ -495,7 +497,7 @@ export default function PostCommentsScreen() {
                             activeOpacity={0.7}
                             style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}
                           >
-                            <Text style={styles.commentUsername}>{reply.user.full_name}</Text>
+                            <Text style={styles.commentUsername}>{getDisplayName(reply.user)}</Text>
                             {((reply.user as any).is_admin || (reply.user as any).role === 'admin') && (
                               <View style={styles.verifiedBadge}>
                                 <Text style={styles.verifiedCheck}>✓</Text>
@@ -508,6 +510,7 @@ export default function PostCommentsScreen() {
                           text={reply.content}
                           numberOfLines={3}
                           captionStyle={styles.commentText}
+                          mentionedUser={getDisplayName(comment.user)}
                         />
                         <View style={styles.commentActions}>
                           <TouchableOpacity 
@@ -552,7 +555,7 @@ export default function PostCommentsScreen() {
       </ScrollView>
 
       {authUser && userProfile && (
-        <View style={styles.inputContainer}>
+        <View style={[styles.inputContainer, { paddingBottom: Math.max(insets.bottom, 12) }]}>
           {replyingTo && (
             <View style={styles.replyingIndicator}>
               <Text style={styles.replyingText}>
@@ -569,7 +572,7 @@ export default function PostCommentsScreen() {
           <View style={styles.inputRow}>
             <Image
               source={{ 
-                uri: userProfile.avatar_url || 'https://ui-avatars.com/api/?name=' + encodeURIComponent(userProfile.full_name || 'User') + '&background=random'
+                uri: userProfile.avatar_url || 'https://ui-avatars.com/api/?name=' + encodeURIComponent(getDisplayName(userProfile) || 'User') + '&background=random'
               }}
               style={styles.inputAvatar}
             />

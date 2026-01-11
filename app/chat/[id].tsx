@@ -1,4 +1,5 @@
 import { View, Text, StyleSheet, ScrollView, TextInput, TouchableOpacity, KeyboardAvoidingView, Platform, Alert, Animated } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { ArrowLeft, Send, Mic, X, Play, Pause } from 'lucide-react-native';
 import { useFonts, Inter_400Regular, Inter_600SemiBold } from '@expo-google-fonts/inter';
 import { useEffect, useState, useRef } from 'react';
@@ -8,7 +9,7 @@ import { debouncedRouter } from '@/utils/navigationDebounce';;
 import { fetchChatMessages, sendMessage as sendMessageHelper, subscribeToMessages as subscribeToMessagesHelper, getChatInfo, markChatAsRead } from '@/lib/chats';
 import { startRecording, stopRecording, cancelRecording } from '@/lib/media';
 import { useAuth } from '@/hooks/useAuth';
-import { supabase } from '@/lib/supabase';
+import { supabase, getDisplayName } from '@/lib/supabase';
 import { Audio } from 'expo-av';
 import * as Haptics from 'expo-haptics';
 import type { Message, Profile } from '@/lib/supabase';
@@ -17,6 +18,7 @@ SplashScreen.preventAutoHideAsync();
 
 export default function ChatDetailScreen() {
   const router = useRouter();
+  const insets = useSafeAreaInsets();
   const { id: chatId } = useLocalSearchParams<{ id: string }>();
   const { user } = useAuth();
   const scrollViewRef = useRef<ScrollView>(null);
@@ -329,9 +331,10 @@ export default function ChatDetailScreen() {
             styles.messageBubble,
             isMyMessage ? styles.myMessageBubble : styles.otherMessageBubble
           ]}>
+          ]}>
             {!isMyMessage && chatInfo?.type === 'group' && (
               <Text style={styles.senderName}>
-                {message.profiles?.full_name || message.profiles?.username || 'Unknown'}
+                {getDisplayName(message.profiles)}
               </Text>
             )}
             {isVoiceMessage ? (
@@ -438,7 +441,7 @@ export default function ChatDetailScreen() {
       </ScrollView>
 
       {/* Input */}
-      <View style={styles.inputContainer}>
+      <View style={[styles.inputContainer, { paddingBottom: Math.max(insets.bottom, 12) }]}>
         {isRecording ? (
           // Recording UI
           <View style={styles.recordingContainer}>

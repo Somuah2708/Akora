@@ -20,7 +20,7 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import { useLocalSearchParams, useRouter } from 'expo-router'
 import { DebouncedTouchable } from '@/components/DebouncedTouchable';
 import { debouncedRouter } from '@/utils/navigationDebounce';;
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { ArrowLeft, Send, Smile, X, Play, Pause, Check, CheckCheck, FileText, Paperclip, Camera, Image as ImageIcon, File, Mic } from 'lucide-react-native';
 import * as ImagePicker from 'expo-image-picker';
 import * as DocumentPicker from 'expo-document-picker';
@@ -40,7 +40,7 @@ import {
 } from '@/lib/friends';
 import { startRecording, stopRecording, cancelRecording, pickMedia, takeMedia, pickDocument, uploadMedia, uploadDocument } from '@/lib/media';
 import { formatMessageTime } from '@/lib/timeUtils';
-import { supabase } from '@/lib/supabase';
+import { supabase, getDisplayName } from '@/lib/supabase';
 import EmojiSelector from 'react-native-emoji-selector';
 import { Audio } from 'expo-av';
 import { getCachedThread, setCachedThread, upsertMessageList } from '@/lib/chatCache';
@@ -50,6 +50,7 @@ const CACHE_FRESHNESS_MS = 5 * 60 * 1000;
 
 export default function DirectMessageScreen() {
   const router = useRouter();
+  const insets = useSafeAreaInsets();
   const { id: friendId} = useLocalSearchParams<{ id: string }>();
   const { user } = useAuth();
   const [messages, setMessages] = useState<DirectMessage[]>([]);
@@ -128,7 +129,7 @@ export default function DirectMessageScreen() {
             ...newMessage,
             sender: senderProfile
           };
-          console.log('✅ [REALTIME] Fetched sender profile:', senderProfile.full_name);
+          console.log('✅ [REALTIME] Fetched sender profile:', getDisplayName(senderProfile));
         } else {
           console.error('❌ [REALTIME] Error fetching sender profile:', profileError);
         }
@@ -136,7 +137,7 @@ export default function DirectMessageScreen() {
         console.error('❌ [REALTIME] Exception fetching sender profile:', error);
       }
     } else {
-      console.log('✅ [REALTIME] Message already has sender profile:', newMessage.sender.full_name);
+      console.log('✅ [REALTIME] Message already has sender profile:', getDisplayName(newMessage.sender));
     }
     
     // If it's a shared post, fetch the post data
@@ -769,7 +770,7 @@ export default function DirectMessageScreen() {
         sender: {
           id: user.id,
           username: user.user_metadata?.username || '',
-          full_name: user.user_metadata?.full_name || '',
+          full_name: getDisplayName(user.user_metadata),
           avatar_url: user.user_metadata?.avatar_url,
         },
       } as DirectMessage;
@@ -1326,12 +1327,12 @@ export default function DirectMessageScreen() {
                   ) : (
                     <View style={[styles.sharedPostAvatar, styles.avatarPlaceholder]}>
                       <Text style={styles.sharedPostAvatarText}>
-                        {(item as any).post.profiles?.full_name?.[0]?.toUpperCase() || 'U'}
+                        {getDisplayName((item as any).post.profiles)?.[0]?.toUpperCase() || 'U'}
                       </Text>
                     </View>
                   )}
                   <Text style={styles.sharedPostUsername}>
-                    {(item as any).post.profiles?.full_name || (item as any).post.profiles?.username || 'User'}
+                    {getDisplayName((item as any).post.profiles) || 'User'}
                   </Text>
                 </View>
                 
@@ -1468,13 +1469,13 @@ export default function DirectMessageScreen() {
             ) : (
               <View style={[styles.headerAvatar, styles.avatarPlaceholder]}>
                 <Text style={styles.avatarText}>
-                  {friendProfile?.full_name?.[0]?.toUpperCase() || 'U'}
+                  {getDisplayName(friendProfile)?.[0]?.toUpperCase() || 'U'}
                 </Text>
               </View>
             )}
           </View>
           <View style={styles.headerTextContainer}>
-            <Text style={styles.headerName}>{friendProfile?.full_name || 'Friend'}</Text>
+            <Text style={styles.headerName}>{getDisplayName(friendProfile) || 'Friend'}</Text>
             {isTyping && (
               <View style={styles.typingContainer}>
                 <Text style={styles.typingText}>typing</Text>
@@ -1510,7 +1511,7 @@ export default function DirectMessageScreen() {
         ListEmptyComponent={
           <View style={styles.emptyContainer}>
             <Text style={styles.emptyText}>
-              Start a conversation with {friendProfile?.full_name}!
+              Start a conversation with {getDisplayName(friendProfile)}!
             </Text>
           </View>
         }
@@ -1558,7 +1559,7 @@ export default function DirectMessageScreen() {
         
         <View style={[
           styles.inputContainer,
-          { paddingBottom: isKeyboardVisible ? 12 : (Platform.OS === 'android' ? 16 : 16) }
+          { paddingBottom: isKeyboardVisible ? 12 : Math.max(insets.bottom, 16) }
         ]}>
           {/* Paperclip Attachment Button */}
           <TouchableOpacity

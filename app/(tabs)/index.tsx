@@ -1,4 +1,4 @@
-import { View, Text, StyleSheet, ScrollView, Image, TouchableOpacity, FlatList, Dimensions, Alert, Modal, TextInput, ActivityIndicator, RefreshControl, Image as RNImage } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, Image, TouchableOpacity, FlatList, Dimensions, Alert, Modal, TextInput, ActivityIndicator, RefreshControl, Image as RNImage, TouchableWithoutFeedback, Platform } from 'react-native';
 import { useFonts, Inter_400Regular, Inter_600SemiBold } from '@expo-google-fonts/inter';
 import { useEffect, useState, useCallback, useRef } from 'react';
 import { HEADER_COLOR } from '@/constants/Colors';
@@ -6,7 +6,7 @@ import { SplashScreen, useRouter, useFocusEffect } from 'expo-router'
 import { DebouncedTouchable } from '@/components/DebouncedTouchable';
 import { debouncedRouter } from '@/utils/navigationDebounce';;
 import { Bell, ThumbsUp, MessagesSquare, Share2, Star, MoreHorizontal, Plus, BookOpen, PartyPopper, Calendar, TrendingUp, Users, Newspaper, Search, User, Edit3, Trash2, Play, X } from 'lucide-react-native';
-import { supabase, type Post, type Profile, type HomeFeaturedItem, type HomeCategoryTab, type TrendingArticle } from '@/lib/supabase';
+import { supabase, getDisplayName, type Post, type Profile, type HomeFeaturedItem, type HomeCategoryTab, type TrendingArticle } from '@/lib/supabase';
 import { useAuth } from '@/hooks/useAuth';
 import { Video, ResizeMode, Audio, InterruptionModeIOS, InterruptionModeAndroid } from 'expo-av';
 import YouTubePlayer from '@/components/YouTubePlayer';
@@ -194,6 +194,9 @@ export default function HomeScreen() {
   const [scrollY, setScrollY] = useState(0);
   const scrollViewRef = useRef<ScrollView>(null);
   
+  // Lock to prevent double-tap race conditions on likes
+  const likingInProgressRef = useRef<Set<string>>(new Set());
+  
   // Share modal
   const [shareModalVisible, setShareModalVisible] = useState(false);
   const [selectedPostForShare, setSelectedPostForShare] = useState<PostWithUser | null>(null);
@@ -232,8 +235,11 @@ export default function HomeScreen() {
     'Inter-SemiBold': Inter_600SemiBold,
   });
 
+  // Debounce ref for Android video visibility updates
+  const visibilityUpdateTimeoutRef = useRef<any>(null);
+
   // Calculate which videos are in viewport (50%+ visible)
-  const updateVisibleVideos = useCallback(() => {
+  const updateVisibleVideos = useCallback((immediate: boolean = false) => {
     const viewportTop = scrollY;
     const viewportBottom = scrollY + height;
     const threshold = 0.5; // 50% visibility required
@@ -266,10 +272,19 @@ export default function HomeScreen() {
   }, [scrollY, postLayouts, height]);
 
   // Update visible videos when scroll position or layouts change
+  // IMPORTANT: On Android, stop videos IMMEDIATELY but debounce starting new ones
   useEffect(() => {
     if (postLayouts.length > 0) {
+      // Always update immediately - this ensures videos STOP right away
+      // The Video component's shouldPlay prop will handle the actual play/pause
       updateVisibleVideos();
     }
+    
+    return () => {
+      if (visibilityUpdateTimeoutRef.current) {
+        clearTimeout(visibilityUpdateTimeoutRef.current);
+      }
+    };
   }, [scrollY, postLayouts.length]); // Only depend on scrollY and layouts count, not the callback
 
   const fetchPosts = useCallback(async () => {
@@ -314,7 +329,55 @@ export default function HomeScreen() {
       // Get user's liked and bookmarked posts if logged in
       let userLikes: Set<string> = new Set();
       let userBookmarks: Set<string> = new Set();
-      if (user) {
+      // Map to store accurate like counts from post_likes table
+      const likesCountMap = new Map<string, number>();
+      // Map to store accurate comment counts from post_comments table
+      const commentsCountMap = new Map<string, number>();
+      
+      if (data && data.length > 0) {
+        const postIds = data.map(p => p.id);
+        
+        // Fetch accurate like counts directly from post_likes table
+        // This is more reliable than the likes_count column which depends on triggers
+        const { data: allLikes } = await supabase
+          .from('post_likes')
+          .select('post_id')
+          .in('post_id', postIds);
+        
+        if (allLikes) {
+          // Count likes per post
+          allLikes.forEach(like => {
+            const currentCount = likesCountMap.get(like.post_id) || 0;
+            likesCountMap.set(like.post_id, currentCount + 1);
+          });
+          console.log('📊 Accurate like counts fetched for', likesCountMap.size, 'posts');
+        }
+        
+        // Fetch accurate comment counts directly from post_comments table
+        // This is more reliable than the comments_count column which depends on triggers
+        const { data: allComments } = await supabase
+          .from('post_comments')
+          .select('post_id')
+          .in('post_id', postIds);
+        
+        if (allComments) {
+          // Count comments per post
+          allComments.forEach(comment => {
+            const currentCount = commentsCountMap.get(comment.post_id) || 0;
+            commentsCountMap.set(comment.post_id, currentCount + 1);
+          });
+          console.log('📊 Accurate comment counts fetched for', commentsCountMap.size, 'posts');
+        }
+        
+        if (user) {
+          const [likesRes, bmsRes] = await Promise.all([
+            supabase.from('post_likes').select('post_id').eq('user_id', user.id).in('post_id', postIds),
+            supabase.from('post_bookmarks').select('post_id').eq('user_id', user.id).in('post_id', postIds),
+          ]);
+          if (likesRes.data) userLikes = new Set(likesRes.data.map(l => l.post_id));
+          if (bmsRes.data) userBookmarks = new Set(bmsRes.data.map(b => b.post_id));
+        }
+      } else if (user) {
         const [likesRes, bmsRes] = await Promise.all([
           supabase.from('post_likes').select('post_id').eq('user_id', user.id),
           supabase.from('post_bookmarks').select('post_id').eq('user_id', user.id),
@@ -371,10 +434,12 @@ export default function HomeScreen() {
           youtube_urls: (post as any).youtube_urls,
           created_at: post.created_at,
           user: safeProfile,
-          likes: post.likes_count || 0,
+          // Use accurate count from post_likes table, fallback to likes_count column
+          likes: likesCountMap.get(post.id) ?? post.likes_count ?? 0,
           isLiked: userLikes.has(post.id),
           isBookmarked: userBookmarks.has(post.id),
-          comments_count: post.comments_count || 0,
+          // Use accurate count from post_comments table, fallback to comments_count column
+          comments_count: commentsCountMap.get(post.id) ?? post.comments_count ?? 0,
         } as PostWithUser;
       });
 
@@ -686,8 +751,18 @@ export default function HomeScreen() {
       return;
     }
 
+    // Prevent double-tap race condition (especially on Android)
+    if (likingInProgressRef.current.has(postId)) {
+      console.log('⏳ Like already in progress for post:', postId);
+      return;
+    }
+    likingInProgressRef.current.add(postId);
+
     const post = posts.find(p => p.id === postId);
-    if (!post) return;
+    if (!post) {
+      likingInProgressRef.current.delete(postId);
+      return;
+    }
 
     const wasLiked = post.isLiked;
     const originalLikes = post.likes ?? 0;
@@ -721,17 +796,40 @@ export default function HomeScreen() {
         if (error) throw error;
         console.log('✅ Post unliked successfully');
       } else {
-        // Like: Insert a new like
+        // Like: First check if already liked to avoid duplicate issues
         console.log('❤️ Liking post...');
-        const { error } = await supabase
+        
+        // Check if like already exists (handles race condition from multiple devices)
+        const { data: existingLike } = await supabase
           .from('post_likes')
-          .insert({
-            post_id: postId,
-            user_id: user.id,
-          });
+          .select('id')
+          .eq('post_id', postId)
+          .eq('user_id', user.id)
+          .maybeSingle();
+        
+        if (existingLike) {
+          // Already liked - skip insert, just fetch accurate count
+          console.log('⚠️ Like already exists, skipping insert');
+        } else {
+          // Insert new like
+          const { error } = await supabase
+            .from('post_likes')
+            .insert({
+              post_id: postId,
+              user_id: user.id,
+            });
 
-        if (error) throw error;
-        console.log('✅ Post liked successfully');
+          if (error) {
+            // If we get a unique constraint error, it means another device just liked
+            // This is fine - we'll fetch the accurate count below
+            if (!error.code?.includes('23505')) {
+              throw error;
+            }
+            console.log('⚠️ Duplicate like detected (race condition), continuing...');
+          } else {
+            console.log('✅ Post liked successfully');
+          }
+        }
       }
 
       // Fetch accurate count after toggle
@@ -775,6 +873,9 @@ export default function HomeScreen() {
       }));
       
       Alert.alert('Error', 'Failed to update like');
+    } finally {
+      // Always release the lock
+      likingInProgressRef.current.delete(postId);
     }
   };
 
@@ -973,7 +1074,7 @@ export default function HomeScreen() {
       
       // Show success feedback
       const friend = friendsList.find(f => f.id === friendId);
-      alert(`Sent to ${friend?.full_name || 'friend'}!`);
+      alert(`Sent to ${getDisplayName(friend)}!`);
       
     } catch (error) {
       console.error('Error sharing post:', error);
@@ -1155,7 +1256,7 @@ export default function HomeScreen() {
                   {(() => {
                     const filteredFriends = friendsList.filter(friend => 
                       searchFriends === '' || 
-                      friend.full_name?.toLowerCase().includes(searchFriends.toLowerCase()) ||
+                      getDisplayName(friend).toLowerCase().includes(searchFriends.toLowerCase()) ||
                       friend.username?.toLowerCase().includes(searchFriends.toLowerCase())
                     );
                     console.log('🎯 Rendering friends:', filteredFriends.length, 'of', friendsList.length);
@@ -1176,12 +1277,12 @@ export default function HomeScreen() {
                           ) : (
                             <View style={[styles.shareFriendAvatar, styles.shareFriendAvatarPlaceholder]}>
                               <Text style={styles.shareFriendAvatarText}>
-                                {friend.full_name?.[0]?.toUpperCase() || 'U'}
+                                {getDisplayName(friend)[0]?.toUpperCase() || 'U'}
                               </Text>
                             </View>
                           )}
                           <View style={styles.shareFriendInfo}>
-                            <Text style={styles.shareFriendName}>{friend.full_name || 'Unknown'}</Text>
+                            <Text style={styles.shareFriendName}>{getDisplayName(friend)}</Text>
                           </View>
                         </View>
                         <View style={styles.shareSendButton}>
@@ -1322,7 +1423,7 @@ export default function HomeScreen() {
                           )}
                           <View style={styles.searchPersonInfo}>
                             <Text style={styles.searchPersonName} numberOfLines={1}>
-                              {person.full_name || person.username}
+                              {getDisplayName(person)}
                             </Text>
                             {person.bio && (
                               <Text style={styles.searchPersonBio} numberOfLines={1}>
@@ -1358,7 +1459,7 @@ export default function HomeScreen() {
                                 <View style={[styles.searchPostUserAvatar, styles.searchPostUserAvatarPlaceholder]} />
                               )}
                               <Text style={styles.searchPostUserName} numberOfLines={1}>
-                                {post.user?.full_name || 'Unknown'}
+                                {getDisplayName(post.user)}
                               </Text>
                             </View>
                             <Text style={styles.searchPostContent} numberOfLines={3}>
@@ -1418,6 +1519,9 @@ export default function HomeScreen() {
         style={styles.scrollView}
         showsVerticalScrollIndicator={false}
         stickyHeaderIndices={[]}
+        // Android performance optimizations
+        removeClippedSubviews={Platform.OS === 'android'}
+        overScrollMode="never"
         refreshControl={
           <RefreshControl 
             refreshing={refreshing} 
@@ -1429,7 +1533,8 @@ export default function HomeScreen() {
         onScroll={(event) => {
           setScrollY(event.nativeEvent.contentOffset.y);
         }}
-        scrollEventThrottle={16}
+        // Reduce scroll events on Android for better performance
+        scrollEventThrottle={Platform.OS === 'android' ? 32 : 16}
       >
         {/* FIX: Dark background filler for pull-to-refresh gap */}
         <View style={{ position: 'absolute', top: -1000, left: 0, right: 0, height: 1000, backgroundColor: HEADER_COLOR }} />
@@ -1603,7 +1708,7 @@ export default function HomeScreen() {
                   />
                   <View>
                     <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-                      <Text style={styles.postUsername}>{post.user.full_name}</Text>
+                      <Text style={styles.postUsername}>{getDisplayName(post.user)}</Text>
                       {(post.user.is_admin || post.user.role === 'admin') && (
                         <View style={styles.verifiedBadge}>
                           <Text style={styles.verifiedCheck}>✓</Text>
@@ -1648,7 +1753,7 @@ export default function HomeScreen() {
                         horizontal
                         pagingEnabled
                         showsHorizontalScrollIndicator={false}
-                        removeClippedSubviews={false}
+                        removeClippedSubviews={Platform.OS === 'android'}
                         style={styles.carousel}
                         nestedScrollEnabled={true}
                         decelerationRate="fast"
@@ -1662,7 +1767,7 @@ export default function HomeScreen() {
                             [post.id]: currentIndex,
                           });
                         }}
-                        scrollEventThrottle={16}
+                        scrollEventThrottle={Platform.OS === 'android' ? 32 : 16}
                       >
                         {(post as any).media_items.map((mediaItem: any, index: number) => {
                           console.log(`🎬 Rendering media item ${index} for post ${post.id}:`, {
@@ -1673,39 +1778,47 @@ export default function HomeScreen() {
                       return (
                         <View key={index} style={styles.mediaPage}>
                           {mediaItem.type === 'video' ? (
-                            <Video
-                              source={{ uri: mediaItem.url }}
-                              style={[
-                                styles.postImage,
-                                { aspectRatio: mediaAspectRatios[`post_${post.id}_media_${index}`] || 1 }
-                              ]}
-                              useNativeControls
-                              resizeMode={ResizeMode.COVER}
-                              isLooping={true}
-                              shouldPlay={
-                                isScreenFocused && 
-                                visibleVideos.has(post.id) && 
-                                (carouselIndices[post.id] ?? 0) === index
-                              }
-                              volume={
-                                isMuted || (carouselIndices[post.id] ?? 0) !== index 
-                                  ? 0.0 
-                                  : 1.0
-                              }
-                              onReadyForDisplay={(data) => {
-                                if (data.naturalSize) {
-                                  handleMediaLoad(
-                                    `post_${post.id}_media_${index}`,
-                                    data.naturalSize.width,
-                                    data.naturalSize.height
-                                  );
-                                }
-                              }}
-                              onError={(err) => {
-                                console.error('❌ Video error:', err);
-                                console.warn('Video play error (mixed media)', err);
-                              }}
-                            />
+                            <TouchableWithoutFeedback onPress={() => {}}>
+                              <View style={{ flex: 1 }}>
+                                <Video
+                                  source={{ uri: mediaItem.url }}
+                                  style={[
+                                    styles.postImage,
+                                    { aspectRatio: mediaAspectRatios[`post_${post.id}_media_${index}`] || 1 }
+                                  ]}
+                                  useNativeControls
+                                  resizeMode={ResizeMode.COVER}
+                                  isLooping={true}
+                                  shouldPlay={
+                                    isScreenFocused && 
+                                    visibleVideos.has(post.id) && 
+                                    (carouselIndices[post.id] ?? 0) === index
+                                  }
+                                  volume={
+                                    // IMPORTANT: Set volume to 0 immediately when not visible (fixes Android audio delay)
+                                    !visibleVideos.has(post.id) ? 0.0 :
+                                    isMuted || (carouselIndices[post.id] ?? 0) !== index 
+                                      ? 0.0 
+                                      : 1.0
+                                  }
+                                  // Android performance: reduce update frequency
+                                  progressUpdateIntervalMillis={Platform.OS === 'android' ? 500 : 250}
+                                  onReadyForDisplay={(data) => {
+                                    if (data.naturalSize) {
+                                      handleMediaLoad(
+                                        `post_${post.id}_media_${index}`,
+                                        data.naturalSize.width,
+                                        data.naturalSize.height
+                                      );
+                                    }
+                                  }}
+                                  onError={(err) => {
+                                    console.error('❌ Video error:', err);
+                                    console.warn('Video play error (mixed media)', err);
+                                  }}
+                                />
+                              </View>
+                            </TouchableWithoutFeedback>
                           ) : (
                             <TouchableOpacity 
                               activeOpacity={0.95}
@@ -1765,7 +1878,7 @@ export default function HomeScreen() {
                     horizontal
                     pagingEnabled
                     showsHorizontalScrollIndicator={false}
-                    removeClippedSubviews={false}
+                    removeClippedSubviews={Platform.OS === 'android'}
                     style={styles.carousel}
                     onScroll={(event) => {
                       const scrollX = event.nativeEvent.contentOffset.x;
@@ -1775,40 +1888,48 @@ export default function HomeScreen() {
                         [post.id]: currentIndex,
                       });
                     }}
-                    scrollEventThrottle={16}
+                    scrollEventThrottle={Platform.OS === 'android' ? 32 : 16}
                   >
                     {post.video_urls.map((videoUrl, index) => (
                       <View key={index} style={styles.mediaPage}>
-                        <Video
-                          source={{ uri: videoUrl }}
-                          style={[
-                            styles.postImage,
-                            { aspectRatio: mediaAspectRatios[`post_${post.id}_video_${index}`] || 1 }
-                          ]}
-                          useNativeControls
-                          resizeMode={ResizeMode.COVER}
-                          isLooping={true}
-                          shouldPlay={
-                            isScreenFocused && 
-                            visibleVideos.has(post.id) && 
-                            (carouselIndices[post.id] ?? 0) === index
-                          }
-                          volume={
-                            isMuted || (carouselIndices[post.id] ?? 0) !== index 
-                              ? 0.0 
-                              : 1.0
-                          }
-                          onReadyForDisplay={(data) => {
-                            if (data.naturalSize) {
-                              handleMediaLoad(
-                                `post_${post.id}_video_${index}`,
-                                data.naturalSize.width,
-                                data.naturalSize.height
-                              );
-                            }
-                          }}
-                          onError={(err) => console.warn('Video play error (carousel item)', err)}
-                        />
+                        <TouchableWithoutFeedback onPress={() => {}}>
+                          <View style={{ flex: 1 }}>
+                            <Video
+                              source={{ uri: videoUrl }}
+                              style={[
+                                styles.postImage,
+                                { aspectRatio: mediaAspectRatios[`post_${post.id}_video_${index}`] || 1 }
+                              ]}
+                              useNativeControls
+                              resizeMode={ResizeMode.COVER}
+                              isLooping={true}
+                              shouldPlay={
+                                isScreenFocused && 
+                                visibleVideos.has(post.id) && 
+                                (carouselIndices[post.id] ?? 0) === index
+                              }
+                              volume={
+                                // IMPORTANT: Set volume to 0 immediately when not visible (fixes Android audio delay)
+                                !visibleVideos.has(post.id) ? 0.0 :
+                                isMuted || (carouselIndices[post.id] ?? 0) !== index 
+                                  ? 0.0 
+                                  : 1.0
+                              }
+                              // Android performance: reduce update frequency
+                              progressUpdateIntervalMillis={Platform.OS === 'android' ? 500 : 250}
+                              onReadyForDisplay={(data) => {
+                                if (data.naturalSize) {
+                                  handleMediaLoad(
+                                    `post_${post.id}_video_${index}`,
+                                    data.naturalSize.width,
+                                    data.naturalSize.height
+                                  );
+                                }
+                              }}
+                              onError={(err) => console.warn('Video play error (carousel item)', err)}
+                            />
+                          </View>
+                        </TouchableWithoutFeedback>
                       </View>
                     ))}
                   </ScrollView>
@@ -1826,7 +1947,7 @@ export default function HomeScreen() {
                     horizontal
                     pagingEnabled
                     showsHorizontalScrollIndicator={false}
-                    removeClippedSubviews={false}
+                    removeClippedSubviews={Platform.OS === 'android'}
                     style={styles.carousel}
                     onScroll={(event) => {
                       const scrollX = event.nativeEvent.contentOffset.x;
@@ -1836,7 +1957,7 @@ export default function HomeScreen() {
                         [post.id]: currentIndex,
                       });
                     }}
-                    scrollEventThrottle={16}
+                    scrollEventThrottle={Platform.OS === 'android' ? 32 : 16}
                   >
                     {post.image_urls.map((imageUrl, index) => (
                       <TouchableOpacity 
@@ -1872,28 +1993,37 @@ export default function HomeScreen() {
               ) : post.youtube_url ? (
                 <YouTubePlayer url={post.youtube_url} />
               ) : post.video_url ? (
-                <Video
-                  source={{ uri: post.video_url }}
-                  style={[
-                    styles.postImage,
-                    { aspectRatio: mediaAspectRatios[`post_${post.id}_single`] || 1 }
-                  ]}
-                  useNativeControls
-                  resizeMode={ResizeMode.COVER}
-                  isLooping
-                  shouldPlay={isScreenFocused && visibleVideos.has(post.id)}
-                  volume={isMuted ? 0.0 : 1.0}
-                  onReadyForDisplay={(data) => {
-                    if (data.naturalSize) {
-                      handleMediaLoad(
-                        `post_${post.id}_single`,
-                        data.naturalSize.width,
-                        data.naturalSize.height
-                      );
-                    }
-                  }}
-                  onError={(err) => console.warn('Video play error (single)', err)}
-                />
+                <TouchableWithoutFeedback onPress={() => {}}>
+                  <View>
+                    <Video
+                      source={{ uri: post.video_url }}
+                      style={[
+                        styles.postImage,
+                        { aspectRatio: mediaAspectRatios[`post_${post.id}_single`] || 1 }
+                      ]}
+                      useNativeControls
+                      resizeMode={ResizeMode.COVER}
+                      isLooping
+                      shouldPlay={isScreenFocused && visibleVideos.has(post.id)}
+                      volume={
+                        // IMPORTANT: Set volume to 0 immediately when not visible (fixes Android audio delay)
+                        !visibleVideos.has(post.id) ? 0.0 : (isMuted ? 0.0 : 1.0)
+                      }
+                      // Android performance: reduce update frequency
+                      progressUpdateIntervalMillis={Platform.OS === 'android' ? 500 : 250}
+                      onReadyForDisplay={(data) => {
+                        if (data.naturalSize) {
+                          handleMediaLoad(
+                            `post_${post.id}_single`,
+                            data.naturalSize.width,
+                            data.naturalSize.height
+                          );
+                        }
+                      }}
+                      onError={(err) => console.warn('Video play error (single)', err)}
+                    />
+                  </View>
+                </TouchableWithoutFeedback>
               ) : post.image_url ? (
                 <TouchableOpacity activeOpacity={0.85} onPress={() => debouncedRouter.push(`/post/${post.id}`)}>
                   <Image 
@@ -1917,6 +2047,8 @@ export default function HomeScreen() {
                   <TouchableOpacity 
                     style={styles.actionButtonWithCount}
                     onPress={() => handleLikeToggle(post.id)}
+                    activeOpacity={0.6}
+                    hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
                   >
                     <ThumbsUp 
                       size={24} 
@@ -1931,6 +2063,8 @@ export default function HomeScreen() {
                   <TouchableOpacity 
                     style={styles.actionButtonWithCount}
                     onPress={() => debouncedRouter.push(`/post-comments/${post.id}`)}
+                    activeOpacity={0.6}
+                    hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
                   >
                     <MessagesSquare size={24} color="#000000" strokeWidth={2} />
                     {post.comments_count !== undefined && post.comments_count > 0 && (
@@ -1940,11 +2074,18 @@ export default function HomeScreen() {
                   <TouchableOpacity 
                     style={styles.actionButton}
                     onPress={() => handleSharePress(post)}
+                    activeOpacity={0.6}
+                    hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
                   >
                     <Share2 size={24} color="#000000" strokeWidth={2} />
                   </TouchableOpacity>
                 </View>
-                <TouchableOpacity style={styles.actionButton} onPress={() => handleBookmarkToggle(post.id)}>
+                <TouchableOpacity 
+                  style={styles.actionButton} 
+                  onPress={() => handleBookmarkToggle(post.id)}
+                  activeOpacity={0.6}
+                  hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                >
                   <Star size={24} color={post.isBookmarked ? '#ffc857' : '#000000'} fill={post.isBookmarked ? '#ffc857' : 'none'} strokeWidth={2} />
                 </TouchableOpacity>
               </View>
@@ -1953,7 +2094,7 @@ export default function HomeScreen() {
               {post.content && (
                 <View style={styles.postCaption}>
                   <Text style={styles.postCaptionUsername}>
-                    {post.user.full_name}
+                    {getDisplayName(post.user)}
                   </Text>
                   <ExpandableText
                     text={post.content}

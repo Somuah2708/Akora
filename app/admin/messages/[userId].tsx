@@ -6,7 +6,7 @@ import { debouncedRouter } from '@/utils/navigationDebounce';;
 import { ArrowLeft, Send, Loader2, User, FileText, Paperclip, X, Image as ImageIcon } from 'lucide-react-native';
 import * as ImagePicker from 'expo-image-picker';
 import * as DocumentPicker from 'expo-document-picker';
-import { supabase } from '../../../lib/supabase';
+import { supabase, getDisplayName } from '../../../lib/supabase';
 import { useAuth } from '../../../hooks/useAuth';
 
 interface Message {
@@ -294,7 +294,7 @@ export default function AdminChatWithUserScreen() {
           {!isAdmin && (
             <View style={styles.userBadge}>
               <User size={12} color="#6b7280" strokeWidth={2} />
-              <Text style={styles.userBadgeText}>{userProfile?.full_name || 'User'}</Text>
+              <Text style={styles.userBadgeText}>{getDisplayName(userProfile)}</Text>
             </View>
           )}
           
@@ -359,11 +359,11 @@ export default function AdminChatWithUserScreen() {
         <View style={styles.headerContent}>
           <View style={styles.headerIcon}>
             <Text style={styles.headerIconText}>
-              {(userProfile?.full_name || 'U')[0].toUpperCase()}
+              {getDisplayName(userProfile)[0].toUpperCase()}
             </Text>
           </View>
           <View>
-            <Text style={styles.headerTitle}>{userProfile?.full_name || 'User'}</Text>
+            <Text style={styles.headerTitle}>{getDisplayName(userProfile)}</Text>
             <Text style={styles.headerSubtitle}>{userProfile?.email || ''}</Text>
           </View>
         </View>

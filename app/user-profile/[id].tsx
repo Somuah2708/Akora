@@ -28,7 +28,7 @@ import {
 import type { LucideIcon } from 'lucide-react-native';
 import { useAuth } from '@/hooks/useAuth';
 import { useToast } from '@/components/Toast';
-import { supabase } from '@/lib/supabase';
+import { supabase, getFullLegalName } from '@/lib/supabase';
 import { INTEREST_LIBRARY, type InterestOptionId } from '@/lib/interest-data';
 import VisitorActions from '@/components/VisitorActions';
 import { Video, ResizeMode } from 'expo-av';
@@ -147,7 +147,7 @@ export default function UserProfileScreen() {
 
   const shareSystem = async () => {
     const url = buildProfileLink();
-    const message = `${viewProfile?.full_name ?? 'My'} Akora profile\n${url}`;
+    const message = `${getFullLegalName(viewProfile) || 'My'} Akora profile\n${url}`;
     try {
       await Share.share({ message, url });
     } catch (e) {}
@@ -291,7 +291,7 @@ export default function UserProfileScreen() {
                 <ArrowLeft size={24} color="#000000" strokeWidth={2} />
               </TouchableOpacity>
               <View style={styles.nameRow}>
-                <Text style={styles.username}>{profile.full_name || 'User'}</Text>
+                <Text style={styles.username}>{getFullLegalName(profile) || 'User'}</Text>
                 {profile.is_admin && (
                   <View style={styles.adminBadge}>
                     <Text style={styles.adminBadgeText}>Admin</Text>
@@ -311,7 +311,7 @@ export default function UserProfileScreen() {
               ) : (
                 <View style={[styles.avatar, styles.avatarPlaceholder]}>
                   <Text style={styles.avatarText}>
-                    {profile.full_name?.[0]?.toUpperCase() || 'U'}
+                    {getFullLegalName(profile)?.[0]?.toUpperCase() || 'U'}
                   </Text>
                 </View>
               )}
@@ -333,7 +333,7 @@ export default function UserProfileScreen() {
 
           <View style={styles.bioSection}>
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-              <Text style={styles.displayName}>{profile.full_name || 'User'}</Text>
+              <Text style={styles.displayName}>{getFullLegalName(profile) || 'User'}</Text>
               {profile.is_admin && (
                 <View style={styles.verifiedBadge}>
                   <Text style={styles.verifiedCheck}>✓</Text>

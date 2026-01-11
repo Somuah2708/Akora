@@ -5,7 +5,7 @@ import { SplashScreen, useRouter } from 'expo-router'
 import { DebouncedTouchable } from '@/components/DebouncedTouchable';
 import { debouncedRouter } from '@/utils/navigationDebounce';;
 import { HEADER_COLOR } from '@/constants/Colors';
-import { Search, Plus, MoveVertical as MoreVertical, Bell, Moon, Lock, CircleHelp as HelpCircle, LogOut, Shield, Languages, MessageSquare, Bookmark, ShoppingBag, GraduationCap, Briefcase, MessageCircle, Building2, Calendar, Heart, FileText, Users, Newspaper, Globe, Video } from 'lucide-react-native';
+import { Search, Plus, MoveVertical as MoreVertical, Bell, Moon, Lock, CircleHelp as HelpCircle, LogOut, Shield, Languages, MessageSquare, Bookmark, ShoppingBag, GraduationCap, Briefcase, MessageCircle, Building2, Calendar, Heart, FileText, Users, Newspaper, Globe, Video, BookOpen } from 'lucide-react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 const { width } = Dimensions.get('window');
@@ -13,47 +13,67 @@ const CARD_WIDTH = width - 48;
 const GRID_SPACING = 16;
 const GRID_ITEM_WIDTH = (width - 48 - GRID_SPACING) / 2;
 
+// Local hub images
+const HUB_IMAGES = {
+  products: require('@/assets/images/hub/products.png'),
+  mentorship: require('@/assets/images/hub/mentorship.png'),
+  forum: require('@/assets/images/hub/forum.png'),
+  secretariat: require('@/assets/images/hub/secretariat.png'),
+  events: require('@/assets/images/hub/events.png'),
+  donations: require('@/assets/images/hub/donations.png'),
+  requests: require('@/assets/images/hub/requests.png'),
+  clubs: require('@/assets/images/hub/clubs.png'),
+  articles: require('@/assets/images/hub/articles.png'),
+  live: require('@/assets/images/hub/live.png'),
+  news: require('@/assets/images/hub/news.png'),
+};
+
 // Removed horizontal featured scroller – content moved to Home as requested
 
 const HERITAGE_ITEMS = [
   {
     id: '1',
     title: 'Products and Services',
-    description: 'Discover exclusive products and services from fellow Akoras',
+    description: 'Shop from fellow alumni',
     icon: ShoppingBag,
-    image: 'https://images.unsplash.com/photo-1472851294608-062f824d29cc?w=800&auto=format&fit=crop&q=60',
+    image: HUB_IMAGES.products,
+    isLocal: true,
     route: 'services',
   },
   {
     id: '2',
     title: 'Educational Opportunities',
-    description: 'Universities, scholarships and alumni mentors',
+    description: 'Scholarships and mentorships',
     icon: GraduationCap,
-    image: 'https://images.unsplash.com/photo-1523050854058-8df90110c9f1?w=800&auto=format&fit=crop&q=60',
+    image: HUB_IMAGES.mentorship,
+    isLocal: true,
     route: '/education',
   },
   {
     id: '3',
     title: 'Internships & Jobs',
-    description: 'Career opportunities, National Service placements',
+    description: 'Find career opportunities',
     icon: Briefcase,
     image: 'https://images.unsplash.com/photo-1521791136064-7986c2920216?w=800&auto=format&fit=crop&q=60',
+    isLocal: false,
     route: 'workplace',
   },
   {
     id: '4',
     title: 'Development Forum',
-    description: 'Engage in meaningful conversations and mentorship',
+    description: 'Discuss and share ideas',
     icon: MessageCircle,
-    image: 'https://images.unsplash.com/photo-1517486808906-6ca8b3f04846?w=800&auto=format&fit=crop&q=60',
+    image: HUB_IMAGES.forum,
+    isLocal: true,
     route: 'forum',
   },
   {
     id: '5',
     title: 'Secretariat',
-    description: 'Official communications and updates',
+    description: 'Official OAA updates',
     icon: Building2,
-    image: 'https://images.unsplash.com/photo-1497366216548-37526070297c?w=800&auto=format&fit=crop&q=60',
+    image: HUB_IMAGES.secretariat,
+    isLocal: true,
     route: 'secretariat',
   },
   {
@@ -61,7 +81,8 @@ const HERITAGE_ITEMS = [
     title: 'Events',
     description: 'Upcoming events and gatherings',
     icon: Calendar,
-    image: 'https://images.unsplash.com/photo-1511795409834-ef04bbd61622?w=800&auto=format&fit=crop&q=60',
+    image: HUB_IMAGES.events,
+    isLocal: true,
     route: 'events',
   },
   {
@@ -69,7 +90,8 @@ const HERITAGE_ITEMS = [
     title: 'Donations',
     description: 'Support our community initiatives',
     icon: Heart,
-    image: 'https://images.unsplash.com/photo-1532629345422-7515f3d16bb6?w=800&auto=format&fit=crop&q=60',
+    image: HUB_IMAGES.donations,
+    isLocal: true,
     route: 'donation',
   },
   {
@@ -77,7 +99,8 @@ const HERITAGE_ITEMS = [
     title: 'Academic Requests',
     description: 'Access and request academic records',
     icon: FileText,
-    image: 'https://images.unsplash.com/photo-1506784983877-45594efa4cbe?w=800&auto=format&fit=crop&q=60',
+    image: HUB_IMAGES.requests,
+    isLocal: true,
     route: 'transcripts',
   },
   {
@@ -85,23 +108,26 @@ const HERITAGE_ITEMS = [
     title: 'Circles Fun Clubs',
     description: 'Join interest groups and social clubs',
     icon: Users,
-    image: 'https://images.unsplash.com/photo-1511632765486-a01980e01a18?w=800&auto=format&fit=crop&q=60',
+    image: HUB_IMAGES.clubs,
+    isLocal: true,
     route: 'circles',
   },
   {
     id: '10',
     title: 'News Daily',
-    description: 'Stay updated with latest news and announcements',
+    description: 'Latest news and updates',
     icon: Newspaper,
-    image: 'https://images.unsplash.com/photo-1504711434969-e33886168f5c?w=800&auto=format&fit=crop&q=60',
+    image: HUB_IMAGES.news,
+    isLocal: true,
     route: 'news',
   },
   {
     id: '11',
-    title: 'Chapters',
-    description: 'Connect with regional alumni chapters',
-    icon: Globe,
-    image: 'https://images.unsplash.com/photo-1528605248644-14dd04022da1?w=800&auto=format&fit=crop&q=60',
+    title: 'Articles',
+    description: 'Read insightful articles and stories',
+    icon: BookOpen,
+    image: HUB_IMAGES.articles,
+    isLocal: true,
     route: 'chapters',
   },
   {
@@ -109,7 +135,8 @@ const HERITAGE_ITEMS = [
     title: 'Live Stream',
     description: 'Watch live events and ceremonies',
     icon: Video,
-    image: 'https://images.unsplash.com/photo-1524178232363-1fb2b075b655?w=800&auto=format&fit=crop&q=60',
+    image: HUB_IMAGES.live,
+    isLocal: true,
     route: 'live',
   },
 ];
@@ -186,7 +213,7 @@ export default function HubScreen() {
                   style={styles.gridItem}
                   onPress={() => item.route && debouncedRouter.push(item.route)}
                 >
-                  <Image source={{ uri: item.image }} style={styles.itemImage} />
+                  <Image source={item.isLocal ? item.image : { uri: item.image }} style={styles.itemImage} />
                   <View style={styles.itemContent}>
                     <View style={styles.iconContainer}>
                       <IconComponent size={24} color="#FFFFFF" strokeWidth={1.5} />
@@ -211,7 +238,7 @@ export default function HubScreen() {
                   style={styles.gridItem}
                   onPress={() => item.route && debouncedRouter.push(item.route)}
                 >
-                  <Image source={{ uri: item.image }} style={styles.itemImage} />
+                  <Image source={item.isLocal ? item.image : { uri: item.image }} style={styles.itemImage} />
                   <View style={styles.itemContent}>
                     <View style={styles.iconContainer}>
                       <IconComponent size={24} color="#FFFFFF" strokeWidth={1.5} />

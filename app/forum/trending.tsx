@@ -5,7 +5,7 @@ import { DebouncedTouchable } from '@/components/DebouncedTouchable';
 import { debouncedRouter } from '@/utils/navigationDebounce';;
 import { ArrowLeft, Hash } from 'lucide-react-native';
 import { fetchTrendingDiscussions, TrendingDiscussionRow } from '@/lib/forum/analytics';
-import { supabase } from '@/lib/supabase';
+import { supabase, getDisplayName } from '@/lib/supabase';
 
 type Row = TrendingDiscussionRow & {
   profile?: { id: string; full_name: string; avatar_url?: string };
@@ -100,7 +100,7 @@ export default function TrendingListScreen() {
               <Text style={styles.cardTitle} numberOfLines={2}>{item.title || '(Untitled discussion)'}</Text>
               <View style={styles.authorRow}>
                 <Image source={{ uri: item.profile?.avatar_url || 'https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?w=400&auto=format&fit=crop&q=60' }} style={styles.avatar} />
-                <Text style={styles.author} numberOfLines={1}>{item.profile?.full_name || 'Member'}</Text>
+                <Text style={styles.author} numberOfLines={1}>{getDisplayName(item.profile) || 'Member'}</Text>
                 <Text style={styles.dot}>•</Text>
                 <Text style={styles.time}>{getTimeAgo(item.last_activity_at)}</Text>
               </View>

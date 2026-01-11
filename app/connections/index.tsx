@@ -25,7 +25,7 @@ import {
   cancelConnectionRequest,
   type Connection,
 } from '@/lib/connections';
-import type { Profile } from '@/lib/supabase';
+import { getDisplayName, type Profile } from '@/lib/supabase';
 import { formatProfileSubtitle } from '@/lib/display';
 
 SplashScreen.preventAutoHideAsync();
@@ -152,7 +152,7 @@ export default function ConnectionsScreen() {
         />
         <View style={styles.requestInfo}>
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-            <Text style={styles.requestName}>{requester.full_name}</Text>
+            <Text style={styles.requestName}>{getDisplayName(requester)}</Text>
             {(requester as any)?.is_admin && (
               <View style={styles.adminBadge}>
                 <Text style={styles.adminBadgeText}>Admin</Text>
@@ -202,7 +202,7 @@ export default function ConnectionsScreen() {
         />
         <View style={styles.requestInfo}>
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-            <Text style={styles.requestName}>{addressee.full_name}</Text>
+            <Text style={styles.requestName}>{getDisplayName(addressee)}</Text>
             {(addressee as any)?.is_admin && (
               <View style={styles.adminBadge}>
                 <Text style={styles.adminBadgeText}>Admin</Text>
@@ -242,7 +242,7 @@ export default function ConnectionsScreen() {
       />
       <View style={styles.requestInfo}>
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-          <Text style={styles.requestName}>{profile.full_name}</Text>
+          <Text style={styles.requestName}>{getDisplayName(profile)}</Text>
           {(profile as any)?.is_admin && (
             <View style={styles.adminBadge}>
               <Text style={styles.adminBadgeText}>Admin</Text>

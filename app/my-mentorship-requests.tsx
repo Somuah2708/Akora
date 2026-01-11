@@ -14,7 +14,7 @@ import { useRouter } from 'expo-router'
 import { DebouncedTouchable } from '@/components/DebouncedTouchable';
 import { debouncedRouter } from '@/utils/navigationDebounce';;
 import { Ionicons } from '@expo/vector-icons';
-import { supabase } from '../lib/supabase';
+import { supabase, getDisplayName } from '../lib/supabase';
 import { useAuth } from '@/hooks/useAuth';
 import RatingModal from '@/components/RatingModal';
 import FilterModal from '@/components/FilterModal';
@@ -308,11 +308,11 @@ export default function MyMentorshipRequests() {
               <View style={styles.mentorHeader}>
                 <View style={styles.avatarPlaceholder}>
                   <Text style={styles.avatarText}>
-                    {request.mentor.full_name.charAt(0).toUpperCase()}
+                    {getDisplayName(request.mentor).charAt(0).toUpperCase()}
                   </Text>
                 </View>
                 <View style={styles.mentorInfo}>
-                  <Text style={styles.mentorName}>{request.mentor.full_name}</Text>
+                  <Text style={styles.mentorName}>{getDisplayName(request.mentor)}</Text>
                   <Text style={styles.mentorTitle}>
                     {request.mentor.current_title} at {request.mentor.company}
                   </Text>
@@ -395,7 +395,7 @@ export default function MyMentorshipRequests() {
                     
                     <TouchableOpacity 
                       style={styles.completeButton}
-                      onPress={() => handleMarkCompleted(request.id, request.mentor.user_id, request.mentor.full_name)}
+                      onPress={() => handleMarkCompleted(request.id, request.mentor.user_id, getDisplayName(request.mentor))}
                     >
                       <Ionicons name="checkmark-circle" size={20} color="#fff" />
                       <Text style={styles.completeButtonText}>Mark as Completed</Text>
@@ -478,7 +478,7 @@ export default function MyMentorshipRequests() {
           }}
           requestId={selectedRequest.id}
           mentorId={selectedRequest.mentor_id}
-          mentorName={selectedRequest.mentor.full_name}
+          mentorName={getDisplayName(selectedRequest.mentor)}
           onRatingSubmitted={() => {
             fetchRequests();
           }}
@@ -506,7 +506,7 @@ export default function MyMentorshipRequests() {
             setRequestToCancel(null);
           }}
           requestId={requestToCancel.id}
-          mentorName={requestToCancel.mentor.full_name}
+          mentorName={getDisplayName(requestToCancel.mentor)}
           onCancelled={handleRequestCancelled}
         />
       )}

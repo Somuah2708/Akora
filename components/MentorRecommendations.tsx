@@ -8,7 +8,7 @@ import {
   ActivityIndicator,
   Alert,
 } from 'react-native';
-import { supabase } from '../lib/supabase';
+import { supabase, getDisplayName } from '../lib/supabase';
 import { Sparkles, RefreshCw, Settings } from 'lucide-react-native';
 
 type MatchReason = {
@@ -192,20 +192,20 @@ export default function MentorRecommendations() {
                   {rec.profile_photo_url ? (
                     <img
                       src={rec.profile_photo_url}
-                      alt={rec.full_name}
+                      alt={getDisplayName(rec)}
                       style={{ width: 80, height: 80, borderRadius: 40 }}
                     />
                   ) : (
                     <View style={styles.placeholderPhoto}>
                       <Text style={styles.placeholderText}>
-                        {rec.full_name.charAt(0)}
+                        {getDisplayName(rec).charAt(0)}
                       </Text>
                     </View>
                   )}
                 </View>
 
                 <View style={styles.basicInfo}>
-                  <Text style={styles.mentorName}>{rec.full_name}</Text>
+                  <Text style={styles.mentorName}>{getDisplayName(rec)}</Text>
                   <Text style={styles.mentorTitle}>{rec.current_title}</Text>
                   <Text style={styles.mentorCompany}>{rec.company}</Text>
                   

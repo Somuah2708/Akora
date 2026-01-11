@@ -5,7 +5,7 @@ import { SplashScreen, useRouter, useLocalSearchParams } from 'expo-router'
 import { DebouncedTouchable } from '@/components/DebouncedTouchable';
 import { debouncedRouter } from '@/utils/navigationDebounce';;
 import { ArrowLeft, CheckCircle, XCircle, Clock, Eye, FileText, Mail, Phone, Briefcase, Calendar, DollarSign, Link as LinkIcon, Download } from 'lucide-react-native';
-import { supabase, JobApplication, Job } from '@/lib/supabase';
+import { supabase, JobApplication, Job, getDisplayName } from '@/lib/supabase';
 import { useAuth } from '@/hooks/useAuth';
 import { LinearGradient } from 'expo-linear-gradient';
 
@@ -198,7 +198,7 @@ export default function JobApplicationsReviewScreen() {
       >
         <View style={styles.cardHeader}>
           <View style={styles.applicantInfo}>
-            <Text style={styles.applicantName}>{application.full_name}</Text>
+            <Text style={styles.applicantName}>{getDisplayName(application)}</Text>
             <Text style={styles.applicationDate}>{timeAgo}</Text>
           </View>
           <View style={[styles.statusBadge, { backgroundColor: `${statusColor}20` }]}>
@@ -277,7 +277,7 @@ export default function JobApplicationsReviewScreen() {
               <Text style={styles.detailSectionTitle}>Applicant Information</Text>
               <View style={styles.detailRow}>
                 <Text style={styles.detailLabel}>Name:</Text>
-                <Text style={styles.detailValue}>{selectedApplication.full_name}</Text>
+                <Text style={styles.detailValue}>{getDisplayName(selectedApplication)}</Text>
               </View>
               <View style={styles.detailRow}>
                 <Text style={styles.detailLabel}>Email:</Text>

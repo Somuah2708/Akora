@@ -27,7 +27,7 @@ import {
   Notification,
   NotificationType
 } from '@/lib/notifications';
-import { supabase, JobApplicationNotification } from '@/lib/supabase';
+import { supabase, JobApplicationNotification, getDisplayName } from '@/lib/supabase';
 
 type TabType = 'all' | 'likes' | 'comments' | 'follows' | 'jobs';
 

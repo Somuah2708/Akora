@@ -5,7 +5,7 @@ import { DebouncedTouchable } from '@/components/DebouncedTouchable';
 import { debouncedRouter } from '@/utils/navigationDebounce';;
 import { ArrowLeft, Building2, GraduationCap, Clock, MapPin, Linkedin, Mail, MessageCircle, Phone, Send, FileText, UserCircle2 } from 'lucide-react-native';
 import { useAuth } from '@/hooks/useAuth';
-import { supabase } from '@/lib/supabase';
+import { supabase, getDisplayName } from '@/lib/supabase';
 import RequestTemplatesModal, { RequestTemplate } from '@/components/RequestTemplatesModal';
 import MentorBadges from '@/components/MentorBadges';
 
@@ -195,7 +195,7 @@ export default function MentorDetailScreen() {
       if (existingRequests) {
         Alert.alert(
           'Request Already Sent',
-          `You already have a pending request to ${mentor.full_name} from ${new Date(existingRequests.created_at).toLocaleDateString()}. Please wait for their response.`,
+          `You already have a pending request to ${getDisplayName(mentor)} from ${new Date(existingRequests.created_at).toLocaleDateString()}. Please wait for their response.`,
           [{ text: 'OK' }]
         );
         setSubmitting(false);
@@ -246,7 +246,7 @@ export default function MentorDetailScreen() {
 
       Alert.alert(
         'Request Sent! 🎉',
-        `Your mentorship request has been sent to ${mentor.full_name}. They will be notified and can review it in their mentor dashboard.`,
+        `Your mentorship request has been sent to ${getDisplayName(mentor)}. They will be notified and can review it in their mentor dashboard.`,
         [
           {
             text: 'OK',
@@ -335,7 +335,7 @@ export default function MentorDetailScreen() {
             )}
           </View>
           <View style={styles.profileInfo}>
-            <Text style={styles.name}>{mentor.full_name}</Text>
+            <Text style={styles.name}>{getDisplayName(mentor)}</Text>
             <Text style={styles.title}>{mentor.current_title}</Text>
             {mentor.company && (
               <View style={styles.companyRow}>

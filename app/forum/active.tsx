@@ -5,7 +5,7 @@ import { DebouncedTouchable } from '@/components/DebouncedTouchable';
 import { debouncedRouter } from '@/utils/navigationDebounce';;
 import { ArrowLeft } from 'lucide-react-native';
 import { fetchActiveUsers, ActiveUserRow } from '@/lib/forum/analytics';
-import { supabase } from '@/lib/supabase';
+import { supabase, getDisplayName } from '@/lib/supabase';
 
 type Row = ActiveUserRow & {
   profile?: { id: string; full_name: string; avatar_url?: string };
@@ -84,7 +84,7 @@ export default function ActiveMembersScreen() {
               <View style={styles.row}>
                 <Image source={{ uri: item.profile?.avatar_url || 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=400&auto=format&fit=crop&q=60' }} style={styles.avatar} />
                 <View style={{ flex: 1 }}>
-                  <Text style={styles.name} numberOfLines={1}>{item.profile?.full_name || 'Member'}</Text>
+                  <Text style={styles.name} numberOfLines={1}>{getDisplayName(item.profile) || 'Member'}</Text>
                   <Text style={styles.time}>{getTimeAgo(item.last_activity_at)}</Text>
                 </View>
                   {/* metrics removed for a cleaner UI */}
