@@ -578,7 +578,7 @@ const ProfileScreen = React.memo(function ProfileScreen() {
               )}
               {profile.location && (isSelf || profile.is_contact_public) && (
                 <View style={styles.aboutItem}>
-                  <Text style={styles.aboutLabel}>Location</Text>
+                  <Text style={styles.aboutLabel}>Current Location</Text>
                   <Text style={styles.aboutValue}>{profile.location}</Text>
                 </View>
               )}

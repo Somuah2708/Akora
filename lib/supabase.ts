@@ -75,21 +75,51 @@ console.log('Supabase client initialized successfully');
 export const AVATAR_BUCKET = process.env.EXPO_PUBLIC_SUPABASE_AVATAR_BUCKET || 'avatars';
 
 /**
+ * Capitalize the first letter of each word in a name
+ * Handles multiple words separated by spaces or hyphens
+ */
+export const capitalizeName = (name: string | null | undefined): string => {
+  if (!name) return '';
+  return name
+    .trim()
+    .toLowerCase()
+    .split(/([\s-]+)/) // Split by spaces/hyphens but keep delimiters
+    .map(part => {
+      // If it's a delimiter (space or hyphen), keep it
+      if (/^[\s-]+$/.test(part)) return part;
+      // Otherwise capitalize first letter
+      return part.charAt(0).toUpperCase() + part.slice(1);
+    })
+    .join('');
+};
+
+/**
  * Get the display name for a user (first_name + surname only)
  * This should be used throughout the app instead of full_name
  * Full name (including other_names) should only be shown on profile pages
+ * Auto-capitalizes names for consistent display
  */
 export const getDisplayName = (profile: { first_name?: string | null; surname?: string | null; full_name?: string | null } | null | undefined): string => {
   if (!profile) return 'Unknown User';
   
   // If first_name and surname exist, use them
   if (profile.first_name && profile.surname) {
-    return `${profile.first_name} ${profile.surname}`;
+    const firstName = capitalizeName(profile.first_name);
+    const surname = capitalizeName(profile.surname);
+    return `${firstName} ${surname}`;
   }
   
   // Fallback to full_name if first_name/surname not available
   if (profile.full_name) {
-    return profile.full_name;
+    // Split full_name and return first + last word (first name + surname)
+    const parts = profile.full_name.trim().split(/\s+/).filter(Boolean);
+    if (parts.length >= 2) {
+      const firstName = capitalizeName(parts[0]);
+      const surname = capitalizeName(parts[parts.length - 1]);
+      return `${firstName} ${surname}`;
+    } else if (parts.length === 1) {
+      return capitalizeName(parts[0]);
+    }
   }
   
   return 'Unknown User';
@@ -98,21 +128,26 @@ export const getDisplayName = (profile: { first_name?: string | null; surname?: 
 /**
  * Get the full legal name for a user (first_name + other_names + surname)
  * This should ONLY be used on profile pages
+ * Auto-capitalizes names for consistent display
  */
 export const getFullLegalName = (profile: { first_name?: string | null; surname?: string | null; other_names?: string | null; full_name?: string | null } | null | undefined): string => {
   if (!profile) return 'Unknown User';
   
-  // Use full_name which already contains the complete name
-  if (profile.full_name) {
-    return profile.full_name;
+  // Prefer constructing from parts for proper capitalization
+  if (profile.first_name && profile.surname) {
+    const firstName = capitalizeName(profile.first_name);
+    const surname = capitalizeName(profile.surname);
+    if (profile.other_names) {
+      const otherNames = capitalizeName(profile.other_names);
+      return `${firstName} ${otherNames} ${surname}`;
+    }
+    return `${firstName} ${surname}`;
   }
   
-  // Fallback to constructing from parts
-  if (profile.first_name && profile.surname) {
-    if (profile.other_names) {
-      return `${profile.first_name} ${profile.other_names} ${profile.surname}`;
-    }
-    return `${profile.first_name} ${profile.surname}`;
+  // Fallback to full_name with capitalization
+  if (profile.full_name) {
+    const parts = profile.full_name.trim().split(/\s+/).filter(Boolean);
+    return parts.map(part => capitalizeName(part)).join(' ');
   }
   
   return 'Unknown User';

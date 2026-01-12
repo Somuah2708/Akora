@@ -3,8 +3,13 @@
 
 type ForumBookmarkChanged = { discussionId: string; saved: boolean };
 
+// Tab refresh events (Instagram-style: tap tab while on it to refresh)
+type TabRefresh = { timestamp: number };
+
 type Events = {
   'forum:bookmarkChanged': ForumBookmarkChanged;
+  'tab:homeRefresh': TabRefresh;
+  'tab:discoverRefresh': TabRefresh;
 };
 
 type Handler<T> = (payload: T) => void;

@@ -5,9 +5,10 @@ import { useEffect, useState } from 'react';
 import { SplashScreen, useRouter } from 'expo-router'
 import { DebouncedTouchable } from '@/components/DebouncedTouchable';
 import { debouncedRouter } from '@/utils/navigationDebounce';;
-import { Eye, EyeOff, Mail, Lock, User, GraduationCap, Calendar, Chrome as Home, MapPin, Phone, Briefcase, Building, ArrowLeft } from 'lucide-react-native';
+import { Eye, EyeOff, Mail, Lock, User, GraduationCap, Calendar, Chrome as Home, MapPin, Phone, Briefcase, Building, ArrowLeft, Camera } from 'lucide-react-native';
 import { useAuth } from '@/hooks/useAuth';
-import { supabase } from '@/lib/supabase';
+import { supabase, capitalizeName, AVATAR_BUCKET } from '@/lib/supabase';
+import * as ImagePicker from 'expo-image-picker';
 
 SplashScreen.preventAutoHideAsync();
 
@@ -70,6 +71,11 @@ export default function SignUpScreen() {
   const [location, setLocation] = useState('');
   const [phone, setPhone] = useState('');
   const [bio, setBio] = useState('');
+  
+  // Avatar state
+  const [avatarUri, setAvatarUri] = useState<string | null>(null);
+  const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
+  const [isUploadingAvatar, setIsUploadingAvatar] = useState(false);
   
   // UI state
   const [showPassword, setShowPassword] = useState(false);
@@ -139,6 +145,82 @@ export default function SignUpScreen() {
     return true;
   };
 
+  // Pick profile photo from gallery
+  const pickImage = async () => {
+    try {
+      // Request permissions
+      if (Platform.OS !== 'web') {
+        const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+        if (status !== 'granted') {
+          Alert.alert('Permission Denied', 'We need photo library access to set a profile photo');
+          return;
+        }
+      }
+      
+      // Launch image picker
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        allowsEditing: true,
+        aspect: [1, 1],
+        quality: 0.8,
+      });
+      
+      if (!result.canceled && result.assets && result.assets.length > 0) {
+        const selectedAsset = result.assets[0];
+        setAvatarUri(selectedAsset.uri);
+      }
+    } catch (error) {
+      console.error('Error picking image:', error);
+      Alert.alert('Error', 'Failed to select image');
+    }
+  };
+
+  // Upload avatar to Supabase storage (called during signup)
+  const uploadAvatar = async (userId: string): Promise<string | null> => {
+    if (!avatarUri) return null;
+    
+    try {
+      setIsUploadingAvatar(true);
+      
+      // Use expo-file-system to read file as base64
+      const { readAsStringAsync } = await import('expo-file-system/legacy');
+      const base64 = await readAsStringAsync(avatarUri, { encoding: 'base64' });
+      
+      // Determine file extension from URI or default to jpg
+      const uriParts = avatarUri.split('.');
+      const ext = uriParts.length > 1 ? uriParts[uriParts.length - 1].toLowerCase() : 'jpg';
+      const mime = ext === 'png' ? 'image/png' : ext === 'webp' ? 'image/webp' : 'image/jpeg';
+      
+      // Decode base64 to ArrayBuffer for upload
+      const { decode } = await import('base64-arraybuffer');
+      const arrayBuffer = decode(base64);
+      
+      const filePath = `${userId}/${Date.now()}.${ext}`;
+      
+      // Upload to Supabase Storage
+      const { error: uploadError } = await supabase.storage
+        .from(AVATAR_BUCKET)
+        .upload(filePath, arrayBuffer, { upsert: true, contentType: mime });
+      
+      if (uploadError) {
+        console.error('Avatar upload error:', uploadError);
+        return null;
+      }
+      
+      // Get the public URL
+      const { data } = supabase.storage
+        .from(AVATAR_BUCKET)
+        .getPublicUrl(filePath);
+      
+      return data.publicUrl;
+    } catch (error) {
+      console.error('Error uploading avatar:', error);
+      return null;
+    } finally {
+      setIsUploadingAvatar(false);
+    }
+  };
+
   const handleSignUp = async () => {
     if (!validateForm()) {
       return;
@@ -148,21 +230,27 @@ export default function SignUpScreen() {
       setIsSubmitting(true);
       setError('');
       
-      // Generate a username from first name and surname
-      const username = `${firstName.toLowerCase()}.${surname.toLowerCase()}`;
-      // Full name includes other names if provided
-      const fullName = otherNames.trim() 
-        ? `${firstName} ${otherNames.trim()} ${surname}`
-        : `${firstName} ${surname}`;
+      // Capitalize names properly
+      const capitalizedFirstName = capitalizeName(firstName.trim());
+      const capitalizedSurname = capitalizeName(surname.trim());
+      const capitalizedOtherNames = capitalizeName(otherNames.trim());
       
+      // Generate a username from first name and surname
+      const username = `${firstName.toLowerCase().trim()}.${surname.toLowerCase().trim()}`;
+      // Full name includes other names if provided
+      const fullName = capitalizedOtherNames 
+        ? `${capitalizedFirstName} ${capitalizedOtherNames} ${capitalizedSurname}`
+        : `${capitalizedFirstName} ${capitalizedSurname}`;
+      
+      // First create the account
       const { data, error } = await signUp(
         email.trim(),
         password,
         username,
         fullName,
-        firstName.trim(),
-        surname.trim(),
-        otherNames.trim(),
+        capitalizedFirstName,
+        capitalizedSurname,
+        capitalizedOtherNames,
         classGroup.trim(),
         yearGroup.trim(),
         house,
@@ -180,6 +268,18 @@ export default function SignUpScreen() {
       );
       
       if (error) throw error;
+      
+      // If user selected an avatar, upload it after account creation
+      if (avatarUri && data?.user?.id) {
+        const uploadedAvatarUrl = await uploadAvatar(data.user.id);
+        if (uploadedAvatarUrl) {
+          // Update profile with avatar URL
+          await supabase
+            .from('profiles')
+            .update({ avatar_url: uploadedAvatarUrl })
+            .eq('id', data.user.id);
+        }
+      }
       
       Alert.alert(
         'Sign Up Successful',
@@ -228,12 +328,35 @@ export default function SignUpScreen() {
           </View>
         ) : null}
         
+        {/* Profile Photo Picker */}
+        <View style={styles.avatarSection}>
+          <TouchableOpacity 
+            style={styles.avatarContainer} 
+            onPress={pickImage}
+            disabled={isUploadingAvatar}
+          >
+            {avatarUri ? (
+              <Image source={{ uri: avatarUri }} style={styles.avatarImage} />
+            ) : (
+              <View style={styles.avatarPlaceholder}>
+                <Camera size={32} color="#666666" />
+              </View>
+            )}
+            <View style={styles.avatarBadge}>
+              <Camera size={14} color="#FFFFFF" />
+            </View>
+          </TouchableOpacity>
+          <Text style={styles.avatarText}>Add Profile Photo</Text>
+          <Text style={styles.avatarSubtext}>(Optional)</Text>
+        </View>
+        
         <View style={styles.inputContainer}>
           <User size={20} color="#666666" />
           <TextInput
             style={styles.input}
             placeholder="First Name"
             placeholderTextColor="#666666"
+            autoCapitalize="words"
             value={firstName}
             onChangeText={setFirstName}
           />
@@ -245,6 +368,7 @@ export default function SignUpScreen() {
             style={styles.input}
             placeholder="Surname"
             placeholderTextColor="#666666"
+            autoCapitalize="words"
             value={surname}
             onChangeText={setSurname}
           />
@@ -256,6 +380,7 @@ export default function SignUpScreen() {
             style={styles.input}
             placeholder="Other Names (Optional)"
             placeholderTextColor="#666666"
+            autoCapitalize="words"
             value={otherNames}
             onChangeText={setOtherNames}
           />
@@ -597,6 +722,58 @@ const styles = StyleSheet.create({
   },
   form: {
     marginBottom: 24,
+  },
+  avatarSection: {
+    alignItems: 'center',
+    marginBottom: 24,
+  },
+  avatarContainer: {
+    width: 100,
+    height: 100,
+    borderRadius: 50,
+    overflow: 'hidden',
+    position: 'relative',
+  },
+  avatarImage: {
+    width: 100,
+    height: 100,
+    borderRadius: 50,
+  },
+  avatarPlaceholder: {
+    width: 100,
+    height: 100,
+    borderRadius: 50,
+    backgroundColor: '#F1F5F9',
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 2,
+    borderColor: '#E2E8F0',
+    borderStyle: 'dashed',
+  },
+  avatarBadge: {
+    position: 'absolute',
+    bottom: 0,
+    right: 0,
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: '#0F172A',
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 3,
+    borderColor: '#FFFFFF',
+  },
+  avatarText: {
+    fontSize: 14,
+    fontFamily: 'Inter-SemiBold',
+    color: '#0F172A',
+    marginTop: 8,
+  },
+  avatarSubtext: {
+    fontSize: 12,
+    fontFamily: 'Inter-Regular',
+    color: '#666666',
+    marginTop: 2,
   },
   errorContainer: {
     backgroundColor: '#FFE4E4',

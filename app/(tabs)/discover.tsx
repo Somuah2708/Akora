@@ -18,6 +18,7 @@ import YouTubePlayer from '@/components/YouTubePlayer';
 import ExpandableText from '@/components/ExpandableText';
 import { useVideoSettings } from '@/contexts/VideoSettingsContext';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { on } from '@/lib/eventBus';
 // Using the same simple horizontal ScrollView pattern as the Post detail screen
 
 const { width, height } = Dimensions.get('window');
@@ -523,6 +524,17 @@ export default function DiscoverScreen() {
       };
     }, [])
   );
+
+  // Instagram-style: tap Discover tab while on Discover to scroll to top and refresh
+  useEffect(() => {
+    const unsubscribe = on('tab:discoverRefresh', () => {
+      // Scroll to top
+      scrollViewRef.current?.scrollTo({ y: 0, animated: true });
+      // Trigger refresh
+      onRefresh();
+    });
+    return unsubscribe;
+  }, [onRefresh]);
 
   // If routed with ?openInterestModal=1, open the interests modal on mount
   useEffect(() => {

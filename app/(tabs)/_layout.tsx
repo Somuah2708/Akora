@@ -3,6 +3,7 @@ import { Home, LayoutGrid, MessageSquare, Compass, User } from 'lucide-react-nat
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Platform } from 'react-native';
 import { useMemo, useCallback } from 'react';
+import { emit } from '@/lib/eventBus';
 
 export default function TabLayout() {
   const insets = useSafeAreaInsets();
@@ -71,6 +72,15 @@ export default function TabLayout() {
           title: 'Home',
           tabBarIcon: renderHomeIcon,
         }}
+        listeners={({ navigation, route }) => ({
+          tabPress: (e) => {
+            // If already on Home tab, emit refresh event (Instagram-style)
+            const isFocused = navigation.isFocused();
+            if (isFocused) {
+              emit('tab:homeRefresh', { timestamp: Date.now() });
+            }
+          },
+        })}
       />
       <Tabs.Screen
         name="hub"
@@ -85,6 +95,15 @@ export default function TabLayout() {
           title: 'Discover',
           tabBarIcon: renderDiscoverIcon,
         }}
+        listeners={({ navigation, route }) => ({
+          tabPress: (e) => {
+            // If already on Discover tab, emit refresh event (Instagram-style)
+            const isFocused = navigation.isFocused();
+            if (isFocused) {
+              emit('tab:discoverRefresh', { timestamp: Date.now() });
+            }
+          },
+        })}
       />
       <Tabs.Screen
         name="chat"

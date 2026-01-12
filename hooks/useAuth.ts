@@ -171,18 +171,44 @@ export function useAuth() {
     phone?: string,
     bio?: string
   ) => {
-    // Sign up the user
+    // Sign up the user with metadata so the trigger can create a complete profile
+    // Include ALL fields (required + optional) in metadata
     const { data: authData, error: authError } = await supabase.auth.signUp({
       email,
       password,
+      options: {
+        data: {
+          username,
+          full_name: fullName,
+          first_name: firstName,
+          surname,
+          other_names: otherNames,
+          class: classGroup,
+          year_group: yearGroup,
+          house,
+          // Optional fields
+          occupation_status: occupationStatus || null,
+          job_title: jobTitle || null,
+          company_name: companyName || null,
+          institution_name: institutionName || null,
+          program_of_study: programOfStudy || null,
+          graduation_year: graduationYear ? parseInt(graduationYear) : null,
+          current_study_year: currentStudyYear ? parseInt(currentStudyYear) : null,
+          location: location || null,
+          phone: phone || null,
+          bio: bio || null,
+        },
+      },
     });
 
     if (authError) return { data: null, error: authError };
 
-    // Profile will be created automatically by the auth trigger
-    // But we can update it with additional info
+    // Profile will be created by the auth trigger with basic info
+    // Now update it with any additional fields not in the trigger
     if (authData.user) {
+      // Data to update (additional fields not handled by trigger)
       const updateData: any = {
+        // Re-include these to ensure they're saved even if trigger had issues
         username,
         full_name: fullName,
         first_name: firstName,
@@ -205,13 +231,53 @@ export function useAuth() {
       if (phone) updateData.phone = phone;
       if (bio) updateData.bio = bio;
       
-      const { error: profileError } = await supabase
-        .from('profiles')
-        .update(updateData)
-        .eq('id', authData.user.id);
+      console.log('[useAuth] Attempting to save profile data:', JSON.stringify(updateData));
+      
+      // Retry logic: wait for trigger to create profile, then update
+      let profileSaved = false;
+      let lastError = null;
+      
+      for (let attempt = 1; attempt <= 5; attempt++) {
+        // Wait progressively longer for the trigger to create the profile
+        await new Promise(resolve => setTimeout(resolve, attempt * 300));
+        
+        const { error: updateError, count } = await supabase
+          .from('profiles')
+          .update(updateData)
+          .eq('id', authData.user.id);
+        
+        if (!updateError) {
+          console.log(`[useAuth] Profile updated successfully on attempt ${attempt}`);
+          profileSaved = true;
+          break;
+        } else {
+          console.log(`[useAuth] Profile update attempt ${attempt} failed:`, updateError.message);
+          lastError = updateError;
+        }
+      }
+      
+      // If all update attempts failed, try upsert as last resort
+      if (!profileSaved) {
+        console.log('[useAuth] All update attempts failed, trying upsert...');
+        const upsertData = { 
+          id: authData.user.id, 
+          email: email,
+          ...updateData 
+        };
+        const { error: upsertError } = await supabase
+          .from('profiles')
+          .upsert(upsertData, { onConflict: 'id' });
+        
+        if (upsertError) {
+          console.error('[useAuth] Upsert also failed:', upsertError);
+        } else {
+          console.log('[useAuth] Profile saved via upsert');
+          profileSaved = true;
+        }
+      }
 
-      if (profileError) {
-        console.error('Error updating profile:', profileError);
+      if (!profileSaved && lastError) {
+        console.error('[useAuth] Failed to save profile after all attempts:', lastError);
       }
     }
 

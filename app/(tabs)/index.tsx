@@ -17,6 +17,7 @@ import { useNotifications } from '@/contexts/NotificationContext';
 import NotificationBellIcon from '@/components/NotificationBellIcon';
 import TrendingSection from '@/components/TrendingSection';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { on } from '@/lib/eventBus';
 
 // Local hub images for Quick Access tabs
 const HUB_IMAGES: Record<string, any> = {
@@ -651,6 +652,17 @@ export default function HomeScreen() {
       };
     }, [refreshUnreadCount])
   );
+
+  // Instagram-style: tap Home tab while on Home to scroll to top and refresh
+  useEffect(() => {
+    const unsubscribe = on('tab:homeRefresh', () => {
+      // Scroll to top
+      scrollViewRef.current?.scrollTo({ y: 0, animated: true });
+      // Trigger refresh
+      onRefresh();
+    });
+    return unsubscribe;
+  }, [onRefresh]);
 
   // Real-time badge updates are handled centrally by NotificationProvider; no local listener needed here
 

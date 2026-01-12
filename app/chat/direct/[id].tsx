@@ -52,7 +52,7 @@ export default function DirectMessageScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { id: friendId} = useLocalSearchParams<{ id: string }>();
-  const { user } = useAuth();
+  const { user, profile } = useAuth();
   const [messages, setMessages] = useState<DirectMessage[]>([]);
   const [messageText, setMessageText] = useState('');
   const [loading, setLoading] = useState(true);
@@ -769,9 +769,9 @@ export default function DirectMessageScreen() {
         is_read: false,
         sender: {
           id: user.id,
-          username: user.user_metadata?.username || '',
-          full_name: getDisplayName(user.user_metadata),
-          avatar_url: user.user_metadata?.avatar_url,
+          username: profile?.username || user.user_metadata?.username || '',
+          full_name: getDisplayName(profile || user.user_metadata),
+          avatar_url: profile?.avatar_url || user.user_metadata?.avatar_url,
         },
       } as DirectMessage;
 

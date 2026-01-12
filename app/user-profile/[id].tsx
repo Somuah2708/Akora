@@ -366,59 +366,62 @@ export default function UserProfileScreen() {
                   {expandAbout ? <ChevronUp size={18} color="#666" /> : <ChevronDown size={18} color="#666" />}
                 </TouchableOpacity>
                 {expandAbout && (
-                <View style={styles.cardBody}>
+                <View style={styles.aboutGrid}>
+                  {/* Occupation Status */}
                   {(profile as any).occupation_status && (
-                    <View style={styles.aboutRow}>
+                    <View style={styles.aboutItemFull}>
                       <Text style={styles.aboutLabel}>Status</Text>
                       <Text style={styles.aboutValue}>{formatOccupation((profile as any).occupation_status)}</Text>
                     </View>
                   )}
                   {profile.year_group && (
-                    <View style={styles.aboutRow}>
+                    <View style={styles.aboutItem}>
                       <Text style={styles.aboutLabel}>Year Group</Text>
                       <Text style={styles.aboutValue}>{profile.year_group}</Text>
                     </View>
                   )}
-                  {profile.class && (
-                    <View style={styles.aboutRow}>
-                      <Text style={styles.aboutLabel}>Class</Text>
-                      <Text style={styles.aboutValue}>{profile.class}</Text>
-                    </View>
-                  )}
                   {profile.house && (
-                    <View style={styles.aboutRow}>
+                    <View style={styles.aboutItem}>
                       <Text style={styles.aboutLabel}>House</Text>
                       <Text style={styles.aboutValue}>{profile.house}</Text>
                     </View>
                   )}
+                  {profile.class && (
+                    <View style={styles.aboutItem}>
+                      <Text style={styles.aboutLabel}>Class</Text>
+                      <Text style={styles.aboutValue}>{profile.class}</Text>
+                    </View>
+                  )}
                   {(profile as any).location && (
-                    <View style={styles.aboutRow}>
-                      <Text style={styles.aboutLabel}>Location</Text>
+                    <View style={styles.aboutItem}>
+                      <Text style={styles.aboutLabel}>Current Location</Text>
                       <Text style={styles.aboutValue}>{(profile as any).location}</Text>
                     </View>
                   )}
                   {(profile as any).phone && (
-                    <View style={styles.aboutRow}>
+                    <View style={styles.aboutItem}>
                       <Text style={styles.aboutLabel}>Phone</Text>
                       <Text style={styles.aboutValue}>{(profile as any).phone}</Text>
                     </View>
                   )}
                   {(profile as any).email && (
-                    <View style={styles.aboutRow}>
+                    <View style={styles.aboutItemFull}>
                       <Text style={styles.aboutLabel}>Email</Text>
                       <Text style={styles.aboutValue}>{(profile as any).email}</Text>
                     </View>
                   )}
+                  {/* Occupation */}
                   {((profile as any).job_title || (profile as any).company_name) && (
-                    <View style={styles.aboutRow}>
+                    <View style={styles.aboutItemFull}>
                       <Text style={styles.aboutLabel}>Occupation</Text>
                       <Text style={styles.aboutValue}>
                         {[(profile as any).job_title, (profile as any).company_name].filter(Boolean).join(' @ ')}
                       </Text>
                     </View>
                   )}
+                  {/* Education */}
                   {((profile as any).institution_name || (profile as any).program_of_study || (profile as any).graduation_year || (profile as any).current_study_year) && (
-                    <View style={styles.aboutRow}>
+                    <View style={styles.aboutItemFull}>
                       <Text style={styles.aboutLabel}>Education</Text>
                       <Text style={styles.aboutValue}>
                         {[
@@ -587,19 +590,23 @@ const styles = StyleSheet.create({
   headerTop: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    alignItems: 'center',
+    alignItems: 'flex-start',
     paddingHorizontal: 16,
     paddingBottom: 16,
   },
   headerLeftRow: {
     flexDirection: 'row',
-    alignItems: 'center',
+    alignItems: 'flex-start',
     gap: 8,
+    flex: 1,
+    marginRight: 8,
   },
   username: {
     fontSize: 22,
     fontFamily: 'Inter-SemiBold',
     color: '#0F172A',
+    flexShrink: 1,
+    flexWrap: 'wrap',
   },
   backButton: {
     padding: 4,
@@ -828,6 +835,19 @@ const styles = StyleSheet.create({
     marginTop: 8,
     gap: 8,
   },
+  aboutGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    columnGap: 12,
+    rowGap: 10,
+    marginTop: 8,
+  },
+  aboutItem: {
+    width: (width - 16*2 - 12 - 24) / 2, // two columns within padding (adjusted for card padding)
+  },
+  aboutItemFull: {
+    width: '100%',
+  },
   aboutRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
@@ -838,21 +858,19 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontFamily: 'Inter-Regular',
     color: '#6B7280',
-    flexShrink: 0,
-    minWidth: 80,
   },
   aboutValue: {
+    marginTop: 2,
     fontSize: 13,
     fontFamily: 'Inter-SemiBold',
     color: '#111827',
-    flex: 1,
-    flexWrap: 'wrap',
-    textAlign: 'right',
   },
   nameRow: {
     flexDirection: 'row',
-    alignItems: 'center',
+    alignItems: 'flex-start',
+    flexWrap: 'wrap',
     gap: 8,
+    flex: 1,
   },
   adminBadge: {
     marginLeft: 6,

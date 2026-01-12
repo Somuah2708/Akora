@@ -1,12 +1,13 @@
 import { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, TextInput, TouchableOpacity, ScrollView, Image, Alert, ActivityIndicator, Switch, Platform, Modal, Dimensions, KeyboardAvoidingView } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFonts, Inter_400Regular, Inter_600SemiBold } from '@expo-google-fonts/inter';
 import { SplashScreen, useRouter } from 'expo-router'
 import { DebouncedTouchable } from '@/components/DebouncedTouchable';
 import { debouncedRouter } from '@/utils/navigationDebounce';;
 import { ArrowLeft, Camera, Trash2, User, GraduationCap, Calendar, Chrome as Home, MapPin, Phone, Mail, Link as LinkIcon } from 'lucide-react-native';
 import * as ImagePicker from 'expo-image-picker';
-import { supabase, AVATAR_BUCKET } from '@/lib/supabase';
+import { supabase, AVATAR_BUCKET, capitalizeName } from '@/lib/supabase';
 import { useAuth } from '@/hooks/useAuth';
 
 SplashScreen.preventAutoHideAsync();
@@ -25,7 +26,11 @@ export default function EditProfileScreen() {
   const [initialSnapshot, setInitialSnapshot] = useState<any | null>(null);
   
   // Form state
-  // Usernames removed – we only use full names
+  // Separate name fields for proper name handling
+  const [firstName, setFirstName] = useState('');
+  const [surname, setSurname] = useState('');
+  const [otherNames, setOtherNames] = useState('');
+  // fullName is computed from the above for display/legacy purposes
   const [fullName, setFullName] = useState('');
   const [classGroup, setClassGroup] = useState('');
   const [yearGroup, setYearGroup] = useState('');
@@ -87,6 +92,10 @@ export default function EditProfileScreen() {
       if (error) throw error;
       
       if (data) {
+        // Load separate name fields
+        setFirstName(data.first_name || '');
+        setSurname(data.surname || '');
+        setOtherNames(data.other_names || '');
         setFullName(data.full_name || '');
         setClassGroup(data.class || '');
         setYearGroup(data.year_group || '');
@@ -118,6 +127,9 @@ export default function EditProfileScreen() {
 
         // Capture initial snapshot for unsaved changes detection
         setInitialSnapshot({
+          firstName: data.first_name || '',
+          surname: data.surname || '',
+          otherNames: data.other_names || '',
           fullName: data.full_name || '',
           classGroup: data.class || '',
           yearGroup: data.year_group || '',
@@ -240,12 +252,30 @@ export default function EditProfileScreen() {
       return;
     }
     
-    // Basic validation
-    const fullNameTrim = fullName.trim();
-    if (!fullNameTrim) {
-      Alert.alert('Error', 'Full name is required');
+    // Basic validation - require first name and surname
+    const firstNameTrim = firstName.trim();
+    const surnameTrim = surname.trim();
+    const otherNamesTrim = otherNames.trim();
+    
+    if (!firstNameTrim) {
+      Alert.alert('Error', 'First name is required');
       return;
     }
+    if (!surnameTrim) {
+      Alert.alert('Error', 'Surname is required');
+      return;
+    }
+    
+    // Capitalize names properly
+    const capitalizedFirstName = capitalizeName(firstNameTrim);
+    const capitalizedSurname = capitalizeName(surnameTrim);
+    const capitalizedOtherNames = capitalizeName(otherNamesTrim);
+    
+    // Build full name from parts
+    const computedFullName = capitalizedOtherNames
+      ? `${capitalizedFirstName} ${capitalizedOtherNames} ${capitalizedSurname}`
+      : `${capitalizedFirstName} ${capitalizedSurname}`;
+    
     if (graduationYear && !/^\d{4}$/.test(graduationYear)) {
       Alert.alert('Invalid year', 'Graduation year must be a 4-digit year, e.g., 2025.');
       return;
@@ -299,10 +329,31 @@ export default function EditProfileScreen() {
 
     try {
       setSaving(true);
+      
+      // Update auth user metadata so it stays in sync with profile
+      const { error: authError } = await supabase.auth.updateUser({
+        data: {
+          username: `${capitalizedFirstName.toLowerCase()}.${capitalizedSurname.toLowerCase()}`,
+          full_name: computedFullName,
+          first_name: capitalizedFirstName,
+          surname: capitalizedSurname,
+          other_names: capitalizedOtherNames || null,
+          avatar_url: avatarUrl,
+        },
+      });
+      
+      if (authError) {
+        console.warn('Failed to update auth metadata:', authError);
+        // Continue anyway - profile update is more important
+      }
+      
       const { error } = await supabase
         .from('profiles')
         .update({
-          full_name: fullNameTrim,
+          first_name: capitalizedFirstName,
+          surname: capitalizedSurname,
+          other_names: capitalizedOtherNames || null,
+          full_name: computedFullName,
           class: classGroup.trim(),
           year_group: yearGroup.trim(),
           house: house.trim(),
@@ -334,7 +385,10 @@ export default function EditProfileScreen() {
       if (error) throw error;
       // Reset initial snapshot after successful save
       setInitialSnapshot({
-        fullName: fullNameTrim,
+        firstName: capitalizedFirstName,
+        surname: capitalizedSurname,
+        otherNames: capitalizedOtherNames,
+        fullName: computedFullName,
         classGroup: classGroup.trim(),
         yearGroup: yearGroup.trim(),
         house: house.trim(),
@@ -370,6 +424,9 @@ export default function EditProfileScreen() {
   const isDirty = () => {
     if (!initialSnapshot) return false;
     const current = {
+      firstName,
+      surname,
+      otherNames,
       fullName,
       classGroup,
       yearGroup,
@@ -433,7 +490,7 @@ export default function EditProfileScreen() {
   }
 
   return (
-    <View style={styles.container}>
+    <SafeAreaView style={styles.container} edges={['bottom']}>
       {/* Avatar Preview Modal */}
       <Modal
         transparent
@@ -456,8 +513,8 @@ export default function EditProfileScreen() {
 
       <KeyboardAvoidingView 
         style={{ flex: 1 }}
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-        keyboardVerticalOffset={Platform.OS === 'ios' ? 90 : 0}
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        keyboardVerticalOffset={Platform.OS === 'ios' ? 10 : 0}
       >
         <View style={styles.header}>
         <TouchableOpacity 
@@ -486,7 +543,12 @@ export default function EditProfileScreen() {
           <Text style={styles.loadingText}>Loading profile...</Text>
         </View>
       ) : (
-        <ScrollView style={styles.scrollView} showsVerticalScrollIndicator={false}>
+        <ScrollView 
+          style={styles.scrollView} 
+          showsVerticalScrollIndicator={false}
+          keyboardShouldPersistTaps="handled"
+          contentContainerStyle={{ paddingBottom: 40 }}
+        >
           {/* Avatar Card */}
           <View style={styles.card}>
             <Text style={styles.cardTitle}>Profile Photo</Text>
@@ -548,15 +610,46 @@ export default function EditProfileScreen() {
             <Text style={styles.cardTitle}>About</Text>
           <View style={styles.formGroup}>
             <View style={styles.formGroup}>
-              <Text style={styles.label}>Full Name</Text>
+              <Text style={styles.label}>First Name</Text>
               <View style={styles.inputContainer}>
                 <User size={20} color="#666666" />
                 <TextInput
                   style={styles.input}
-                  placeholder="Full Name"
+                  placeholder="First Name"
                   placeholderTextColor="#666666"
-                  value={fullName}
-                  onChangeText={setFullName}
+                  autoCapitalize="words"
+                  value={firstName}
+                  onChangeText={setFirstName}
+                />
+              </View>
+            </View>
+
+            <View style={styles.formGroup}>
+              <Text style={styles.label}>Surname</Text>
+              <View style={styles.inputContainer}>
+                <User size={20} color="#666666" />
+                <TextInput
+                  style={styles.input}
+                  placeholder="Surname"
+                  placeholderTextColor="#666666"
+                  autoCapitalize="words"
+                  value={surname}
+                  onChangeText={setSurname}
+                />
+              </View>
+            </View>
+
+            <View style={styles.formGroup}>
+              <Text style={styles.label}>Other Names (Optional)</Text>
+              <View style={styles.inputContainer}>
+                <User size={20} color="#666666" />
+                <TextInput
+                  style={styles.input}
+                  placeholder="Other Names (e.g., middle names)"
+                  placeholderTextColor="#666666"
+                  autoCapitalize="words"
+                  value={otherNames}
+                  onChangeText={setOtherNames}
                 />
               </View>
             </View>
@@ -795,12 +888,12 @@ export default function EditProfileScreen() {
             </View>
 
             <View style={styles.formGroup}>
-              <Text style={styles.label}>Location</Text>
+              <Text style={styles.label}>Current Location</Text>
               <View style={styles.inputContainer}>
                 <MapPin size={20} color="#666666" />
                 <TextInput
                   style={styles.input}
-                  placeholder="Location (e.g., Accra, Ghana)"
+                  placeholder="Current Location (e.g., Accra, Ghana)"
                   placeholderTextColor="#666666"
                   value={location}
                   onChangeText={setLocation}
@@ -919,7 +1012,7 @@ export default function EditProfileScreen() {
         </ScrollView>
       )}
       </KeyboardAvoidingView>
-    </View>
+    </SafeAreaView>
   );
 }
 

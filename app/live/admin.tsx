@@ -187,7 +187,7 @@ export default function AdminLiveStreamScreen() {
         description: form.description,
         thumbnail_url: form.thumbnail_url,
         stream_url: form.stream_url,
-        host_name: form.host_name || user?.user_metadata?.full_name || 'Admin',
+        host_name: form.host_name || profile?.full_name || user?.user_metadata?.full_name || 'Admin',
         is_live: form.is_live,
         start_time: new Date().toISOString(),
         viewer_count: 0,
