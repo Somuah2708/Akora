@@ -1,6 +1,6 @@
 import { View, Text, StyleSheet, ScrollView, Image, TouchableOpacity, FlatList, Dimensions, Alert, Modal, TextInput, ActivityIndicator, RefreshControl, Image as RNImage, TouchableWithoutFeedback, Platform } from 'react-native';
 import { useFonts, Inter_400Regular, Inter_600SemiBold } from '@expo-google-fonts/inter';
-import { useEffect, useState, useCallback, useRef } from 'react';
+import { useEffect, useState, useCallback, useRef, useMemo } from 'react';
 import { HEADER_COLOR } from '@/constants/Colors';
 import { SplashScreen, useRouter, useFocusEffect } from 'expo-router'
 import { DebouncedTouchable } from '@/components/DebouncedTouchable';
@@ -18,6 +18,9 @@ import NotificationBellIcon from '@/components/NotificationBellIcon';
 import TrendingSection from '@/components/TrendingSection';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { on } from '@/lib/eventBus';
+import { getMemoryCacheSync, setMemoryCacheSync, cacheData } from '@/lib/cache';
+import { CACHE_KEYS } from '@/lib/queries';
+import CachedImage from '@/components/CachedImage';
 
 // Local hub images for Quick Access tabs
 const HUB_IMAGES: Record<string, any> = {
@@ -188,15 +191,31 @@ export default function HomeScreen() {
   const { user, profile } = useAuth();
   const { isMuted, setIsMuted } = useVideoSettings();
   const insets = useSafeAreaInsets();
-  const [posts, setPosts] = useState<PostWithUser[]>([]);
-  const [loading, setLoading] = useState(true);
+  
+  // INSTANT CACHE: Get cached data synchronously (no loading delay)
+  const cachedPosts = useMemo(() => {
+    if (!user?.id) return null;
+    return getMemoryCacheSync<PostWithUser[]>(CACHE_KEYS.homePosts(user.id));
+  }, [user?.id]);
+  
+  const cachedConfig = useMemo(() => {
+    return getMemoryCacheSync<{
+      featured: HomeFeaturedItem[];
+      categoryTabs: HomeCategoryTab[];
+      trendingArticles: TrendingArticle[];
+    }>(CACHE_KEYS.homeConfig());
+  }, []);
+  
+  // Initialize state with cached data if available (INSTANT display)
+  const [posts, setPosts] = useState<PostWithUser[]>(cachedPosts || []);
+  const [loading, setLoading] = useState(!cachedPosts); // No loading if cached
   const [refreshing, setRefreshing] = useState(false);
   const [carouselIndices, setCarouselIndices] = useState<{ [key: string]: number }>({});
   const [mediaAspectRatios, setMediaAspectRatios] = useState<{[key: string]: number}>({});
   const [activeCategoryId, setActiveCategoryId] = useState<string | null>(null);
-  const [featured, setFeatured] = useState<HomeFeaturedItem[]>([]);
-  const [categoryTabs, setCategoryTabs] = useState<HomeCategoryTab[]>([]);
-  const [trendingArticles, setTrendingArticles] = useState<TrendingArticle[]>([]);
+  const [featured, setFeatured] = useState<HomeFeaturedItem[]>(cachedConfig?.featured || []);
+  const [categoryTabs, setCategoryTabs] = useState<HomeCategoryTab[]>(cachedConfig?.categoryTabs || []);
+  const [trendingArticles, setTrendingArticles] = useState<TrendingArticle[]>(cachedConfig?.trendingArticles || []);
   const [failedCategoryImages, setFailedCategoryImages] = useState<Set<string>>(new Set());
   
   // Video viewport detection
@@ -458,11 +477,19 @@ export default function HomeScreen() {
       // Only show posts authored by admins on Home
       const adminOnlyPosts = formattedPosts.filter(p => (p.user?.is_admin === true) || (p.user?.role === 'admin'));
 
-      setPosts(adminOnlyPosts.length > 0 ? adminOnlyPosts : [] as any);
+      const finalPosts = adminOnlyPosts.length > 0 ? adminOnlyPosts : [] as any;
+      setPosts(finalPosts);
+      
+      // Cache posts for instant loading next time
+      if (user?.id && finalPosts.length > 0) {
+        cacheData(CACHE_KEYS.homePosts(user.id), finalPosts, { expiryMinutes: 10 });
+      }
     } catch (error) {
       console.error('Error fetching posts:', error);
-      // On error, show placeholder posts
-      setPosts(PLACEHOLDER_POSTS as any);
+      // On error, show placeholder posts (only if no cached data)
+      if (posts.length === 0) {
+        setPosts(PLACEHOLDER_POSTS as any);
+      }
     } finally {
       setLoading(false);
     }
@@ -516,18 +543,30 @@ export default function HomeScreen() {
           .limit(10),
       ]);
 
-      setFeatured((featRes.data as HomeFeaturedItem[]) || []);
-      setCategoryTabs((tabsRes.data as HomeCategoryTab[]) || []);
-      setTrendingArticles((trendingRes.data as TrendingArticle[]) || []);
+      const featuredData = (featRes.data as HomeFeaturedItem[]) || [];
+      const categoryTabsData = (tabsRes.data as HomeCategoryTab[]) || [];
+      const trendingData = (trendingRes.data as TrendingArticle[]) || [];
       
-      console.log('✅ Trending articles refreshed:', (trendingRes.data as TrendingArticle[])?.length || 0);
+      setFeatured(featuredData);
+      setCategoryTabs(categoryTabsData);
+      setTrendingArticles(trendingData);
+      
+      // Cache config for instant loading next time
+      cacheData(CACHE_KEYS.homeConfig(), {
+        featured: featuredData,
+        categoryTabs: categoryTabsData,
+        trendingArticles: trendingData,
+      }, { expiryMinutes: 15 });
+      
+      console.log('✅ Trending articles refreshed:', trendingData.length);
     } catch (e) {
       console.warn('Failed to load home config, using defaults', e);
-      setFeatured([]);
-      setCategoryTabs([]);
-      setTrendingArticles([]);
+      // Only reset if no cached data
+      if (featured.length === 0) setFeatured([]);
+      if (categoryTabs.length === 0) setCategoryTabs([]);
+      if (trendingArticles.length === 0) setTrendingArticles([]);
     }
-  }, []);
+  }, [featured.length, categoryTabs.length, trendingArticles.length]);
 
   // Search function
   const performSearch = useCallback(async (query: string) => {

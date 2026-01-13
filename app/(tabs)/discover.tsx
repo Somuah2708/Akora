@@ -10,7 +10,7 @@ import type { LucideIcon } from 'lucide-react-native';
 import { useAuth } from '@/hooks/useAuth';
 import { supabase, getDisplayName } from '@/lib/supabase';
 import { fetchDiscoverFeed, type DiscoverItem } from '@/lib/discover';
-import { useDiscoverFeed, useUserInterests, useFriendIds } from '@/lib/queries';
+import { useDiscoverFeed, useUserInterests, useFriendIds, CACHE_KEYS } from '@/lib/queries';
 import { INTEREST_LIBRARY, type InterestCategoryDefinition, type InterestOptionId } from '@/lib/interest-data';
 import CachedImage from '@/components/CachedImage';
 import { Video, ResizeMode, Audio, InterruptionModeIOS, InterruptionModeAndroid } from 'expo-av';
@@ -19,6 +19,7 @@ import ExpandableText from '@/components/ExpandableText';
 import { useVideoSettings } from '@/contexts/VideoSettingsContext';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { on } from '@/lib/eventBus';
+import { getMemoryCacheSync, cacheData } from '@/lib/cache';
 // Using the same simple horizontal ScrollView pattern as the Post detail screen
 
 const { width, height } = Dimensions.get('window');
@@ -183,11 +184,18 @@ export default function DiscoverScreen() {
   const { user } = useAuth();
   const { isMuted, setIsMuted } = useVideoSettings();
   const insets = useSafeAreaInsets();
+  
+  // INSTANT CACHE: Get cached data synchronously (no loading delay)
+  const cachedDiscoverFeed = useMemo(() => {
+    if (!user?.id) return null;
+    return getMemoryCacheSync<DiscoverItem[]>(CACHE_KEYS.discoverFeed(user.id));
+  }, [user?.id]);
+  
   const [activeFilter, setActiveFilter] = useState<'all' | 'friends' | string>('all');
-  const [discoverFeed, setDiscoverFeed] = useState<DiscoverItem[]>([]);
+  const [discoverFeed, setDiscoverFeed] = useState<DiscoverItem[]>(cachedDiscoverFeed || []);
   const [userInterests, setUserInterests] = useState<Set<string>>(new Set());
   const [friendIds, setFriendIds] = useState<Set<string>>(new Set());
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(!cachedDiscoverFeed); // No loading if cached
   const [refreshing, setRefreshing] = useState(false);
   const [carouselIndices, setCarouselIndices] = useState<CarouselIndices>({});
   const [visibleVideos, setVisibleVideos] = useState<Set<string>>(new Set());
@@ -371,9 +379,19 @@ export default function DiscoverScreen() {
           
           console.log('✅ [DISCOVER] Loaded', enriched.length, 'posts (newest first)');
           setDiscoverFeed(enriched);
+          
+          // Cache discover feed for instant loading next time
+          if (enriched.length > 0 && activeFilter === 'all') {
+            cacheData(CACHE_KEYS.discoverFeed(user.id), enriched, { expiryMinutes: 5 });
+          }
         } else {
           console.log('✅ [DISCOVER] Loaded', feed.length, 'items (newest first)');
           setDiscoverFeed(feed);
+          
+          // Cache discover feed for instant loading next time
+          if (feed.length > 0 && activeFilter === 'all') {
+            cacheData(CACHE_KEYS.discoverFeed(user.id), feed, { expiryMinutes: 5 });
+          }
         }
       } else {
         console.log('✅ [DISCOVER] Loaded', feed.length, 'items (no user, newest first)');

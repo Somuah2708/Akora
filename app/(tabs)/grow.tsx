@@ -32,6 +32,9 @@ import { INTEREST_LIBRARY, type InterestOptionId } from '@/lib/interest-data';
 import VisitorActions from '@/components/VisitorActions';
 import { Video, ResizeMode } from 'expo-av';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { getMemoryCacheSync, cacheData } from '@/lib/cache';
+import { CACHE_KEYS } from '@/lib/queries';
+import CachedImage from '@/components/CachedImage';
 
 const { width, height } = Dimensions.get('window');
 const GRID_ITEM_SIZE = (width - 6) / 3;
@@ -63,12 +66,24 @@ const ProfileScreen = React.memo(function ProfileScreen() {
   const viewingUserId = user?.id || '';
   const isOwner = true; // Always viewing own profile in this tab
   const toast = useToast();
+  
+  // INSTANT CACHE: Get cached data synchronously (no loading delay)
+  const cachedUserPosts = useMemo(() => {
+    if (!viewingUserId) return null;
+    return getMemoryCacheSync<any[]>(CACHE_KEYS.userPosts(viewingUserId));
+  }, [viewingUserId]);
+  
+  const cachedSavedPosts = useMemo(() => {
+    if (!viewingUserId) return null;
+    return getMemoryCacheSync<any[]>(CACHE_KEYS.savedPosts(viewingUserId));
+  }, [viewingUserId]);
+  
   const [activeTab, setActiveTab] = useState<'grid' | 'saved'>('grid');
-  const [userPosts, setUserPosts] = useState<any[]>([]);
-  const [savedPosts, setSavedPosts] = useState<any[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [userPosts, setUserPosts] = useState<any[]>(cachedUserPosts || []);
+  const [savedPosts, setSavedPosts] = useState<any[]>(cachedSavedPosts || []);
+  const [loading, setLoading] = useState(!cachedUserPosts); // No loading if cached
   const [stats, setStats] = useState({
-    posts: 0,
+    posts: cachedUserPosts?.length || 0,
     friends: 0,
   });
   const [userInterests, setUserInterests] = useState<Set<InterestOptionId>>(new Set());
@@ -171,6 +186,11 @@ const ProfileScreen = React.memo(function ProfileScreen() {
 
       setUserPosts(posts || []);
       setStats(prev => ({ ...prev, posts: posts?.length || 0 }));
+      
+      // Cache user posts for instant loading next time
+      if (posts && posts.length > 0) {
+        cacheData(CACHE_KEYS.userPosts(viewingUserId), posts, { expiryMinutes: 10 });
+      }
 
       // Fetch user's saved/bookmarked posts
       if (isOwner) {
@@ -185,6 +205,11 @@ const ProfileScreen = React.memo(function ProfileScreen() {
             .map((b: any) => Array.isArray(b.posts) ? b.posts[0] : b.posts)
             .filter(Boolean);
           setSavedPosts(mapped);
+          
+          // Cache saved posts for instant loading next time
+          if (mapped.length > 0) {
+            cacheData(CACHE_KEYS.savedPosts(viewingUserId), mapped, { expiryMinutes: 10 });
+          }
         } else {
           setSavedPosts([]);
         }

@@ -15,6 +15,7 @@ import { debouncedRouter } from '@/utils/navigationDebounce';
 import { StatusBar } from 'expo-status-bar';
 import { QueryClientProvider } from '@tanstack/react-query';
 import { queryClient } from '@/lib/queryClient';
+import { preloadAppCaches } from '@/lib/queries';
 import { useFrameworkReady } from '@/hooks/useFrameworkReady';
 import { useAuth } from '@/hooks/useAuth';
 import { ToastProvider } from '@/components/Toast';
@@ -38,6 +39,14 @@ function RootLayout() {
   const router = useRouter();
   const navigationTimeoutRef = useRef<any>();
   const previousUserRef = useRef(user);
+
+  // Preload caches when user logs in for instant data display
+  useEffect(() => {
+    if (user?.id && !loading) {
+      console.log('⚡ Preloading app caches for instant display...');
+      preloadAppCaches(user.id).catch(console.warn);
+    }
+  }, [user?.id, loading]);
 
   // Register push notifications when user logs in
   useEffect(() => {

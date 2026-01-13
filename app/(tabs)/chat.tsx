@@ -1,7 +1,7 @@
 import { View, Text, StyleSheet, ScrollView, Image, TouchableOpacity, TextInput, Modal, FlatList, Alert, RefreshControl, ActivityIndicator } from 'react-native';
 import { Search, Plus, MoveVertical as MoreVertical, X, MessageCircle, UserPlus, Check, CheckCheck, Users, ArrowLeft, Circle } from 'lucide-react-native';
 import { useFonts, Inter_400Regular, Inter_600SemiBold } from '@expo-google-fonts/inter';
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useMemo } from 'react';
 import { SplashScreen, useRouter } from 'expo-router'
 import { DebouncedTouchable } from '@/components/DebouncedTouchable';
 import { debouncedRouter } from '@/utils/navigationDebounce';;
@@ -15,6 +15,9 @@ import { formatChatListTime } from '@/lib/timeUtils';
 import type { Profile } from '@/lib/supabase';
 import { getDisplayName } from '@/lib/supabase';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { getMemoryCacheSync, cacheData } from '@/lib/cache';
+import { CACHE_KEYS } from '@/lib/queries';
+import CachedImage from '@/components/CachedImage';
 
 // Cache freshness threshold (5 minutes)
 const CACHE_FRESHNESS_MS = 5 * 60 * 1000;
@@ -38,12 +41,25 @@ export default function ChatScreen() {
   const { user } = useAuth();
   const insets = useSafeAreaInsets();
   console.log('👤 ChatScreen user:', user?.id || 'no user');
-  const [conversations, setConversations] = useState<Conversation[]>([]);
-  const [loading, setLoading] = useState(true);
+  
+  // INSTANT CACHE: Get cached data synchronously (no loading delay)
+  const cachedConversations = useMemo(() => {
+    if (!user?.id) return null;
+    return getMemoryCacheSync<Conversation[]>(CACHE_KEYS.conversations(user.id));
+  }, [user?.id]);
+  
+  const cachedGroups = useMemo(() => {
+    if (!user?.id) return null;
+    return getMemoryCacheSync<any[]>(CACHE_KEYS.groups(user.id));
+  }, [user?.id]);
+  
+  // Initialize state with cached data if available (INSTANT display)
+  const [conversations, setConversations] = useState<Conversation[]>(cachedConversations || []);
+  const [loading, setLoading] = useState(!cachedConversations); // No loading if cached
   // Groups state
   type GroupItem = { group: { id: string; name: string; avatar_url?: string | null }, lastMessage: any | null, unreadCount: number, isCircle?: boolean };
-  const [groups, setGroups] = useState<GroupItem[]>([]);
-  const [groupsLoading, setGroupsLoading] = useState(true);
+  const [groups, setGroups] = useState<GroupItem[]>(cachedGroups || []);
+  const [groupsLoading, setGroupsLoading] = useState(!cachedGroups);
   const [supportConversations, setSupportConversations] = useState<any[]>([]);
   const [isAdmin, setIsAdmin] = useState(false);
   const [searchModalVisible, setSearchModalVisible] = useState(false);
@@ -398,11 +414,19 @@ export default function ChatScreen() {
       if (showLoading) setLoading(true);
       const convos = await getConversationList(user.id);
       setConversations(convos);
+      
+      // Cache conversations for instant loading next time
+      if (convos.length > 0) {
+        cacheData(CACHE_KEYS.conversations(user.id), convos, { expiryMinutes: 5 });
+      }
   // After loading conversations, refresh typing subscriptions
   // handled by effect watching conversations.length
     } catch (error) {
       console.error('Error fetching conversations:', error);
-      Alert.alert('Error', 'Failed to load conversations');
+      // Only show alert if no cached data available
+      if (conversations.length === 0) {
+        Alert.alert('Error', 'Failed to load conversations');
+      }
     } finally {
       if (showLoading) setLoading(false);
     }
@@ -547,6 +571,11 @@ export default function ChatScreen() {
       );
       base.sort((a, b) => new Date(b.lastMessage?.created_at || 0).getTime() - new Date(a.lastMessage?.created_at || 0).getTime());
       setGroups(base);
+      
+      // Cache groups for instant loading next time
+      if (base.length > 0) {
+        cacheData(CACHE_KEYS.groups(user.id), base, { expiryMinutes: 5 });
+      }
     } catch (e) {
       console.error('Error fetching groups', e);
     } finally {

@@ -1,4 +1,5 @@
-import { View, Text, StyleSheet, ScrollView, Image, TouchableOpacity, TextInput, Dimensions, RefreshControl, ActivityIndicator } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, TextInput, Dimensions, RefreshControl, ActivityIndicator } from 'react-native';
+import { Image } from 'expo-image';
 import { useFonts, Inter_400Regular, Inter_600SemiBold } from '@expo-google-fonts/inter';
 import { useEffect, useState, useCallback } from 'react';
 import { SplashScreen, useRouter } from 'expo-router'
@@ -196,7 +197,7 @@ export default function HubScreen() {
         {/* FIX: Dark background filler for pull-to-refresh gap */}
         <View style={{ position: 'absolute', top: -1000, left: 0, right: 0, height: 1000, backgroundColor: HEADER_COLOR }} />
 
-        <View style={[styles.header, { paddingTop: insets.top + 16, marginTop: -200, paddingTop: insets.top + 216 }]}>
+        <View style={[styles.header, { marginTop: -200, paddingTop: insets.top + 216 }]}>
           <Text style={styles.title}>Hub</Text>
           <Text style={styles.subtitle}>Connect, grow, and engage with the community</Text>
         </View>
@@ -213,7 +214,14 @@ export default function HubScreen() {
                   style={styles.gridItem}
                   onPress={() => item.route && debouncedRouter.push(item.route)}
                 >
-                  <Image source={item.isLocal ? item.image : { uri: item.image }} style={styles.itemImage} />
+                  <Image 
+                    source={item.isLocal ? item.image : { uri: item.image }} 
+                    style={styles.itemImage}
+                    contentFit="cover"
+                    transition={150}
+                    cachePolicy="memory-disk"
+                    priority={item.id <= '4' ? 'high' : 'normal'}
+                  />
                   <View style={styles.itemContent}>
                     <View style={styles.iconContainer}>
                       <IconComponent size={24} color="#FFFFFF" strokeWidth={1.5} />
@@ -238,7 +246,14 @@ export default function HubScreen() {
                   style={styles.gridItem}
                   onPress={() => item.route && debouncedRouter.push(item.route)}
                 >
-                  <Image source={item.isLocal ? item.image : { uri: item.image }} style={styles.itemImage} />
+                  <Image 
+                    source={item.isLocal ? item.image : { uri: item.image }} 
+                    style={styles.itemImage}
+                    contentFit="cover"
+                    transition={150}
+                    cachePolicy="memory-disk"
+                    priority={item.id <= '4' ? 'high' : 'normal'}
+                  />
                   <View style={styles.itemContent}>
                     <View style={styles.iconContainer}>
                       <IconComponent size={24} color="#FFFFFF" strokeWidth={1.5} />
