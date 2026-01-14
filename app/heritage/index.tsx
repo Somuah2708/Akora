@@ -1,11 +1,9 @@
-import { View, Text, StyleSheet, ScrollView, Image, TouchableOpacity, Dimensions, ActivityIndicator, FlatList, Linking, StatusBar } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, Image, TouchableOpacity, Dimensions, StatusBar } from 'react-native';
 import { useFonts, Inter_400Regular, Inter_600SemiBold, Inter_700Bold } from '@expo-google-fonts/inter';
-import { useEffect, useState, useCallback } from 'react';
-import { SplashScreen, useRouter, useFocusEffect } from 'expo-router'
-import { DebouncedTouchable } from '@/components/DebouncedTouchable';
+import { useEffect } from 'react';
+import { SplashScreen, useRouter } from 'expo-router'
 import { debouncedRouter } from '@/utils/navigationDebounce';;
-import { ArrowLeft, History, Book, GraduationCap, Globe, Users, Star, ChevronRight, Flag, Award, Building2, Plus, Calendar, Crown, Sparkles, TrendingUp, Heart, Music, Briefcase, Scale, Microscope, MapPin } from 'lucide-react-native';
-import { supabase } from '@/lib/supabase';
+import { ArrowLeft, History, Book, GraduationCap, Globe, Users, Star, ChevronRight, Flag, Award, Building2, Calendar, Crown, Sparkles, TrendingUp, Heart, Music, Briefcase, Scale, Microscope, MapPin } from 'lucide-react-native';
 import { useAuth } from '@/hooks/useAuth';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -64,31 +62,31 @@ const HISTORICAL_MILESTONES = [
   {
     year: '1920',
     event: 'Governor Guggisberg meets Dr. James Aggrey, laying groundwork for Achimota',
-    image: 'https://upload.wikimedia.org/wikipedia/commons/thumb/3/37/Gordon_Guggisberg.jpg/440px-Gordon_Guggisberg.jpg',
+    image: 'https://upload.wikimedia.org/wikipedia/commons/3/37/Gordon_Guggisberg.jpg',
     description: 'The Phelps Stokes Commission visits Gold Coast',
   },
   {
     year: '1924',
     event: 'Foundation Stone Laid',
-    image: 'https://upload.wikimedia.org/wikipedia/commons/thumb/b/b9/Achimota_School_Assembly_Hall.jpg/440px-Achimota_School_Assembly_Hall.jpg',
+    image: 'https://upload.wikimedia.org/wikipedia/commons/b/b9/Achimota_School_Assembly_Hall.jpg',
     description: 'Construction begins on Prince of Wales College and School',
   },
   {
     year: '1927',
     event: 'Official Opening by Prince of Wales',
-    image: 'https://upload.wikimedia.org/wikipedia/commons/thumb/3/30/Achimota_School_Clock_Tower.jpg/440px-Achimota_School_Clock_Tower.jpg',
+    image: 'https://upload.wikimedia.org/wikipedia/commons/3/30/Achimota_School_Clock_Tower.jpg',
     description: 'School opens on 28 January with Edward VIII, Prince of Wales, as guest of honor',
   },
   {
     year: '1948',
     event: 'Birth of University of Ghana',
-    image: 'https://images.unsplash.com/photo-1541339907198-e08756dedf3f?w=800&auto=format&fit=crop&q=60',
+    image: 'https://upload.wikimedia.org/wikipedia/commons/3/3a/Great_hall_university_of_Ghana.jpg',
     description: 'University College of Gold Coast established at Achimota, later becoming University of Ghana',
   },
   {
     year: '2003',
     event: 'Ranked Among Africa\'s Top Schools',
-    image: 'https://images.unsplash.com/photo-1523050854058-8df90110c9f1?w=800&auto=format&fit=crop&q=60',
+    image: 'https://upload.wikimedia.org/wikipedia/commons/b/b9/Achimota_School_Assembly_Hall.jpg',
     description: 'Listed in Africa\'s Top 100 High Schools by Africa Almanac',
   },
 ];
@@ -98,42 +96,42 @@ const NOTABLE_ALUMNI = [
     name: 'Kwame Nkrumah',
     role: 'First President of Ghana',
     category: 'Political Leader',
-    image: 'https://upload.wikimedia.org/wikipedia/commons/thumb/4/4c/Kwame_Nkrumah_%281962%29.jpg/440px-Kwame_Nkrumah_%281962%29.jpg',
+    image: 'https://upload.wikimedia.org/wikipedia/commons/4/4c/Kwame_Nkrumah_%281962%29.jpg',
     description: 'Founding father of Ghana and leading Pan-Africanist',
   },
   {
     name: 'Edward Akufo-Addo',
     role: 'President of Ghana (1969-72)',
     category: 'Political Leader',
-    image: 'https://upload.wikimedia.org/wikipedia/commons/thumb/2/2d/Edward_Akufo-Addo.jpg/440px-Edward_Akufo-Addo.jpg',
+    image: 'https://upload.wikimedia.org/wikipedia/commons/2/2d/Edward_Akufo-Addo.jpg',
     description: 'Second Republic President',
   },
   {
     name: 'Jerry John Rawlings',
     role: 'President of Ghana (1993-2001)',
     category: 'Political Leader',
-    image: 'https://upload.wikimedia.org/wikipedia/commons/thumb/2/2c/Jerry_Rawlings_1993.jpg/440px-Jerry_Rawlings_1993.jpg',
+    image: 'https://upload.wikimedia.org/wikipedia/commons/2/2c/Jerry_Rawlings_1993.jpg',
     description: 'Fourth Republic President',
   },
   {
     name: 'John Atta Mills',
     role: 'President of Ghana (2009-12)',
     category: 'Political Leader',
-    image: 'https://images.unsplash.com/photo-1560250097-0b93528c311a?w=400&auto=format&fit=crop&q=60',
+    image: 'https://upload.wikimedia.org/wikipedia/commons/9/9f/John_Atta_Mills.jpg',
     description: 'Fourth Republic President',
   },
   {
     name: 'Robert Mugabe',
     role: 'President of Zimbabwe',
     category: 'Political Leader',
-    image: 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=400&auto=format&fit=crop&q=60',
+    image: 'https://upload.wikimedia.org/wikipedia/commons/4/4e/Robert_Mugabe_Official_Portrait_%284x5_cropped%29.jpg',
     description: 'Former President of Zimbabwe',
   },
   {
     name: 'Kofi Abrefa Busia',
     role: 'Prime Minister of Ghana',
     category: 'Political Leader',
-    image: 'https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?w=400&auto=format&fit=crop&q=60',
+    image: 'https://upload.wikimedia.org/wikipedia/commons/8/81/Kofi_Busia_-_John_Agyekum_Kufuor_and_photo_of_Kofi_Busia_%28cropped%29.jpg',
     description: 'Second Republic Prime Minister',
   },
 ];
@@ -217,113 +215,6 @@ export default function HeritageScreen() {
       SplashScreen.hideAsync();
     }
   }, [fontsLoaded]);
-
-  const [loadingHistory, setLoadingHistory] = useState(false);
-  const [historyItems, setHistoryItems] = useState<any[]>([]);
-  const [filterMine, setFilterMine] = useState<'all' | 'mine'>('all');
-  const [filterType, setFilterType] = useState<'all' | 'images' | 'docs'>('all');
-
-  const fetchHistoryItems = async () => {
-    try {
-      setLoadingHistory(true);
-      let q = supabase
-        .from('history_items')
-        .select(`
-          id, user_id, title, description, is_public, created_at,
-          profiles:user_id ( id, full_name, avatar_url ),
-          history_item_files ( id, file_path, file_name, mime_type, created_at )
-        `)
-        .order('created_at', { ascending: false });
-      if (user?.id) {
-        // show public items plus items owned by the current user
-        q = q.or(`is_public.eq.true,user_id.eq.${user.id}`);
-      } else {
-        q = q.eq('is_public', true);
-      }
-      const { data, error } = await q;
-      if (error) throw error;
-      if (!data) {
-        setHistoryItems([]);
-        return;
-      }
-
-      // Resolve public URLs from storage (bucket: 'media')
-      const resolved = await Promise.all(data.map(async (item: any) => {
-        try {
-          const profile = Array.isArray(item.profiles) ? item.profiles[0] : item.profiles;
-          const files = Array.isArray(item.history_item_files) ? item.history_item_files : [];
-          const withUrls = files.map((f: any) => {
-            const { data: pub } = supabase.storage.from('media').getPublicUrl(f.file_path);
-            return { ...f, file_url: pub?.publicUrl ?? null };
-          });
-          return { ...item, files: withUrls, profile };
-        } catch (e) {
-          const profile = Array.isArray(item.profiles) ? item.profiles[0] : item.profiles;
-          const files = Array.isArray(item.history_item_files) ? item.history_item_files : [];
-          return { ...item, files, profile };
-        }
-      }));
-      setHistoryItems(resolved);
-    } catch (e) {
-      console.error('Failed to fetch history items', e);
-    } finally {
-      setLoadingHistory(false);
-    }
-  };
-
-  useEffect(() => {
-    fetchHistoryItems();
-  }, [user?.id]);
-
-  // Refresh when screen gains focus (e.g., after adding a new item)
-  useFocusEffect(
-    useCallback(() => {
-      fetchHistoryItems();
-      return () => {};
-    }, [user?.id])
-  );
-
-  // Realtime updates for history_items (insert/update/delete)
-  useEffect(() => {
-    const channel = supabase
-      .channel('history_items_changes')
-      .on(
-        'postgres_changes',
-        { event: '*', schema: 'public', table: 'history_items' },
-        async (payload) => {
-          try {
-            if (payload.eventType === 'INSERT' || payload.eventType === 'UPDATE') {
-              const item: any = payload.new;
-              const { data: pub } = supabase.storage.from('media').getPublicUrl(item.file_path);
-              const enriched = { ...item, file_url: pub?.publicUrl ?? null };
-              setHistoryItems((prev) => {
-                const idx = prev.findIndex((x) => x.id === enriched.id);
-                if (idx === -1) {
-                  const next = [enriched, ...prev];
-                  next.sort((a, b) => new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime());
-                  return next;
-                }
-                const next = [...prev];
-                next[idx] = enriched;
-                next.sort((a, b) => new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime());
-                return next;
-              });
-            } else if (payload.eventType === 'DELETE') {
-              const item: any = payload.old;
-              setHistoryItems((prev) => prev.filter((x) => x.id !== item.id));
-            }
-          } catch (e) {
-            console.warn('history_items realtime handler error', e);
-          }
-        }
-      )
-      .subscribe();
-
-    return () => {
-      try { channel.unsubscribe(); } catch {}
-      try { supabase.removeChannel(channel); } catch {}
-    };
-  }, [user?.id]);
 
   if (!fontsLoaded) {
     return null;
@@ -589,6 +480,49 @@ export default function HeritageScreen() {
           </ScrollView>
         </View>
 
+        {/* Virtual Museum */}
+        <View style={styles.section}>
+          <View style={styles.sectionHeader}>
+            <View style={styles.sectionTitleContainer}>
+              <View style={styles.sectionIconBg}>
+                <Building2 size={20} color="#ffc857" />
+              </View>
+              <Text style={styles.sectionTitle}>Virtual Museum</Text>
+            </View>
+          </View>
+
+          <TouchableOpacity 
+            style={styles.museumCard}
+            onPress={() => debouncedRouter.push('/museum')}
+            activeOpacity={0.8}
+          >
+            <Image 
+              source={require('@/assets/images/heritage/museum.png')}
+              style={styles.museumBackgroundImage}
+              resizeMode="cover"
+            />
+            <LinearGradient
+              colors={['rgba(30, 41, 59, 0.6)', 'rgba(15, 23, 42, 0.75)']}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 0, y: 1 }}
+              style={styles.museumGradient}
+            >
+              <View style={styles.museumIconContainer}>
+                <Building2 size={48} color="#ffc857" />
+              </View>
+              <Text style={styles.museumTitle}>Explore Our Heritage</Text>
+              <Text style={styles.museumDescription}>
+                Step into our virtual museum and discover artifacts, documents, photographs, 
+                and stories that tell the rich history of Achimota School.
+              </Text>
+              <View style={styles.museumButton}>
+                <Text style={styles.museumButtonText}>Enter Museum</Text>
+                <ChevronRight size={20} color="#FFFFFF" />
+              </View>
+            </LinearGradient>
+          </TouchableOpacity>
+        </View>
+
         {/* Legacy Statement */}
         <View style={styles.section}>
           <LinearGradient
@@ -606,119 +540,7 @@ export default function HeritageScreen() {
               who have transformed Ghana, Africa, and the world. From presidents to innovators, 
               our alumni embody the spirit of "Ut Omnes Unum Sint."
             </Text>
-            <TouchableOpacity style={styles.legacyButton}>
-              <Text style={styles.legacyButtonText}>Explore Our Impact</Text>
-              <TrendingUp size={18} color="#FFFFFF" />
-            </TouchableOpacity>
           </LinearGradient>
-        </View>
-
-        {/* Shared History Section */}
-        <View style={styles.section}>
-          <View style={styles.sectionHeader}>
-            <View style={styles.sectionTitleContainer}>
-              <View style={styles.sectionIconBg}>
-                <Users size={20} color="#ffc857" />
-              </View>
-              <Text style={styles.sectionTitle}>Community Contributions</Text>
-            </View>
-          </View>
-          
-          {loadingHistory ? (
-            <View style={styles.loadingContainer}>
-              <ActivityIndicator size="large" color="#ffc857" />
-              <Text style={styles.loadingText}>Loading shared history...</Text>
-            </View>
-          ) : historyItems.length === 0 ? (
-            <View style={styles.emptyState}>
-              <History size={48} color="#D1D5DB" />
-              <Text style={styles.emptyTitle}>No Shared Items Yet</Text>
-              <Text style={styles.emptyText}>Be the first to share a piece of Achimota's rich history</Text>
-              {user && (
-                <TouchableOpacity 
-                  style={styles.emptyButton}
-                  onPress={() => debouncedRouter.push('/heritage/add')}
-                >
-                  <Plus size={20} color="#FFFFFF" />
-                  <Text style={styles.emptyButtonText}>Add History</Text>
-                </TouchableOpacity>
-              )}
-            </View>
-          ) : (
-            <>
-              <View style={styles.filtersRow}>
-                <TouchableOpacity onPress={() => setFilterMine('all')} style={[styles.filterChip, filterMine === 'all' && styles.filterChipActive]}>
-                  <Text style={[styles.filterText, filterMine === 'all' && styles.filterTextActive]}>All</Text>
-                </TouchableOpacity>
-                {user && (
-                  <TouchableOpacity onPress={() => setFilterMine('mine')} style={[styles.filterChip, filterMine === 'mine' && styles.filterChipActive]}>
-                    <Text style={[styles.filterText, filterMine === 'mine' && styles.filterTextActive]}>Mine</Text>
-                  </TouchableOpacity>
-                )}
-                <View style={{ width: 12 }} />
-                <TouchableOpacity onPress={() => setFilterType('all')} style={[styles.filterChip, filterType === 'all' && styles.filterChipActive]}>
-                  <Text style={[styles.filterText, filterType === 'all' && styles.filterTextActive]}>All Types</Text>
-                </TouchableOpacity>
-                <TouchableOpacity onPress={() => setFilterType('images')} style={[styles.filterChip, filterType === 'images' && styles.filterChipActive]}>
-                  <Text style={[styles.filterText, filterType === 'images' && styles.filterTextActive]}>Images</Text>
-                </TouchableOpacity>
-                <TouchableOpacity onPress={() => setFilterType('docs')} style={[styles.filterChip, filterType === 'docs' && styles.filterChipActive]}>
-                  <Text style={[styles.filterText, filterType === 'docs' && styles.filterTextActive]}>Docs</Text>
-                </TouchableOpacity>
-              </View>
-              <FlatList
-                data={historyItems}
-                keyExtractor={(item) => item.id}
-                horizontal
-                showsHorizontalScrollIndicator={false}
-                contentContainerStyle={{ paddingHorizontal: 16, gap: 12 }}
-                renderItem={({ item }) => {
-                  if (filterMine === 'mine' && user?.id && item.user_id !== user.id) return null;
-                  if (filterType !== 'all') {
-                    const hasImage = Array.isArray(item.files) && item.files.some((f: any) => (f.mime_type || '').startsWith('image'));
-                    const isDocsOnly = Array.isArray(item.files) && item.files.length > 0 && !hasImage;
-                    if (filterType === 'images' && !hasImage) return null;
-                    if (filterType === 'docs' && !isDocsOnly) return null;
-                  }
-                  return (
-                    <TouchableOpacity
-                      style={styles.historyCard}
-                      onPress={() => {
-                        if (item.files && item.files[0]?.file_url) Linking.openURL(item.files[0].file_url);
-                      }}
-                    >
-                      <View style={styles.uploaderRow}>
-                        <Image
-                          source={{ uri: item.profile?.avatar_url || 'https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?w=200&auto=format&fit=crop&q=60' }}
-                          style={styles.uploaderAvatar}
-                        />
-                        <Text style={styles.uploaderName} numberOfLines={1}>{item.profile?.full_name || 'Akora Member'}</Text>
-                      </View>
-                      {Array.isArray(item.files) && item.files.find((f: any) => (f.mime_type || '').startsWith('image')) ? (
-                        <View>
-                          <Image source={{ uri: (item.files.find((f: any) => (f.mime_type || '').startsWith('image'))?.file_url) || undefined }} style={styles.historyImage} />
-                          {item.files.length > 1 && (
-                            <View style={styles.fileCountBadge}><Text style={styles.fileCountText}>{item.files.length}</Text></View>
-                          )}
-                        </View>
-                      ) : (
-                        <View style={styles.docPlaceholder}>
-                          <Text style={{ color: '#374151' }}>{item.files?.[0]?.file_name || 'Document'}</Text>
-                          {item.files?.length > 1 && (
-                            <View style={[styles.fileCountBadge, { position: 'relative', marginTop: 8 }]}><Text style={styles.fileCountText}>{item.files.length}</Text></View>
-                          )}
-                        </View>
-                      )}
-                      <View style={{ padding: 8 }}>
-                        <Text style={{ fontFamily: 'Inter-SemiBold' }}>{item.title || 'Untitled'}</Text>
-                        {item.description ? <Text style={{ color: '#6B7280', marginTop: 4 }} numberOfLines={2}>{item.description}</Text> : null}
-                      </View>
-                    </TouchableOpacity>
-                  );
-                }}
-              />
-            </>
-          )}
         </View>
 
         <View style={{ height: 40 }} />
@@ -1335,6 +1157,65 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontFamily: 'Inter-SemiBold',
     color: '#FFFFFF',
+  },
+
+  // Virtual Museum Card
+  museumCard: {
+    borderRadius: 20,
+    overflow: 'hidden',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.15,
+    shadowRadius: 16,
+    elevation: 8,
+    position: 'relative',
+  },
+  museumBackgroundImage: {
+    position: 'absolute',
+    width: '100%',
+    height: '100%',
+  },
+  museumGradient: {
+    padding: 32,
+    alignItems: 'center',
+  },
+  museumIconContainer: {
+    width: 80,
+    height: 80,
+    borderRadius: 40,
+    backgroundColor: 'rgba(255, 200, 87, 0.1)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 20,
+  },
+  museumTitle: {
+    fontSize: 26,
+    fontFamily: 'Inter-Bold',
+    color: '#FFFFFF',
+    marginBottom: 12,
+    textAlign: 'center',
+  },
+  museumDescription: {
+    fontSize: 15,
+    fontFamily: 'Inter-Regular',
+    color: '#CBD5E1',
+    textAlign: 'center',
+    lineHeight: 22,
+    marginBottom: 24,
+  },
+  museumButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#ffc857',
+    paddingHorizontal: 24,
+    paddingVertical: 14,
+    borderRadius: 12,
+    gap: 8,
+  },
+  museumButtonText: {
+    fontSize: 16,
+    fontFamily: 'Inter-SemiBold',
+    color: '#1E293B',
   },
 
   // History Cards (Community Contributions)
