@@ -66,16 +66,24 @@ export default function DonationDetailsScreen() {
         .from('donations')
         .select('*')
         .eq('id', id)
-        .single();
+        .maybeSingle();
 
-      if (donationError) throw donationError;
+      if (donationError) {
+        console.error('Error fetching donation:', donationError);
+        return;
+      }
+
+      if (!donationData) {
+        console.error('No donation found with id:', id);
+        return;
+      }
 
       // Fetch campaign title
       const { data: campaignData } = await supabase
         .from('donation_campaigns')
         .select('title')
         .eq('id', donationData.campaign_id)
-        .single();
+        .maybeSingle();
 
       // Fetch donor profile if not anonymous
       let donorProfile = null;
@@ -84,7 +92,7 @@ export default function DonationDetailsScreen() {
           .from('profiles')
           .select('full_name, avatar_url')
           .eq('id', donationData.user_id)
-          .single();
+          .maybeSingle();
         donorProfile = profileData;
       }
 

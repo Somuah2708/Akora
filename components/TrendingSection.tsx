@@ -217,7 +217,8 @@ export default function TrendingSection({ isAdmin, onAddPress, onLongPress }: Tr
           debouncedRouter.push(`/events/${item.item_id}`);
           break;
         case 'donation':
-          debouncedRouter.push(`/donation/donation-details?id=${item.item_id}`);
+          // Navigate to campaign detail, not donation detail
+          debouncedRouter.push(`/donation/campaign/${item.item_id}`);
           break;
         case 'forum':
           debouncedRouter.push(`/forum/${item.item_id}`);
@@ -467,7 +468,7 @@ const styles = StyleSheet.create({
     paddingBottom: 4,
   },
   card: {
-    width: 180,
+    width: 220,
     borderRadius: 20,
     overflow: 'hidden',
     shadowColor: '#000',
@@ -480,8 +481,8 @@ const styles = StyleSheet.create({
     backgroundColor: '#FFFFFF',
     borderRadius: 20,
     overflow: 'hidden',
-    borderWidth: 1,
-    borderColor: '#E2E8F0',
+    borderWidth: 1.5,
+    borderColor: '#ffc857',
   },
   imageContainer: {
     width: '100%',

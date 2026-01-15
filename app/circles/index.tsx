@@ -61,7 +61,7 @@ interface JoinRequest {
 }
 
 // Tier System: Define which categories are admin-only vs user-created
-const ADMIN_ONLY_CATEGORIES = ['Year Groups', 'Class Pages', 'House Groups'];
+const ADMIN_ONLY_CATEGORIES = ['Year Groups', 'Class Pages', 'House Groups', 'Centenary', 'Chapters'];
 const USER_CATEGORIES = ['Fun Clubs', 'Study Groups', 'Sports', 'Arts'];
 const ALL_CATEGORIES = ['All', ...ADMIN_ONLY_CATEGORIES, ...USER_CATEGORIES];
 
@@ -791,11 +791,11 @@ export default function CirclesScreen() {
           
           <View style={styles.circleInfo}>
             <View style={styles.circleTitleRow}>
-              <Text style={styles.circleTitle}>{circle.name}</Text>
+              <Text style={styles.circleTitle} numberOfLines={1}>{circle.name}</Text>
               {isOfficialCircle && (
-                <CheckCircle size={18} color="#ffc857" style={{ marginLeft: 6 }} />
+                <CheckCircle size={18} color="#ffc857" style={{ marginLeft: 4, flexShrink: 0 }} />
               )}
-              {circle.is_private && <Lock size={16} color="#666" style={{ marginLeft: 4 }} />}
+              {circle.is_private && <Lock size={16} color="#666" style={{ marginLeft: 4, flexShrink: 0 }} />}
             </View>
             <View style={styles.categoryBadgeRow}>
               <View style={[styles.categoryBadge, isOfficialCircle && styles.officialCategoryBadge]}>
@@ -1480,17 +1480,21 @@ const styles = StyleSheet.create({
   },
   circleInfo: {
     flex: 1,
+    overflow: 'hidden',
   },
   circleTitleRow: {
     flexDirection: 'row',
     alignItems: 'center',
     marginBottom: 4,
+    flexWrap: 'nowrap',
   },
   circleTitle: {
     fontSize: 18,
     fontWeight: 'bold',
     color: '#333',
-    marginRight: 8,
+    marginRight: 6,
+    flex: 1,
+    flexShrink: 1,
   },
   circleCategory: {
     fontSize: 14,
