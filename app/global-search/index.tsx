@@ -248,7 +248,7 @@ export default function GlobalSearchScreen() {
         debouncedRouter.push(`/post-comments/${result.id}`);
         break;
       case 'article':
-        debouncedRouter.push(`/trending-article/${result.id}`);
+        debouncedRouter.push(`/news`);
         break;
       case 'product':
         debouncedRouter.push(`/product-details/${result.id}`);

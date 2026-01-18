@@ -2,15 +2,14 @@ import { View, Text, StyleSheet, TextInput, TouchableOpacity, ScrollView, Image,
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFonts, Inter_400Regular, Inter_600SemiBold } from '@expo-google-fonts/inter';
 import { useEffect, useState } from 'react';
-import { SplashScreen, useRouter } from 'expo-router'
+import { useRouter } from 'expo-router'
 import { DebouncedTouchable } from '@/components/DebouncedTouchable';
 import { debouncedRouter } from '@/utils/navigationDebounce';;
 import { Eye, EyeOff, Mail, Lock, User, GraduationCap, Calendar, Chrome as Home, MapPin, Phone, Briefcase, Building, ArrowLeft, Camera } from 'lucide-react-native';
 import { useAuth } from '@/hooks/useAuth';
 import { supabase, capitalizeName, AVATAR_BUCKET } from '@/lib/supabase';
 import * as ImagePicker from 'expo-image-picker';
-
-SplashScreen.preventAutoHideAsync();
+import { hideSplashScreen } from '@/lib/splashScreen';
 
 // House options for dropdown
 const HOUSES = [
@@ -92,7 +91,7 @@ export default function SignUpScreen() {
 
   useEffect(() => {
     if (fontsLoaded) {
-      SplashScreen.hideAsync();
+      hideSplashScreen();
     }
   }, [fontsLoaded]);
 

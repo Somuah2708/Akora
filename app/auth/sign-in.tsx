@@ -2,13 +2,12 @@ import { View, Text, StyleSheet, TextInput, TouchableOpacity, ScrollView, Image,
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFonts, Inter_400Regular, Inter_600SemiBold } from '@expo-google-fonts/inter';
 import { useEffect, useState } from 'react';
-import { SplashScreen, useRouter } from 'expo-router'
+import { useRouter } from 'expo-router'
 import { DebouncedTouchable } from '@/components/DebouncedTouchable';
 import { debouncedRouter } from '@/utils/navigationDebounce';;
 import { Eye, EyeOff, Mail, Lock } from 'lucide-react-native';
 import { useAuth } from '@/hooks/useAuth';
-
-SplashScreen.preventAutoHideAsync();
+import { hideSplashScreen } from '@/lib/splashScreen';
 
 export default function SignInScreen() {
   const router = useRouter();
@@ -26,7 +25,7 @@ export default function SignInScreen() {
 
   useEffect(() => {
     if (fontsLoaded) {
-      SplashScreen.hideAsync();
+      hideSplashScreen();
     }
   }, [fontsLoaded]);
 

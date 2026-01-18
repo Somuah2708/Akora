@@ -1,11 +1,10 @@
 import { View, Text, StyleSheet, Image } from 'react-native';
 import { useFonts, Inter_400Regular, Inter_600SemiBold } from '@expo-google-fonts/inter';
 import { useEffect } from 'react';
-import { SplashScreen, useRouter } from 'expo-router'
+import { useRouter } from 'expo-router'
 import { DebouncedTouchable } from '@/components/DebouncedTouchable';
 import { debouncedRouter } from '@/utils/navigationDebounce';;
-
-SplashScreen.preventAutoHideAsync();
+import { hideSplashScreen } from '@/lib/splashScreen';
 
 export default function OnboardingScreen() {
   const router = useRouter();
@@ -16,7 +15,7 @@ export default function OnboardingScreen() {
 
   useEffect(() => {
     if (fontsLoaded) {
-      SplashScreen.hideAsync();
+      hideSplashScreen();
     }
   }, [fontsLoaded]);
 

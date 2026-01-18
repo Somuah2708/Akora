@@ -2,10 +2,10 @@ import { View, Text, StyleSheet, ScrollView, Image, TouchableOpacity, FlatList, 
 import { useFonts, Inter_400Regular, Inter_600SemiBold } from '@expo-google-fonts/inter';
 import { useEffect, useState, useCallback, useRef, useMemo } from 'react';
 import { HEADER_COLOR } from '@/constants/Colors';
-import { SplashScreen, useRouter, useFocusEffect } from 'expo-router'
+import { useRouter, useFocusEffect } from 'expo-router'
 import { DebouncedTouchable } from '@/components/DebouncedTouchable';
 import { debouncedRouter } from '@/utils/navigationDebounce';;
-import { Bell, ThumbsUp, MessagesSquare, Share2, Star, MoreHorizontal, Plus, BookOpen, PartyPopper, Calendar, TrendingUp, Users, Newspaper, Search, User, Edit3, Trash2, Play, X } from 'lucide-react-native';
+import { Bell, ThumbsUp, MessagesSquare, Share2, Star, MoreHorizontal, Plus, BookOpen, PartyPopper, Calendar, TrendingUp, Users, Newspaper, Search, User, Edit3, Trash2, Play, X, Briefcase, ShoppingBag, MessageCircle, MapPin, Clock, ChevronRight } from 'lucide-react-native';
 import { supabase, getDisplayName, type Post, type Profile, type HomeFeaturedItem, type HomeCategoryTab, type TrendingArticle } from '@/lib/supabase';
 import { useAuth } from '@/hooks/useAuth';
 import { Video, ResizeMode, Audio, InterruptionModeIOS, InterruptionModeAndroid } from 'expo-av';
@@ -21,6 +21,7 @@ import { on } from '@/lib/eventBus';
 import { getMemoryCacheSync, setMemoryCacheSync, cacheData } from '@/lib/cache';
 import { CACHE_KEYS } from '@/lib/queries';
 import CachedImage from '@/components/CachedImage';
+import { hideSplashScreen } from '@/lib/splashScreen';
 
 // Local hub images for Quick Access tabs
 const HUB_IMAGES: Record<string, any> = {
@@ -253,10 +254,14 @@ export default function HomeScreen() {
   const [searchResults, setSearchResults] = useState<{
     posts: PostWithUser[];
     people: Profile[];
-    articles: TrendingArticle[];
-  }>({ posts: [], people: [], articles: [] });
+    events: any[];
+    circles: any[];
+    jobs: any[];
+    marketplace: any[];
+    forum: any[];
+  }>({ posts: [], people: [], events: [], circles: [], jobs: [], marketplace: [], forum: [] });
   const [searchLoading, setSearchLoading] = useState(false);
-  const [selectedSearchFilter, setSelectedSearchFilter] = useState<'all' | 'posts' | 'people' | 'articles'>('all');
+  const [selectedSearchFilter, setSelectedSearchFilter] = useState<'all' | 'posts' | 'people' | 'events' | 'circles' | 'jobs' | 'marketplace' | 'forum'>('all');
 
   // Notifications (use central NotificationContext for real-time badge)
   const { unreadCount: unreadNotifications, refreshUnreadCount } = useNotifications();
@@ -497,7 +502,7 @@ export default function HomeScreen() {
 
   useEffect(() => {
     if (fontsLoaded) {
-      SplashScreen.hideAsync();
+      hideSplashScreen();
     }
   }, [fontsLoaded]);
 
@@ -571,7 +576,7 @@ export default function HomeScreen() {
   // Search function
   const performSearch = useCallback(async (query: string) => {
     if (!query.trim()) {
-      setSearchResults({ posts: [], people: [], articles: [] });
+      setSearchResults({ posts: [], people: [], events: [], circles: [], jobs: [], marketplace: [], forum: [] });
       return;
     }
 
@@ -584,13 +589,10 @@ export default function HomeScreen() {
         searchPromises.push(
           supabase
             .from('posts')
-            .select(`
-              *,
-              user:profiles(*)
-            `)
+            .select(`*, user:profiles(*)`)
             .ilike('content', `%${query}%`)
             .order('created_at', { ascending: false })
-            .limit(20)
+            .limit(10)
         );
       } else {
         searchPromises.push(Promise.resolve({ data: [] }));
@@ -602,33 +604,95 @@ export default function HomeScreen() {
           supabase
             .from('profiles')
             .select('*')
-            .or(`username.ilike.%${query}%,full_name.ilike.%${query}%,first_name.ilike.%${query}%,surname.ilike.%${query}%,bio.ilike.%${query}%`)
-            .limit(20)
+            .or(`username.ilike.%${query}%,full_name.ilike.%${query}%,first_name.ilike.%${query}%,surname.ilike.%${query}%,bio.ilike.%${query}%,job_title.ilike.%${query}%,company_name.ilike.%${query}%`)
+            .limit(15)
         );
       } else {
         searchPromises.push(Promise.resolve({ data: [] }));
       }
 
-      // Search articles
-      if (selectedSearchFilter === 'all' || selectedSearchFilter === 'articles') {
+      // Search events
+      if (selectedSearchFilter === 'all' || selectedSearchFilter === 'events') {
         searchPromises.push(
           supabase
-            .from('trending_articles')
+            .from('secretariat_events')
             .select('*')
-            .eq('is_active', true)
-            .or(`title.ilike.%${query}%,subtitle.ilike.%${query}%,summary.ilike.%${query}%,article_content.ilike.%${query}%`)
+            .or(`title.ilike.%${query}%,description.ilike.%${query}%,location.ilike.%${query}%`)
+            .gte('event_date', new Date().toISOString().split('T')[0])
+            .order('event_date', { ascending: true })
             .limit(10)
         );
       } else {
         searchPromises.push(Promise.resolve({ data: [] }));
       }
 
-      const [postsRes, peopleRes, articlesRes] = await Promise.all(searchPromises);
+      // Search circles
+      if (selectedSearchFilter === 'all' || selectedSearchFilter === 'circles') {
+        searchPromises.push(
+          supabase
+            .from('circles')
+            .select('*')
+            .or(`name.ilike.%${query}%,description.ilike.%${query}%,category.ilike.%${query}%`)
+            .limit(10)
+        );
+      } else {
+        searchPromises.push(Promise.resolve({ data: [] }));
+      }
+
+      // Search jobs
+      if (selectedSearchFilter === 'all' || selectedSearchFilter === 'jobs') {
+        searchPromises.push(
+          supabase
+            .from('job_listings')
+            .select('*, user:profiles(id, full_name, first_name, surname, avatar_url)')
+            .eq('is_approved', true)
+            .or(`title.ilike.%${query}%,company_name.ilike.%${query}%,description.ilike.%${query}%,location.ilike.%${query}%`)
+            .order('created_at', { ascending: false })
+            .limit(10)
+        );
+      } else {
+        searchPromises.push(Promise.resolve({ data: [] }));
+      }
+
+      // Search marketplace
+      if (selectedSearchFilter === 'all' || selectedSearchFilter === 'marketplace') {
+        searchPromises.push(
+          supabase
+            .from('product_services')
+            .select('*, user:profiles(id, full_name, first_name, surname, avatar_url)')
+            .eq('is_approved', true)
+            .or(`title.ilike.%${query}%,description.ilike.%${query}%,category_name.ilike.%${query}%`)
+            .order('created_at', { ascending: false })
+            .limit(10)
+        );
+      } else {
+        searchPromises.push(Promise.resolve({ data: [] }));
+      }
+
+      // Search forum discussions
+      if (selectedSearchFilter === 'all' || selectedSearchFilter === 'forum') {
+        searchPromises.push(
+          supabase
+            .from('forum_discussions')
+            .select('*, author:profiles(id, full_name, first_name, surname, avatar_url)')
+            .or(`title.ilike.%${query}%,content.ilike.%${query}%,category.ilike.%${query}%`)
+            .order('created_at', { ascending: false })
+            .limit(10)
+        );
+      } else {
+        searchPromises.push(Promise.resolve({ data: [] }));
+      }
+
+      const [postsRes, peopleRes, eventsRes, circlesRes, jobsRes, marketplaceRes, forumRes] = await Promise.all(searchPromises);
 
       setSearchResults({
         posts: (postsRes.data as any[]) || [],
         people: (peopleRes.data as Profile[]) || [],
-        articles: (articlesRes.data as TrendingArticle[]) || [],
+        events: (eventsRes.data as any[]) || [],
+        circles: (circlesRes.data as any[]) || [],
+        jobs: (jobsRes.data as any[]) || [],
+        marketplace: (marketplaceRes.data as any[]) || [],
+        forum: (forumRes.data as any[]) || [],
       });
     } catch (error) {
       console.error('Search error:', error);
@@ -644,7 +708,7 @@ export default function HomeScreen() {
       if (searchQuery.length >= 1) {
         performSearch(searchQuery);
       } else {
-        setSearchResults({ posts: [], people: [], articles: [] });
+        setSearchResults({ posts: [], people: [], events: [], circles: [], jobs: [], marketplace: [], forum: [] });
       }
     }, 300);
 
@@ -1386,22 +1450,22 @@ export default function HomeScreen() {
                 }}
                 style={styles.searchBackButton}
               >
-                <X size={24} color="#111827" strokeWidth={2} />
+                <X size={20} color="#FFFFFF" strokeWidth={2.5} />
               </TouchableOpacity>
               <View style={styles.searchInputContainer}>
-                <Search size={20} color="#9CA3AF" strokeWidth={2} />
+                <Search size={20} color="#0F172A" strokeWidth={2} />
                 <TextInput
                   style={styles.searchModalInput}
                   placeholder="Search posts, people, and more..."
                   value={searchQuery}
                   onChangeText={setSearchQuery}
-                  placeholderTextColor="#9CA3AF"
+                  placeholderTextColor="#6B7280"
                   autoFocus
                   returnKeyType="search"
                 />
                 {searchQuery.length > 0 && (
                   <TouchableOpacity onPress={() => setSearchQuery('')}>
-                    <X size={18} color="#9CA3AF" strokeWidth={2} />
+                    <X size={18} color="#0F172A" strokeWidth={2} />
                   </TouchableOpacity>
                 )}
               </View>
@@ -1415,48 +1479,91 @@ export default function HomeScreen() {
               contentContainerStyle={styles.searchFiltersContent}
             >
               {[
-                { id: 'all', label: 'All' },
-                { id: 'posts', label: 'Posts' },
-                { id: 'people', label: 'People' },
-                { id: 'articles', label: 'Articles' },
-              ].map((filter) => (
-                <TouchableOpacity
-                  key={filter.id}
-                  style={[
-                    styles.searchFilterChip,
-                    selectedSearchFilter === filter.id && styles.searchFilterChipActive,
-                  ]}
-                  onPress={() => setSelectedSearchFilter(filter.id as any)}
-                  activeOpacity={0.7}
-                >
-                  <Text
+                { id: 'all', label: 'All', icon: Search },
+                { id: 'people', label: 'People', icon: User },
+                { id: 'posts', label: 'Posts', icon: MessagesSquare },
+                { id: 'events', label: 'Events', icon: Calendar },
+                { id: 'circles', label: 'Circles', icon: Users },
+                { id: 'jobs', label: 'Jobs', icon: Briefcase },
+                { id: 'marketplace', label: 'Market', icon: ShoppingBag },
+                { id: 'forum', label: 'Forum', icon: MessageCircle },
+              ].map((filter) => {
+                const IconComponent = filter.icon;
+                const isActive = selectedSearchFilter === filter.id;
+                return (
+                  <TouchableOpacity
+                    key={filter.id}
                     style={[
-                      styles.searchFilterChipText,
-                      selectedSearchFilter === filter.id && styles.searchFilterChipTextActive,
+                      styles.searchFilterChip,
+                      isActive && styles.searchFilterChipActive,
                     ]}
+                    onPress={() => setSelectedSearchFilter(filter.id as any)}
+                    activeOpacity={0.7}
                   >
-                    {filter.label}
-                  </Text>
-                </TouchableOpacity>
-              ))}
+                    <IconComponent size={14} color={isActive ? '#0F172A' : '#6B7280'} strokeWidth={2} />
+                    <Text
+                      style={[
+                        styles.searchFilterChipText,
+                        isActive && styles.searchFilterChipTextActive,
+                      ]}
+                    >
+                      {filter.label}
+                    </Text>
+                  </TouchableOpacity>
+                );
+              })}
             </ScrollView>
 
             {/* Results */}
             <ScrollView style={styles.searchResultsContainer} showsVerticalScrollIndicator={false}>
               {searchLoading ? (
                 <View style={styles.searchLoadingState}>
-                  <ActivityIndicator size="large" color="#000000" />
+                  <ActivityIndicator size="large" color="#ffc857" />
                   <Text style={styles.searchLoadingText}>Searching...</Text>
                 </View>
               ) : searchQuery.length === 0 ? (
                 <View style={styles.searchEmptyState}>
-                  <Search size={64} color="#D1D5DB" strokeWidth={1.5} />
-                  <Text style={styles.searchEmptyTitle}>Search Everything</Text>
-                  <Text style={styles.searchEmptyText}>
-                    Find posts, people, and trending articles{'\n'}across the Akora community
-                  </Text>
+                  {/* Quick Access Categories */}
+                  <View style={styles.searchQuickAccessSection}>
+                    <Text style={styles.searchQuickAccessTitle}>Explore</Text>
+                    <View style={styles.searchQuickAccessGrid}>
+                      {[
+                        { id: 'people', label: 'Alumni', icon: User, color: '#3B82F6', route: '/connections' },
+                        { id: 'events', label: 'Events', icon: Calendar, color: '#10B981', route: '/secretariat/event-calendar' },
+                        { id: 'circles', label: 'Circles', icon: Users, color: '#8B5CF6', route: '/circles' },
+                        { id: 'jobs', label: 'Jobs', icon: Briefcase, color: '#F59E0B', route: '/professional' },
+                        { id: 'marketplace', label: 'Marketplace', icon: ShoppingBag, color: '#EC4899', route: '/category' },
+                        { id: 'forum', label: 'Discussions', icon: MessageCircle, color: '#06B6D4', route: '/forum' },
+                      ].map((item) => {
+                        const IconComponent = item.icon;
+                        return (
+                          <TouchableOpacity
+                            key={item.id}
+                            style={styles.searchQuickAccessItem}
+                            onPress={() => {
+                              setSearchVisible(false);
+                              debouncedRouter.push(item.route as any);
+                            }}
+                            activeOpacity={0.7}
+                          >
+                            <View style={[styles.searchQuickAccessIcon, { backgroundColor: item.color + '15' }]}>
+                              <IconComponent size={24} color={item.color} strokeWidth={2} />
+                            </View>
+                            <Text style={styles.searchQuickAccessLabel}>{item.label}</Text>
+                          </TouchableOpacity>
+                        );
+                      })}
+                    </View>
+                  </View>
+                  
+                  <View style={styles.searchHintContainer}>
+                    <Search size={48} color="#D1D5DB" strokeWidth={1.5} />
+                    <Text style={styles.searchHintText}>
+                      Search for people, events, jobs, circles, and more
+                    </Text>
+                  </View>
                 </View>
-              ) : searchResults.posts.length === 0 && searchResults.people.length === 0 && searchResults.articles.length === 0 ? (
+              ) : (searchResults.posts.length === 0 && searchResults.people.length === 0 && searchResults.events.length === 0 && searchResults.circles.length === 0 && searchResults.jobs.length === 0 && searchResults.marketplace.length === 0 && searchResults.forum.length === 0) ? (
                 <View style={styles.searchEmptyState}>
                   <Search size={64} color="#D1D5DB" strokeWidth={1.5} />
                   <Text style={styles.searchEmptyTitle}>No results found</Text>
@@ -1469,8 +1576,11 @@ export default function HomeScreen() {
                   {/* People Results */}
                   {searchResults.people.length > 0 && (selectedSearchFilter === 'all' || selectedSearchFilter === 'people') && (
                     <View style={styles.searchSection}>
-                      <Text style={styles.searchSectionTitle}>People ({searchResults.people.length})</Text>
-                      {searchResults.people.map((person) => (
+                      <View style={styles.searchSectionHeader}>
+                        <User size={18} color="#0F172A" strokeWidth={2} />
+                        <Text style={styles.searchSectionTitle}>People ({searchResults.people.length})</Text>
+                      </View>
+                      {searchResults.people.slice(0, selectedSearchFilter === 'people' ? 20 : 5).map((person) => (
                         <TouchableOpacity
                           key={person.id}
                           style={styles.searchPersonItem}
@@ -1484,18 +1594,206 @@ export default function HomeScreen() {
                           {person.avatar_url ? (
                             <Image source={{ uri: person.avatar_url }} style={styles.searchPersonAvatar} />
                           ) : (
-                            <View style={[styles.searchPersonAvatar, styles.searchPersonAvatarPlaceholder]} />
+                            <View style={[styles.searchPersonAvatar, styles.searchPersonAvatarPlaceholder]}>
+                              <User size={20} color="#9CA3AF" strokeWidth={2} />
+                            </View>
                           )}
                           <View style={styles.searchPersonInfo}>
                             <Text style={styles.searchPersonName} numberOfLines={1}>
                               {getDisplayName(person)}
                             </Text>
-                            {person.bio && (
+                            {(person.job_title || person.company_name) ? (
+                              <Text style={styles.searchPersonBio} numberOfLines={1}>
+                                {person.job_title}{person.job_title && person.company_name ? ' at ' : ''}{person.company_name}
+                              </Text>
+                            ) : person.bio ? (
                               <Text style={styles.searchPersonBio} numberOfLines={1}>
                                 {person.bio}
                               </Text>
+                            ) : person.year_group ? (
+                              <Text style={styles.searchPersonBio} numberOfLines={1}>
+                                Class of {person.year_group}
+                              </Text>
+                            ) : null}
+                          </View>
+                          <ChevronRight size={20} color="#D1D5DB" strokeWidth={2} />
+                        </TouchableOpacity>
+                      ))}
+                    </View>
+                  )}
+
+                  {/* Events Results */}
+                  {searchResults.events.length > 0 && (selectedSearchFilter === 'all' || selectedSearchFilter === 'events') && (
+                    <View style={styles.searchSection}>
+                      <View style={styles.searchSectionHeader}>
+                        <Calendar size={18} color="#10B981" strokeWidth={2} />
+                        <Text style={styles.searchSectionTitle}>Events ({searchResults.events.length})</Text>
+                      </View>
+                      {searchResults.events.slice(0, selectedSearchFilter === 'events' ? 20 : 5).map((event: any) => (
+                        <TouchableOpacity
+                          key={event.id}
+                          style={styles.searchEventItem}
+                          onPress={() => {
+                            setSearchVisible(false);
+                            setSearchQuery('');
+                            debouncedRouter.push(`/events/${event.id}`);
+                          }}
+                          activeOpacity={0.7}
+                        >
+                          <View style={styles.searchEventDateBadge}>
+                            <Text style={styles.searchEventDateDay}>
+                              {new Date(event.event_date).getDate()}
+                            </Text>
+                            <Text style={styles.searchEventDateMonth}>
+                              {new Date(event.event_date).toLocaleDateString('en-US', { month: 'short' })}
+                            </Text>
+                          </View>
+                          <View style={styles.searchEventInfo}>
+                            <Text style={styles.searchEventTitle} numberOfLines={1}>{event.title}</Text>
+                            {event.location && (
+                              <View style={styles.searchEventMeta}>
+                                <MapPin size={12} color="#6B7280" strokeWidth={2} />
+                                <Text style={styles.searchEventLocation} numberOfLines={1}>{event.location}</Text>
+                              </View>
                             )}
                           </View>
+                          <ChevronRight size={20} color="#D1D5DB" strokeWidth={2} />
+                        </TouchableOpacity>
+                      ))}
+                    </View>
+                  )}
+
+                  {/* Circles Results */}
+                  {searchResults.circles.length > 0 && (selectedSearchFilter === 'all' || selectedSearchFilter === 'circles') && (
+                    <View style={styles.searchSection}>
+                      <View style={styles.searchSectionHeader}>
+                        <Users size={18} color="#8B5CF6" strokeWidth={2} />
+                        <Text style={styles.searchSectionTitle}>Circles ({searchResults.circles.length})</Text>
+                      </View>
+                      {searchResults.circles.slice(0, selectedSearchFilter === 'circles' ? 20 : 5).map((circle: any) => (
+                        <TouchableOpacity
+                          key={circle.id}
+                          style={styles.searchCircleItem}
+                          onPress={() => {
+                            setSearchVisible(false);
+                            setSearchQuery('');
+                            debouncedRouter.push(`/circles/${circle.id}`);
+                          }}
+                          activeOpacity={0.7}
+                        >
+                          {circle.image_url ? (
+                            <Image source={{ uri: circle.image_url }} style={styles.searchCircleImage} />
+                          ) : (
+                            <View style={[styles.searchCircleImage, styles.searchCircleImagePlaceholder]}>
+                              <Users size={20} color="#8B5CF6" strokeWidth={2} />
+                            </View>
+                          )}
+                          <View style={styles.searchCircleInfo}>
+                            <Text style={styles.searchCircleName} numberOfLines={1}>{circle.name}</Text>
+                            <Text style={styles.searchCircleCategory} numberOfLines={1}>{circle.category}</Text>
+                          </View>
+                          <ChevronRight size={20} color="#D1D5DB" strokeWidth={2} />
+                        </TouchableOpacity>
+                      ))}
+                    </View>
+                  )}
+
+                  {/* Jobs Results */}
+                  {searchResults.jobs.length > 0 && (selectedSearchFilter === 'all' || selectedSearchFilter === 'jobs') && (
+                    <View style={styles.searchSection}>
+                      <View style={styles.searchSectionHeader}>
+                        <Briefcase size={18} color="#F59E0B" strokeWidth={2} />
+                        <Text style={styles.searchSectionTitle}>Jobs ({searchResults.jobs.length})</Text>
+                      </View>
+                      {searchResults.jobs.slice(0, selectedSearchFilter === 'jobs' ? 20 : 5).map((job: any) => (
+                        <TouchableOpacity
+                          key={job.id}
+                          style={styles.searchJobItem}
+                          onPress={() => {
+                            setSearchVisible(false);
+                            setSearchQuery('');
+                            debouncedRouter.push(`/job-detail/${job.id}`);
+                          }}
+                          activeOpacity={0.7}
+                        >
+                          <View style={styles.searchJobIconContainer}>
+                            <Briefcase size={20} color="#F59E0B" strokeWidth={2} />
+                          </View>
+                          <View style={styles.searchJobInfo}>
+                            <Text style={styles.searchJobTitle} numberOfLines={1}>{job.title}</Text>
+                            <Text style={styles.searchJobCompany} numberOfLines={1}>
+                              {job.company_name}{job.location ? ` • ${job.location}` : ''}
+                            </Text>
+                          </View>
+                          <ChevronRight size={20} color="#D1D5DB" strokeWidth={2} />
+                        </TouchableOpacity>
+                      ))}
+                    </View>
+                  )}
+
+                  {/* Marketplace Results */}
+                  {searchResults.marketplace.length > 0 && (selectedSearchFilter === 'all' || selectedSearchFilter === 'marketplace') && (
+                    <View style={styles.searchSection}>
+                      <View style={styles.searchSectionHeader}>
+                        <ShoppingBag size={18} color="#EC4899" strokeWidth={2} />
+                        <Text style={styles.searchSectionTitle}>Marketplace ({searchResults.marketplace.length})</Text>
+                      </View>
+                      {searchResults.marketplace.slice(0, selectedSearchFilter === 'marketplace' ? 20 : 5).map((product: any) => (
+                        <TouchableOpacity
+                          key={product.id}
+                          style={styles.searchMarketItem}
+                          onPress={() => {
+                            setSearchVisible(false);
+                            setSearchQuery('');
+                            debouncedRouter.push(`/listing/${product.id}`);
+                          }}
+                          activeOpacity={0.7}
+                        >
+                          {product.image_url || product.image_urls?.[0] ? (
+                            <Image source={{ uri: product.image_url || product.image_urls?.[0] }} style={styles.searchMarketImage} />
+                          ) : (
+                            <View style={[styles.searchMarketImage, styles.searchMarketImagePlaceholder]}>
+                              <ShoppingBag size={20} color="#EC4899" strokeWidth={2} />
+                            </View>
+                          )}
+                          <View style={styles.searchMarketInfo}>
+                            <Text style={styles.searchMarketTitle} numberOfLines={1}>{product.title}</Text>
+                            <Text style={styles.searchMarketPrice}>
+                              {product.price ? `GH₵ ${product.price.toLocaleString()}` : 'Contact for price'}
+                            </Text>
+                          </View>
+                          <ChevronRight size={20} color="#D1D5DB" strokeWidth={2} />
+                        </TouchableOpacity>
+                      ))}
+                    </View>
+                  )}
+
+                  {/* Forum Results */}
+                  {searchResults.forum.length > 0 && (selectedSearchFilter === 'all' || selectedSearchFilter === 'forum') && (
+                    <View style={styles.searchSection}>
+                      <View style={styles.searchSectionHeader}>
+                        <MessageCircle size={18} color="#06B6D4" strokeWidth={2} />
+                        <Text style={styles.searchSectionTitle}>Discussions ({searchResults.forum.length})</Text>
+                      </View>
+                      {searchResults.forum.slice(0, selectedSearchFilter === 'forum' ? 20 : 5).map((discussion: any) => (
+                        <TouchableOpacity
+                          key={discussion.id}
+                          style={styles.searchForumItem}
+                          onPress={() => {
+                            setSearchVisible(false);
+                            setSearchQuery('');
+                            debouncedRouter.push(`/forum/${discussion.id}`);
+                          }}
+                          activeOpacity={0.7}
+                        >
+                          <View style={styles.searchForumIconContainer}>
+                            <MessageCircle size={20} color="#06B6D4" strokeWidth={2} />
+                          </View>
+                          <View style={styles.searchForumInfo}>
+                            <Text style={styles.searchForumTitle} numberOfLines={2}>{discussion.title}</Text>
+                            <Text style={styles.searchForumCategory} numberOfLines={1}>{discussion.category}</Text>
+                          </View>
+                          <ChevronRight size={20} color="#D1D5DB" strokeWidth={2} />
                         </TouchableOpacity>
                       ))}
                     </View>
@@ -1504,8 +1802,11 @@ export default function HomeScreen() {
                   {/* Posts Results */}
                   {searchResults.posts.length > 0 && (selectedSearchFilter === 'all' || selectedSearchFilter === 'posts') && (
                     <View style={styles.searchSection}>
-                      <Text style={styles.searchSectionTitle}>Posts ({searchResults.posts.length})</Text>
-                      {searchResults.posts.map((post) => (
+                      <View style={styles.searchSectionHeader}>
+                        <MessagesSquare size={18} color="#0F172A" strokeWidth={2} />
+                        <Text style={styles.searchSectionTitle}>Posts ({searchResults.posts.length})</Text>
+                      </View>
+                      {searchResults.posts.slice(0, selectedSearchFilter === 'posts' ? 20 : 5).map((post) => (
                         <TouchableOpacity
                           key={post.id}
                           style={styles.searchPostItem}
@@ -1521,13 +1822,15 @@ export default function HomeScreen() {
                               {post.user?.avatar_url ? (
                                 <Image source={{ uri: post.user.avatar_url }} style={styles.searchPostUserAvatar} />
                               ) : (
-                                <View style={[styles.searchPostUserAvatar, styles.searchPostUserAvatarPlaceholder]} />
+                                <View style={[styles.searchPostUserAvatar, styles.searchPostUserAvatarPlaceholder]}>
+                                  <User size={12} color="#9CA3AF" strokeWidth={2} />
+                                </View>
                               )}
                               <Text style={styles.searchPostUserName} numberOfLines={1}>
                                 {getDisplayName(post.user)}
                               </Text>
                             </View>
-                            <Text style={styles.searchPostContent} numberOfLines={3}>
+                            <Text style={styles.searchPostContent} numberOfLines={2}>
                               {post.content}
                             </Text>
                           </View>
@@ -1537,37 +1840,6 @@ export default function HomeScreen() {
                               style={styles.searchPostThumbnail}
                             />
                           )}
-                        </TouchableOpacity>
-                      ))}
-                    </View>
-                  )}
-
-                  {/* Articles Results */}
-                  {searchResults.articles.length > 0 && (selectedSearchFilter === 'all' || selectedSearchFilter === 'articles') && (
-                    <View style={styles.searchSection}>
-                      <Text style={styles.searchSectionTitle}>Articles ({searchResults.articles.length})</Text>
-                      {searchResults.articles.map((article) => (
-                        <TouchableOpacity
-                          key={article.id}
-                          style={styles.searchArticleItem}
-                          onPress={() => {
-                            setSearchVisible(false);
-                            setSearchQuery('');
-                            debouncedRouter.push(`/trending-article/${article.id}`);
-                          }}
-                          activeOpacity={0.7}
-                        >
-                          <Image source={{ uri: article.image_url }} style={styles.searchArticleThumbnail} />
-                          <View style={styles.searchArticleInfo}>
-                            <Text style={styles.searchArticleTitle} numberOfLines={2}>
-                              {article.title}
-                            </Text>
-                            {article.subtitle && (
-                              <Text style={styles.searchArticleSubtitle} numberOfLines={1}>
-                                {article.subtitle}
-                              </Text>
-                            )}
-                          </View>
                         </TouchableOpacity>
                       ))}
                     </View>
@@ -2423,13 +2695,22 @@ const styles = StyleSheet.create({
   categoryTab: {
     width: 80,
     height: 60,
-    borderRadius: 8,
+    borderRadius: 12,
     overflow: 'hidden',
     position: 'relative',
+    borderWidth: 2,
+    borderColor: '#ffc857',
+    shadowColor: '#ffc857',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.25,
+    shadowRadius: 4,
+    elevation: 3,
   },
   categoryTabActive: {
-    borderColor: '#0095F6',
-    borderWidth: 2,
+    borderColor: '#ffc857',
+    borderWidth: 3,
+    shadowOpacity: 0.5,
+    shadowRadius: 6,
   },
   categoryImage: {
     width: '100%',
@@ -2444,7 +2725,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     gap: 4,
-    backgroundColor: 'rgba(0, 0, 0, 0.55)',
+    backgroundColor: 'rgba(15, 23, 42, 0.65)',
   },
   categoryOverlayActive: {
     backgroundColor: 'rgba(255, 200, 87, 0.85)',
@@ -2454,9 +2735,10 @@ const styles = StyleSheet.create({
     fontFamily: 'Inter-SemiBold',
     color: '#FFFFFF',
     textAlign: 'center',
-    textShadowColor: 'rgba(0, 0, 0, 0.5)',
+    letterSpacing: 0.3,
+    textShadowColor: 'rgba(0, 0, 0, 0.6)',
     textShadowOffset: { width: 0, height: 1 },
-    textShadowRadius: 2,
+    textShadowRadius: 3,
   },
   searchBar: {
     flexDirection: 'row',
@@ -2835,7 +3117,7 @@ const styles = StyleSheet.create({
   // Search Modal Styles
   searchModalOverlay: {
     flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    backgroundColor: 'rgba(15, 23, 42, 0.6)',
     justifyContent: 'flex-end',
   },
   searchModalContent: {
@@ -2853,7 +3135,9 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   searchBackButton: {
-    padding: 4,
+    padding: 8,
+    backgroundColor: '#0F172A',
+    borderRadius: 20,
   },
   searchInputContainer: {
     flex: 1,
@@ -2864,6 +3148,8 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     height: 48,
     gap: 8,
+    borderWidth: 2,
+    borderColor: '#0F172A',
   },
   searchModalInput: {
     flex: 1,
@@ -2875,7 +3161,7 @@ const styles = StyleSheet.create({
   searchFiltersContainer: {
     maxHeight: 50,
     borderBottomWidth: 1,
-    borderBottomColor: '#F3F4F6',
+    borderBottomColor: '#E5E7EB',
   },
   searchFiltersContent: {
     paddingHorizontal: 16,
@@ -2883,22 +3169,28 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   searchFilterChip: {
-    paddingHorizontal: 16,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 14,
     paddingVertical: 8,
     borderRadius: 20,
     backgroundColor: '#F3F4F6',
     marginRight: 8,
+    borderWidth: 1.5,
+    borderColor: '#E5E7EB',
   },
   searchFilterChipActive: {
-    backgroundColor: '#0EA5E9',
+    backgroundColor: '#ffc857',
+    borderColor: '#ffc857',
   },
   searchFilterChipText: {
-    fontSize: 14,
+    fontSize: 13,
     fontFamily: 'Inter-SemiBold',
     color: '#6B7280',
   },
   searchFilterChipTextActive: {
-    color: '#FFFFFF',
+    color: '#0F172A',
   },
   searchResultsContainer: {
     flex: 1,
@@ -2911,19 +3203,18 @@ const styles = StyleSheet.create({
   searchLoadingText: {
     fontSize: 16,
     fontFamily: 'Inter-Medium',
-    color: '#6B7280',
+    color: '#0F172A',
     marginTop: 16,
   },
   searchEmptyState: {
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: 80,
-    paddingHorizontal: 32,
+    flex: 1,
+    paddingVertical: 24,
+    paddingHorizontal: 16,
   },
   searchEmptyTitle: {
     fontSize: 20,
     fontFamily: 'Inter-SemiBold',
-    color: '#111827',
+    color: '#0F172A',
     marginTop: 16,
   },
   searchEmptyText: {
@@ -2934,15 +3225,66 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     lineHeight: 20,
   },
+  searchQuickAccessSection: {
+    marginBottom: 24,
+  },
+  searchQuickAccessTitle: {
+    fontSize: 18,
+    fontFamily: 'Inter-SemiBold',
+    color: '#0F172A',
+    marginBottom: 16,
+  },
+  searchQuickAccessGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 12,
+  },
+  searchQuickAccessItem: {
+    width: '30%',
+    alignItems: 'center',
+    gap: 8,
+  },
+  searchQuickAccessIcon: {
+    width: 56,
+    height: 56,
+    borderRadius: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  searchQuickAccessLabel: {
+    fontSize: 12,
+    fontFamily: 'Inter-SemiBold',
+    color: '#374151',
+    textAlign: 'center',
+  },
+  searchHintContainer: {
+    alignItems: 'center',
+    paddingVertical: 32,
+  },
+  searchHintText: {
+    fontSize: 14,
+    fontFamily: 'Inter-Regular',
+    color: '#9CA3AF',
+    marginTop: 16,
+    textAlign: 'center',
+  },
   searchSection: {
     paddingTop: 16,
+    paddingBottom: 8,
+    borderBottomWidth: 1,
+    borderBottomColor: '#F3F4F6',
+  },
+  searchSectionHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    paddingHorizontal: 16,
+    marginBottom: 12,
   },
   searchSectionTitle: {
     fontSize: 16,
     fontFamily: 'Inter-SemiBold',
-    color: '#111827',
-    paddingHorizontal: 16,
-    marginBottom: 12,
+    color: '#0F172A',
   },
   searchPersonItem: {
     flexDirection: 'row',
@@ -2956,6 +3298,8 @@ const styles = StyleSheet.create({
     height: 48,
     borderRadius: 24,
     backgroundColor: '#F3F4F6',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   searchPersonAvatarPlaceholder: {
     backgroundColor: '#E5E7EB',
@@ -2966,10 +3310,180 @@ const styles = StyleSheet.create({
   searchPersonName: {
     fontSize: 15,
     fontFamily: 'Inter-SemiBold',
-    color: '#111827',
+    color: '#0F172A',
     marginBottom: 2,
   },
   searchPersonBio: {
+    fontSize: 13,
+    fontFamily: 'Inter-Regular',
+    color: '#6B7280',
+  },
+  searchEventItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    gap: 12,
+  },
+  searchEventDateBadge: {
+    width: 48,
+    height: 48,
+    borderRadius: 12,
+    backgroundColor: '#10B98115',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  searchEventDateDay: {
+    fontSize: 18,
+    fontFamily: 'Inter-SemiBold',
+    color: '#10B981',
+    lineHeight: 22,
+  },
+  searchEventDateMonth: {
+    fontSize: 10,
+    fontFamily: 'Inter-SemiBold',
+    color: '#10B981',
+    textTransform: 'uppercase',
+  },
+  searchEventInfo: {
+    flex: 1,
+  },
+  searchEventTitle: {
+    fontSize: 15,
+    fontFamily: 'Inter-SemiBold',
+    color: '#0F172A',
+    marginBottom: 4,
+  },
+  searchEventMeta: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
+  searchEventLocation: {
+    fontSize: 13,
+    fontFamily: 'Inter-Regular',
+    color: '#6B7280',
+    flex: 1,
+  },
+  searchCircleItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    gap: 12,
+  },
+  searchCircleImage: {
+    width: 48,
+    height: 48,
+    borderRadius: 12,
+    backgroundColor: '#F3F4F6',
+  },
+  searchCircleImagePlaceholder: {
+    backgroundColor: '#8B5CF615',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  searchCircleInfo: {
+    flex: 1,
+  },
+  searchCircleName: {
+    fontSize: 15,
+    fontFamily: 'Inter-SemiBold',
+    color: '#0F172A',
+    marginBottom: 2,
+  },
+  searchCircleCategory: {
+    fontSize: 13,
+    fontFamily: 'Inter-Regular',
+    color: '#6B7280',
+  },
+  searchJobItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    gap: 12,
+  },
+  searchJobIconContainer: {
+    width: 48,
+    height: 48,
+    borderRadius: 12,
+    backgroundColor: '#F59E0B15',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  searchJobInfo: {
+    flex: 1,
+  },
+  searchJobTitle: {
+    fontSize: 15,
+    fontFamily: 'Inter-SemiBold',
+    color: '#0F172A',
+    marginBottom: 2,
+  },
+  searchJobCompany: {
+    fontSize: 13,
+    fontFamily: 'Inter-Regular',
+    color: '#6B7280',
+  },
+  searchMarketItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    gap: 12,
+  },
+  searchMarketImage: {
+    width: 48,
+    height: 48,
+    borderRadius: 8,
+    backgroundColor: '#F3F4F6',
+  },
+  searchMarketImagePlaceholder: {
+    backgroundColor: '#EC489915',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  searchMarketInfo: {
+    flex: 1,
+  },
+  searchMarketTitle: {
+    fontSize: 15,
+    fontFamily: 'Inter-SemiBold',
+    color: '#0F172A',
+    marginBottom: 2,
+  },
+  searchMarketPrice: {
+    fontSize: 14,
+    fontFamily: 'Inter-SemiBold',
+    color: '#10B981',
+  },
+  searchForumItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    gap: 12,
+  },
+  searchForumIconContainer: {
+    width: 48,
+    height: 48,
+    borderRadius: 12,
+    backgroundColor: '#06B6D415',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  searchForumInfo: {
+    flex: 1,
+  },
+  searchForumTitle: {
+    fontSize: 15,
+    fontFamily: 'Inter-SemiBold',
+    color: '#0F172A',
+    marginBottom: 2,
+    lineHeight: 20,
+  },
+  searchForumCategory: {
     fontSize: 13,
     fontFamily: 'Inter-Regular',
     color: '#6B7280',
@@ -2979,8 +3493,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingVertical: 12,
     gap: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: '#F3F4F6',
   },
   searchPostLeft: {
     flex: 1,
@@ -2988,7 +3500,7 @@ const styles = StyleSheet.create({
   searchPostHeader: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 8,
+    marginBottom: 6,
     gap: 8,
   },
   searchPostUserAvatar: {
@@ -2996,6 +3508,8 @@ const styles = StyleSheet.create({
     height: 24,
     borderRadius: 12,
     backgroundColor: '#F3F4F6',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   searchPostUserAvatarPlaceholder: {
     backgroundColor: '#E5E7EB',
@@ -3003,7 +3517,7 @@ const styles = StyleSheet.create({
   searchPostUserName: {
     fontSize: 14,
     fontFamily: 'Inter-SemiBold',
-    color: '#111827',
+    color: '#0F172A',
     flex: 1,
   },
   searchPostContent: {
@@ -3013,8 +3527,8 @@ const styles = StyleSheet.create({
     lineHeight: 20,
   },
   searchPostThumbnail: {
-    width: 80,
-    height: 80,
+    width: 64,
+    height: 64,
     borderRadius: 8,
     backgroundColor: '#F3F4F6',
   },

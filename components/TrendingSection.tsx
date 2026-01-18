@@ -7,9 +7,14 @@ import {
   TouchableOpacity,
   Image,
   ActivityIndicator,
+  Dimensions,
 } from 'react-native';
+import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
 import { useFocusEffect } from '@react-navigation/native';
+
+const { width: screenWidth } = Dimensions.get('window');
+
 import {
   Briefcase,
   GraduationCap,
@@ -230,7 +235,7 @@ export default function TrendingSection({ isAdmin, onAddPress, onLongPress }: Tr
           debouncedRouter.push(`/circle-comments/${item.item_id}`);
           break;
         case 'news':
-          debouncedRouter.push(`/trending-article/${item.item_id}`);
+          debouncedRouter.push(`/news`);
           break;
         case 'notice':
           debouncedRouter.push(`/notices`);
@@ -327,6 +332,9 @@ export default function TrendingSection({ isAdmin, onAddPress, onLongPress }: Tr
           horizontal
           showsHorizontalScrollIndicator={false}
           contentContainerStyle={styles.scrollContent}
+          pagingEnabled={false}
+          snapToInterval={screenWidth - 40 + 16}
+          decelerationRate="fast"
         >
           {trendingItems.map((item, index) => {
             const config = TYPE_CONFIG[item.item_type] || TYPE_CONFIG.custom;
@@ -338,51 +346,50 @@ export default function TrendingSection({ isAdmin, onAddPress, onLongPress }: Tr
                 style={styles.card}
                 onPress={() => handlePress(item)}
                 onLongPress={() => onLongPress?.(item.id)}
-                activeOpacity={0.9}
+                activeOpacity={0.95}
               >
-                <View style={styles.cardInner}>
-                  {/* Image Section */}
-                  <View style={styles.imageContainer}>
-                    {item.image_url && !failedImages.has(item.id) ? (
-                      <Image 
-                        source={{ uri: item.image_url }} 
-                        style={styles.image}
-                        onError={() => {
-                          console.log('Trending image failed to load:', item.id, item.image_url);
-                          setFailedImages(prev => new Set([...prev, item.id]));
-                        }}
-                      />
-                    ) : (
-                      <View style={[styles.placeholderImage, { backgroundColor: config.color }]}>
-                        <IconComponent size={40} color="#FFFFFF" strokeWidth={1.5} />
-                      </View>
-                    )}
-                    
-                    {/* Time Badge - Top Left */}
-                    <View style={styles.timeBadge}>
-                      <Clock size={10} color="#FFFFFF" />
-                      <Text style={styles.timeBadgeText}>{formatTimeAgo(item.created_at)}</Text>
-                    </View>
-
-                    {/* Type Pill - Bottom */}
-                    <View style={styles.typeContainer}>
-                      <View style={[styles.typePill, { backgroundColor: config.color }]}>
-                        <IconComponent size={11} color="#FFFFFF" strokeWidth={2.5} />
-                        <Text style={styles.typePillText}>{config.label}</Text>
-                      </View>
-                    </View>
+                {/* Background Image */}
+                {item.image_url && !failedImages.has(item.id) ? (
+                  <Image 
+                    source={{ uri: item.image_url }} 
+                    style={styles.backgroundImage}
+                    onError={() => {
+                      console.log('Trending image failed to load:', item.id, item.image_url);
+                      setFailedImages(prev => new Set([...prev, item.id]));
+                    }}
+                  />
+                ) : (
+                  <View style={[styles.placeholderImage, { backgroundColor: config.color }]}>
+                    <IconComponent size={60} color="rgba(255,255,255,0.3)" strokeWidth={1.5} />
                   </View>
-
-                  {/* Content Section */}
-                  <View style={styles.content}>
-                    <Text style={styles.cardTitle} numberOfLines={2}>
-                      {item.title}
-                    </Text>
-                    
-                    <Text style={styles.cardSubtitle} numberOfLines={1}>
-                      {item.subtitle || ' '}
-                    </Text>
+                )}
+                
+                {/* Gradient Overlay */}
+                <LinearGradient
+                  colors={['transparent', 'rgba(0,0,0,0.3)', 'rgba(0,0,0,0.85)']}
+                  locations={[0, 0.4, 1]}
+                  style={styles.gradientOverlay}
+                />
+                
+                {/* Type Badge - Top Left */}
+                <View style={styles.typeBadgeContainer}>
+                  <View style={[styles.typeBadge, { backgroundColor: config.color }]}>
+                    <IconComponent size={12} color="#FFFFFF" strokeWidth={2.5} />
+                    <Text style={styles.typeBadgeText}>{config.label}</Text>
                   </View>
+                </View>
+                
+                {/* Content Overlay */}
+                <View style={styles.contentOverlay}>
+                  <Text style={styles.cardTitle} numberOfLines={2}>
+                    {item.title}
+                  </Text>
+                  
+                  {(item.description || item.subtitle) && (
+                    <Text style={styles.cardDescription} numberOfLines={3}>
+                      {item.description || item.subtitle}
+                    </Text>
+                  )}
                 </View>
               </TouchableOpacity>
             );
@@ -464,95 +471,78 @@ const styles = StyleSheet.create({
   },
   scrollContent: {
     paddingHorizontal: 20,
-    gap: 14,
-    paddingBottom: 4,
+    gap: 16,
+    paddingBottom: 8,
   },
   card: {
-    width: 220,
+    width: screenWidth - 40,
+    height: 220,
     borderRadius: 20,
     overflow: 'hidden',
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.12,
+    shadowOpacity: 0.15,
     shadowRadius: 16,
-    elevation: 8,
+    elevation: 10,
+    backgroundColor: '#1F2937',
   },
-  cardInner: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 20,
-    overflow: 'hidden',
-    borderWidth: 1.5,
-    borderColor: '#ffc857',
-  },
-  imageContainer: {
-    width: '100%',
-    height: 130,
-    position: 'relative',
-  },
-  image: {
+  backgroundImage: {
+    ...StyleSheet.absoluteFillObject,
     width: '100%',
     height: '100%',
     resizeMode: 'cover',
   },
   placeholderImage: {
-    width: '100%',
-    height: '100%',
+    ...StyleSheet.absoluteFillObject,
     justifyContent: 'center',
     alignItems: 'center',
   },
-  timeBadge: {
+  gradientOverlay: {
+    ...StyleSheet.absoluteFillObject,
+  },
+  typeBadgeContainer: {
     position: 'absolute',
-    top: 10,
-    left: 10,
-    backgroundColor: 'rgba(15, 23, 42, 0.75)',
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 10,
+    top: 16,
+    left: 16,
+  },
+  typeBadge: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 4,
-  },
-  timeBadgeText: {
-    fontSize: 10,
-    fontWeight: '600',
-    color: '#FFFFFF',
-  },
-  typeContainer: {
-    position: 'absolute',
-    bottom: 10,
-    left: 10,
-  },
-  typePill: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 5,
-    paddingHorizontal: 10,
-    paddingVertical: 5,
+    gap: 6,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
     borderRadius: 20,
   },
-  typePillText: {
-    fontSize: 10,
+  typeBadgeText: {
+    fontSize: 11,
     fontWeight: '700',
     color: '#FFFFFF',
-    letterSpacing: 0.3,
+    letterSpacing: 0.5,
   },
-  content: {
-    padding: 12,
-    minHeight: 70, // Ensures space for title (2 lines) + subtitle
+  contentOverlay: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    padding: 20,
   },
   cardTitle: {
-    fontSize: 14,
+    fontSize: 22,
     fontWeight: '700',
-    color: '#0F172A',
-    lineHeight: 19,
-    letterSpacing: -0.2,
-    minHeight: 38, // Reserve space for 2 lines
+    color: '#FFFFFF',
+    lineHeight: 28,
+    letterSpacing: -0.3,
+    marginBottom: 8,
+    textShadowColor: 'rgba(0, 0, 0, 0.3)',
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 4,
   },
-  cardSubtitle: {
-    fontSize: 12,
-    color: '#64748B',
-    marginTop: 4,
-    lineHeight: 16,
-    minHeight: 16, // Reserve space even when empty
+  cardDescription: {
+    fontSize: 14,
+    color: 'rgba(255, 255, 255, 0.85)',
+    lineHeight: 20,
+    textShadowColor: 'rgba(0, 0, 0, 0.3)',
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 3,
   },
 });

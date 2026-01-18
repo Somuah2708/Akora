@@ -1,19 +1,18 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { View, Text, StyleSheet, ScrollView, Image, TouchableOpacity, Dimensions, ActivityIndicator, LayoutAnimation, Platform, UIManager } from 'react-native';
-import { SplashScreen, useRouter } from 'expo-router'
+import { useRouter } from 'expo-router'
 import { DebouncedTouchable } from '@/components/DebouncedTouchable';
 import { debouncedRouter } from '@/utils/navigationDebounce';;
 import { useFonts, Inter_400Regular, Inter_600SemiBold } from '@expo-google-fonts/inter';
 import { ArrowLeft, Calendar, Users, Star, Clock, HeartHandshake, ChevronRight, ChevronDown, ChevronUp, Map, Award, Megaphone, BookOpen, DollarSign, Theater, Clipboard } from 'lucide-react-native';
 import { COLORS } from '@/constants/Colors';
 import { supabase } from '@/lib/supabase';
+import { hideSplashScreen } from '@/lib/splashScreen';
 
 // Enable LayoutAnimation on Android
 if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
   UIManager.setLayoutAnimationEnabledExperimental(true);
 }
-
-SplashScreen.preventAutoHideAsync();
 
 const { width } = Dimensions.get('window');
 
@@ -66,7 +65,7 @@ export default function CentenaryScreen() {
   };
 
   useEffect(() => {
-    if (fontsLoaded) SplashScreen.hideAsync();
+    if (fontsLoaded) hideSplashScreen();
   }, [fontsLoaded]);
 
   // Fetch centenary circle IDs from database
