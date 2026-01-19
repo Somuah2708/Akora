@@ -5,7 +5,7 @@ import { Video } from 'expo-av';
 import { useRouter } from 'expo-router'
 import { DebouncedTouchable } from '@/components/DebouncedTouchable';
 import { debouncedRouter } from '@/utils/navigationDebounce';;
-import { ArrowLeft, Plus, Calendar, MapPin, Upload, CheckCircle2, XCircle, Play, Settings } from 'lucide-react-native';
+import { ArrowLeft, Plus, Calendar, MapPin, Upload, CheckCircle2, XCircle, Play, Settings, Eye, Clock, Users, X } from 'lucide-react-native';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/hooks/useAuth';
 import { pickDocument, pickMedia, uploadMedia } from '@/lib/media';
@@ -73,6 +73,7 @@ export default function AkoraEventsScreen() {
 
   // Submission form (Akora)
   const [showForm, setShowForm] = useState(false);
+  const [showPreview, setShowPreview] = useState(false);
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
   const [location, setLocation] = useState('');
@@ -732,6 +733,21 @@ export default function AkoraEventsScreen() {
               </View>
             )}
 
+            {/* Preview Button */}
+            <TouchableOpacity
+              style={styles.previewBtn}
+              onPress={() => {
+                if (!title.trim()) {
+                  Alert.alert('Missing Info', 'Please enter an event title to preview.');
+                  return;
+                }
+                setShowPreview(true);
+              }}
+            >
+              <Eye size={18} color="#4169E1" />
+              <Text style={styles.previewBtnText}>Preview Event</Text>
+            </TouchableOpacity>
+
             <TouchableOpacity
               disabled={submitting}
               style={[styles.primaryBtn, submitting && { opacity: 0.7 }]}
@@ -875,6 +891,156 @@ export default function AkoraEventsScreen() {
           </TouchableOpacity>
         </Modal>
       )}
+
+      {/* Event Preview Modal */}
+      <Modal
+        visible={showPreview}
+        animationType="slide"
+        presentationStyle="pageSheet"
+        onRequestClose={() => setShowPreview(false)}
+      >
+        <SafeAreaView style={styles.previewContainer} edges={['top']}>
+          {/* Preview Header */}
+          <View style={styles.previewHeader}>
+            <TouchableOpacity onPress={() => setShowPreview(false)} style={styles.previewCloseBtn}>
+              <X size={24} color="#111" />
+            </TouchableOpacity>
+            <Text style={styles.previewHeaderTitle}>Event Preview</Text>
+            <View style={{ width: 40 }} />
+          </View>
+
+          <ScrollView style={{ flex: 1 }} showsVerticalScrollIndicator={false}>
+            {/* Preview Media */}
+            <View style={styles.previewMediaBox}>
+              {videoUrl ? (
+                <Video
+                  source={{ uri: videoUrl.url }}
+                  style={styles.previewMedia}
+                  useNativeControls
+                  resizeMode={"cover" as any}
+                  shouldPlay={false}
+                  usePoster={!!bannerUrl}
+                  posterSource={bannerUrl ? { uri: bannerUrl.url } : undefined}
+                />
+              ) : bannerUrl ? (
+                <Image source={{ uri: bannerUrl.url }} style={styles.previewMedia} />
+              ) : (
+                <View style={[styles.previewMedia, { backgroundColor: '#F3F4F6', alignItems: 'center', justifyContent: 'center' }]}>
+                  <Text style={{ color: '#6B7280', fontSize: 16 }}>No banner image</Text>
+                  <Text style={{ color: '#9CA3AF', fontSize: 12, marginTop: 4 }}>Add a banner to make your event stand out</Text>
+                </View>
+              )}
+            </View>
+
+            {/* Preview Body */}
+            <View style={styles.previewBody}>
+              <Text style={styles.previewTitle}>{title.trim() || 'Event Title'}</Text>
+
+              {/* Info Cards */}
+              <View style={styles.previewInfoCards}>
+                <View style={styles.previewInfoRow}>
+                  <View style={styles.previewIconCircle}>
+                    <MapPin size={18} color="#4169E1" />
+                  </View>
+                  <Text style={styles.previewInfoText}>{location.trim() || 'Location not set'}</Text>
+                </View>
+
+                <View style={styles.previewInfoRow}>
+                  <View style={styles.previewIconCircle}>
+                    <Calendar size={18} color="#4169E1" />
+                  </View>
+                  <Text style={styles.previewInfoText}>
+                    {startDate ? new Date(startDate).toLocaleString() : 'Date not set'}
+                  </Text>
+                </View>
+
+                {endDate && (
+                  <View style={styles.previewInfoRow}>
+                    <View style={styles.previewIconCircle}>
+                      <Clock size={18} color="#4169E1" />
+                    </View>
+                    <Text style={styles.previewInfoText}>
+                      Ends: {new Date(endDate).toLocaleString()}
+                    </Text>
+                  </View>
+                )}
+
+                {capacity && (
+                  <View style={styles.previewInfoRow}>
+                    <View style={styles.previewIconCircle}>
+                      <Users size={18} color="#4169E1" />
+                    </View>
+                    <Text style={styles.previewInfoText}>Capacity: {capacity} people</Text>
+                  </View>
+                )}
+              </View>
+
+              {/* About Section */}
+              {description.trim() && (
+                <View style={styles.previewSection}>
+                  <Text style={styles.previewSectionTitle}>About This Event</Text>
+                  <Text style={styles.previewDescription}>{description}</Text>
+                </View>
+              )}
+
+              {/* Organizer Section */}
+              {(organizerName || organizerEmail || organizerPhone) && (
+                <View style={styles.previewSection}>
+                  <Text style={styles.previewSectionTitle}>Contact Organizer</Text>
+                  {organizerName && (
+                    <Text style={styles.previewOrganizerText}>👤 {organizerName}</Text>
+                  )}
+                  {organizerEmail && (
+                    <Text style={styles.previewOrganizerText}>✉️ {organizerEmail}</Text>
+                  )}
+                  {organizerPhone && (
+                    <Text style={styles.previewOrganizerText}>📞 {organizerPhone}</Text>
+                  )}
+                </View>
+              )}
+
+              {/* Gallery Preview */}
+              {galleryUrls.length > 0 && (
+                <View style={styles.previewSection}>
+                  <Text style={styles.previewSectionTitle}>Event Gallery</Text>
+                  <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginTop: 12 }}>
+                    {galleryUrls.map((item, index) => (
+                      <View key={index} style={styles.previewGalleryItem}>
+                        {item.type === 'video' ? (
+                          <Video
+                            source={{ uri: item.url }}
+                            style={styles.previewGalleryMedia}
+                            resizeMode={"cover" as any}
+                            shouldPlay={false}
+                          />
+                        ) : (
+                          <Image source={{ uri: item.url }} style={styles.previewGalleryMedia} />
+                        )}
+                      </View>
+                    ))}
+                  </ScrollView>
+                </View>
+              )}
+
+              {/* Package Badge */}
+              <View style={styles.previewPackageBadge}>
+                <Text style={styles.previewPackageLabel}>
+                  {packageTier.charAt(0).toUpperCase() + packageTier.slice(1)} Package
+                </Text>
+                <Text style={styles.previewPackageFee}>GHS {fee}</Text>
+              </View>
+            </View>
+          </ScrollView>
+
+          {/* Preview Footer */}
+          <View style={styles.previewFooter}>
+            <TouchableOpacity style={styles.previewBackBtn} onPress={() => setShowPreview(false)}>
+              <Text style={styles.previewBackBtnText}>← Back to Edit</Text>
+            </TouchableOpacity>
+            <Text style={styles.previewHint}>This is how your event will appear to others</Text>
+          </View>
+        </SafeAreaView>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -1027,4 +1193,174 @@ const styles = StyleSheet.create({
   myEventsBtn: { width: 40, height: 40, justifyContent: 'center', alignItems: 'center' },
   searchContainer: { paddingHorizontal: 16, paddingVertical: 12, backgroundColor: '#F9FAFB' },
   searchInput: { backgroundColor: '#FFFFFF', borderWidth: 1, borderColor: '#E5E7EB', borderRadius: 10, paddingHorizontal: 16, paddingVertical: 12, fontSize: 14, color: '#1F2937' },
+  // Preview Button & Modal Styles
+  previewBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    paddingVertical: 14,
+    paddingHorizontal: 20,
+    backgroundColor: '#EEF2FF',
+    borderRadius: 12,
+    borderWidth: 2,
+    borderColor: '#4169E1',
+    marginTop: 12,
+    marginBottom: 8,
+  },
+  previewBtnText: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: '#4169E1',
+  },
+  previewContainer: {
+    flex: 1,
+    backgroundColor: '#fff',
+  },
+  previewHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: '#F3F4F6',
+  },
+  previewCloseBtn: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: '#F3F4F6',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  previewHeaderTitle: {
+    fontSize: 17,
+    fontWeight: '700',
+    color: '#111827',
+  },
+  previewMediaBox: {
+    backgroundColor: '#F9FAFB',
+  },
+  previewMedia: {
+    width: '100%',
+    height: 280,
+  },
+  previewBody: {
+    padding: 20,
+    paddingTop: 24,
+  },
+  previewTitle: {
+    fontSize: 26,
+    fontWeight: '800',
+    color: '#111827',
+    letterSpacing: -0.5,
+    lineHeight: 32,
+    marginBottom: 16,
+  },
+  previewInfoCards: {
+    marginBottom: 20,
+  },
+  previewInfoRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    paddingVertical: 10,
+    paddingHorizontal: 14,
+    backgroundColor: '#F9FAFB',
+    borderRadius: 12,
+    marginBottom: 8,
+  },
+  previewIconCircle: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: '#EEF2FF',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  previewInfoText: {
+    fontSize: 15,
+    color: '#374151',
+    fontWeight: '500',
+    flex: 1,
+  },
+  previewSection: {
+    marginTop: 24,
+    paddingTop: 24,
+    borderTopWidth: 1,
+    borderTopColor: '#F3F4F6',
+  },
+  previewSectionTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: '#111827',
+    marginBottom: 12,
+  },
+  previewDescription: {
+    fontSize: 16,
+    color: '#4B5563',
+    lineHeight: 26,
+  },
+  previewOrganizerText: {
+    fontSize: 15,
+    color: '#374151',
+    marginBottom: 8,
+  },
+  previewGalleryItem: {
+    width: 140,
+    height: 100,
+    borderRadius: 12,
+    marginRight: 10,
+    overflow: 'hidden',
+    backgroundColor: '#F3F4F6',
+  },
+  previewGalleryMedia: {
+    width: '100%',
+    height: '100%',
+  },
+  previewPackageBadge: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginTop: 24,
+    padding: 16,
+    backgroundColor: '#FFFBF0',
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#FFD700',
+  },
+  previewPackageLabel: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#92400E',
+  },
+  previewPackageFee: {
+    fontSize: 16,
+    fontWeight: '800',
+    color: '#92400E',
+  },
+  previewFooter: {
+    padding: 16,
+    borderTopWidth: 1,
+    borderTopColor: '#F3F4F6',
+    alignItems: 'center',
+    gap: 8,
+  },
+  previewBackBtn: {
+    paddingVertical: 14,
+    paddingHorizontal: 24,
+    backgroundColor: '#0F172A',
+    borderRadius: 12,
+  },
+  previewBackBtnText: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: '#fff',
+  },
+  previewHint: {
+    fontSize: 12,
+    color: '#9CA3AF',
+    textAlign: 'center',
+  },
 });

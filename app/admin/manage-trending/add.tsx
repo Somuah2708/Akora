@@ -144,8 +144,8 @@ export default function AddTrendingScreen() {
         case 'event':
           let eventQuery = supabase
             .from('akora_events')
-            .select('id, title, location, image_url')
-            .eq('status', 'published')
+            .select('id, title, location, banner_url')
+            .in('status', ['published', 'approved'])
             .limit(50);
           if (query.trim()) {
             eventQuery = eventQuery.ilike('title', `%${query}%`);
@@ -155,7 +155,7 @@ export default function AddTrendingScreen() {
             id: e.id, 
             displayTitle: e.title, 
             displaySubtitle: e.location || 'Event',
-            image_url: e.image_url 
+            image_url: e.banner_url 
           })) || [];
           break;
           

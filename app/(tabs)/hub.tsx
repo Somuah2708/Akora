@@ -129,7 +129,7 @@ const HERITAGE_ITEMS = [
     icon: BookOpen,
     image: HUB_IMAGES.articles,
     isLocal: true,
-    route: 'chapters',
+    route: 'news/articles',
   },
   {
     id: '12',

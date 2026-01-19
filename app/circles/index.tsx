@@ -61,7 +61,7 @@ interface JoinRequest {
 }
 
 // Tier System: Define which categories are admin-only vs user-created
-const ADMIN_ONLY_CATEGORIES = ['Year Groups', 'Class Pages', 'House Groups', 'Centenary', 'Chapters'];
+const ADMIN_ONLY_CATEGORIES = ['Year Groups', 'Class Pages', 'House Groups', 'Chapters'];
 const USER_CATEGORIES = ['Fun Clubs', 'Study Groups', 'Sports', 'Arts'];
 const ALL_CATEGORIES = ['All', ...ADMIN_ONLY_CATEGORIES, ...USER_CATEGORIES];
 
@@ -140,22 +140,33 @@ export default function CirclesScreen() {
 
   const fetchCircles = async () => {
     try {
-      let query = supabase
+      // Fetch all circles except Centenary (Centenary has its own separate screens)
+      const { data: circlesData, error: circlesError } = await supabase
         .from('circles')
-        .select(`
-          *,
-          circle_members!inner(count)
-        `);
+        .select('*')
+        .neq('category', 'Centenary')
+        .order('created_at', { ascending: false });
 
-      const { data, error } = await query;
+      if (circlesError) throw circlesError;
 
-      if (error) throw error;
-
-      // Get membership status for each circle
+      // Get membership status and accurate member count for each circle
       const circlesWithStatus = await Promise.all(
-        (data || []).map(async (circle) => {
+        (circlesData || []).map(async (circle) => {
           let is_member = false;
           let has_pending_request = false;
+          let member_count = 0;
+
+          // Get accurate member count from circle_members table
+          const { count, error: countError } = await supabase
+            .from('circle_members')
+            .select('*', { count: 'exact', head: true })
+            .eq('circle_id', circle.id);
+
+          if (countError) {
+            console.error('❌ Error counting members for circle', circle.id, ':', countError);
+          } else {
+            member_count = count || 0;
+          }
 
           if (user) {
             // Check membership - use maybeSingle() to avoid error when not found
@@ -171,7 +182,13 @@ export default function CirclesScreen() {
             }
 
             is_member = !!memberData;
-            console.log('🔍 Membership check:', { circleId: circle.id, circleName: circle.name, userId: user.id, isMember: is_member, memberData });
+            console.log('🔍 Circle stats:', { 
+              circleId: circle.id, 
+              circleName: circle.name, 
+              memberCount: member_count,
+              userId: user.id, 
+              isMember: is_member 
+            });
 
             // Check pending requests
             if (!is_member && circle.is_private) {
@@ -189,7 +206,7 @@ export default function CirclesScreen() {
 
           return {
             ...circle,
-            member_count: circle.circle_members?.length || 0,
+            member_count,
             is_member,
             has_pending_request,
           };

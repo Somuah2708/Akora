@@ -14,8 +14,9 @@ import {
   Share,
   Platform,
   StatusBar,
-  SafeAreaView,
+  FlatList,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter, useLocalSearchParams } from 'expo-router'
 import { DebouncedTouchable } from '@/components/DebouncedTouchable';
 import { debouncedRouter } from '@/utils/navigationDebounce';;
@@ -31,7 +32,8 @@ import {
   Bookmark,
   ExternalLink,
   CheckCircle2,
-  XCircle
+  XCircle,
+  Play
 } from 'lucide-react-native';
 import { Video } from 'expo-av';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -74,7 +76,9 @@ export default function EventDetailScreen() {
   const [fullscreenMedia, setFullscreenMedia] = useState<{
     url: string;
     type: 'image' | 'video';
+    index?: number;
   } | null>(null);
+  const [galleryItems, setGalleryItems] = useState<{ url: string; type: 'image' | 'video' }[]>([]);
   const [rsvpStatus, setRsvpStatus] = useState<'attending' | 'maybe' | 'not_attending' | null>(null);
   const [rsvpId, setRsvpId] = useState<string | null>(null);
   const [rsvpCount, setRsvpCount] = useState(0);
@@ -902,6 +906,19 @@ export default function EventDetailScreen() {
     const gallery: string[] = Array.isArray(supaEvent.gallery_urls) ? supaEvent.gallery_urls : [];
     return (
       <View style={styles.container}>
+        {/* Fixed Header */}
+        <SafeAreaView edges={['top']} style={styles.safeHeader}>
+          <View style={styles.eventHeader}>
+            <TouchableOpacity style={styles.headerBackBtn} onPress={() => debouncedRouter.back()}>
+              <ArrowLeft size={22} color="#111" />
+            </TouchableOpacity>
+            <Text style={styles.headerTitle} numberOfLines={1}>{titleLabel}</Text>
+            <TouchableOpacity style={styles.headerShareBtn} onPress={handleShare}>
+              <Share2 size={20} color="#111" />
+            </TouchableOpacity>
+          </View>
+        </SafeAreaView>
+        
         <ScrollView showsVerticalScrollIndicator={false}>
           <View style={styles.mediaBox}>
             {video ? (
@@ -922,21 +939,43 @@ export default function EventDetailScreen() {
                 <Text style={{ color: '#6B7280' }}>No media</Text>
               </View>
             )}
-            <TouchableOpacity style={styles.detailBack} onPress={() => debouncedRouter.back()}>
-              <View style={styles.backButtonCircle}>
-                <ArrowLeft size={22} color="#333" />
-              </View>
-            </TouchableOpacity>
           </View>
           <View style={styles.detailBody}>
             <Text style={styles.detailTitle}>{titleLabel}</Text>
-            <View style={styles.detailRow}><MapPin size={16} color="#1F2937" /><Text style={styles.detailMeta}>{locationLabel}</Text></View>
-            {supaEvent.time && supaEvent.time !== 'TBA' ? (
-              <View style={styles.detailRow}><Clock size={16} color="#1F2937" /><Text style={styles.detailMeta}>{supaEvent.time}</Text></View>
-            ) : null}
-            {startLabel ? (
-              <View style={styles.detailRow}><Calendar size={16} color="#1F2937" /><Text style={styles.detailMeta}>{startLabel}</Text></View>
-            ) : null}
+            
+            {/* Event Info Cards */}
+            <View style={styles.infoCardsContainer}>
+              <View style={styles.detailRow}>
+                <View style={styles.iconCircle}>
+                  <MapPin size={18} color="#FFD700" />
+                </View>
+                <Text style={styles.detailMeta}>{locationLabel}</Text>
+              </View>
+              {supaEvent.time && supaEvent.time !== 'TBA' ? (
+                <View style={styles.detailRow}>
+                  <View style={styles.iconCircle}>
+                    <Clock size={18} color="#FFD700" />
+                  </View>
+                  <Text style={styles.detailMeta}>{supaEvent.time}</Text>
+                </View>
+              ) : null}
+              {startLabel ? (
+                <View style={styles.detailRow}>
+                  <View style={styles.iconCircle}>
+                    <Calendar size={18} color="#FFD700" />
+                  </View>
+                  <Text style={styles.detailMeta}>{startLabel}</Text>
+                </View>
+              ) : null}
+              {supaEvent.capacity ? (
+                <View style={styles.detailRow}>
+                  <View style={styles.iconCircle}>
+                    <Users size={18} color="#FFD700" />
+                  </View>
+                  <Text style={styles.detailMeta}>Capacity: {supaEvent.capacity} people</Text>
+                </View>
+              ) : null}
+            </View>
 
             {/* Capacity Warning */}
             {(() => {
@@ -953,23 +992,30 @@ export default function EventDetailScreen() {
               return null;
             })()}
 
-            {!!desc && <Text style={styles.detailDesc}>{desc}</Text>}
-
-
+            {/* About Section */}
+            {!!desc && (
+              <View style={styles.aboutSection}>
+                <Text style={styles.sectionTitleDetail}>About This Event</Text>
+                <Text style={styles.detailDesc}>{desc}</Text>
+              </View>
+            )}
 
             {/* Actions */}
             {(supaEvent.organizer_email || supaEvent.organizer_phone) && (
-              <View style={{ flexDirection: 'row', gap: 12, marginTop: 8 }}>
-                {supaEvent.organizer_email ? (
-                  <TouchableOpacity style={styles.contactCta} onPress={() => Linking.openURL(`mailto:${supaEvent.organizer_email}`)}>
-                    <Text style={styles.contactCtaText}>Email Organizer</Text>
-                  </TouchableOpacity>
-                ) : null}
-                {supaEvent.organizer_phone ? (
-                  <TouchableOpacity style={styles.contactCta} onPress={() => Linking.openURL(`tel:${supaEvent.organizer_phone}`)}>
-                    <Text style={styles.contactCtaText}>Call Organizer</Text>
-                  </TouchableOpacity>
-                ) : null}
+              <View style={styles.organizerSection}>
+                <Text style={styles.sectionTitleDetail}>Contact Organizer</Text>
+                <View style={{ flexDirection: 'row', gap: 12, marginTop: 12 }}>
+                  {supaEvent.organizer_email ? (
+                    <TouchableOpacity style={styles.contactCta} onPress={() => Linking.openURL(`mailto:${supaEvent.organizer_email}`)}>
+                      <Text style={styles.contactCtaText}>✉️  Email</Text>
+                    </TouchableOpacity>
+                  ) : null}
+                  {supaEvent.organizer_phone ? (
+                    <TouchableOpacity style={styles.contactCta} onPress={() => Linking.openURL(`tel:${supaEvent.organizer_phone}`)}>
+                      <Text style={styles.contactCtaText}>📞  Call</Text>
+                    </TouchableOpacity>
+                  ) : null}
+                </View>
               </View>
             )}
 
@@ -981,15 +1027,36 @@ export default function EventDetailScreen() {
                   {gallery.map((url, i) => {
                     const isVideo = url.toLowerCase().includes('.mp4') || url.toLowerCase().includes('.mov') || url.toLowerCase().includes('video');
                     const item = { url, type: isVideo ? 'video' as const : 'image' as const };
+                    // Build gallery items for swipeable modal
+                    const allItems = gallery.map((u) => ({
+                      url: u,
+                      type: (u.toLowerCase().includes('.mp4') || u.toLowerCase().includes('.mov') || u.toLowerCase().includes('video')) ? 'video' as const : 'image' as const
+                    }));
                     return (
-                      <TouchableOpacity key={i} activeOpacity={0.9} onPress={() => setFullscreenMedia(item)}>
+                      <TouchableOpacity 
+                        key={i} 
+                        activeOpacity={0.9} 
+                        onPress={() => {
+                          setGalleryItems(allItems);
+                          setFullscreenMedia({ ...item, index: i });
+                        }}
+                        style={styles.galleryItemContainer}
+                      >
                         {isVideo ? (
-                          <Video
-                            source={{ uri: url }}
-                            style={styles.galleryItem}
-                            resizeMode={"cover" as any}
-                            shouldPlay={false}
-                          />
+                          <View style={styles.galleryItem}>
+                            <Video
+                              source={{ uri: url }}
+                              style={styles.galleryItemMedia}
+                              resizeMode={"cover" as any}
+                              shouldPlay={false}
+                            />
+                            {/* Video Icon Overlay */}
+                            <View style={styles.videoIconOverlay}>
+                              <View style={styles.videoIconCircle}>
+                                <Play size={20} color="#fff" fill="#fff" />
+                              </View>
+                            </View>
+                          </View>
                         ) : (
                           <Image source={{ uri: url }} style={styles.galleryItem} />
                         )}
@@ -1001,7 +1068,7 @@ export default function EventDetailScreen() {
             )}
           </View>
         </ScrollView>
-        {/* Fullscreen Media Modal */}
+        {/* Fullscreen Media Modal - Swipeable Gallery */}
         {fullscreenMedia && (
           <Modal
             visible={!!fullscreenMedia}
@@ -1009,38 +1076,63 @@ export default function EventDetailScreen() {
             animationType="fade"
             onRequestClose={() => setFullscreenMedia(null)}
           >
-            <TouchableOpacity
-              activeOpacity={1}
-              style={styles.modalOverlay}
-              onPress={() => setFullscreenMedia(null)}
-            >
-              <TouchableOpacity
-                activeOpacity={1}
-                style={styles.modalMediaContainer}
-                onPress={(e) => e.stopPropagation()}
-              >
-                {fullscreenMedia.type === 'video' ? (
-                  <Video
-                    source={{ uri: fullscreenMedia.url }}
-                    style={styles.modalMedia}
-                    useNativeControls
-                    resizeMode={"contain" as any}
-                    shouldPlay
-                  />
-                ) : (
-                  <Image
-                    source={{ uri: fullscreenMedia.url }}
-                    style={styles.modalMedia}
-                    resizeMode="contain"
-                  />
-                )}
-              </TouchableOpacity>
+            <View style={styles.modalOverlay}>
+              {/* Close Button - Top Left */}
               <TouchableOpacity style={styles.modalClose} onPress={() => setFullscreenMedia(null)}>
                 <View style={styles.backButtonCircle}>
                   <ArrowLeft size={22} color="#333" />
                 </View>
               </TouchableOpacity>
-            </TouchableOpacity>
+              
+              {/* Gallery Counter */}
+              {galleryItems.length > 1 && (
+                <View style={styles.galleryCounter}>
+                  <Text style={styles.galleryCounterText}>
+                    {(fullscreenMedia.index ?? 0) + 1} / {galleryItems.length}
+                  </Text>
+                </View>
+              )}
+              
+              {/* Swipeable Gallery */}
+              <FlatList
+                data={galleryItems}
+                horizontal
+                pagingEnabled
+                showsHorizontalScrollIndicator={false}
+                initialScrollIndex={fullscreenMedia.index ?? 0}
+                getItemLayout={(_, index) => ({
+                  length: Dimensions.get('window').width,
+                  offset: Dimensions.get('window').width * index,
+                  index,
+                })}
+                onMomentumScrollEnd={(e) => {
+                  const newIndex = Math.round(e.nativeEvent.contentOffset.x / Dimensions.get('window').width);
+                  if (galleryItems[newIndex]) {
+                    setFullscreenMedia({ ...galleryItems[newIndex], index: newIndex });
+                  }
+                }}
+                keyExtractor={(_, index) => index.toString()}
+                renderItem={({ item }) => (
+                  <View style={styles.modalMediaContainer}>
+                    {item.type === 'video' ? (
+                      <Video
+                        source={{ uri: item.url }}
+                        style={styles.modalMedia}
+                        useNativeControls
+                        resizeMode={"contain" as any}
+                        shouldPlay={item.url === fullscreenMedia.url}
+                      />
+                    ) : (
+                      <Image
+                        source={{ uri: item.url }}
+                        style={styles.modalMedia}
+                        resizeMode="contain"
+                      />
+                    )}
+                  </View>
+                )}
+              />
+            </View>
           </Modal>
         )}
       </View>
@@ -1596,25 +1688,181 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     color: '#fff',
   },
+  // Event detail header
+  safeHeader: {
+    backgroundColor: '#fff',
+  },
+  eventHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    backgroundColor: '#fff',
+    borderBottomWidth: 1,
+    borderBottomColor: '#F3F4F6',
+  },
+  headerBackBtn: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: '#F3F4F6',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  headerTitle: {
+    flex: 1,
+    fontSize: 17,
+    fontWeight: '600',
+    color: '#111827',
+    marginHorizontal: 12,
+    textAlign: 'center',
+  },
+  headerShareBtn: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: '#F3F4F6',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
   // Supabase detail additions
-  mediaBox: { position: 'relative' },
-  detailMedia: { width: '100%', height: 240 },
+  mediaBox: { 
+    position: 'relative',
+    backgroundColor: '#F9FAFB',
+  },
+  detailMedia: { 
+    width: '100%', 
+    height: 280, 
+    borderRadius: 0,
+  },
   detailBack: { position: 'absolute', top: 16, left: 16 },
-  detailBody: { padding: 16 },
-  detailTitle: { fontSize: 22, fontWeight: '800', color: '#111827' },
-  detailRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 8 },
-  detailMeta: { fontSize: 14, color: '#374151' },
-  detailDesc: { marginTop: 12, fontSize: 15, color: '#4B5563', lineHeight: 22 },
+  detailBody: { 
+    padding: 20,
+    paddingTop: 24,
+  },
+  detailTitle: { 
+    fontSize: 26, 
+    fontWeight: '800', 
+    color: '#111827',
+    letterSpacing: -0.5,
+    lineHeight: 32,
+    marginBottom: 16,
+  },
+  detailRow: { 
+    flexDirection: 'row', 
+    alignItems: 'center', 
+    gap: 10, 
+    marginTop: 0,
+    paddingVertical: 10,
+    paddingHorizontal: 14,
+    backgroundColor: '#F9FAFB',
+    borderRadius: 12,
+    marginBottom: 8,
+  },
+  detailMeta: { 
+    fontSize: 15, 
+    color: '#374151',
+    fontWeight: '500',
+    flex: 1,
+  },
+  detailDesc: { 
+    fontSize: 16, 
+    color: '#4B5563', 
+    lineHeight: 26,
+  },
+  infoCardsContainer: {
+    marginBottom: 20,
+  },
+  iconCircle: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: '#FFFBEB',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  aboutSection: {
+    marginTop: 24,
+    paddingTop: 24,
+    borderTopWidth: 1,
+    borderTopColor: '#F3F4F6',
+  },
+  sectionTitleDetail: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: '#111827',
+    marginBottom: 12,
+  },
+  organizerSection: {
+    marginTop: 24,
+    paddingTop: 24,
+    borderTopWidth: 1,
+    borderTopColor: '#F3F4F6',
+  },
   registerCta: { marginTop: 16, backgroundColor: '#4169E1', paddingVertical: 12, paddingHorizontal: 16, borderRadius: 10, alignSelf: 'flex-start' },
   registerCtaText: { color: '#fff', fontWeight: '700' },
-  contactCta: { backgroundColor: '#EEF2FF', borderWidth: 1, borderColor: '#C7D2FE', paddingVertical: 10, paddingHorizontal: 14, borderRadius: 10 },
-  contactCtaText: { color: '#3730A3', fontWeight: '700' },
-  gallerySection: { marginTop: 24, paddingTop: 24, borderTopWidth: 1, borderTopColor: '#E5E7EB' },
-  gallerySectionTitle: { fontSize: 18, fontWeight: '700', color: '#111827', marginBottom: 12 },
-  galleryGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
-  galleryItem: { width: (Dimensions.get('window').width - 48) / 2, height: 180, borderRadius: 12, backgroundColor: '#F3F4F6' },
+  contactCta: { 
+    backgroundColor: '#EEF2FF', 
+    borderWidth: 1, 
+    borderColor: '#C7D2FE', 
+    paddingVertical: 12, 
+    paddingHorizontal: 20, 
+    borderRadius: 12,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  contactCtaText: { color: '#3730A3', fontWeight: '700', fontSize: 14 },
+  gallerySection: { 
+    marginTop: 24, 
+    paddingTop: 24, 
+    borderTopWidth: 1, 
+    borderTopColor: '#E5E7EB',
+  },
+  gallerySectionTitle: { 
+    fontSize: 18, 
+    fontWeight: '700', 
+    color: '#111827', 
+    marginBottom: 16,
+  },
+  galleryGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
+  galleryItemContainer: { position: 'relative' },
+  galleryItem: { width: (Dimensions.get('window').width - 50) / 2, height: 160, borderRadius: 16, backgroundColor: '#F3F4F6', overflow: 'hidden' },
+  galleryItemMedia: { width: '100%', height: '100%' },
+  videoIconOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  videoIconCircle: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: 'rgba(0,0,0,0.4)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
   modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.95)', justifyContent: 'center', alignItems: 'center' },
-  modalClose: { position: 'absolute', top: 50, right: 16 },
+  modalClose: { position: 'absolute', top: 50, left: 16, zIndex: 10 },
+  galleryCounter: {
+    position: 'absolute',
+    top: 56,
+    alignSelf: 'center',
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    paddingHorizontal: 16,
+    paddingVertical: 6,
+    borderRadius: 20,
+    zIndex: 10,
+  },
+  galleryCounterText: {
+    color: '#fff',
+    fontSize: 14,
+    fontWeight: '600',
+  },
   modalMediaContainer: { width: Dimensions.get('window').width, height: Dimensions.get('window').height, justifyContent: 'center', alignItems: 'center' },
   modalMedia: { width: Dimensions.get('window').width, height: Dimensions.get('window').height * 0.8 },
   centered: {

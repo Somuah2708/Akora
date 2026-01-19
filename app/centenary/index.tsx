@@ -4,10 +4,11 @@ import { useRouter } from 'expo-router'
 import { DebouncedTouchable } from '@/components/DebouncedTouchable';
 import { debouncedRouter } from '@/utils/navigationDebounce';;
 import { useFonts, Inter_400Regular, Inter_600SemiBold } from '@expo-google-fonts/inter';
-import { ArrowLeft, Calendar, Users, Star, Clock, HeartHandshake, ChevronRight, ChevronDown, ChevronUp, Map, Award, Megaphone, BookOpen, DollarSign, Theater, Clipboard } from 'lucide-react-native';
+import { ArrowLeft, Calendar, Users, Clock, HeartHandshake, ChevronRight, ChevronDown, ChevronUp, Map, Theater, Archive, Radio, Heart, FileText, Footprints, Trophy, Target, Home, Wallet, Compass, Mic, Gift, Music, ClipboardCheck, Settings } from 'lucide-react-native';
 import { COLORS } from '@/constants/Colors';
 import { supabase } from '@/lib/supabase';
 import { hideSplashScreen } from '@/lib/splashScreen';
+import { useAuth } from '@/hooks/useAuth';
 
 // Enable LayoutAnimation on Android
 if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
@@ -20,29 +21,40 @@ const CENTENARY_DATE = new Date('2027-01-27T00:00:00Z');
 
 // Committee display data with matching database circle names
 const COMMITTEES = [
-  { id: 'memorabilia', dbName: 'Memorabilia Committee', name: 'Memorabilia', desc: 'Preserving Achimota\'s rich history and heritage through archives and exhibitions', icon: BookOpen, color: '#EDE9FE' },
-  { id: 'publicity', dbName: 'Publicity Committee', name: 'Publicity', desc: 'Global media coverage and social campaigns for the centenary', icon: Megaphone, color: '#ECFDF5' },
-  { id: 'healthwalks', dbName: 'Health Walks Committee', name: 'Health Walks', desc: 'Wellness activities, campus tours, and fitness challenges', icon: Star, color: '#FFF7ED' },
-  { id: 'historicaldoc', dbName: 'Historical Documentation Committee', name: 'Historical Documentation', desc: 'Archive preservation and video documentation', icon: BookOpen, color: '#EFF6FF' },
-  { id: 'healthwalks2', dbName: 'Health Walks II Committee', name: 'Health Walks II', desc: 'Extended wellness programs across regions', icon: Star, color: '#FFF7ED' },
-  { id: 'achimotasubjugates', dbName: 'Achimota Subjugates Committee', name: 'Achimota Subjugates', desc: 'Sports tournaments and athletic competitions', icon: Award, color: '#F0FDF4' },
-  { id: 'sports', dbName: 'Sports Committee', name: 'Sports', desc: 'Inter-school competitions and sports galas', icon: Award, color: '#FAF5FF' },
-  { id: 'homecoming', dbName: 'Homecoming Committee', name: 'Homecoming', desc: 'Alumni reunions and networking sessions', icon: Users, color: '#EFF6FF' },
-  { id: 'finance', dbName: 'Finance Committee', name: 'Finance', desc: 'Fundraising, budgeting, and sponsor relations', icon: DollarSign, color: '#EDE9FE' },
-  { id: 'gambagatoaccra', dbName: 'Gambaga to Accra Committee', name: 'Gambaga to Accra', desc: 'Heritage tours and historical journey documentation', icon: Map, color: '#F0FDF4' },
-  { id: 'achimotaspeaks', dbName: 'Achimota Speaks Committee', name: 'Achimota Speaks', desc: 'Lectures, seminars, and panel discussions', icon: Megaphone, color: '#EFF6FF' },
-  { id: 'yeargroup', dbName: 'Year Group Celebrations Committee', name: 'Year Group Celebrations', desc: 'Year group events and reunion celebrations', icon: Calendar, color: '#FFF7ED' },
-  { id: 'operadrama', dbName: 'Opera and Drama Committee', name: 'Opera and Drama', desc: 'Theatrical productions and cultural performances', icon: Theater, color: '#ECFDF5' },
-  { id: 'centenaryplanning', dbName: 'Centenary Planning Committee', name: 'Centenary Planning', desc: 'Central coordination of all centenary activities', icon: Clipboard, color: '#EDE9FE' },
+  { id: 'memorabilia', dbName: 'Memorabilia Committee', name: 'Memorabilia', desc: 'Preserving Achimota\'s rich history and heritage through archives and exhibitions', icon: Archive, color: '#EDE9FE' },
+  { id: 'publicity', dbName: 'Publicity Committee', name: 'Publicity', desc: 'Global media coverage and social campaigns for the centenary', icon: Radio, color: '#ECFDF5' },
+  { id: 'healthwalks', dbName: 'Health Walks Committee', name: 'Health Walks', desc: 'Wellness activities, campus tours, and fitness challenges', icon: Heart, color: '#FFF7ED' },
+  { id: 'historicaldoc', dbName: 'Historical Documentation Committee', name: 'Historical Documentation', desc: 'Archive preservation and video documentation', icon: FileText, color: '#EFF6FF' },
+  { id: 'healthwalks2', dbName: 'Health Walks II Committee', name: 'Health Walks II', desc: 'Extended wellness programs across regions', icon: Footprints, color: '#FFF7ED' },
+  { id: 'achimotasubjugates', dbName: 'Achimota Subjugates Committee', name: 'Achimota Subjugates', desc: 'Sports tournaments and athletic competitions', icon: Trophy, color: '#F0FDF4' },
+  { id: 'sports', dbName: 'Sports Committee', name: 'Sports', desc: 'Inter-school competitions and sports galas', icon: Target, color: '#FAF5FF' },
+  { id: 'homecoming', dbName: 'Homecoming Committee', name: 'Homecoming', desc: 'Alumni reunions and networking sessions', icon: Home, color: '#EFF6FF' },
+  { id: 'finance', dbName: 'Finance Committee', name: 'Finance', desc: 'Fundraising, budgeting, and sponsor relations', icon: Wallet, color: '#EDE9FE' },
+  { id: 'gambagatoaccra', dbName: 'Gambaga to Accra Committee', name: 'Gambaga to Accra', desc: 'Heritage tours and historical journey documentation', icon: Compass, color: '#F0FDF4' },
+  { id: 'achimotaspeaks', dbName: 'Achimota Speaks Committee', name: 'Achimota Speaks', desc: 'Lectures, seminars, and panel discussions', icon: Mic, color: '#EFF6FF' },
+  { id: 'yeargroup', dbName: 'Year Group Celebrations Committee', name: 'Year Group Celebrations', desc: 'Year group events and reunion celebrations', icon: Gift, color: '#FFF7ED' },
+  { id: 'operadrama', dbName: 'Opera and Drama Committee', name: 'Opera and Drama', desc: 'Theatrical productions and cultural performances', icon: Music, color: '#ECFDF5' },
+  { id: 'centenaryplanning', dbName: 'Centenary Planning Committee', name: 'Centenary Planning', desc: 'Central coordination of all centenary activities', icon: ClipboardCheck, color: '#EDE9FE' },
 ];
 
-const ACTIVITIES = [
-  { id: 'a1', month: 'Jan', year: 2026, title: 'Committee Onboarding', summary: 'Kick-off workshops and alignment' },
-  { id: 'a2', month: 'Apr', year: 2026, title: 'Sponsorship Drive', summary: 'Launch official sponsor packages' },
-  { id: 'a3', month: 'Aug', year: 2026, title: 'Heritage Exhibition Prep', summary: 'Curation and archival digitization' },
-  { id: 'a4', month: 'Nov', year: 2026, title: 'Volunteers Recruitment', summary: 'Campus and alumni volunteers' },
-  { id: 'a5', month: 'Mar', year: 2027, title: 'Centenary Gala', summary: 'Flagship celebration night' },
-];
+// Interfaces for database items
+interface Activity {
+  id: string;
+  title: string;
+  description: string | null;
+  month: string | null;
+  year: number | null;
+  sort_order: number;
+}
+
+interface Milestone {
+  id: string;
+  title: string;
+  description: string | null;
+  milestone_date: string | null;
+  sort_order: number;
+  is_completed: boolean;
+}
 
 // Map committee dbName to circle ID from database
 interface CircleMap {
@@ -51,6 +63,7 @@ interface CircleMap {
 
 export default function CentenaryScreen() {
   const router = useRouter();
+  const { user } = useAuth();
   const [fontsLoaded] = useFonts({
     'Inter-Regular': Inter_400Regular,
     'Inter-SemiBold': Inter_600SemiBold,
@@ -58,15 +71,70 @@ export default function CentenaryScreen() {
   const [circleIds, setCircleIds] = useState<CircleMap>({});
   const [loadingCircles, setLoadingCircles] = useState(true);
   const [expandedCommittee, setExpandedCommittee] = useState<string | null>(null);
+  const [activities, setActivities] = useState<Activity[]>([]);
+  const [milestones, setMilestones] = useState<Milestone[]>([]);
+  const [expandedActivity, setExpandedActivity] = useState<string | null>(null);
+  const [isAdmin, setIsAdmin] = useState(false);
 
   const toggleExpand = (id: string) => {
     LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
     setExpandedCommittee(expandedCommittee === id ? null : id);
   };
 
+  const toggleActivityExpand = (id: string) => {
+    LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+    setExpandedActivity(expandedActivity === id ? null : id);
+  };
+
   useEffect(() => {
     if (fontsLoaded) hideSplashScreen();
   }, [fontsLoaded]);
+
+  // Check admin status
+  useEffect(() => {
+    const checkAdmin = async () => {
+      if (!user?.id) return;
+      try {
+        const { data } = await supabase
+          .from('alumni')
+          .select('is_admin')
+          .eq('id', user.id)
+          .single();
+        setIsAdmin(data?.is_admin || false);
+      } catch (error) {
+        console.error('Error checking admin:', error);
+      }
+    };
+    checkAdmin();
+  }, [user]);
+
+  // Fetch activities and milestones
+  useEffect(() => {
+    const fetchActivitiesAndMilestones = async () => {
+      try {
+        // Fetch activities
+        const { data: activitiesData } = await supabase
+          .from('centenary_activities')
+          .select('*')
+          .eq('is_active', true)
+          .order('sort_order', { ascending: true });
+
+        if (activitiesData) setActivities(activitiesData);
+
+        // Fetch milestones
+        const { data: milestonesData } = await supabase
+          .from('centenary_milestones')
+          .select('*')
+          .eq('is_active', true)
+          .order('sort_order', { ascending: true });
+
+        if (milestonesData) setMilestones(milestonesData);
+      } catch (error) {
+        console.error('Error fetching centenary data:', error);
+      }
+    };
+    fetchActivitiesAndMilestones();
+  }, []);
 
   // Fetch centenary circle IDs from database
   useEffect(() => {
@@ -128,7 +196,13 @@ export default function CentenaryScreen() {
           <ArrowLeft size={22} color="#FFFFFF" />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Achimota Centenary 2027</Text>
-        <View style={{ width: 44 }} />
+        {isAdmin ? (
+          <TouchableOpacity onPress={() => debouncedRouter.push('/centenary/admin')} style={styles.adminBtn}>
+            <Settings size={20} color="#FFFFFF" />
+          </TouchableOpacity>
+        ) : (
+          <View style={{ width: 44 }} />
+        )}
       </View>
 
       {/* Hero - Enhanced with theme colors */}
@@ -166,15 +240,11 @@ export default function CentenaryScreen() {
 
       {/* Committees */}
       <View style={styles.section}>
-        <View style={styles.sectionHeader}>
-          <View>
-            <Text style={styles.sectionTitle}>Centenary Committees</Text>
-            <View style={styles.sectionUnderline} />
+        <View style={styles.sectionHeaderAlt}>
+          <View style={styles.titleBadge}>
+            <Text style={styles.sectionTitleLarge}>Centenary Committees</Text>
           </View>
-          <TouchableOpacity onPress={() => debouncedRouter.push('/circles?category=Centenary')} style={styles.seeAllBtn}>
-            <Text style={styles.seeAllText}>View All</Text>
-            <ChevronRight size={16} color={COLORS.tabBarActive} />
-          </TouchableOpacity>
+          <Text style={styles.sectionSubtitle}>Join a committee and contribute to Achimota's centenary celebration</Text>
         </View>
         {loadingCircles ? (
           <View style={styles.loadingContainer}>
@@ -188,11 +258,8 @@ export default function CentenaryScreen() {
               const isExpanded = expandedCommittee === c.id;
               
               const handleCardPress = () => {
-                if (circleId) {
-                  debouncedRouter.push(`/circles/${circleId}`);
-                } else {
-                  debouncedRouter.push('/circles?category=Centenary');
-                }
+                // Navigate to new committee detail page instead of circles
+                debouncedRouter.push(`/centenary/committee/${c.id}`);
               };
               
               return (
@@ -204,15 +271,15 @@ export default function CentenaryScreen() {
                     activeOpacity={0.7}
                   >
                     <View style={[styles.iconContainer, { backgroundColor: c.color }]}>
-                      <Icon size={20} color={COLORS.tabBar} strokeWidth={2.5} />
+                      <View style={styles.iconGradientOverlay} />
+                      <Icon size={24} color={COLORS.tabBar} strokeWidth={2.2} />
                     </View>
                     <View style={styles.committeeTextContainer}>
-                      <Text style={styles.committeeName} numberOfLines={1}>{c.name}</Text>
+                      <Text style={styles.committeeName} numberOfLines={isExpanded ? undefined : 1}>{c.name}</Text>
                       {!isExpanded && (
                         <Text style={styles.committeeDescPreview} numberOfLines={1}>{c.desc}</Text>
                       )}
                     </View>
-                    <ChevronRight size={18} color={COLORS.tabBarActive} />
                   </TouchableOpacity>
                   
                   {/* Expand/Collapse button */}
@@ -255,22 +322,46 @@ export default function CentenaryScreen() {
             <Text style={styles.sectionTitle}>Activities & Preparation</Text>
             <View style={styles.sectionUnderline} />
           </View>
-          <TouchableOpacity onPress={() => debouncedRouter.push('/events')} style={styles.seeAllBtn}>
-            <Text style={styles.seeAllText}>View Events</Text>
+          <TouchableOpacity onPress={() => debouncedRouter.push('/centenary/activities')} style={styles.seeAllBtn}>
+            <Text style={styles.seeAllText}>All</Text>
             <ChevronRight size={16} color={COLORS.tabBarActive} />
           </TouchableOpacity>
         </View>
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingHorizontal: 16, gap: 14 }}>
-          {ACTIVITIES.map((a) => (
-            <View key={a.id} style={styles.activityCard}>
-              <View style={styles.activityHeader}>
-                <View style={styles.activityBadge}><Text style={styles.activityBadgeText}>{a.month} {a.year}</Text></View>
-              </View>
-              <Text style={styles.activityTitle}>{a.title}</Text>
-              <Text style={styles.activitySummary}>{a.summary}</Text>
-              <View style={styles.activityIndicator} />
+          {activities.length > 0 ? activities.map((a) => {
+            const isExpanded = expandedActivity === a.id;
+            return (
+              <TouchableOpacity 
+                key={a.id} 
+                style={[styles.activityCard, isExpanded && styles.activityCardExpanded]}
+                onPress={() => toggleActivityExpand(a.id)}
+                activeOpacity={0.8}
+              >
+                <View style={styles.activityHeader}>
+                  <View style={styles.activityBadge}>
+                    <Text style={styles.activityBadgeText}>{a.month} {a.year}</Text>
+                  </View>
+                  {isExpanded ? (
+                    <ChevronUp size={16} color="#9CA3AF" />
+                  ) : (
+                    <ChevronDown size={16} color="#9CA3AF" />
+                  )}
+                </View>
+                <Text style={styles.activityTitle}>{a.title}</Text>
+                {!isExpanded && a.description && (
+                  <Text style={styles.activitySummary} numberOfLines={2}>{a.description}</Text>
+                )}
+                {isExpanded && a.description && (
+                  <Text style={styles.activityDescriptionFull}>{a.description}</Text>
+                )}
+                <View style={styles.activityIndicator} />
+              </TouchableOpacity>
+            );
+          }) : (
+            <View style={styles.emptyActivities}>
+              <Text style={styles.emptyActivitiesText}>No activities yet</Text>
             </View>
-          ))}
+          )}
         </ScrollView>
       </View>
 
@@ -281,24 +372,40 @@ export default function CentenaryScreen() {
           <View style={styles.sectionUnderline} />
         </View>
         <View style={styles.timeline}>
-          {[
-            { date: 'Q1 2026', text: 'Committee onboarding & scopes' },
-            { date: 'Q2 2026', text: 'Sponsorship packages & partnerships' },
-            { date: 'Q3 2026', text: 'Media campaign & heritage curation' },
-            { date: 'Q4 2026', text: 'Volunteer training & logistics checks' },
-            { date: '2027', text: 'Centenary celebrations' },
-          ].map((t, idx) => (
-            <View key={idx} style={styles.timelineRow}>
+          {milestones.length > 0 ? milestones.map((m, idx) => (
+            <View key={m.id} style={styles.timelineRow}>
               <View style={styles.timelineDotContainer}>
-                <View style={styles.timelineDot} />
-                {idx < 4 && <View style={styles.timelineLine} />}
+                <View style={[styles.timelineDot, m.is_completed && styles.timelineDotCompleted]} />
+                {idx < milestones.length - 1 && <View style={styles.timelineLine} />}
               </View>
               <View style={styles.timelineContent}>
-                <Text style={styles.timelineDate}>{t.date}</Text>
-                <Text style={styles.timelineText}>{t.text}</Text>
+                <Text style={styles.timelineDate}>{m.milestone_date}</Text>
+                <Text style={styles.timelineText}>{m.title}</Text>
+                {m.description && (
+                  <Text style={styles.timelineDescription}>{m.description}</Text>
+                )}
               </View>
             </View>
-          ))}
+          )) : (
+            [
+              { date: 'Q1 2026', text: 'Committee onboarding & scopes' },
+              { date: 'Q2 2026', text: 'Sponsorship packages & partnerships' },
+              { date: 'Q3 2026', text: 'Media campaign & heritage curation' },
+              { date: 'Q4 2026', text: 'Volunteer training & logistics checks' },
+              { date: '2027', text: 'Centenary celebrations' },
+            ].map((t, idx) => (
+              <View key={idx} style={styles.timelineRow}>
+                <View style={styles.timelineDotContainer}>
+                  <View style={styles.timelineDot} />
+                  {idx < 4 && <View style={styles.timelineLine} />}
+                </View>
+                <View style={styles.timelineContent}>
+                  <Text style={styles.timelineDate}>{t.date}</Text>
+                  <Text style={styles.timelineText}>{t.text}</Text>
+                </View>
+              </View>
+            ))
+          )}
         </View>
       </View>
 
@@ -516,6 +623,29 @@ const styles = StyleSheet.create({
     fontFamily: 'Inter-SemiBold',
     letterSpacing: 0.3,
   },
+  titleBadge: {
+    alignSelf: 'flex-start',
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    backgroundColor: '#FFF9E6',
+    borderRadius: 12,
+    marginBottom: 12,
+    borderLeftWidth: 4,
+    borderLeftColor: COLORS.tabBarActive,
+  },
+  sectionTitleLarge: {
+    fontSize: 24,
+    color: COLORS.tabBar,
+    fontFamily: 'Inter-SemiBold',
+    letterSpacing: 0.5,
+  },
+  sectionSubtitle: {
+    fontSize: 14,
+    color: COLORS.textSecondary,
+    fontFamily: 'Inter-Regular',
+    marginBottom: 12,
+    lineHeight: 20,
+  },
   sectionUnderline: {
     width: 40,
     height: 3,
@@ -543,49 +673,69 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   committeeCard: { 
-    borderRadius: 16, 
+    borderRadius: 18, 
     backgroundColor: '#FFFFFF',
-    borderWidth: 1,
+    borderWidth: 1.5,
     borderColor: '#E5E7EB',
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.06,
-    shadowRadius: 8,
-    elevation: 3,
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.08,
+    shadowRadius: 12,
+    elevation: 4,
     overflow: 'hidden',
   },
   committeeCardExpanded: {
     borderColor: COLORS.tabBarActive,
-    borderWidth: 1.5,
+    borderWidth: 2,
+    shadowOpacity: 0.12,
   },
   committeeMainRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    padding: 14,
-    paddingRight: 44,
-    gap: 12,
+    padding: 16,
+    paddingRight: 16,
+    gap: 14,
   },
   iconContainer: {
-    width: 44,
-    height: 44,
-    borderRadius: 12,
+    width: 52,
+    height: 52,
+    borderRadius: 14,
     alignItems: 'center',
     justifyContent: 'center',
+    position: 'relative',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 2,
+  },
+  iconGradientOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    borderRadius: 14,
+    backgroundColor: 'rgba(255, 255, 255, 0.3)',
   },
   committeeTextContainer: {
     flex: 1,
+    paddingRight: 40,
   },
   committeeName: { 
     fontFamily: 'Inter-SemiBold', 
     color: COLORS.tabBar,
-    fontSize: 15,
-    lineHeight: 20,
+    fontSize: 16,
+    lineHeight: 22,
+    letterSpacing: 0.2,
+    flexShrink: 1,
   },
   committeeDescPreview: {
     fontFamily: 'Inter-Regular',
     color: COLORS.textSecondary,
     fontSize: 13,
-    marginTop: 2,
+    marginTop: 4,
+    lineHeight: 18,
   },
   expandBtn: {
     position: 'absolute',
@@ -647,8 +797,16 @@ const styles = StyleSheet.create({
     elevation: 2,
     position: 'relative',
   },
+  activityCardExpanded: {
+    width: 280,
+    backgroundColor: '#FFFBEB',
+    borderColor: COLORS.tabBarActive,
+  },
   activityHeader: {
     marginBottom: 12,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
   },
   activityBadge: { 
     alignSelf: 'flex-start', 
@@ -674,6 +832,28 @@ const styles = StyleSheet.create({
     color: COLORS.textSecondary,
     fontSize: 13,
     lineHeight: 18,
+  },
+  activityDescriptionFull: {
+    color: COLORS.textSecondary,
+    fontSize: 14,
+    lineHeight: 20,
+    marginTop: 8,
+  },
+  emptyActivities: {
+    width: 240,
+    backgroundColor: '#F9FAFB',
+    borderRadius: 16,
+    padding: 24,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+    borderStyle: 'dashed',
+  },
+  emptyActivitiesText: {
+    color: COLORS.textSecondary,
+    fontSize: 14,
+    fontFamily: 'Inter-Regular',
   },
   activityIndicator: {
     position: 'absolute',
@@ -708,6 +888,10 @@ const styles = StyleSheet.create({
     borderColor: COLORS.tabBar,
     zIndex: 2,
   },
+  timelineDotCompleted: {
+    backgroundColor: '#10B981',
+    borderColor: '#059669',
+  },
   timelineLine: {
     width: 2,
     flex: 1,
@@ -728,6 +912,13 @@ const styles = StyleSheet.create({
     color: COLORS.textSecondary,
     fontSize: 14,
     lineHeight: 20,
+  },
+  timelineDescription: {
+    color: COLORS.textSecondary,
+    fontSize: 13,
+    lineHeight: 18,
+    marginTop: 4,
+    opacity: 0.8,
   },
   ctaBox: { 
     margin: 16, 
