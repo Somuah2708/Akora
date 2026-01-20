@@ -246,7 +246,7 @@ export default function JobApplicationScreen() {
   if (!fontsLoaded || loading) {
     return (
       <View style={[styles.container, styles.centerContent]}>
-        <ActivityIndicator size="large" color="#4169E1" />
+        <ActivityIndicator size="large" color="#0F172A" />
         <Text style={styles.loadingText}>Loading job details...</Text>
       </View>
     );
@@ -520,7 +520,7 @@ export default function JobApplicationScreen() {
             disabled={submitting}
           >
             {submitting ? (
-              <ActivityIndicator color="#ffc857" size="small" />
+              <ActivityIndicator color="#0F172A" size="small" />
             ) : (
               <>
                 <Send size={20} color="#ffc857" />

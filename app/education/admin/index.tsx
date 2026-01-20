@@ -18,7 +18,7 @@ export default function EducationAdminScreen() {
 
   return (
     <View style={styles.container}>
-      <ActivityIndicator size="large" color="#16a34a" />
+      <ActivityIndicator size="large" color="#0F172A" />
       <Text style={styles.text}>Redirecting to Alumni Mentors Admin...</Text>
     </View>
   );

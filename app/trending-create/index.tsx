@@ -227,7 +227,7 @@ export default function TrendingCreateScreen() {
                 disabled={uploading}
               >
                 {uploading ? (
-                  <ActivityIndicator size="small" color="#0EA5E9" />
+                  <ActivityIndicator size="small" color="#0F172A" />
                 ) : (
                   <>
                     <ImageIcon size={32} color="#9CA3AF" strokeWidth={2} />

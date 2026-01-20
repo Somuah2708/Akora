@@ -143,7 +143,7 @@ export default function SearchScreen() {
     if (isLoading) {
       return (
         <View style={styles.connectButton}>
-          <ActivityIndicator size="small" color="#4169E1" />
+          <ActivityIndicator size="small" color="#0F172A" />
         </View>
       );
     }
@@ -246,7 +246,7 @@ export default function SearchScreen() {
       {/* Results */}
       {loading ? (
         <View style={styles.centered}>
-          <ActivityIndicator size="large" color="#4169E1" />
+          <ActivityIndicator size="large" color="#0F172A" />
         </View>
       ) : users.length === 0 && searchQuery.length >= 2 ? (
         <View style={styles.centered}>

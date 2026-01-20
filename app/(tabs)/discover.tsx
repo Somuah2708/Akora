@@ -1083,7 +1083,7 @@ export default function DiscoverScreen() {
       {/* Full Screen Refresh Overlay */}
       {refreshing && (
         <View style={styles.loadingOverlay}>
-          <ActivityIndicator size="large" color="#000000" />
+          <ActivityIndicator size="large" color="#0F172A" />
         </View>
       )}
 
@@ -1222,7 +1222,7 @@ export default function DiscoverScreen() {
             <ScrollView style={styles.shareFriendsList} showsVerticalScrollIndicator={false}>
               {loadingFriends ? (
                 <View style={styles.shareLoadingState}>
-                  <ActivityIndicator size="large" color="#000000" />
+                  <ActivityIndicator size="large" color="#0F172A" />
                   <Text style={styles.shareLoadingText}>Loading friends...</Text>
                 </View>
               ) : friendsList.length === 0 ? (
@@ -1362,7 +1362,7 @@ export default function DiscoverScreen() {
         {/* Posts Feed */}
         {loading && !refreshing ? (
           <View style={styles.loadingContainer}>
-            <ActivityIndicator size="large" color="#000000" />
+            <ActivityIndicator size="large" color="#0F172A" />
             <Text style={styles.loadingText}>Loading personalized content...</Text>
           </View>
         ) : filteredFeed.length === 0 ? (

@@ -577,7 +577,7 @@ export default function AdminAlumniMentorsScreen() {
   if (loading) {
     return (
       <View style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color="#16a34a" />
+        <ActivityIndicator size="large" color="#0F172A" />
         <Text style={styles.loadingText}>Loading admin panel...</Text>
       </View>
     );
@@ -1305,7 +1305,7 @@ export default function AdminAlumniMentorsScreen() {
                     disabled={uploadingDocuments}
                   >
                     {uploadingDocuments ? (
-                      <ActivityIndicator color="#16a34a" />
+                      <ActivityIndicator color="#0F172A" />
                     ) : (
                       <>
                         <Ionicons name="cloud-upload-outline" size={24} color="#16a34a" />
@@ -1444,7 +1444,7 @@ export default function AdminAlumniMentorsScreen() {
                       </View>
                       {loadingUniversities ? (
                         <View style={styles.inlinePickerLoading}>
-                          <ActivityIndicator size="small" color="#4169E1" />
+                          <ActivityIndicator size="small" color="#0F172A" />
                         </View>
                       ) : (
                         <ScrollView style={styles.inlinePickerList} nestedScrollEnabled={true}>
@@ -1634,7 +1634,7 @@ export default function AdminAlumniMentorsScreen() {
 
             {loadingUniversities ? (
               <View style={styles.modalLoading}>
-                <ActivityIndicator size="large" color="#4169E1" />
+                <ActivityIndicator size="large" color="#0F172A" />
                 <Text style={styles.modalLoadingText}>Loading universities...</Text>
               </View>
             ) : (

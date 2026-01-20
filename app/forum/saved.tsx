@@ -134,7 +134,7 @@ export default function SavedDiscussionsScreen() {
   if (loading) {
     return (
       <View style={[styles.container, styles.centered]}>
-        <ActivityIndicator size="large" color="#4169E1" />
+        <ActivityIndicator size="large" color="#0F172A" />
         <Text style={styles.loadingText}>Loading saved…</Text>
       </View>
     );

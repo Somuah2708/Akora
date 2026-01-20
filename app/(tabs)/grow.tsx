@@ -362,7 +362,7 @@ const ProfileScreen = React.memo(function ProfileScreen() {
   if (!fontsLoaded || loading) {
     return (
       <View style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color="#000000" />
+        <ActivityIndicator size="large" color="#0F172A" />
       </View>
     );
   }

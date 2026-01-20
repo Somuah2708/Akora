@@ -105,7 +105,7 @@ export default function CategoryScreen() {
       <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
         {loading ? (
           <View style={styles.loadingContainer}>
-            <ActivityIndicator size="large" color="#4169E1" />
+            <ActivityIndicator size="large" color="#0F172A" />
             <Text style={styles.loadingText}>Loading opportunities...</Text>
           </View>
         ) : jobs.length === 0 ? (

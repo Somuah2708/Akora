@@ -205,7 +205,7 @@ export default function TrendingEditScreen() {
     return (
       <View style={styles.container}>
         <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color="#0EA5E9" />
+          <ActivityIndicator size="large" color="#0F172A" />
           <Text style={styles.loadingText}>Loading article...</Text>
         </View>
       </View>
@@ -253,7 +253,7 @@ export default function TrendingEditScreen() {
                 disabled={uploading}
               >
                 {uploading ? (
-                  <ActivityIndicator size="small" color="#0EA5E9" />
+                  <ActivityIndicator size="small" color="#0F172A" />
                 ) : (
                   <>
                     <ImageIcon size={32} color="#9CA3AF" strokeWidth={2} />

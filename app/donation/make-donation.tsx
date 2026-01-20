@@ -448,7 +448,7 @@ export default function MakeDonationScreen() {
               disabled={uploading}
             >
               {uploading ? (
-                <ActivityIndicator size="small" color="#ffc857" />
+                <ActivityIndicator size="small" color="#0F172A" />
               ) : (
                 <>
                   <View style={styles.uploadIconContainer}>

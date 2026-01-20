@@ -194,7 +194,7 @@ export default function ProductDetailScreen() {
   if (!fontsLoaded || loading) {
     return (
       <View style={styles.container}>
-        <ActivityIndicator size="large" color="#10B981" style={{ marginTop: 100 }} />
+        <ActivityIndicator size="large" color="#0F172A" style={{ marginTop: 100 }} />
       </View>
     );
   }

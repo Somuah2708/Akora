@@ -78,7 +78,7 @@ export default function RecommendationListScreen() {
       </View>
 
       {loading ? (
-        <View style={styles.center}><ActivityIndicator color="#4169E1" /></View>
+        <View style={styles.center}><ActivityIndicator color="#0F172A" /></View>
       ) : items.length === 0 ? (
         <View style={styles.empty}>
           <Users size={36} color="#999" />

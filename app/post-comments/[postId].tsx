@@ -395,7 +395,7 @@ export default function PostCommentsScreen() {
       <ScrollView style={styles.commentsContainer} showsVerticalScrollIndicator={false}>
         {loading ? (
           <View style={styles.loadingContainer}>
-            <ActivityIndicator size="large" color="#475569" />
+            <ActivityIndicator size="large" color="#0F172A" />
           </View>
         ) : comments.length === 0 ? (
           <View style={styles.emptyContainer}>

@@ -440,7 +440,7 @@ export default function UploadDocumentScreen() {
                 {formData.fileName || 'PDF, DOC, XLS, PPT (Max 50MB)'}
               </Text>
             </View>
-            {uploading && <ActivityIndicator size="small" color="#ffc857" />}
+            {uploading && <ActivityIndicator size="small" color="#0F172A" />}
             {!uploading && formData.fileName && (
               <View style={styles.documentPickerCheckmark}>
                 <Text style={styles.documentPickerCheckmarkText}>✓</Text>

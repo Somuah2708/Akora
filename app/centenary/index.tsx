@@ -4,7 +4,7 @@ import { useRouter } from 'expo-router'
 import { DebouncedTouchable } from '@/components/DebouncedTouchable';
 import { debouncedRouter } from '@/utils/navigationDebounce';;
 import { useFonts, Inter_400Regular, Inter_600SemiBold } from '@expo-google-fonts/inter';
-import { ArrowLeft, Calendar, Users, Clock, HeartHandshake, ChevronRight, ChevronDown, ChevronUp, Map, Theater, Archive, Radio, Heart, FileText, Footprints, Trophy, Target, Home, Wallet, Compass, Mic, Gift, Music, ClipboardCheck, Settings } from 'lucide-react-native';
+import { ArrowLeft, Calendar, Users, Clock, HeartHandshake, ChevronRight, ChevronDown, ChevronUp, Map, Theater, Archive, Radio, Heart, FileText, Footprints, Trophy, Target, Home, Wallet, Compass, Mic, Gift, Music, ClipboardCheck, Settings, Sparkles } from 'lucide-react-native';
 import { COLORS } from '@/constants/Colors';
 import { supabase } from '@/lib/supabase';
 import { hideSplashScreen } from '@/lib/splashScreen';
@@ -56,6 +56,21 @@ interface Milestone {
   is_completed: boolean;
 }
 
+interface Committee {
+  id: string;
+  name: string;
+  db_name: string;
+  description: string | null;
+  icon_name: string | null;
+  color: string | null;
+  sort_order: number;
+}
+
+// Icon mapping for dynamic icons
+const ICON_MAP: Record<string, any> = {
+  Archive, Radio, Heart, FileText, Footprints, Trophy, Target, Home, Wallet, Compass, Mic, Gift, Music, ClipboardCheck, Users, Calendar, Map, Theater, Settings, ChevronRight, ChevronDown, ChevronUp, HeartHandshake, Clock
+};
+
 // Map committee dbName to circle ID from database
 interface CircleMap {
   [key: string]: string;
@@ -73,6 +88,7 @@ export default function CentenaryScreen() {
   const [expandedCommittee, setExpandedCommittee] = useState<string | null>(null);
   const [activities, setActivities] = useState<Activity[]>([]);
   const [milestones, setMilestones] = useState<Milestone[]>([]);
+  const [committees, setCommittees] = useState<Committee[]>([]);
   const [expandedActivity, setExpandedActivity] = useState<string | null>(null);
   const [isAdmin, setIsAdmin] = useState(false);
 
@@ -96,7 +112,7 @@ export default function CentenaryScreen() {
       if (!user?.id) return;
       try {
         const { data } = await supabase
-          .from('alumni')
+          .from('profiles')
           .select('is_admin')
           .eq('id', user.id)
           .single();
@@ -108,10 +124,21 @@ export default function CentenaryScreen() {
     checkAdmin();
   }, [user]);
 
-  // Fetch activities and milestones
+  // Fetch activities, milestones, and committees
   useEffect(() => {
-    const fetchActivitiesAndMilestones = async () => {
+    const fetchCentenaryData = async () => {
       try {
+        // Fetch committees
+        const { data: committeesData } = await supabase
+          .from('centenary_committees')
+          .select('*')
+          .eq('is_active', true)
+          .order('sort_order', { ascending: true });
+
+        if (committeesData && committeesData.length > 0) {
+          setCommittees(committeesData);
+        }
+
         // Fetch activities
         const { data: activitiesData } = await supabase
           .from('centenary_activities')
@@ -133,7 +160,7 @@ export default function CentenaryScreen() {
         console.error('Error fetching centenary data:', error);
       }
     };
-    fetchActivitiesAndMilestones();
+    fetchCentenaryData();
   }, []);
 
   // Fetch centenary circle IDs from database
@@ -240,22 +267,27 @@ export default function CentenaryScreen() {
 
       {/* Committees */}
       <View style={styles.section}>
-        <View style={styles.sectionHeaderAlt}>
-          <View style={styles.titleBadge}>
-            <Text style={styles.sectionTitleLarge}>Centenary Committees</Text>
+        <View style={styles.sectionHeader}>
+          <View>
+            <Text style={styles.sectionTitle}>Centenary Committees</Text>
+            <View style={styles.sectionUnderline} />
           </View>
-          <Text style={styles.sectionSubtitle}>Join a committee and contribute to Achimota's centenary celebration</Text>
         </View>
+        <Text style={[styles.sectionSubtitle, { paddingHorizontal: 16, marginBottom: 16 }]}>Join a committee and contribute to Achimota's centenary celebration</Text>
         {loadingCircles ? (
           <View style={styles.loadingContainer}>
             <ActivityIndicator size="small" color={COLORS.tabBarActive} />
           </View>
         ) : (
           <View style={styles.committeesList}>
-            {COMMITTEES.map((c) => {
-              const Icon = c.icon;
-              const circleId = circleIds[c.dbName];
+            {(committees.length > 0 ? committees : COMMITTEES).map((c: any) => {
+              const Icon = ICON_MAP[c.icon_name || c.icon] || Users;
+              const circleId = circleIds[c.db_name || c.dbName];
               const isExpanded = expandedCommittee === c.id;
+              const cardColor = c.color || '#EDE9FE';
+              const cardDesc = c.description || c.desc || '';
+              const cardName = c.name;
+              const cardDbName = c.db_name || c.dbName;
               
               const handleCardPress = () => {
                 // Navigate to new committee detail page instead of circles
@@ -270,14 +302,13 @@ export default function CentenaryScreen() {
                     style={styles.committeeMainRow}
                     activeOpacity={0.7}
                   >
-                    <View style={[styles.iconContainer, { backgroundColor: c.color }]}>
-                      <View style={styles.iconGradientOverlay} />
-                      <Icon size={24} color={COLORS.tabBar} strokeWidth={2.2} />
+                    <View style={styles.iconContainer}>
+                      <Icon size={24} color={COLORS.tabBarActive} strokeWidth={2.2} />
                     </View>
                     <View style={styles.committeeTextContainer}>
-                      <Text style={styles.committeeName} numberOfLines={isExpanded ? undefined : 1}>{c.name}</Text>
+                      <Text style={styles.committeeName} numberOfLines={isExpanded ? undefined : 1}>{cardName}</Text>
                       {!isExpanded && (
-                        <Text style={styles.committeeDescPreview} numberOfLines={1}>{c.desc}</Text>
+                        <Text style={styles.committeeDescPreview} numberOfLines={1}>{cardDesc}</Text>
                       )}
                     </View>
                   </TouchableOpacity>
@@ -298,7 +329,7 @@ export default function CentenaryScreen() {
                   {/* Expanded description */}
                   {isExpanded && (
                     <View style={styles.expandedContent}>
-                      <Text style={styles.committeeDescFull}>{c.desc}</Text>
+                      <Text style={styles.committeeDescFull}>{cardDesc}</Text>
                       <TouchableOpacity 
                         onPress={handleCardPress}
                         style={styles.viewCommitteeBtn}
@@ -409,19 +440,20 @@ export default function CentenaryScreen() {
         </View>
       </View>
 
-      {/* Call to Action */}
+      {/* Sponsor Card */}
       <View style={styles.ctaBox}>
         <View style={styles.ctaAccent} />
-        <Text style={styles.ctaTitle}>Get Involved</Text>
-        <Text style={styles.ctaText}>Join a committee, volunteer, or become a sponsor to make the centenary unforgettable.</Text>
-        <View style={styles.ctaButtons}>
-          <TouchableOpacity style={[styles.ctaBtn, styles.ctaBtnPrimary]} onPress={() => debouncedRouter.push('/create-group')}>
-            <Text style={styles.ctaBtnTextLight}>Join Committee</Text>
-          </TouchableOpacity>
-          <TouchableOpacity style={[styles.ctaBtn, styles.ctaBtnSecondary]} onPress={() => debouncedRouter.push('/donation')}>
-            <Text style={styles.ctaBtnTextDark}>Sponsor</Text>
-          </TouchableOpacity>
-        </View>
+        <Text style={styles.ctaTitle}>Become a Sponsor</Text>
+        <Text style={styles.ctaText}>Support Achimota's centenary celebration and help make this milestone unforgettable.</Text>
+        <TouchableOpacity 
+          style={styles.sponsorButton} 
+          onPress={() => debouncedRouter.push('/donation')}
+          activeOpacity={0.85}
+        >
+          <HeartHandshake size={18} color="#0F172A" strokeWidth={2.5} />
+          <Text style={styles.sponsorButtonText}>Sponsor Now</Text>
+          <ChevronRight size={18} color="#0F172A" strokeWidth={2.5} />
+        </TouchableOpacity>
       </View>
 
       <View style={{ height: 32 }} />
@@ -702,12 +734,14 @@ const styles = StyleSheet.create({
     borderRadius: 14,
     alignItems: 'center',
     justifyContent: 'center',
-    position: 'relative',
-    shadowColor: '#000',
+    backgroundColor: COLORS.tabBar,
+    borderWidth: 2,
+    borderColor: COLORS.tabBarActive,
+    shadowColor: COLORS.tabBarActive,
     shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 2,
+    shadowOpacity: 0.25,
+    shadowRadius: 6,
+    elevation: 4,
   },
   iconGradientOverlay: {
     position: 'absolute',
@@ -987,5 +1021,28 @@ const styles = StyleSheet.create({
     fontFamily: 'Inter-SemiBold',
     fontSize: 15,
     letterSpacing: 0.3,
+  },
+  sponsorButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 10,
+    marginTop: 20,
+    backgroundColor: '#ffc857',
+    paddingVertical: 16,
+    paddingHorizontal: 32,
+    borderRadius: 14,
+    alignSelf: 'center',
+    shadowColor: '#ffc857',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 6,
+  },
+  sponsorButtonText: {
+    color: '#0F172A',
+    fontFamily: 'Inter-SemiBold',
+    fontSize: 16,
+    letterSpacing: 0.5,
   },
 });

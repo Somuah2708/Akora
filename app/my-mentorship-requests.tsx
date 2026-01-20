@@ -219,7 +219,7 @@ export default function MyMentorshipRequests() {
   if (loading) {
     return (
       <View style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color="#16a34a" />
+        <ActivityIndicator size="large" color="#0F172A" />
         <Text style={styles.loadingText}>Loading your requests...</Text>
       </View>
     );

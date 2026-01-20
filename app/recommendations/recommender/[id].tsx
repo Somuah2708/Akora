@@ -153,7 +153,7 @@ export default function RecommenderPortalScreen() {
       </View>
 
       {loading ? (
-        <View style={styles.center}><ActivityIndicator color="#4169E1" /></View>
+        <View style={styles.center}><ActivityIndicator color="#0F172A" /></View>
       ) : !req ? (
         <View style={styles.center}><Text>Not found</Text></View>
       ) : (

@@ -332,7 +332,7 @@ export default function EventsAdminScreen() {
   if (loading && !refreshing) {
     return (
       <SafeAreaView style={[styles.container, styles.centered]} edges={['top']}>
-        <ActivityIndicator size="large" color="#4169E1" />
+        <ActivityIndicator size="large" color="#0F172A" />
         <Text style={styles.loadingText}>Loading...</Text>
       </SafeAreaView>
     );

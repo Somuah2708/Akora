@@ -178,7 +178,7 @@ export default function HubScreen() {
       {/* Full Screen Refresh Overlay */}
       {refreshing && (
         <View style={styles.loadingOverlay}>
-          <ActivityIndicator size="large" color="#000000" />
+          <ActivityIndicator size="large" color="#0F172A" />
         </View>
       )}
 

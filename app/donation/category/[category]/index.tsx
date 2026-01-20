@@ -87,7 +87,7 @@ export default function CategoryCampaignsScreen() {
 
       {loading ? (
         <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color="#4169E1" />
+          <ActivityIndicator size="large" color="#0F172A" />
           <Text style={styles.loadingText}>Loading campaigns...</Text>
         </View>
       ) : campaigns.length === 0 ? (

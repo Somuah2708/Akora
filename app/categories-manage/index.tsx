@@ -168,7 +168,7 @@ export default function CategoriesManageScreen() {
           <View style={{ width: 24 }} />
         </View>
         <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color="#0EA5E9" />
+          <ActivityIndicator size="large" color="#0F172A" />
           <Text style={styles.loadingText}>Loading categories...</Text>
         </View>
       </View>

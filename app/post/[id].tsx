@@ -381,7 +381,7 @@ export default function PostDetailScreen() {
                       <>
                         {isLoading && (
                           <View style={styles.mediaLoadingOverlay}>
-                            <ActivityIndicator size="large" color="#ffc857" />
+                            <ActivityIndicator size="large" color="#0F172A" />
                           </View>
                         )}
                         <Image 
@@ -491,7 +491,7 @@ export default function PostDetailScreen() {
                   <View key={i} style={[styles.mediaWrapper, { width, aspectRatio }]}>
                     {isLoading && (
                       <View style={styles.mediaLoadingOverlay}>
-                        <ActivityIndicator size="large" color="#ffc857" />
+                        <ActivityIndicator size="large" color="#0F172A" />
                       </View>
                     )}
                     <Image 
@@ -515,7 +515,7 @@ export default function PostDetailScreen() {
           <View style={[styles.mediaWrapper, { width, aspectRatio: mediaAspectRatios[`img_${post.id}_single`] || 1 }]}>
             {mediaLoading[`img_${post.id}_single`] && (
               <View style={styles.mediaLoadingOverlay}>
-                <ActivityIndicator size="large" color="#ffc857" />
+                <ActivityIndicator size="large" color="#0F172A" />
               </View>
             )}
             <Image 

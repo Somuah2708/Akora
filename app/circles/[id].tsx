@@ -1741,7 +1741,7 @@ export default function CircleDetailScreen() {
   if (loading) {
     return (
       <View style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color="#ffc857" />
+        <ActivityIndicator size="large" color="#0F172A" />
         <Text style={styles.loadingText}>Loading circle...</Text>
       </View>
     );
@@ -1751,7 +1751,7 @@ export default function CircleDetailScreen() {
   if (refreshing) {
     return (
       <View style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color="#ffc857" />
+        <ActivityIndicator size="large" color="#0F172A" />
       </View>
     );
   }
@@ -1820,7 +1820,7 @@ export default function CircleDetailScreen() {
             >
               {uploadingAvatar ? (
                 <View style={styles.circleAvatarPlaceholder}>
-                  <ActivityIndicator size="small" color="#ffc857" />
+                  <ActivityIndicator size="small" color="#0F172A" />
                 </View>
               ) : circle.image_url ? (
                 <CachedImage 
@@ -2002,7 +2002,7 @@ export default function CircleDetailScreen() {
                 scrollEnabled={false}
                 ListEmptyComponent={
                   loadingPosts ? (
-                    <ActivityIndicator size="large" color="#6366F1" style={{ marginTop: 40 }} />
+                    <ActivityIndicator size="large" color="#0F172A" style={{ marginTop: 40 }} />
                   ) : (
                     <View style={styles.emptyState}>
                       <MessageSquare size={48} color="#D1D5DB" />
@@ -2093,7 +2093,7 @@ export default function CircleDetailScreen() {
                 scrollEnabled={false}
                 ListEmptyComponent={
                   loadingMembers ? (
-                    <ActivityIndicator size="large" color="#6366F1" style={{ marginTop: 40 }} />
+                    <ActivityIndicator size="large" color="#0F172A" style={{ marginTop: 40 }} />
                   ) : (
                     <View style={styles.emptyState}>
                       <Users size={48} color="#D1D5DB" />

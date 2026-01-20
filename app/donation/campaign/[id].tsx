@@ -437,7 +437,7 @@ export default function CampaignDetailScreen() {
   if (loading) {
     return (
       <View style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color="#ffc857" />
+        <ActivityIndicator size="large" color="#0F172A" />
       </View>
     );
   }

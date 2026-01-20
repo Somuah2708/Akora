@@ -339,7 +339,7 @@ export default function AdminChatWithUserScreen() {
   if (loading || !accessChecked) {
     return (
       <View style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color="#4169E1" />
+        <ActivityIndicator size="large" color="#0F172A" />
         <Text style={styles.loadingText}>{!accessChecked ? 'Verifying access...' : 'Loading chat...'}</Text>
       </View>
     );

@@ -118,7 +118,7 @@ export default function CreateGroupScreen() {
       
       {loading ? (
         <View style={{ flex: 1, justifyContent: "center", alignItems: "center", paddingVertical: 40 }}>
-          <ActivityIndicator size="large" color="#007AFF" />
+          <ActivityIndicator size="large" color="#0F172A" />
           <Text style={{ marginTop: 12, color: "#666" }}>Loading friends...</Text>
         </View>
       ) : profiles.length === 0 ? (

@@ -100,7 +100,7 @@ export default function ExampleFlatListRefreshScreen() {
       ListFooterComponent={
         loading && !isRefreshing ? (
           <View style={styles.footer}>
-            <ActivityIndicator size="large" color="#4169E1" />
+            <ActivityIndicator size="large" color="#0F172A" />
           </View>
         ) : null
       }

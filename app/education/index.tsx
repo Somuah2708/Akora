@@ -879,7 +879,7 @@ export default function EducationScreen() {
 
           {loading ? (
             <View style={styles.loadingContainer}>
-              <ActivityIndicator size="large" color="#F59E0B" />
+              <ActivityIndicator size="large" color="#0F172A" />
               <Text style={styles.loadingText}>Loading scholarships...</Text>
             </View>
           ) : filteredScholarships.length > 0 ? (

@@ -531,7 +531,7 @@ export default function VolunteerMentorScreen() {
             disabled={uploadingDoc}
           >
             {uploadingDoc ? (
-              <ActivityIndicator size="small" color="#4169E1" />
+              <ActivityIndicator size="small" color="#0F172A" />
             ) : (
               <>
                 <Upload size={20} color="#4169E1" />
@@ -677,7 +677,7 @@ export default function VolunteerMentorScreen() {
 
             {loadingUniversities ? (
               <View style={styles.modalLoading}>
-                <ActivityIndicator size="large" color="#4169E1" />
+                <ActivityIndicator size="large" color="#0F172A" />
                 <Text style={styles.modalLoadingText}>Loading universities...</Text>
               </View>
             ) : (

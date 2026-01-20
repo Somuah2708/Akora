@@ -514,7 +514,7 @@ export default function ListingDetailScreen() {
             </TouchableOpacity>
             <TouchableOpacity onPress={handleSaveEdit} style={styles.headerButton} disabled={isSaving}>
               {isSaving ? (
-                <ActivityIndicator size="small" color="#4169E1" />
+                <ActivityIndicator size="small" color="#0F172A" />
               ) : (
                 <Save size={20} color="#4169E1" />
               )}

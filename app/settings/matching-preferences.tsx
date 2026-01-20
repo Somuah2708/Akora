@@ -170,7 +170,7 @@ export default function MatchingPreferencesScreen() {
   if (loading) {
     return (
       <View style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color="#007AFF" />
+        <ActivityIndicator size="large" color="#0F172A" />
       </View>
     );
   }
@@ -189,7 +189,7 @@ export default function MatchingPreferencesScreen() {
           style={styles.saveButton}
         >
           {saving ? (
-            <ActivityIndicator size="small" color="#007AFF" />
+            <ActivityIndicator size="small" color="#0F172A" />
           ) : (
             <Save size={24} color="#007AFF" />
           )}

@@ -194,7 +194,7 @@ export default function FavoritesScreen() {
           <Text style={styles.headerSubtitle}>Your saved items</Text>
         </LinearGradient>
         <View style={styles.centered}>
-          <ActivityIndicator size="large" color="#4169E1" />
+          <ActivityIndicator size="large" color="#0F172A" />
           <Text style={styles.loadingText}>Loading favorites...</Text>
         </View>
       </View>

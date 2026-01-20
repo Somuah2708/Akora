@@ -1,12 +1,15 @@
 import React, { useEffect, useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, TextInput, Alert, ActivityIndicator, Modal } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, TextInput, Alert, ActivityIndicator, Modal, Image, Dimensions, KeyboardAvoidingView, Platform, TouchableWithoutFeedback, Keyboard } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { debouncedRouter } from '@/utils/navigationDebounce';
-import { ArrowLeft, Plus, Edit2, Trash2, Calendar, Flag, X, ChevronDown, Check } from 'lucide-react-native';
+import { ArrowLeft, Plus, Edit2, Trash2, Calendar, Flag, X, ChevronDown, Check, Users, Settings, Image as ImageIcon, FileText, Link as LinkIcon, UserCheck, UserX, Clock, Play, Upload, Shield, UserMinus } from 'lucide-react-native';
 import { COLORS } from '@/constants/Colors';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/hooks/useAuth';
+import { pickMedia, uploadMedia, pickDocument, uploadDocument } from '@/lib/media';
+
+const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
 interface Activity {
   id: string;
@@ -28,23 +31,82 @@ interface Milestone {
   is_active: boolean;
 }
 
+interface Committee {
+  id: string;
+  name: string;
+  db_name: string;
+  description: string | null;
+  icon_name: string | null;
+  color: string | null;
+  goals: string | null;
+  vision: string | null;
+  plans: string | null;
+  gallery_urls: string[] | null;
+  sort_order: number;
+  is_active: boolean;
+}
+
+interface JoinRequest {
+  id: string;
+  committee_id: string;
+  user_id: string;
+  message: string | null;
+  status: 'pending' | 'approved' | 'rejected';
+  created_at: string;
+  profile: {
+    id: string;
+    full_name: string;
+    avatar_url: string | null;
+  };
+}
+
+interface Resource {
+  id: string;
+  committee_id: string;
+  name: string;
+  description: string | null;
+  url: string;
+  category: 'document' | 'link';
+  file_type: string | null;
+  file_size: number | null;
+  is_active: boolean;
+}
+
+interface CommitteeMember {
+  id: string;
+  user_id: string;
+  committee_id: string;
+  role: 'admin' | 'member';
+  joined_at: string;
+  profile: {
+    id: string;
+    full_name: string;
+    avatar_url: string | null;
+  };
+}
+
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 const YEARS = [2025, 2026, 2027, 2028];
+const ICON_OPTIONS = ['Archive', 'Radio', 'Heart', 'FileText', 'Footprints', 'Trophy', 'Target', 'Home', 'Wallet', 'Compass', 'Mic', 'Gift', 'Music', 'ClipboardCheck', 'Users', 'Star', 'Award', 'Flag'];
+const COLOR_OPTIONS = ['#EDE9FE', '#ECFDF5', '#FFF7ED', '#EFF6FF', '#F0FDF4', '#FAF5FF', '#FEF3C7', '#FCE7F3'];
 
 export default function CentenaryAdminScreen() {
   const router = useRouter();
   const { user } = useAuth();
-  const [activeTab, setActiveTab] = useState<'activities' | 'milestones'>('activities');
+  const [activeTab, setActiveTab] = useState<'committees' | 'activities' | 'milestones'>('committees');
   const [activities, setActivities] = useState<Activity[]>([]);
   const [milestones, setMilestones] = useState<Milestone[]>([]);
+  const [committees, setCommittees] = useState<Committee[]>([]);
   const [loading, setLoading] = useState(true);
   const [isAdmin, setIsAdmin] = useState(false);
 
   // Modal states
   const [showActivityModal, setShowActivityModal] = useState(false);
   const [showMilestoneModal, setShowMilestoneModal] = useState(false);
+  const [showCommitteeModal, setShowCommitteeModal] = useState(false);
   const [editingActivity, setEditingActivity] = useState<Activity | null>(null);
   const [editingMilestone, setEditingMilestone] = useState<Milestone | null>(null);
+  const [editingCommittee, setEditingCommittee] = useState<Committee | null>(null);
 
   // Form states for Activity
   const [activityTitle, setActivityTitle] = useState('');
@@ -60,7 +122,44 @@ export default function CentenaryAdminScreen() {
   const [milestoneSortOrder, setMilestoneSortOrder] = useState('');
   const [milestoneCompleted, setMilestoneCompleted] = useState(false);
 
+  // Form states for Committee
+  const [committeeName, setCommitteeName] = useState('');
+  const [committeeDbName, setCommitteeDbName] = useState('');
+  const [committeeDescription, setCommitteeDescription] = useState('');
+  const [committeeGoals, setCommitteeGoals] = useState('');
+  const [committeeVision, setCommitteeVision] = useState('');
+  const [committeePlans, setCommitteePlans] = useState('');
+  const [committeeIcon, setCommitteeIcon] = useState('Users');
+  const [committeeColor, setCommitteeColor] = useState('#EDE9FE');
+  const [committeeSortOrder, setCommitteeSortOrder] = useState('');
+
   const [saving, setSaving] = useState(false);
+
+  // Committee Management Modal States
+  const [showManageModal, setShowManageModal] = useState(false);
+  const [managingCommittee, setManagingCommittee] = useState<Committee | null>(null);
+  const [manageTab, setManageTab] = useState<'gallery' | 'resources' | 'requests' | 'members'>('gallery');
+  
+  // Gallery state
+  const [galleryUrls, setGalleryUrls] = useState<string[]>([]);
+  const [uploadingGallery, setUploadingGallery] = useState(false);
+  
+  // Resources state
+  const [resources, setResources] = useState<Resource[]>([]);
+  const [showAddResourceModal, setShowAddResourceModal] = useState(false);
+  const [resourceName, setResourceName] = useState('');
+  const [resourceDescription, setResourceDescription] = useState('');
+  const [resourceUrl, setResourceUrl] = useState('');
+  const [resourceCategory, setResourceCategory] = useState<'document' | 'link'>('document');
+  const [savingResource, setSavingResource] = useState(false);
+  
+  // Join requests state
+  const [joinRequests, setJoinRequests] = useState<JoinRequest[]>([]);
+  const [processingRequest, setProcessingRequest] = useState<string | null>(null);
+
+  // Committee members state
+  const [committeeMembers, setCommitteeMembers] = useState<CommitteeMember[]>([]);
+  const [processingMember, setProcessingMember] = useState<string | null>(null);
 
   useEffect(() => {
     checkAdmin();
@@ -71,7 +170,7 @@ export default function CentenaryAdminScreen() {
     if (!user?.id) return;
     try {
       const { data, error } = await supabase
-        .from('alumni')
+        .from('profiles')
         .select('is_admin')
         .eq('id', user.id)
         .single();
@@ -90,6 +189,16 @@ export default function CentenaryAdminScreen() {
   const fetchData = async () => {
     setLoading(true);
     try {
+      // Fetch committees
+      const { data: committeesData, error: committeesError } = await supabase
+        .from('centenary_committees')
+        .select('*')
+        .order('sort_order', { ascending: true });
+
+      if (!committeesError) {
+        setCommittees(committeesData || []);
+      }
+
       // Fetch activities
       const { data: activitiesData, error: activitiesError } = await supabase
         .from('centenary_activities')
@@ -327,6 +436,560 @@ export default function CentenaryAdminScreen() {
     }
   };
 
+  // Committee Modal Functions
+  const openAddCommitteeModal = () => {
+    setEditingCommittee(null);
+    setCommitteeName('');
+    setCommitteeDbName('');
+    setCommitteeDescription('');
+    setCommitteeGoals('');
+    setCommitteeVision('');
+    setCommitteePlans('');
+    setCommitteeIcon('Users');
+    setCommitteeColor('#EDE9FE');
+    setCommitteeSortOrder(String(committees.length + 1));
+    setShowCommitteeModal(true);
+  };
+
+  const openEditCommitteeModal = (committee: Committee) => {
+    setEditingCommittee(committee);
+    setCommitteeName(committee.name);
+    setCommitteeDbName(committee.db_name);
+    setCommitteeDescription(committee.description || '');
+    setCommitteeGoals(committee.goals || '');
+    setCommitteeVision(committee.vision || '');
+    setCommitteePlans(committee.plans || '');
+    setCommitteeIcon(committee.icon_name || 'Users');
+    setCommitteeColor(committee.color || '#EDE9FE');
+    setCommitteeSortOrder(String(committee.sort_order));
+    setShowCommitteeModal(true);
+  };
+
+  const saveCommittee = async () => {
+    if (!committeeName.trim()) {
+      Alert.alert('Error', 'Name is required');
+      return;
+    }
+    if (!committeeDbName.trim()) {
+      Alert.alert('Error', 'Database name is required');
+      return;
+    }
+
+    setSaving(true);
+    try {
+      const committeeData = {
+        name: committeeName.trim(),
+        db_name: committeeDbName.trim(),
+        description: committeeDescription.trim() || null,
+        goals: committeeGoals.trim() || null,
+        vision: committeeVision.trim() || null,
+        plans: committeePlans.trim() || null,
+        icon_name: committeeIcon,
+        color: committeeColor,
+        sort_order: parseInt(committeeSortOrder) || 0,
+        created_by: user?.id,
+      };
+
+      if (editingCommittee) {
+        const { error } = await supabase
+          .from('centenary_committees')
+          .update(committeeData)
+          .eq('id', editingCommittee.id);
+
+        if (error) throw error;
+        Alert.alert('Success', 'Committee updated successfully');
+      } else {
+        const { error } = await supabase
+          .from('centenary_committees')
+          .insert(committeeData);
+
+        if (error) throw error;
+        Alert.alert('Success', 'Committee created successfully');
+      }
+
+      setShowCommitteeModal(false);
+      fetchData();
+    } catch (error: any) {
+      console.error('Error saving committee:', error);
+      Alert.alert('Error', error.message || 'Failed to save committee');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const deleteCommittee = async (id: string) => {
+    Alert.alert(
+      'Delete Committee',
+      'Are you sure you want to delete this committee?',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              const { error } = await supabase
+                .from('centenary_committees')
+                .delete()
+                .eq('id', id);
+
+              if (error) throw error;
+              fetchData();
+            } catch (error: any) {
+              Alert.alert('Error', error.message || 'Failed to delete');
+            }
+          },
+        },
+      ]
+    );
+  };
+
+  const toggleCommitteeStatus = async (committee: Committee) => {
+    try {
+      const { error } = await supabase
+        .from('centenary_committees')
+        .update({ is_active: !committee.is_active })
+        .eq('id', committee.id);
+
+      if (error) throw error;
+      fetchData();
+    } catch (error: any) {
+      Alert.alert('Error', error.message || 'Failed to update');
+    }
+  };
+
+  // =====================================================
+  // COMMITTEE MANAGEMENT FUNCTIONS
+  // =====================================================
+
+  const openManageModal = async (committee: Committee) => {
+    console.log('Opening manage modal for committee:', committee.id, committee.name);
+    setManagingCommittee(committee);
+    setGalleryUrls(committee.gallery_urls || []);
+    setManageTab('gallery');
+    setShowManageModal(true);
+    
+    // Fetch resources, requests, and members
+    await Promise.all([
+      fetchResources(committee.id),
+      fetchJoinRequests(committee.id),
+      fetchCommitteeMembers(committee.id),
+    ]);
+  };
+
+  const fetchResources = async (committeeId: string) => {
+    try {
+      const { data, error } = await supabase
+        .from('centenary_committee_resources')
+        .select('*')
+        .eq('committee_id', committeeId)
+        .order('category', { ascending: true })
+        .order('created_at', { ascending: false });
+
+      if (!error && data) {
+        setResources(data);
+      }
+    } catch (error) {
+      console.error('Error fetching resources:', error);
+    }
+  };
+
+  const fetchJoinRequests = async (committeeId: string) => {
+    try {
+      const { data, error } = await supabase
+        .from('centenary_committee_join_requests')
+        .select(`
+          *,
+          profile:profiles!user_id (
+            id,
+            full_name,
+            avatar_url
+          )
+        `)
+        .eq('committee_id', committeeId)
+        .eq('status', 'pending')
+        .order('created_at', { ascending: true });
+
+      console.log('Fetch join requests result:', { committeeId, data, error });
+
+      if (error) {
+        console.error('Error fetching join requests:', error);
+        return;
+      }
+      
+      if (data) {
+        setJoinRequests(data.map((r: any) => ({
+          ...r,
+          profile: r.profile || { id: r.user_id, full_name: 'Unknown', avatar_url: null }
+        })));
+      }
+    } catch (error) {
+      console.error('Error fetching join requests:', error);
+    }
+  };
+
+  const fetchCommitteeMembers = async (committeeId: string) => {
+    try {
+      const { data, error } = await supabase
+        .from('centenary_committee_members')
+        .select(`
+          id,
+          user_id,
+          committee_id,
+          role,
+          joined_at,
+          profile:profiles!user_id (
+            id,
+            full_name,
+            avatar_url
+          )
+        `)
+        .eq('committee_id', committeeId)
+        .order('role', { ascending: true })
+        .order('joined_at', { ascending: true });
+
+      if (!error && data) {
+        setCommitteeMembers(data.map((m: any) => ({
+          ...m,
+          profile: m.profile || { id: m.user_id, full_name: 'Unknown', avatar_url: null }
+        })));
+      }
+    } catch (error) {
+      console.error('Error fetching committee members:', error);
+    }
+  };
+
+  const handleToggleMemberRole = async (member: CommitteeMember) => {
+    if (!managingCommittee) return;
+    
+    const newRole = member.role === 'admin' ? 'member' : 'admin';
+    const actionText = newRole === 'admin' ? 'promote to admin' : 'demote to member';
+    
+    Alert.alert(
+      'Change Role',
+      `Are you sure you want to ${actionText} ${member.profile.full_name}?`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Confirm',
+          onPress: async () => {
+            setProcessingMember(member.id);
+            try {
+              const { error } = await supabase
+                .from('centenary_committee_members')
+                .update({ role: newRole })
+                .eq('id', member.id);
+
+              if (error) throw error;
+              
+              // Refresh members list
+              await fetchCommitteeMembers(managingCommittee.id);
+              Alert.alert('Success', `${member.profile.full_name} is now a ${newRole}`);
+            } catch (error: any) {
+              Alert.alert('Error', error.message || 'Failed to update role');
+            } finally {
+              setProcessingMember(null);
+            }
+          },
+        },
+      ]
+    );
+  };
+
+  const handleRemoveMember = async (member: CommitteeMember) => {
+    if (!managingCommittee) return;
+    
+    Alert.alert(
+      'Remove Member',
+      `Are you sure you want to remove ${member.profile.full_name} from this committee?`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Remove',
+          style: 'destructive',
+          onPress: async () => {
+            setProcessingMember(member.id);
+            try {
+              const { error } = await supabase
+                .from('centenary_committee_members')
+                .delete()
+                .eq('id', member.id);
+
+              if (error) throw error;
+              
+              // Refresh members list
+              await fetchCommitteeMembers(managingCommittee.id);
+              Alert.alert('Success', `${member.profile.full_name} has been removed from the committee`);
+            } catch (error: any) {
+              Alert.alert('Error', error.message || 'Failed to remove member');
+            } finally {
+              setProcessingMember(null);
+            }
+          },
+        },
+      ]
+    );
+  };
+
+  // Gallery Functions
+  const handleAddGalleryMedia = async () => {
+    if (!managingCommittee || !user?.id) return;
+
+    try {
+      const media = await pickMedia();
+      if (!media) return;
+
+      setUploadingGallery(true);
+      const mediaType = media.type === 'video' ? 'video' : 'image';
+      const uploadedUrl = await uploadMedia(media.uri, user.id, mediaType);
+
+      if (uploadedUrl) {
+        const newGalleryUrls = [...galleryUrls, uploadedUrl];
+        
+        const { error } = await supabase
+          .from('centenary_committees')
+          .update({ gallery_urls: newGalleryUrls })
+          .eq('id', managingCommittee.id);
+
+        if (error) throw error;
+        
+        setGalleryUrls(newGalleryUrls);
+        Alert.alert('Success', 'Media added to gallery');
+      }
+    } catch (error: any) {
+      console.error('Error uploading gallery media:', error);
+      Alert.alert('Error', error.message || 'Failed to upload media');
+    } finally {
+      setUploadingGallery(false);
+    }
+  };
+
+  const handleRemoveGalleryMedia = async (urlToRemove: string) => {
+    if (!managingCommittee) return;
+
+    Alert.alert(
+      'Remove Media',
+      'Are you sure you want to remove this media from the gallery?',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Remove',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              const newGalleryUrls = galleryUrls.filter(url => url !== urlToRemove);
+              
+              const { error } = await supabase
+                .from('centenary_committees')
+                .update({ gallery_urls: newGalleryUrls })
+                .eq('id', managingCommittee.id);
+
+              if (error) throw error;
+              
+              setGalleryUrls(newGalleryUrls);
+            } catch (error: any) {
+              Alert.alert('Error', error.message || 'Failed to remove media');
+            }
+          },
+        },
+      ]
+    );
+  };
+
+  // Resource Functions
+  const openAddResourceModal = () => {
+    console.log('openAddResourceModal called');
+    setResourceName('');
+    setResourceDescription('');
+    setResourceUrl('');
+    setResourceCategory('document');
+    setShowAddResourceModal(true);
+    console.log('showAddResourceModal set to true');
+  };
+
+  const handlePickDocument = async () => {
+    try {
+      const doc = await pickDocument();
+      if (!doc || !user?.id) return;
+
+      setSavingResource(true);
+      const uploadedUrl = await uploadDocument(doc.uri, user.id, doc.name);
+
+      if (uploadedUrl) {
+        setResourceUrl(uploadedUrl);
+        if (!resourceName) {
+          setResourceName(doc.name);
+        }
+        Alert.alert('Success', 'Document uploaded. Save to add it to resources.');
+      }
+    } catch (error: any) {
+      console.error('Error uploading document:', error);
+      Alert.alert('Error', error.message || 'Failed to upload document');
+    } finally {
+      setSavingResource(false);
+    }
+  };
+
+  const saveResource = async () => {
+    if (!managingCommittee || !user?.id) {
+      console.log('saveResource: Missing committee or user', { managingCommittee, userId: user?.id });
+      Alert.alert('Error', 'Session error. Please try again.');
+      return;
+    }
+    if (!resourceName.trim()) {
+      Alert.alert('Error', 'Name is required');
+      return;
+    }
+    if (!resourceUrl.trim()) {
+      Alert.alert('Error', 'URL or document is required');
+      return;
+    }
+
+    console.log('Saving resource:', {
+      committee_id: managingCommittee.id,
+      name: resourceName.trim(),
+      url: resourceUrl.trim(),
+      category: resourceCategory,
+      uploaded_by: user.id,
+    });
+
+    setSavingResource(true);
+    try {
+      const { data, error } = await supabase
+        .from('centenary_committee_resources')
+        .insert({
+          committee_id: managingCommittee.id,
+          name: resourceName.trim(),
+          description: resourceDescription.trim() || null,
+          url: resourceUrl.trim(),
+          category: resourceCategory,
+          uploaded_by: user.id,
+        })
+        .select();
+
+      console.log('Insert result:', { data, error });
+
+      if (error) throw error;
+
+      setShowAddResourceModal(false);
+      fetchResources(managingCommittee.id);
+      Alert.alert('Success', 'Resource added successfully');
+    } catch (error: any) {
+      console.error('Error saving resource:', error);
+      Alert.alert('Error', error.message || 'Failed to save resource');
+    } finally {
+      setSavingResource(false);
+    }
+  };
+
+  const deleteResource = async (resourceId: string) => {
+    if (!managingCommittee) return;
+
+    Alert.alert(
+      'Delete Resource',
+      'Are you sure you want to delete this resource?',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              const { error } = await supabase
+                .from('centenary_committee_resources')
+                .delete()
+                .eq('id', resourceId);
+
+              if (error) throw error;
+              fetchResources(managingCommittee.id);
+            } catch (error: any) {
+              Alert.alert('Error', error.message || 'Failed to delete');
+            }
+          },
+        },
+      ]
+    );
+  };
+
+  // Join Request Functions
+  const handleApproveRequest = async (request: JoinRequest) => {
+    if (!managingCommittee || !user?.id) return;
+
+    setProcessingRequest(request.id);
+    try {
+      // Add user as member
+      const { error: memberError } = await supabase
+        .from('centenary_committee_members')
+        .insert({
+          committee_id: managingCommittee.id,
+          user_id: request.user_id,
+          role: 'member',
+        });
+
+      if (memberError) throw memberError;
+
+      // Update request status
+      const { error: requestError } = await supabase
+        .from('centenary_committee_join_requests')
+        .update({
+          status: 'approved',
+          reviewed_by: user.id,
+          reviewed_at: new Date().toISOString(),
+        })
+        .eq('id', request.id);
+
+      if (requestError) throw requestError;
+
+      // Refresh requests
+      fetchJoinRequests(managingCommittee.id);
+      Alert.alert('Approved', `${request.profile.full_name} has been added to the committee.`);
+    } catch (error: any) {
+      console.error('Error approving request:', error);
+      Alert.alert('Error', error.message || 'Failed to approve request');
+    } finally {
+      setProcessingRequest(null);
+    }
+  };
+
+  const handleRejectRequest = async (request: JoinRequest) => {
+    if (!managingCommittee || !user?.id) return;
+
+    Alert.alert(
+      'Reject Request',
+      `Are you sure you want to reject ${request.profile.full_name}'s request?`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Reject',
+          style: 'destructive',
+          onPress: async () => {
+            setProcessingRequest(request.id);
+            try {
+              const { error } = await supabase
+                .from('centenary_committee_join_requests')
+                .update({
+                  status: 'rejected',
+                  reviewed_by: user.id,
+                  reviewed_at: new Date().toISOString(),
+                })
+                .eq('id', request.id);
+
+              if (error) throw error;
+
+              fetchJoinRequests(managingCommittee.id);
+              Alert.alert('Rejected', 'The request has been rejected.');
+            } catch (error: any) {
+              console.error('Error rejecting request:', error);
+              Alert.alert('Error', error.message || 'Failed to reject request');
+            } finally {
+              setProcessingRequest(null);
+            }
+          },
+        },
+      ]
+    );
+  };
+
   if (!isAdmin) {
     return (
       <SafeAreaView style={styles.container} edges={['top']}>
@@ -350,6 +1013,15 @@ export default function CentenaryAdminScreen() {
 
       {/* Tabs */}
       <View style={styles.tabsContainer}>
+        <TouchableOpacity
+          style={[styles.tab, activeTab === 'committees' && styles.tabActive]}
+          onPress={() => setActiveTab('committees')}
+        >
+          <Users size={18} color={activeTab === 'committees' ? '#FFFFFF' : '#6B7280'} />
+          <Text style={[styles.tabText, activeTab === 'committees' && styles.tabTextActive]}>
+            Committees
+          </Text>
+        </TouchableOpacity>
         <TouchableOpacity
           style={[styles.tab, activeTab === 'activities' && styles.tabActive]}
           onPress={() => setActiveTab('activities')}
@@ -376,7 +1048,52 @@ export default function CentenaryAdminScreen() {
         </View>
       ) : (
         <ScrollView style={styles.scrollView} contentContainerStyle={styles.scrollContent}>
-          {activeTab === 'activities' ? (
+          {activeTab === 'committees' ? (
+            <>
+              <View style={styles.sectionHeader}>
+                <Text style={styles.sectionTitle}>Centenary Committees</Text>
+                <TouchableOpacity style={styles.addBtn} onPress={openAddCommitteeModal}>
+                  <Plus size={20} color="#FFFFFF" />
+                </TouchableOpacity>
+              </View>
+
+              {committees.length === 0 ? (
+                <View style={styles.emptyState}>
+                  <Text style={styles.emptyText}>No committees yet</Text>
+                </View>
+              ) : (
+                committees.map((committee) => (
+                  <View key={committee.id} style={[styles.itemCard, !committee.is_active && styles.itemCardInactive]}>
+                    <View style={styles.itemHeader}>
+                      <View style={[styles.colorBadge, { backgroundColor: committee.color || '#EDE9FE' }]}>
+                        <Text style={styles.colorBadgeText}>{committee.icon_name}</Text>
+                      </View>
+                      <View style={styles.itemActions}>
+                        <TouchableOpacity onPress={() => toggleCommitteeStatus(committee)} style={styles.statusBtn}>
+                          <View style={[styles.statusDot, committee.is_active && styles.statusDotActive]} />
+                        </TouchableOpacity>
+                        <TouchableOpacity onPress={() => openManageModal(committee)} style={styles.actionBtn}>
+                          <Settings size={16} color={COLORS.tabBarActive} />
+                        </TouchableOpacity>
+                        <TouchableOpacity onPress={() => openEditCommitteeModal(committee)} style={styles.actionBtn}>
+                          <Edit2 size={16} color="#6B7280" />
+                        </TouchableOpacity>
+                        <TouchableOpacity onPress={() => deleteCommittee(committee.id)} style={styles.actionBtn}>
+                          <Trash2 size={16} color="#EF4444" />
+                        </TouchableOpacity>
+                      </View>
+                    </View>
+                    <Text style={styles.itemTitle}>{committee.name}</Text>
+                    <Text style={styles.itemSubtitle}>{committee.db_name}</Text>
+                    {committee.description && (
+                      <Text style={styles.itemDescription} numberOfLines={2}>{committee.description}</Text>
+                    )}
+                    <Text style={styles.sortOrderText}>Order: {committee.sort_order}</Text>
+                  </View>
+                ))
+              )}
+            </>
+          ) : activeTab === 'activities' ? (
             <>
               <View style={styles.sectionHeader}>
                 <Text style={styles.sectionTitle}>Activities & Preparation</Text>
@@ -635,6 +1352,605 @@ export default function CentenaryAdminScreen() {
               )}
             </TouchableOpacity>
           </ScrollView>
+        </SafeAreaView>
+      </Modal>
+
+      {/* Committee Modal */}
+      <Modal visible={showCommitteeModal} animationType="slide" presentationStyle="pageSheet">
+        <SafeAreaView style={styles.modalContainer} edges={['top']}>
+          <View style={styles.modalHeader}>
+            <TouchableOpacity onPress={() => setShowCommitteeModal(false)} style={styles.modalCloseBtn}>
+              <X size={24} color="#111827" />
+            </TouchableOpacity>
+            <Text style={styles.modalTitle}>{editingCommittee ? 'Edit Committee' : 'Add Committee'}</Text>
+            <View style={{ width: 44 }} />
+          </View>
+
+          <ScrollView style={styles.modalContent} showsVerticalScrollIndicator={false}>
+            <Text style={styles.inputLabel}>Committee Name *</Text>
+            <TextInput
+              style={styles.input}
+              value={committeeName}
+              onChangeText={(text) => {
+                setCommitteeName(text);
+                // Auto-generate db_name if not editing
+                if (!editingCommittee) {
+                  setCommitteeDbName(text.trim() + ' Committee');
+                }
+              }}
+              placeholder="e.g., Finance"
+              placeholderTextColor="#9CA3AF"
+            />
+
+            <Text style={styles.inputLabel}>Database Name *</Text>
+            <TextInput
+              style={styles.input}
+              value={committeeDbName}
+              onChangeText={setCommitteeDbName}
+              placeholder="e.g., Finance Committee"
+              placeholderTextColor="#9CA3AF"
+            />
+
+            <Text style={styles.inputLabel}>Description</Text>
+            <TextInput
+              style={[styles.input, styles.textArea]}
+              value={committeeDescription}
+              onChangeText={setCommitteeDescription}
+              placeholder="Brief description of the committee's role"
+              placeholderTextColor="#9CA3AF"
+              multiline
+              numberOfLines={4}
+            />
+
+            <Text style={styles.inputLabel}>Goals</Text>
+            <TextInput
+              style={[styles.input, styles.textArea]}
+              value={committeeGoals}
+              onChangeText={setCommitteeGoals}
+              placeholder="What are the committee's main goals?"
+              placeholderTextColor="#9CA3AF"
+              multiline
+              numberOfLines={4}
+            />
+
+            <Text style={styles.inputLabel}>Vision</Text>
+            <TextInput
+              style={[styles.input, styles.textArea]}
+              value={committeeVision}
+              onChangeText={setCommitteeVision}
+              placeholder="What is the committee's vision?"
+              placeholderTextColor="#9CA3AF"
+              multiline
+              numberOfLines={4}
+            />
+
+            <Text style={styles.inputLabel}>Plans</Text>
+            <TextInput
+              style={[styles.input, styles.textArea]}
+              value={committeePlans}
+              onChangeText={setCommitteePlans}
+              placeholder="Current plans and upcoming activities"
+              placeholderTextColor="#9CA3AF"
+              multiline
+              numberOfLines={4}
+            />
+
+            <Text style={styles.inputLabel}>Icon</Text>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.optionsScroll}>
+              <View style={styles.selectContainer}>
+                {ICON_OPTIONS.map((icon) => (
+                  <TouchableOpacity
+                    key={icon}
+                    style={[styles.selectOption, committeeIcon === icon && styles.selectOptionActive]}
+                    onPress={() => setCommitteeIcon(icon)}
+                  >
+                    <Text style={[styles.selectOptionText, committeeIcon === icon && styles.selectOptionTextActive]}>
+                      {icon}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+            </ScrollView>
+
+            <Text style={styles.inputLabel}>Color</Text>
+            <View style={styles.colorGrid}>
+              {COLOR_OPTIONS.map((color) => (
+                <TouchableOpacity
+                  key={color}
+                  style={[styles.colorOption, { backgroundColor: color }, committeeColor === color && styles.colorOptionActive]}
+                  onPress={() => setCommitteeColor(color)}
+                >
+                  {committeeColor === color && <Check size={16} color="#111827" />}
+                </TouchableOpacity>
+              ))}
+            </View>
+
+            <Text style={styles.inputLabel}>Sort Order</Text>
+            <TextInput
+              style={styles.input}
+              value={committeeSortOrder}
+              onChangeText={setCommitteeSortOrder}
+              placeholder="1"
+              placeholderTextColor="#9CA3AF"
+              keyboardType="number-pad"
+            />
+
+            <TouchableOpacity
+              style={[styles.saveBtn, saving && styles.saveBtnDisabled]}
+              onPress={saveCommittee}
+              disabled={saving}
+            >
+              {saving ? (
+                <ActivityIndicator size="small" color="#FFFFFF" />
+              ) : (
+                <Text style={styles.saveBtnText}>{editingCommittee ? 'Update Committee' : 'Create Committee'}</Text>
+              )}
+            </TouchableOpacity>
+          </ScrollView>
+        </SafeAreaView>
+      </Modal>
+
+      {/* Committee Management Modal */}
+      <Modal visible={showManageModal} animationType="slide" presentationStyle="pageSheet">
+        <SafeAreaView style={styles.modalContainer}>
+          <View style={styles.modalHeader}>
+            <TouchableOpacity onPress={() => setShowManageModal(false)} style={styles.modalCloseBtn}>
+              <X size={24} color="#111827" />
+            </TouchableOpacity>
+            <Text style={styles.modalTitle} numberOfLines={1}>
+              Manage: {managingCommittee?.name}
+            </Text>
+            <View style={{ width: 40 }} />
+          </View>
+
+          {/* Tabs */}
+          <View style={styles.manageTabs}>
+            <TouchableOpacity
+              style={[styles.manageTab, manageTab === 'gallery' && styles.manageTabActive]}
+              onPress={() => setManageTab('gallery')}
+            >
+              <ImageIcon size={18} color={manageTab === 'gallery' ? COLORS.tabBarActive : '#6B7280'} />
+              <Text style={[styles.manageTabText, manageTab === 'gallery' && styles.manageTabTextActive]}>
+                Gallery
+              </Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.manageTab, manageTab === 'resources' && styles.manageTabActive]}
+              onPress={() => setManageTab('resources')}
+            >
+              <FileText size={18} color={manageTab === 'resources' ? COLORS.tabBarActive : '#6B7280'} />
+              <Text style={[styles.manageTabText, manageTab === 'resources' && styles.manageTabTextActive]}>
+                Resources
+              </Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.manageTab, manageTab === 'requests' && styles.manageTabActive]}
+              onPress={() => setManageTab('requests')}
+            >
+              <UserCheck size={18} color={manageTab === 'requests' ? COLORS.tabBarActive : '#6B7280'} />
+              <Text style={[styles.manageTabText, manageTab === 'requests' && styles.manageTabTextActive]}>
+                Requests {joinRequests.length > 0 && `(${joinRequests.length})`}
+              </Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.manageTab, manageTab === 'members' && styles.manageTabActive]}
+              onPress={() => setManageTab('members')}
+            >
+              <Shield size={18} color={manageTab === 'members' ? COLORS.tabBarActive : '#6B7280'} />
+              <Text style={[styles.manageTabText, manageTab === 'members' && styles.manageTabTextActive]}>
+                Members
+              </Text>
+            </TouchableOpacity>
+          </View>
+
+          <ScrollView style={styles.modalContent} contentContainerStyle={{ paddingBottom: 40 }}>
+            {/* Gallery Tab */}
+            {manageTab === 'gallery' && (
+              <View>
+                <View style={styles.manageHeader}>
+                  <Text style={styles.manageSubtitle}>Committee Gallery</Text>
+                  <TouchableOpacity
+                    style={[styles.manageAddBtn, uploadingGallery && { opacity: 0.5 }]}
+                    onPress={handleAddGalleryMedia}
+                    disabled={uploadingGallery}
+                  >
+                    {uploadingGallery ? (
+                      <ActivityIndicator size="small" color="#FFFFFF" />
+                    ) : (
+                      <>
+                        <Upload size={16} color="#FFFFFF" />
+                        <Text style={styles.manageAddBtnText}>Add Media</Text>
+                      </>
+                    )}
+                  </TouchableOpacity>
+                </View>
+
+                {galleryUrls.length === 0 ? (
+                  <View style={styles.emptyManageState}>
+                    <ImageIcon size={48} color="#D1D5DB" />
+                    <Text style={styles.emptyManageText}>No gallery media yet</Text>
+                    <Text style={styles.emptyManageHint}>Add photos and videos to showcase the committee</Text>
+                  </View>
+                ) : (
+                  <View style={styles.galleryGrid}>
+                    {galleryUrls.map((url, index) => {
+                      const isVideo = url.includes('.mp4') || url.includes('.mov') || url.includes('.webm') || url.includes('video');
+                      return (
+                        <View key={index} style={styles.galleryItem}>
+                          {isVideo ? (
+                            <View style={styles.galleryVideoPlaceholder}>
+                              <Play size={24} color="#FFFFFF" />
+                            </View>
+                          ) : (
+                            <Image source={{ uri: url }} style={styles.galleryImage} />
+                          )}
+                          <TouchableOpacity
+                            style={styles.galleryRemoveBtn}
+                            onPress={() => handleRemoveGalleryMedia(url)}
+                          >
+                            <X size={16} color="#FFFFFF" />
+                          </TouchableOpacity>
+                        </View>
+                      );
+                    })}
+                  </View>
+                )}
+              </View>
+            )}
+
+            {/* Resources Tab */}
+            {manageTab === 'resources' && (
+              <View>
+                <View style={styles.manageHeader}>
+                  <Text style={styles.manageSubtitle}>Documents & Links</Text>
+                  <TouchableOpacity style={styles.manageAddBtn} onPress={openAddResourceModal}>
+                    <Plus size={16} color="#FFFFFF" />
+                    <Text style={styles.manageAddBtnText}>Add Resource</Text>
+                  </TouchableOpacity>
+                </View>
+
+                {resources.length === 0 ? (
+                  <View style={styles.emptyManageState}>
+                    <FileText size={48} color="#D1D5DB" />
+                    <Text style={styles.emptyManageText}>No resources yet</Text>
+                    <Text style={styles.emptyManageHint}>Add documents and links for committee members</Text>
+                  </View>
+                ) : (
+                  <View style={styles.resourceList}>
+                    {resources.map((resource) => (
+                      <View key={resource.id} style={styles.resourceItem}>
+                        <View style={styles.resourceIcon}>
+                          {resource.category === 'link' ? (
+                            <LinkIcon size={20} color={COLORS.tabBarActive} />
+                          ) : (
+                            <FileText size={20} color={COLORS.tabBarActive} />
+                          )}
+                        </View>
+                        <View style={styles.resourceInfo}>
+                          <Text style={styles.resourceName}>{resource.name}</Text>
+                          {resource.description && (
+                            <Text style={styles.resourceDescription} numberOfLines={1}>
+                              {resource.description}
+                            </Text>
+                          )}
+                          <Text style={styles.resourceCategory}>
+                            {resource.category === 'link' ? 'External Link' : 'Document'}
+                          </Text>
+                        </View>
+                        <TouchableOpacity
+                          style={styles.resourceDeleteBtn}
+                          onPress={() => deleteResource(resource.id)}
+                        >
+                          <Trash2 size={18} color="#EF4444" />
+                        </TouchableOpacity>
+                      </View>
+                    ))}
+                  </View>
+                )}
+              </View>
+            )}
+
+            {/* Join Requests Tab */}
+            {manageTab === 'requests' && (
+              <View>
+                <Text style={styles.manageSubtitle}>Pending Join Requests</Text>
+
+                {joinRequests.length === 0 ? (
+                  <View style={styles.emptyManageState}>
+                    <UserCheck size={48} color="#D1D5DB" />
+                    <Text style={styles.emptyManageText}>No pending requests</Text>
+                    <Text style={styles.emptyManageHint}>All join requests have been processed</Text>
+                  </View>
+                ) : (
+                  <View style={styles.requestList}>
+                    {joinRequests.map((request) => (
+                      <View key={request.id} style={styles.requestItem}>
+                        <TouchableOpacity 
+                          style={styles.requestProfile}
+                          onPress={() => {
+                            setShowManageModal(false);
+                            debouncedRouter.push(`/user-profile/${request.user_id}`);
+                          }}
+                          activeOpacity={0.7}
+                        >
+                          {request.profile.avatar_url ? (
+                            <Image
+                              source={{ uri: request.profile.avatar_url }}
+                              style={styles.requestAvatar}
+                            />
+                          ) : (
+                            <View style={styles.requestAvatarPlaceholder}>
+                              <Text style={styles.requestAvatarText}>
+                                {request.profile.full_name?.[0] || '?'}
+                              </Text>
+                            </View>
+                          )}
+                          <View style={styles.requestInfo}>
+                            <Text style={styles.requestName}>
+                              {request.profile.full_name}
+                            </Text>
+                            <View style={styles.requestTimeRow}>
+                              <Clock size={12} color="#9CA3AF" />
+                              <Text style={styles.requestTime}>
+                                {new Date(request.created_at).toLocaleDateString()}
+                              </Text>
+                            </View>
+                          </View>
+                        </TouchableOpacity>
+                        {request.message && (
+                          <Text style={styles.requestMessage} numberOfLines={3}>
+                            "{request.message}"
+                          </Text>
+                        )}
+                        <View style={styles.requestActions}>
+                          <TouchableOpacity
+                            style={[styles.requestActionBtn, styles.requestRejectBtn]}
+                            onPress={() => handleRejectRequest(request)}
+                            disabled={processingRequest === request.id}
+                          >
+                            {processingRequest === request.id ? (
+                              <ActivityIndicator size="small" color="#0F172A" />
+                            ) : (
+                              <>
+                                <UserX size={16} color="#EF4444" />
+                                <Text style={styles.requestRejectText}>Reject</Text>
+                              </>
+                            )}
+                          </TouchableOpacity>
+                          <TouchableOpacity
+                            style={[styles.requestActionBtn, styles.requestApproveBtn]}
+                            onPress={() => handleApproveRequest(request)}
+                            disabled={processingRequest === request.id}
+                          >
+                            {processingRequest === request.id ? (
+                              <ActivityIndicator size="small" color="#FFFFFF" />
+                            ) : (
+                              <>
+                                <UserCheck size={16} color="#FFFFFF" />
+                                <Text style={styles.requestApproveText}>Approve</Text>
+                              </>
+                            )}
+                          </TouchableOpacity>
+                        </View>
+                      </View>
+                    ))}
+                  </View>
+                )}
+              </View>
+            )}
+
+            {/* Members Tab */}
+            {manageTab === 'members' && (
+              <View>
+                <Text style={styles.manageSubtitle}>
+                  Committee Members ({committeeMembers.length})
+                </Text>
+
+                {committeeMembers.length === 0 ? (
+                  <View style={styles.emptyManageState}>
+                    <Users size={48} color="#D1D5DB" />
+                    <Text style={styles.emptyManageText}>No members yet</Text>
+                    <Text style={styles.emptyManageHint}>Approve join requests to add members</Text>
+                  </View>
+                ) : (
+                  <View style={styles.membersList}>
+                    {committeeMembers.map((member) => (
+                      <View key={member.id} style={styles.memberItem}>
+                        <TouchableOpacity 
+                          style={styles.memberProfile}
+                          onPress={() => {
+                            setShowManageModal(false);
+                            debouncedRouter.push(`/user-profile/${member.user_id}`);
+                          }}
+                          activeOpacity={0.7}
+                        >
+                          {member.profile.avatar_url ? (
+                            <Image
+                              source={{ uri: member.profile.avatar_url }}
+                              style={styles.memberAvatar}
+                            />
+                          ) : (
+                            <View style={styles.memberAvatarPlaceholder}>
+                              <Text style={styles.memberAvatarText}>
+                                {member.profile.full_name?.[0] || '?'}
+                              </Text>
+                            </View>
+                          )}
+                          <View style={styles.memberInfo}>
+                            <View style={styles.memberNameRow}>
+                              <Text style={styles.memberName}>
+                                {member.profile.full_name}
+                              </Text>
+                              {member.role === 'admin' && (
+                                <View style={styles.adminBadge}>
+                                  <Shield size={10} color="#FFFFFF" />
+                                  <Text style={styles.adminBadgeText}>Admin</Text>
+                                </View>
+                              )}
+                            </View>
+                            <Text style={styles.memberJoinedDate}>
+                              Joined {new Date(member.joined_at).toLocaleDateString()}
+                            </Text>
+                          </View>
+                        </TouchableOpacity>
+                        <View style={styles.memberActions}>
+                          <TouchableOpacity
+                            style={[
+                              styles.memberActionBtn,
+                              member.role === 'admin' ? styles.demoteBtn : styles.promoteBtn
+                            ]}
+                            onPress={() => handleToggleMemberRole(member)}
+                            disabled={processingMember === member.id}
+                          >
+                            {processingMember === member.id ? (
+                              <ActivityIndicator size="small" color="#0F172A" />
+                            ) : (
+                              <Text style={[
+                                styles.memberActionText,
+                                member.role === 'admin' ? styles.demoteBtnText : styles.promoteBtnText
+                              ]}>
+                                {member.role === 'admin' ? 'Demote' : 'Make Admin'}
+                              </Text>
+                            )}
+                          </TouchableOpacity>
+                          <TouchableOpacity
+                            style={styles.memberRemoveBtn}
+                            onPress={() => handleRemoveMember(member)}
+                            disabled={processingMember === member.id}
+                          >
+                            <UserMinus size={18} color="#EF4444" />
+                          </TouchableOpacity>
+                        </View>
+                      </View>
+                    ))}
+                  </View>
+                )}
+              </View>
+            )}
+          </ScrollView>
+
+          {/* Add Resource Overlay - inside Management Modal */}
+          {showAddResourceModal && (
+            <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
+              <View style={styles.resourceModalOverlay}>
+                <KeyboardAvoidingView
+                  behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+                  style={styles.resourceKeyboardView}
+                >
+                  <TouchableWithoutFeedback>
+                    <View style={styles.resourceModalContent}>
+                      <View style={styles.resourceModalHeader}>
+                        <Text style={styles.resourceModalTitle}>Add Resource</Text>
+                        <TouchableOpacity onPress={() => setShowAddResourceModal(false)}>
+                          <X size={24} color="#111827" />
+                        </TouchableOpacity>
+                      </View>
+
+                      <ScrollView showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
+                        <Text style={styles.inputLabel}>Name *</Text>
+                        <TextInput
+                          style={styles.input}
+                          value={resourceName}
+                          onChangeText={setResourceName}
+                          placeholder="Resource name"
+                          placeholderTextColor="#9CA3AF"
+                        />
+
+                        <Text style={styles.inputLabel}>Description</Text>
+                        <TextInput
+                          style={[styles.input, { height: 80 }]}
+                          value={resourceDescription}
+                          onChangeText={setResourceDescription}
+                          placeholder="Brief description"
+                          placeholderTextColor="#9CA3AF"
+                          multiline
+                        />
+
+                        <Text style={styles.inputLabel}>Category</Text>
+                        <View style={styles.categoryRow}>
+                          <TouchableOpacity
+                            style={[styles.categoryBtn, resourceCategory === 'document' && styles.categoryBtnActive]}
+                            onPress={() => setResourceCategory('document')}
+                          >
+                            <FileText size={16} color={resourceCategory === 'document' ? '#FFFFFF' : '#6B7280'} />
+                            <Text style={[styles.categoryBtnText, resourceCategory === 'document' && styles.categoryBtnTextActive]}>
+                              Document
+                            </Text>
+                          </TouchableOpacity>
+                          <TouchableOpacity
+                            style={[styles.categoryBtn, resourceCategory === 'link' && styles.categoryBtnActive]}
+                            onPress={() => setResourceCategory('link')}
+                          >
+                            <LinkIcon size={16} color={resourceCategory === 'link' ? '#FFFFFF' : '#6B7280'} />
+                            <Text style={[styles.categoryBtnText, resourceCategory === 'link' && styles.categoryBtnTextActive]}>
+                              Link
+                            </Text>
+                          </TouchableOpacity>
+                        </View>
+
+                        {resourceCategory === 'document' ? (
+                          <>
+                            <Text style={styles.inputLabel}>Document</Text>
+                            {resourceUrl ? (
+                              <View style={styles.uploadedDocRow}>
+                                <FileText size={20} color={COLORS.tabBarActive} />
+                                <Text style={styles.uploadedDocText} numberOfLines={1}>
+                                  Document uploaded
+                                </Text>
+                                <TouchableOpacity onPress={() => setResourceUrl('')}>
+                                  <X size={18} color="#EF4444" />
+                                </TouchableOpacity>
+                              </View>
+                            ) : (
+                              <TouchableOpacity
+                                style={styles.uploadDocBtn}
+                                onPress={handlePickDocument}
+                                disabled={savingResource}
+                              >
+                                {savingResource ? (
+                                  <ActivityIndicator size="small" color={COLORS.tabBarActive} />
+                                ) : (
+                                  <>
+                                    <Upload size={18} color={COLORS.tabBarActive} />
+                                    <Text style={styles.uploadDocBtnText}>Upload Document</Text>
+                                  </>
+                                )}
+                              </TouchableOpacity>
+                            )}
+                          </>
+                        ) : (
+                          <>
+                            <Text style={styles.inputLabel}>URL *</Text>
+                            <TextInput
+                              style={styles.input}
+                              value={resourceUrl}
+                              onChangeText={setResourceUrl}
+                              placeholder="https://..."
+                              placeholderTextColor="#9CA3AF"
+                              keyboardType="url"
+                              autoCapitalize="none"
+                            />
+                          </>
+                        )}
+
+                        <TouchableOpacity
+                          style={[styles.saveBtn, savingResource && styles.saveBtnDisabled]}
+                          onPress={saveResource}
+                          disabled={savingResource}
+                        >
+                          {savingResource ? (
+                            <ActivityIndicator size="small" color="#FFFFFF" />
+                          ) : (
+                            <Text style={styles.saveBtnText}>Save Resource</Text>
+                          )}
+                        </TouchableOpacity>
+                      </ScrollView>
+                    </View>
+                  </TouchableWithoutFeedback>
+                </KeyboardAvoidingView>
+              </View>
+            </TouchableWithoutFeedback>
+          )}
         </SafeAreaView>
       </Modal>
     </SafeAreaView>
@@ -916,6 +2232,7 @@ const styles = StyleSheet.create({
     paddingVertical: 16,
     alignItems: 'center',
     marginTop: 32,
+    marginBottom: 40,
   },
   saveBtnDisabled: {
     opacity: 0.7,
@@ -924,5 +2241,489 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '700',
     color: '#FFFFFF',
+  },
+  itemSubtitle: {
+    fontSize: 12,
+    color: '#6B7280',
+    marginTop: 2,
+  },
+  colorBadge: {
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 8,
+  },
+  colorBadgeText: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: '#374151',
+  },
+  optionsScroll: {
+    marginBottom: 8,
+  },
+  colorGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 12,
+    marginTop: 4,
+  },
+  colorOption: {
+    width: 44,
+    height: 44,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 2,
+    borderColor: 'transparent',
+  },
+  colorOptionActive: {
+    borderColor: '#111827',
+  },
+
+  // Management Modal Styles
+  manageTabs: {
+    flexDirection: 'row',
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderBottomWidth: 1,
+    borderBottomColor: '#F3F4F6',
+    gap: 8,
+  },
+  manageTab: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    paddingVertical: 10,
+    borderRadius: 8,
+    backgroundColor: '#F9FAFB',
+  },
+  manageTabActive: {
+    backgroundColor: '#FEF3C7',
+  },
+  manageTabText: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#6B7280',
+  },
+  manageTabTextActive: {
+    color: COLORS.tabBar,
+  },
+  manageHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 16,
+  },
+  manageSubtitle: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#111827',
+  },
+  manageAddBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    backgroundColor: COLORS.tabBar,
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 8,
+  },
+  manageAddBtnText: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#FFFFFF',
+  },
+  emptyManageState: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 60,
+    backgroundColor: '#F9FAFB',
+    borderRadius: 16,
+    marginTop: 8,
+  },
+  emptyManageText: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#6B7280',
+    marginTop: 16,
+  },
+  emptyManageHint: {
+    fontSize: 13,
+    color: '#9CA3AF',
+    marginTop: 4,
+    textAlign: 'center',
+  },
+
+  // Gallery Grid
+  galleryGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 12,
+    marginTop: 8,
+  },
+  galleryItem: {
+    width: (SCREEN_WIDTH - 32 - 12 - 32) / 2, // 32 modal padding, 12 gap, 32 scrollview padding
+    aspectRatio: 1,
+    borderRadius: 12,
+    overflow: 'hidden',
+    backgroundColor: '#F3F4F6',
+  },
+  galleryImage: {
+    width: '100%',
+    height: '100%',
+  },
+  galleryVideoPlaceholder: {
+    width: '100%',
+    height: '100%',
+    backgroundColor: '#374151',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  galleryRemoveBtn: {
+    position: 'absolute',
+    top: 6,
+    right: 6,
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: 'rgba(239, 68, 68, 0.9)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+
+  // Resource List
+  resourceList: {
+    marginTop: 8,
+    gap: 12,
+  },
+  resourceItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 16,
+    backgroundColor: '#F9FAFB',
+    borderRadius: 12,
+    gap: 12,
+  },
+  resourceIcon: {
+    width: 44,
+    height: 44,
+    borderRadius: 12,
+    backgroundColor: '#FEF3C7',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  resourceInfo: {
+    flex: 1,
+  },
+  resourceName: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: '#111827',
+  },
+  resourceDescription: {
+    fontSize: 13,
+    color: '#6B7280',
+    marginTop: 2,
+  },
+  resourceCategory: {
+    fontSize: 11,
+    color: '#9CA3AF',
+    marginTop: 4,
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+  },
+  resourceDeleteBtn: {
+    padding: 8,
+  },
+
+  // Join Request List
+  requestList: {
+    marginTop: 16,
+    gap: 16,
+  },
+  requestItem: {
+    backgroundColor: '#F9FAFB',
+    borderRadius: 16,
+    padding: 16,
+  },
+  requestProfile: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  requestAvatar: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+  },
+  requestAvatarPlaceholder: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    backgroundColor: COLORS.tabBar,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  requestAvatarText: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: '#FFFFFF',
+  },
+  requestInfo: {
+    flex: 1,
+  },
+  requestName: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#111827',
+  },
+  requestTimeRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    marginTop: 4,
+  },
+  requestTime: {
+    fontSize: 12,
+    color: '#9CA3AF',
+  },
+  requestMessage: {
+    fontSize: 14,
+    color: '#4B5563',
+    fontStyle: 'italic',
+    marginTop: 12,
+    paddingLeft: 12,
+    borderLeftWidth: 3,
+    borderLeftColor: '#D1D5DB',
+  },
+  requestActions: {
+    flexDirection: 'row',
+    gap: 12,
+    marginTop: 16,
+  },
+  requestActionBtn: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    paddingVertical: 12,
+    borderRadius: 12,
+  },
+  requestRejectBtn: {
+    backgroundColor: '#FEE2E2',
+  },
+  requestApproveBtn: {
+    backgroundColor: COLORS.tabBar,
+  },
+  requestRejectText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#EF4444',
+  },
+  requestApproveText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#FFFFFF',
+  },
+
+  // Members Tab
+  membersList: {
+    gap: 12,
+  },
+  memberItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: '#F9FAFB',
+    borderRadius: 12,
+    padding: 12,
+  },
+  memberProfile: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    flex: 1,
+  },
+  memberAvatar: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+  },
+  memberAvatarPlaceholder: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: COLORS.tabBarActive,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  memberAvatarText: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#FFFFFF',
+  },
+  memberInfo: {
+    flex: 1,
+  },
+  memberNameRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    flexWrap: 'wrap',
+  },
+  memberName: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: '#111827',
+  },
+  adminBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 3,
+    backgroundColor: COLORS.tabBarActive,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 6,
+  },
+  adminBadgeText: {
+    fontSize: 10,
+    fontWeight: '700',
+    color: '#FFFFFF',
+  },
+  memberJoinedDate: {
+    fontSize: 12,
+    color: '#9CA3AF',
+    marginTop: 2,
+  },
+  memberActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  memberActionBtn: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 8,
+    borderWidth: 1,
+  },
+  promoteBtn: {
+    borderColor: '#10B981',
+    backgroundColor: '#F0FDF4',
+  },
+  demoteBtn: {
+    borderColor: '#F59E0B',
+    backgroundColor: '#FFFBEB',
+  },
+  memberActionText: {
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  promoteBtnText: {
+    color: '#10B981',
+  },
+  demoteBtnText: {
+    color: '#F59E0B',
+  },
+  memberRemoveBtn: {
+    padding: 6,
+    borderRadius: 8,
+    backgroundColor: '#FEF2F2',
+  },
+
+  // Add Resource Modal
+  resourceModalOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 24,
+    zIndex: 100,
+  },
+  resourceKeyboardView: {
+    width: '100%',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  resourceModalContent: {
+    width: '100%',
+    maxWidth: 400,
+    maxHeight: '85%',
+    backgroundColor: '#FFFFFF',
+    borderRadius: 20,
+    padding: 24,
+  },
+  resourceModalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 20,
+  },
+  resourceModalTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: '#111827',
+  },
+  categoryRow: {
+    flexDirection: 'row',
+    gap: 12,
+    marginBottom: 16,
+  },
+  categoryBtn: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    paddingVertical: 12,
+    borderRadius: 12,
+    backgroundColor: '#F3F4F6',
+  },
+  categoryBtnActive: {
+    backgroundColor: COLORS.tabBar,
+  },
+  categoryBtnText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#6B7280',
+  },
+  categoryBtnTextActive: {
+    color: '#FFFFFF',
+  },
+  uploadDocBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    paddingVertical: 16,
+    borderRadius: 12,
+    borderWidth: 2,
+    borderStyle: 'dashed',
+    borderColor: '#D1D5DB',
+    marginBottom: 16,
+  },
+  uploadDocBtnText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: COLORS.tabBarActive,
+  },
+  uploadedDocRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    padding: 12,
+    backgroundColor: '#F0FDF4',
+    borderRadius: 12,
+    marginBottom: 16,
+  },
+  uploadedDocText: {
+    flex: 1,
+    fontSize: 14,
+    color: '#059669',
   },
 });

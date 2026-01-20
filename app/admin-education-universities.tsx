@@ -320,7 +320,7 @@ export default function AdminEducationUniversitiesScreen() {
       >
         {loading ? (
           <View style={styles.loadingContainer}>
-            <ActivityIndicator size="large" color="#4169E1" />
+            <ActivityIndicator size="large" color="#0F172A" />
             <Text style={styles.loadingText}>Loading universities...</Text>
           </View>
         ) : filteredUniversities.length === 0 ? (
@@ -458,7 +458,7 @@ export default function AdminEducationUniversitiesScreen() {
                   disabled={uploadingImage}
                 >
                   {uploadingImage ? (
-                    <ActivityIndicator size="small" color="#4169E1" />
+                    <ActivityIndicator size="small" color="#0F172A" />
                   ) : (
                     <>
                       <Upload size={20} color="#4169E1" />

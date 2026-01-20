@@ -176,7 +176,7 @@ export default function MyAnnouncementsScreen() {
   if (loading) {
     return (
       <View style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color="#4169E1" />
+        <ActivityIndicator size="large" color="#0F172A" />
         <Text style={styles.loadingText}>Loading your announcements...</Text>
       </View>
     );

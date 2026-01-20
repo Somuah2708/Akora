@@ -205,7 +205,7 @@ export default function EditEventScreen() {
   if (loading) {
     return (
       <View style={[{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#FFFFFF' }]}>
-        <ActivityIndicator size="large" color="#4169E1" />
+        <ActivityIndicator size="large" color="#0F172A" />
       </View>
     );
   }

@@ -162,7 +162,7 @@ export default function MyListingsScreen() {
       <ScrollView showsVerticalScrollIndicator={false} style={styles.content}>
         {loading ? (
           <View style={styles.loadingContainer}>
-            <ActivityIndicator size="large" color="#4169E1" />
+            <ActivityIndicator size="large" color="#0F172A" />
             <Text style={styles.loadingText}>Loading your listings...</Text>
           </View>
         ) : listings.length === 0 ? (

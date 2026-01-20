@@ -884,7 +884,7 @@ export default function CirclesScreen() {
     return (
       <View style={styles.container}>
         <View style={styles.refreshingContainer}>
-          <ActivityIndicator size="large" color="#ffc857" />
+          <ActivityIndicator size="large" color="#0F172A" />
         </View>
       </View>
     );

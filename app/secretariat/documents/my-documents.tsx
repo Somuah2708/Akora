@@ -225,7 +225,7 @@ export default function MyDocumentsScreen() {
           </View>
         </LinearGradient>
         <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color="#ffc857" />
+          <ActivityIndicator size="large" color="#0F172A" />
           <Text style={styles.loadingText}>Loading your documents...</Text>
         </View>
       </View>

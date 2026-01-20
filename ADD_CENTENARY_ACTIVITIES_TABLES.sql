@@ -49,9 +49,9 @@ CREATE POLICY "Admins can insert centenary activities"
 ON centenary_activities FOR INSERT
 WITH CHECK (
   EXISTS (
-    SELECT 1 FROM alumni 
-    WHERE alumni.id = auth.uid() 
-    AND alumni.is_admin = true
+    SELECT 1 FROM profiles 
+    WHERE profiles.id = auth.uid() 
+    AND profiles.is_admin = true
   )
 );
 
@@ -60,9 +60,9 @@ CREATE POLICY "Admins can update centenary activities"
 ON centenary_activities FOR UPDATE
 USING (
   EXISTS (
-    SELECT 1 FROM alumni 
-    WHERE alumni.id = auth.uid() 
-    AND alumni.is_admin = true
+    SELECT 1 FROM profiles 
+    WHERE profiles.id = auth.uid() 
+    AND profiles.is_admin = true
   )
 );
 
@@ -71,9 +71,9 @@ CREATE POLICY "Admins can delete centenary activities"
 ON centenary_activities FOR DELETE
 USING (
   EXISTS (
-    SELECT 1 FROM alumni 
-    WHERE alumni.id = auth.uid() 
-    AND alumni.is_admin = true
+    SELECT 1 FROM profiles 
+    WHERE profiles.id = auth.uid() 
+    AND profiles.is_admin = true
   )
 );
 
@@ -88,9 +88,9 @@ CREATE POLICY "Admins can insert centenary milestones"
 ON centenary_milestones FOR INSERT
 WITH CHECK (
   EXISTS (
-    SELECT 1 FROM alumni 
-    WHERE alumni.id = auth.uid() 
-    AND alumni.is_admin = true
+    SELECT 1 FROM profiles 
+    WHERE profiles.id = auth.uid() 
+    AND profiles.is_admin = true
   )
 );
 
@@ -99,9 +99,9 @@ CREATE POLICY "Admins can update centenary milestones"
 ON centenary_milestones FOR UPDATE
 USING (
   EXISTS (
-    SELECT 1 FROM alumni 
-    WHERE alumni.id = auth.uid() 
-    AND alumni.is_admin = true
+    SELECT 1 FROM profiles 
+    WHERE profiles.id = auth.uid() 
+    AND profiles.is_admin = true
   )
 );
 
@@ -110,9 +110,9 @@ CREATE POLICY "Admins can delete centenary milestones"
 ON centenary_milestones FOR DELETE
 USING (
   EXISTS (
-    SELECT 1 FROM alumni 
-    WHERE alumni.id = auth.uid() 
-    AND alumni.is_admin = true
+    SELECT 1 FROM profiles 
+    WHERE profiles.id = auth.uid() 
+    AND profiles.is_admin = true
   )
 );
 

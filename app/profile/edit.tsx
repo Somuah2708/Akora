@@ -539,7 +539,7 @@ export default function EditProfileScreen() {
 
       {loading ? (
         <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color="#000000" />
+          <ActivityIndicator size="large" color="#0F172A" />
           <Text style={styles.loadingText}>Loading profile...</Text>
         </View>
       ) : (

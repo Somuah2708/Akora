@@ -201,7 +201,7 @@ export default function EducationDetailScreen() {
   if (!fontsLoaded || loading) {
     return (
       <View style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color="#4169E1" />
+        <ActivityIndicator size="large" color="#0F172A" />
         <Text style={styles.loadingText}>Loading details...</Text>
       </View>
     );
@@ -504,7 +504,7 @@ export default function EducationDetailScreen() {
 
               {loadingMentors ? (
                 <View style={styles.mentorsLoadingContainer}>
-                  <ActivityIndicator size="small" color="#4169E1" />
+                  <ActivityIndicator size="small" color="#0F172A" />
                   <Text style={styles.mentorsLoadingText}>Loading mentors...</Text>
                 </View>
               ) : alumniMentors.length > 0 ? (

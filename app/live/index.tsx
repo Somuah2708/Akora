@@ -252,7 +252,7 @@ export default function LiveStreamScreen() {
   if (loading) {
     return (
       <View style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color="#8B0000" />
+        <ActivityIndicator size="large" color="#0F172A" />
         <Text style={styles.loadingText}>Loading streams...</Text>
       </View>
     );

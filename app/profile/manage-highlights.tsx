@@ -294,7 +294,7 @@ export default function ManageHighlightsScreen() {
 
       {loading ? (
         <View style={styles.loadingBox}>
-          <ActivityIndicator color="#4169E1" />
+          <ActivityIndicator color="#0F172A" />
         </View>
       ) : (
         <View style={{ flex: 1 }}>

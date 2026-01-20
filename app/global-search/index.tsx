@@ -380,7 +380,7 @@ export default function GlobalSearchScreen() {
       >
         {isSearching ? (
           <View style={styles.centerContent}>
-            <ActivityIndicator size="large" color="#000000" />
+            <ActivityIndicator size="large" color="#0F172A" />
             <Text style={styles.loadingText}>Searching...</Text>
           </View>
         ) : searchQuery.length < 2 ? (

@@ -383,7 +383,7 @@ export default function NotificationsScreen() {
       {/* Notifications List */}
       {loading ? (
         <View style={styles.centerContainer}>
-          <ActivityIndicator size="large" color="#007AFF" />
+          <ActivityIndicator size="large" color="#0F172A" />
         </View>
       ) : activeTab === 'jobs' ? (
         jobNotifications.length === 0 ? (

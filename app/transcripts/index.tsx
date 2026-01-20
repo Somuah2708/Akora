@@ -120,7 +120,7 @@ export default function TranscriptListScreen() {
   if (checkingAdmin) {
     return (
       <View style={styles.center}>
-        <ActivityIndicator size="small" color="#4169E1" />
+        <ActivityIndicator size="small" color="#0F172A" />
         <Text style={styles.subtitle}>Loading...</Text>
       </View>
     );
@@ -130,7 +130,7 @@ export default function TranscriptListScreen() {
   if (isAdmin) {
     return (
       <View style={styles.center}>
-        <ActivityIndicator size="small" color="#4169E1" />
+        <ActivityIndicator size="small" color="#0F172A" />
       </View>
     );
   }
@@ -147,7 +147,7 @@ export default function TranscriptListScreen() {
 
       {loading ? (
         <View style={styles.center}>          
-          <ActivityIndicator size="small" color="#4169E1" />
+          <ActivityIndicator size="small" color="#0F172A" />
         </View>
       ) : items.length === 0 ? (
         <View style={styles.empty}>

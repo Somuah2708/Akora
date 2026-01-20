@@ -326,14 +326,14 @@ export default function FriendsScreen() {
             onChangeText={handleSearch}
             autoCapitalize="none"
           />
-          {searchLoading && <ActivityIndicator size="small" color="#4169E1" />}
+          {searchLoading && <ActivityIndicator size="small" color="#0F172A" />}
         </View>
       )}
 
       {/* Content */}
       {loading ? (
         <View style={styles.centerContainer}>
-          <ActivityIndicator size="large" color="#4169E1" />
+          <ActivityIndicator size="large" color="#0F172A" />
         </View>
       ) : (
         <>

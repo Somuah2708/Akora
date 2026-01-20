@@ -289,7 +289,7 @@ export default function AdminTranscriptsScreen() {
       </View>
 
       {loading ? (
-        <View style={styles.center}><ActivityIndicator color="#4169E1" /></View>
+        <View style={styles.center}><ActivityIndicator color="#0F172A" /></View>
       ) : (
         <ScrollView contentContainerStyle={{ padding: 16 }}>
           {items.map((it) => {
@@ -425,7 +425,7 @@ export default function AdminTranscriptsScreen() {
                   disabled={savingId===it.id}
                 >
                   {savingId===it.id ? (
-                    <ActivityIndicator size="small" color="#111827" />
+                    <ActivityIndicator size="small" color="#0F172A" />
                   ) : (
                     <Text style={styles.secondaryBtnText}>Save Notes</Text>
                   )}
@@ -450,7 +450,7 @@ export default function AdminTranscriptsScreen() {
                   disabled={savingId===it.id}
                 >
                   {savingId===it.id ? (
-                    <ActivityIndicator size="small" color="#111827" />
+                    <ActivityIndicator size="small" color="#0F172A" />
                   ) : (
                     <Text style={styles.secondaryBtnText}>Save Document URL</Text>
                   )}

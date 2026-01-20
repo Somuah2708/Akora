@@ -5,7 +5,7 @@ import { HEADER_COLOR } from '@/constants/Colors';
 import { useRouter, useFocusEffect } from 'expo-router'
 import { DebouncedTouchable } from '@/components/DebouncedTouchable';
 import { debouncedRouter } from '@/utils/navigationDebounce';;
-import { Bell, ThumbsUp, MessagesSquare, Share2, Star, MoreHorizontal, Plus, BookOpen, PartyPopper, Calendar, TrendingUp, Users, Newspaper, Search, User, Edit3, Trash2, Play, X, Briefcase, ShoppingBag, MessageCircle, MapPin, Clock, ChevronRight } from 'lucide-react-native';
+import { Bell, ThumbsUp, MessagesSquare, Share2, Star, MoreHorizontal, Plus, BookOpen, PartyPopper, Calendar, TrendingUp, Users, Newspaper, Search, User, Edit3, Trash2, Play, X, Briefcase, ShoppingBag, MessageCircle, MapPin, Clock, ChevronRight, FileText } from 'lucide-react-native';
 import { supabase, getDisplayName, type Post, type Profile, type HomeFeaturedItem, type HomeCategoryTab, type TrendingArticle } from '@/lib/supabase';
 import { useAuth } from '@/hooks/useAuth';
 import { Video, ResizeMode, Audio, InterruptionModeIOS, InterruptionModeAndroid } from 'expo-av';
@@ -29,7 +29,7 @@ const HUB_IMAGES: Record<string, any> = {
   Centenary: require('@/assets/images/hub/centenary.png'),
   Calendar: require('@/assets/images/hub/calendar.png'),
   News: require('@/assets/images/hub/news.png'),
-  Trending: require('@/assets/images/hub/news.png'),
+  Articles: require('@/assets/images/hub/articles.png'),
   Community: require('@/assets/images/hub/clubs.png'),
 };
 
@@ -1334,7 +1334,7 @@ export default function HomeScreen() {
       {/* Full Screen Refresh Overlay */}
       {refreshing && (
         <View style={styles.loadingOverlay}>
-          <ActivityIndicator size="large" color="#000000" />
+          <ActivityIndicator size="large" color="#0F172A" />
         </View>
       )}
 
@@ -1371,7 +1371,7 @@ export default function HomeScreen() {
             <ScrollView style={styles.shareFriendsList} showsVerticalScrollIndicator={false}>
               {loadingFriends ? (
                 <View style={styles.shareLoadingState}>
-                  <ActivityIndicator size="large" color="#000000" />
+                  <ActivityIndicator size="large" color="#0F172A" />
                   <Text style={styles.shareLoadingText}>Loading friends...</Text>
                 </View>
               ) : friendsList.length === 0 ? (
@@ -1518,7 +1518,7 @@ export default function HomeScreen() {
             <ScrollView style={styles.searchResultsContainer} showsVerticalScrollIndicator={false}>
               {searchLoading ? (
                 <View style={styles.searchLoadingState}>
-                  <ActivityIndicator size="large" color="#ffc857" />
+                  <ActivityIndicator size="large" color="#0F172A" />
                   <Text style={styles.searchLoadingText}>Searching...</Text>
                 </View>
               ) : searchQuery.length === 0 ? (
@@ -1927,7 +1927,7 @@ export default function HomeScreen() {
           contentContainerStyle={styles.categoriesContent}
         >
         {(() => { 
-          const ICON_MAP: any = { BookOpen, PartyPopper, Calendar, TrendingUp, Users, Newspaper };
+          const ICON_MAP: any = { BookOpen, PartyPopper, Calendar, TrendingUp, Users, Newspaper, FileText };
           // Ensure routes are correct for OAA alumni app
           const tabsToUse = (categoryTabs.length > 0 ? categoryTabs : DEFAULT_CATEGORY_TABS)
             .map((t: any) => {
@@ -1950,10 +1950,11 @@ export default function HomeScreen() {
               if (t?.title === 'Calendar' && t?.route === '/calendar') {
                 updated.route = '/secretariat/event-calendar';
               }
-              // Rename Trending to News
+              // Rename Trending to Articles
               if (t?.title === 'Trending') {
-                updated.title = 'News';
-                updated.icon_name = 'Newspaper';
+                updated.title = 'Articles';
+                updated.icon_name = 'FileText';
+                updated.route = '/news/articles';
               }
               
               return updated;

@@ -185,7 +185,7 @@ export default function AdminRecommendationsScreen() {
       </ScrollView>
 
       {loading ? (
-        <View style={styles.center}><ActivityIndicator color="#4169E1" /></View>
+        <View style={styles.center}><ActivityIndicator color="#0F172A" /></View>
       ) : (
         <ScrollView contentContainerStyle={{ padding: 16 }}>
           {items.map((it) => {

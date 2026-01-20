@@ -270,7 +270,7 @@ export default function DocumentViewerScreen() {
   if (loading) {
     return (
       <View style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color="#4169E1" />
+        <ActivityIndicator size="large" color="#0F172A" />
         <Text style={styles.loadingText}>Loading document...</Text>
       </View>
     );
@@ -311,7 +311,7 @@ export default function DocumentViewerScreen() {
             disabled={favoriteLoading}
           >
             {favoriteLoading ? (
-              <ActivityIndicator size="small" color="#ffc857" />
+              <ActivityIndicator size="small" color="#0F172A" />
             ) : (
               <Star 
                 size={24} 
@@ -422,7 +422,7 @@ export default function DocumentViewerScreen() {
                 startInLoadingState={true}
                 renderLoading={() => (
                   <View style={styles.webViewLoading}>
-                    <ActivityIndicator size="large" color="#4169E1" />
+                    <ActivityIndicator size="large" color="#0F172A" />
                     <Text style={styles.webViewLoadingText}>Loading preview...</Text>
                   </View>
                 )}

@@ -295,7 +295,7 @@ export default function AdminLiveStreamScreen() {
   if (loading) {
     return (
       <View style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color="#8B0000" />
+        <ActivityIndicator size="large" color="#0F172A" />
         <Text style={styles.loadingText}>Loading...</Text>
       </View>
     );
@@ -401,7 +401,7 @@ export default function AdminLiveStreamScreen() {
               disabled={submitting}
             >
               {submitting ? (
-                <ActivityIndicator size="small" color="#8B0000" />
+                <ActivityIndicator size="small" color="#0F172A" />
               ) : (
                 <Save size={24} color="#8B0000" strokeWidth={2} />
               )}
@@ -426,7 +426,7 @@ export default function AdminLiveStreamScreen() {
                 ) : (
                   <View style={styles.uploadPlaceholder}>
                     {uploadingImage ? (
-                      <ActivityIndicator size="large" color="#8B0000" />
+                      <ActivityIndicator size="large" color="#0F172A" />
                     ) : (
                       <>
                         <Upload size={32} color="#999999" strokeWidth={1.5} />

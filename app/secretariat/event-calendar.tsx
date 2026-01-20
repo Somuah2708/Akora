@@ -313,7 +313,7 @@ export default function EventCalendarScreen() {
   if (loading) {
     return (
       <View style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color="#4169E1" />
+        <ActivityIndicator size="large" color="#0F172A" />
         <Text style={styles.loadingText}>Loading events calendar...</Text>
       </View>
     );
@@ -328,7 +328,7 @@ export default function EventCalendarScreen() {
     <View style={styles.container}>
       {refreshing && (
         <View style={styles.refreshOverlay}>
-          <ActivityIndicator size="large" color="#ffc857" />
+          <ActivityIndicator size="large" color="#0F172A" />
         </View>
       )}
       <ScrollView

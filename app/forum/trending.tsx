@@ -78,7 +78,7 @@ export default function TrendingListScreen() {
 
       {loading ? (
         <View style={styles.center}> 
-          <ActivityIndicator size="large" color="#4169E1" />
+          <ActivityIndicator size="large" color="#0F172A" />
         </View>
       ) : (
         <FlatList

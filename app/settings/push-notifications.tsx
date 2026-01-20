@@ -268,7 +268,7 @@ export default function NotificationSettingsScreen() {
   if (loading) {
     return (
       <View style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color="#007AFF" />
+        <ActivityIndicator size="large" color="#0F172A" />
       </View>
     );
   }
@@ -287,7 +287,7 @@ export default function NotificationSettingsScreen() {
           style={styles.saveButton}
         >
           {saving ? (
-            <ActivityIndicator size="small" color="#007AFF" />
+            <ActivityIndicator size="small" color="#0F172A" />
           ) : (
             <Text style={styles.saveText}>Save</Text>
           )}

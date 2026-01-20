@@ -391,7 +391,7 @@ export default function CircleCommentsScreen() {
       <ScrollView style={styles.commentsContainer} showsVerticalScrollIndicator={false}>
         {loading ? (
           <View style={styles.loadingContainer}>
-            <ActivityIndicator size="large" color="#ffc857" />
+            <ActivityIndicator size="large" color="#0F172A" />
           </View>
         ) : comments.length === 0 ? (
           <View style={styles.emptyContainer}>

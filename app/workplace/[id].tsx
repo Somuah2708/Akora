@@ -455,7 +455,7 @@ export default function JobDetailsScreen() {
   if (!fontsLoaded || loading) {
     return (
       <View style={[styles.container, { justifyContent: 'center', alignItems: 'center' }]}>
-        <ActivityIndicator size="large" color="#4169E1" />
+        <ActivityIndicator size="large" color="#0F172A" />
       </View>
     );
   }

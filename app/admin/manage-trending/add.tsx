@@ -520,7 +520,7 @@ export default function AddTrendingScreen() {
               </View>
 
               {searchLoading && (
-                <ActivityIndicator size="small" color="#ffc857" style={{ marginTop: 12 }} />
+                <ActivityIndicator size="small" color="#0F172A" style={{ marginTop: 12 }} />
               )}
 
               {searchResults.length > 0 && (

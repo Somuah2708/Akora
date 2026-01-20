@@ -139,7 +139,7 @@ export default function ContactSettingsScreen() {
   if (loading) {
     return (
       <View style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color="#4169E1" />
+        <ActivityIndicator size="large" color="#0F172A" />
         <Text style={styles.loadingText}>Loading settings...</Text>
       </View>
     );
@@ -148,7 +148,7 @@ export default function ContactSettingsScreen() {
   if (!accessChecked) {
     return (
       <View style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color="#4169E1" />
+        <ActivityIndicator size="large" color="#0F172A" />
         <Text style={styles.loadingText}>Verifying access...</Text>
       </View>
     );

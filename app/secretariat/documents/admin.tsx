@@ -238,7 +238,7 @@ export default function AdminDashboardScreen() {
   if (loading) {
     return (
       <View style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color="#ffc857" />
+        <ActivityIndicator size="large" color="#0F172A" />
       </View>
     );
   }
@@ -423,7 +423,7 @@ export default function AdminDashboardScreen() {
                     disabled={deletingId === document.id}
                   >
                     {deletingId === document.id ? (
-                      <ActivityIndicator size="small" color="#EF4444" />
+                      <ActivityIndicator size="small" color="#0F172A" />
                     ) : (
                       <>
                         <Trash2 size={20} color="#EF4444" />

@@ -176,7 +176,7 @@ export default function SavedListingsScreen() {
       >
         {loading ? (
           <View style={styles.loadingContainer}>
-            <ActivityIndicator size="large" color="#4169E1" />
+            <ActivityIndicator size="large" color="#0F172A" />
             <Text style={styles.loadingText}>Loading saved listings...</Text>
           </View>
         ) : savedListings.length === 0 ? (

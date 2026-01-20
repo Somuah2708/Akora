@@ -167,7 +167,7 @@ export default function ConnectionsScreen() {
           </Text>
         </View>
         {isActioning ? (
-          <ActivityIndicator size="small" color="#4169E1" />
+          <ActivityIndicator size="small" color="#0F172A" />
         ) : (
           <View style={styles.actionButtons}>
             <TouchableOpacity
@@ -217,7 +217,7 @@ export default function ConnectionsScreen() {
           </Text>
         </View>
         {isActioning ? (
-          <ActivityIndicator size="small" color="#4169E1" />
+          <ActivityIndicator size="small" color="#0F172A" />
         ) : (
           <TouchableOpacity
             style={[styles.actionButton, styles.cancelButton]}
@@ -306,7 +306,7 @@ export default function ConnectionsScreen() {
       >
         {loading && !refreshing ? (
           <View style={styles.centered}>
-            <ActivityIndicator size="large" color="#4169E1" />
+            <ActivityIndicator size="large" color="#0F172A" />
           </View>
         ) : (
           <>

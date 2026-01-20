@@ -197,7 +197,7 @@ export default function PaymentSettingsScreen() {
     return (
       <SafeAreaView style={styles.container} edges={['top']}>
         <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color="#ffc857" />
+          <ActivityIndicator size="large" color="#0F172A" />
           <Text style={styles.loadingText}>Loading payment settings...</Text>
         </View>
       </SafeAreaView>

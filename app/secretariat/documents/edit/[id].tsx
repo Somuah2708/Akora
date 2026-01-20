@@ -412,7 +412,7 @@ export default function EditDocumentScreen() {
           </View>
         </LinearGradient>
         <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color="#ffc857" />
+          <ActivityIndicator size="large" color="#0F172A" />
           <Text style={styles.loadingText}>
             {authLoading ? 'Authenticating...' : 'Loading document...'}
           </Text>
@@ -538,7 +538,7 @@ export default function EditDocumentScreen() {
                 {formData.fileName || 'PDF, DOC, XLS, PPT (Max 10MB)'}
               </Text>
             </View>
-            {uploading && <ActivityIndicator size="small" color="#ffc857" />}
+            {uploading && <ActivityIndicator size="small" color="#0F172A" />}
             {!uploading && formData.fileName && (
               <View style={styles.documentPickerCheckmark}>
                 <Text style={styles.documentPickerCheckmarkText}>✓</Text>
