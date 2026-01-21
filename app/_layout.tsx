@@ -77,28 +77,39 @@ function RootLayout() {
         
         console.log('📱 Got push token:', token);
         
-        // Insert directly into the table (RLS policies allow this)
-        const { data, error } = await supabase
-          .from('push_notification_tokens')
-          .upsert({
-            user_id: user.id,
-            token: token,
-            device_type: Platform.OS === 'ios' ? 'ios' : 'android',
-            is_active: true,
-            updated_at: new Date().toISOString(),
-            last_used_at: new Date().toISOString()
-          }, {
-            onConflict: 'user_id,token'
-          })
-          .select();
+        // Use SECURITY DEFINER function to register token exclusively
+        // This bypasses RLS to deactivate same token for other users
+        console.log('🔐 Calling register_push_token_exclusive...');
+        const { data: rpcData, error: rpcError } = await supabase.rpc('register_push_token_exclusive', {
+          p_user_id: user.id,
+          p_token: token,
+          p_device_type: Platform.OS === 'ios' ? 'ios' : 'android'
+        });
 
-        console.log('💾 Database upsert result:', { data, error });
+        if (rpcError) {
+          console.log('⚠️ RPC failed, falling back to direct insert:', rpcError.message);
+          // Fallback: try direct insert (won't deactivate other users' tokens due to RLS)
+          const { data, error } = await supabase
+            .from('push_notification_tokens')
+            .upsert({
+              user_id: user.id,
+              token: token,
+              device_type: Platform.OS === 'ios' ? 'ios' : 'android',
+              is_active: true,
+              updated_at: new Date().toISOString(),
+              last_used_at: new Date().toISOString()
+            }, {
+              onConflict: 'user_id,token'
+            })
+            .select();
 
-        if (error) {
-          console.error('❌ Error saving push token:', error);
+          if (error) {
+            console.error('❌ Error saving push token:', error);
+          } else {
+            console.log('✅ Push token registered (fallback):', data);
+          }
         } else {
-          console.log('✅ Push token registered successfully in database');
-          console.log('📊 Inserted/Updated data:', data);
+          console.log('✅ Push token registered exclusively:', rpcData);
         }
       } catch (error) {
         console.error('❌ Error registering push notifications:', error);

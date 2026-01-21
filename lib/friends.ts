@@ -377,18 +377,41 @@ export async function getUnreadMessageCount(userId: string) {
 }
 
 // Subscribe to new direct messages
+// IMPORTANT: Don't rely on Supabase filters - they're unreliable
+// Subscribe to ALL direct_messages and filter in callback
 export function subscribeToDirectMessages(userId: string, friendId: string, callback: (message: DirectMessage) => void) {
+  console.log('🔔 [DM_SUB] Setting up subscription for:', { userId, friendId });
+  
   const channel = supabase
-    .channel(`direct_messages:${userId}:${friendId}`)
+    .channel(`direct_messages:${userId}:${friendId}:${Date.now()}`)
     .on(
       'postgres_changes',
       {
         event: 'INSERT',
         schema: 'public',
         table: 'direct_messages',
-        filter: `sender_id=eq.${friendId}`,
+        // NO FILTER - we'll validate in callback
       },
       async (payload) => {
+        const msg = payload.new as any;
+        if (!msg) return;
+        
+        // CRITICAL: Only process messages for this specific conversation
+        const isInThisConversation = 
+          (msg.sender_id === userId && msg.receiver_id === friendId) ||
+          (msg.sender_id === friendId && msg.receiver_id === userId);
+        
+        if (!isInThisConversation) {
+          // This message is for a different conversation - ignore
+          return;
+        }
+        
+        console.log('🔔 [DM_SUB] Message is for this conversation:', {
+          messageId: msg.id,
+          senderId: msg.sender_id,
+          receiverId: msg.receiver_id
+        });
+        
         // Fetch full message with sender info
         const { data } = await supabase
           .from('direct_messages')
@@ -405,13 +428,17 @@ export function subscribeToDirectMessages(userId: string, friendId: string, call
           .single();
 
         if (data) {
+          console.log('✅ [DM_SUB] Calling callback with message:', data.id);
           callback(data as DirectMessage);
         }
       }
     )
-    .subscribe();
+    .subscribe((status) => {
+      console.log('🔔 [DM_SUB] Subscription status:', status);
+    });
 
   return () => {
+    console.log('🔔 [DM_SUB] Cleaning up subscription');
     supabase.removeChannel(channel);
   };
 }
@@ -602,6 +629,8 @@ export function subscribeToGroupMessages(groupId: string, callback: (message: Gr
 
 // Get conversation list with latest message
 export async function getConversationList(userId: string) {
+  console.log('📋 [getConversationList] Fetching for user:', userId);
+  
   // Get all friends
   const { data: friends, error: friendsError } = await supabase
     .from('friends')
@@ -617,6 +646,7 @@ export async function getConversationList(userId: string) {
     .eq('user_id', userId);
 
   if (friendsError) throw friendsError;
+  console.log('📋 [getConversationList] Found', friends?.length || 0, 'friends');
 
   // Get latest message for each friend
   const conversations = await Promise.all(
@@ -628,12 +658,14 @@ export async function getConversationList(userId: string) {
         .order('created_at', { ascending: false })
         .limit(1);
 
-      const { count: unreadCount } = await supabase
+      const { count: unreadCount, error: unreadError } = await supabase
         .from('direct_messages')
         .select('*', { count: 'exact', head: true })
         .eq('sender_id', friend_id)
         .eq('receiver_id', userId)
         .eq('is_read', false);
+
+      console.log('📋 [getConversationList] Friend:', (friend as any)?.full_name || friend_id, 'Unread:', unreadCount, 'Error:', unreadError);
 
       return {
         friend,

@@ -13,6 +13,12 @@ export async function sendChatMessageNotification(
     console.log('🔔 [PUSH] Starting notification process...');
     console.log('🔔 [PUSH] Sender:', senderId, 'Receiver:', receiverId);
     
+    // CRITICAL: Don't send notification if sender and receiver are the same
+    if (senderId === receiverId) {
+      console.log('⚠️ [PUSH] Sender and receiver are the same, skipping notification');
+      return;
+    }
+
     // Get sender info
     const { data: sender } = await supabase
       .from('profiles')
@@ -27,21 +33,35 @@ export async function sendChatMessageNotification(
     
     console.log('✅ [PUSH] Sender found:', sender.full_name || sender.username);
 
-    // Get receiver's push tokens
+    // Get receiver's push tokens - EXPLICITLY exclude sender's tokens
     const { data: tokens, error: tokenError } = await supabase
       .from('push_notification_tokens')
-      .select('token')
+      .select('token, user_id')
       .eq('user_id', receiverId)
       .eq('is_active', true);
 
-    console.log('🔍 [PUSH] Token query result:', { tokens, tokenError, count: tokens?.length });
+    console.log('🔍 [PUSH] Token query for receiver:', receiverId);
+    console.log('🔍 [PUSH] Sender ID (should NOT receive):', senderId);
+    console.log('🔍 [PUSH] Raw tokens from DB:', JSON.stringify(tokens));
+    console.log('🔍 [PUSH] Token error:', tokenError);
+    
+    // CRITICAL: Filter to ONLY include receiver's tokens, exclude any sender tokens
+    const receiverOnlyTokens = (tokens || []).filter(t => {
+      const isReceiver = t.user_id === receiverId;
+      const isNotSender = t.user_id !== senderId;
+      console.log(`🔍 [PUSH] Token check: user_id=${t.user_id}, isReceiver=${isReceiver}, isNotSender=${isNotSender}`);
+      return isReceiver && isNotSender;
+    });
+    
+    console.log('🔍 [PUSH] Receiver-only tokens after filtering:', receiverOnlyTokens.length);
+    console.log('🔍 [PUSH] Token values to send to:', receiverOnlyTokens.map(t => t.token.substring(0, 20) + '...'));
 
-    if (!tokens || tokens.length === 0) {
+    if (receiverOnlyTokens.length === 0) {
       console.log('❌ [PUSH] No active push tokens found for receiver:', receiverId);
       return;
     }
     
-    console.log('✅ [PUSH] Found', tokens.length, 'token(s) for receiver');
+    console.log('✅ [PUSH] Found', receiverOnlyTokens.length, 'token(s) for receiver only');
 
     // Format notification body based on message type
     let notificationBody = message;
@@ -63,7 +83,7 @@ export async function sendChatMessageNotification(
     }
 
     console.log('📤 [PUSH] Calling Edge Function with:', {
-      tokenCount: tokens.length,
+      tokenCount: receiverOnlyTokens.length,
       title: sender.full_name || sender.username,
       body: notificationBody.substring(0, 50)
     });
@@ -71,7 +91,7 @@ export async function sendChatMessageNotification(
     // Send push notification via Supabase Edge Function
     const { data: functionData, error } = await supabase.functions.invoke('send-push-notification', {
       body: {
-        pushTokens: tokens.map(t => t.token),
+        pushTokens: receiverOnlyTokens.map(t => t.token),
         title: sender.full_name || sender.username,
         body: notificationBody,
         data: {

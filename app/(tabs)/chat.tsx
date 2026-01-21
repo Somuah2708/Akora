@@ -1,7 +1,7 @@
 import { View, Text, StyleSheet, ScrollView, Image, TouchableOpacity, TextInput, Modal, FlatList, Alert, RefreshControl, ActivityIndicator } from 'react-native';
 import { Search, Plus, MoveVertical as MoreVertical, X, MessageCircle, UserPlus, Check, CheckCheck, Users, ArrowLeft, Circle } from 'lucide-react-native';
 import { useFonts, Inter_400Regular, Inter_600SemiBold } from '@expo-google-fonts/inter';
-import { useEffect, useState, useMemo } from 'react';
+import { useEffect, useState, useMemo, useRef } from 'react';
 import { SplashScreen, useRouter } from 'expo-router'
 import { DebouncedTouchable } from '@/components/DebouncedTouchable';
 import { debouncedRouter } from '@/utils/navigationDebounce';;
@@ -72,6 +72,8 @@ export default function ChatScreen() {
   const [typingFriendIds, setTypingFriendIds] = useState<Set<string>>(new Set());
   const typingChannelsRef = useState<any[]>([])[0];
   const [navigationLock, setNavigationLock] = useState<Set<string>>(new Set()); // Prevent double-tap
+  const processedMessageIds = useRef<Set<string>>(new Set()); // Track processed messages to prevent duplicates
+  const countedMessageIds = useRef<Set<string>>(new Set()); // Track which messages have been counted for unread
   const [actionSheet, setActionSheet] = useState<
     | { type: 'direct'; friendId: string; unreadCount: number; pinned: boolean }
     | { type: 'group'; groupId: string; unreadCount: number; pinned: boolean }
@@ -132,27 +134,72 @@ export default function ChatScreen() {
       loadPinnedSettings();
       
       // Subscribe to real-time updates for direct messages
+      // IMPORTANT: Don't rely on Supabase filters - they're unreliable
+      // Instead, subscribe to ALL direct_messages and filter in callback
       const messageSubscription = supabase
-        .channel('direct_messages_changes')
+        .channel(`dm_realtime_${user.id}_${Date.now()}`)
         .on(
           'postgres_changes',
           {
-            event: '*',
+            event: 'INSERT',
             schema: 'public',
             table: 'direct_messages',
           },
           async (payload) => {
-            if (!user) return;
+            console.log('🚨🚨🚨 [CHAT LIST] RAW PAYLOAD RECEIVED:', JSON.stringify(payload));
+            
             const msg: any = payload.new;
-            if (!msg) return;
-            // Only react to conversations that involve the current user
-            if (!(msg.sender_id === user.id || msg.receiver_id === user.id)) return;
-
-            const otherUserId = msg.sender_id === user.id ? msg.receiver_id : msg.sender_id;
+            if (!msg) {
+              console.log('🚨 [CHAT LIST] No message in payload!');
+              return;
+            }
+            
+            console.log('🚨 [CHAT LIST] Message details:', {
+              id: msg.id,
+              sender_id: msg.sender_id,
+              receiver_id: msg.receiver_id,
+              myUserId: user.id
+            });
+            
+            // Deduplicate: Skip if we've already processed this message
+            if (processedMessageIds.current.has(msg.id)) {
+              console.log('🔔 [CHAT LIST] Skipping already processed message:', msg.id);
+              return;
+            }
+            
+            // CRITICAL: Only process messages that involve this user
+            const iAmSender = msg.sender_id === user.id;
+            const iAmReceiver = msg.receiver_id === user.id;
+            
+            console.log('🚨 [CHAT LIST] Role check:', { iAmSender, iAmReceiver });
+            
+            if (!iAmSender && !iAmReceiver) {
+              // This message doesn't involve me at all - ignore it
+              console.log('🚨 [CHAT LIST] Message NOT for me, ignoring');
+              return;
+            }
+            
+            // Mark as processed
+            processedMessageIds.current.add(msg.id);
+            // Cleanup old IDs to prevent memory leak (keep last 100)
+            if (processedMessageIds.current.size > 100) {
+              const arr = Array.from(processedMessageIds.current);
+              processedMessageIds.current = new Set(arr.slice(-50));
+            }
+            
+            console.log('🔔 [CHAT LIST] New message:', {
+              messageId: msg.id,
+              iAmSender,
+              iAmReceiver,
+              senderId: msg.sender_id,
+              receiverId: msg.receiver_id,
+            });
+            
+            // Determine who the "other person" is in this conversation
+            const otherUserId = iAmSender ? msg.receiver_id : msg.sender_id;
 
             setConversations((prev) => {
               const list = [...prev];
-              // Find conversation index by friend id
               let idx = list.findIndex((c) => {
                 const f = Array.isArray(c.friend) ? c.friend[0] : c.friend;
                 return f?.id === otherUserId;
@@ -168,42 +215,72 @@ export default function ChatScreen() {
               };
 
               if (idx === -1) {
-                // Not in list yet; we'll handle async profile fetch below
+                console.log('📋 [CHAT LIST] Conversation not found, will fetch profile...');
                 return list;
               }
 
               const existing = list[idx];
-              const isIncoming = msg.sender_id === otherUserId;
-              const nextUnread = isIncoming
-                ? (existing.unreadCount || 0) + (msg.is_read ? 0 : 1)
-                : existing.unreadCount || 0;
+              const friendName = Array.isArray(existing.friend) ? existing.friend[0]?.full_name : existing.friend?.full_name;
+              
+              // Check if this message is already the latest (duplicate event)
+              if (existing.latestMessage?.id === msg.id) {
+                console.log('📋 [CHAT LIST] Duplicate message event, skipping:', msg.id);
+                return list;
+              }
+              
+              // CRITICAL: Only increment unread count if:
+              // 1. I am the RECEIVER (not sender)
+              // 2. Message is not already read
+              // 3. This message hasn't been counted yet (prevents React batching issues)
+              let nextUnread = existing.unreadCount || 0;
+              const alreadyCounted = countedMessageIds.current.has(msg.id);
+              
+              if (iAmReceiver && !msg.is_read && !alreadyCounted) {
+                // Mark as counted BEFORE incrementing (synchronous, outside React)
+                countedMessageIds.current.add(msg.id);
+                nextUnread = nextUnread + 1;
+                console.log('📋 [CHAT LIST] I am RECEIVER - incrementing unread from', existing.unreadCount, 'to', nextUnread, 'for', friendName);
+              } else if (iAmReceiver && alreadyCounted) {
+                console.log('📋 [CHAT LIST] Message already counted, keeping unread at:', nextUnread, 'for', friendName);
+              } else if (iAmSender) {
+                console.log('📋 [CHAT LIST] I am SENDER - keeping unread at:', nextUnread, 'for', friendName);
+              }
 
-              list[idx] = {
+              const updatedConvo = {
                 ...existing,
                 latestMessage,
                 unreadCount: nextUnread,
               };
+              
+              list[idx] = updatedConvo;
+              
+              console.log('📋 [CHAT LIST] Updated conversation:', {
+                friend: friendName,
+                newUnreadCount: updatedConvo.unreadCount,
+                messagePreview: latestMessage.content?.substring(0, 20)
+              });
 
-              // Reorder by latest message time (descending)
               list.sort((a, b) => {
                 const at = new Date(a.latestMessage?.created_at || 0).getTime();
                 const bt = new Date(b.latestMessage?.created_at || 0).getTime();
                 return bt - at;
               });
+              
+              // Log the final state
+              console.log('📋 [CHAT LIST] Final conversations state:', list.map(c => ({
+                friend: Array.isArray(c.friend) ? c.friend[0]?.full_name : c.friend?.full_name,
+                unread: c.unreadCount
+              })));
               return list;
             });
 
-            // If conversation wasn't present, fetch the friend's profile once and insert it
-            const hasConversation = (list: any[]) =>
-              list.some((c) => {
+            // If conversation wasn't present, fetch the friend's profile and add it
+            let alreadyThere = false;
+            setConversations((prev) => {
+              alreadyThere = prev.some((c) => {
                 const f = Array.isArray(c.friend) ? c.friend[0] : c.friend;
                 return f?.id === otherUserId;
               });
-
-            // Double-check current state before fetching
-            let alreadyThere = false;
-            setConversations((prev) => {
-              alreadyThere = hasConversation(prev as any);
               return prev;
             });
 
@@ -224,7 +301,8 @@ export default function ChatScreen() {
                     receiver_id: msg.receiver_id,
                     is_read: !!msg.is_read,
                   },
-                  unreadCount: msg.sender_id === otherUserId && !msg.is_read ? 1 : 0,
+                  // Only set unread to 1 if I'm the receiver and message not read
+                  unreadCount: (iAmReceiver && !msg.is_read) ? 1 : 0,
                 } as Conversation;
                 setConversations((prev) => {
                   const next = upsertConversation(prev, conv);
@@ -239,7 +317,49 @@ export default function ChatScreen() {
             }
           }
         )
-        .subscribe();
+        .on(
+          'postgres_changes',
+          {
+            event: 'UPDATE',
+            schema: 'public',
+            table: 'direct_messages',
+          },
+          (payload) => {
+            const msg: any = payload.new;
+            if (!msg) return;
+            
+            // Only process updates for messages I sent (read receipts)
+            if (msg.sender_id !== user.id) return;
+            
+            console.log('🔄 [CHAT LIST] My message was read:', {
+              messageId: msg.id,
+              isRead: msg.is_read
+            });
+
+            setConversations((prev) => {
+              const list = [...prev];
+              const otherUserId = msg.receiver_id;
+              const idx = list.findIndex((c) => {
+                const f = Array.isArray(c.friend) ? c.friend[0] : c.friend;
+                return f?.id === otherUserId;
+              });
+
+              if (idx !== -1 && list[idx].latestMessage?.id === msg.id) {
+                list[idx] = {
+                  ...list[idx],
+                  latestMessage: {
+                    ...list[idx].latestMessage!,
+                    is_read: msg.is_read,
+                  },
+                };
+              }
+              return list;
+            });
+          }
+        )
+        .subscribe((status) => {
+          console.log('📡 [CHAT LIST] Subscription status:', status);
+        });
 
       // Subscribe to real-time updates for admin support messages (admins only)
       let supportMessageSub: any = null;
@@ -265,13 +385,18 @@ export default function ChatScreen() {
 
       // Subscribe to real-time updates for group messages
       const groupMessageSub = supabase
-        .channel('group_messages_changes')
+        .channel(`group_messages_${user.id}_${Date.now()}`)
         .on(
           'postgres_changes',
-          { event: '*', schema: 'public', table: 'group_messages' },
+          { event: 'INSERT', schema: 'public', table: 'group_messages' },
           (payload) => {
             const msg: any = payload.new;
             if (!msg || !user) return;
+            console.log('🔔 [CHAT LIST] Received group message:', {
+              groupId: msg.group_id,
+              senderId: msg.sender_id,
+              messageId: msg.id
+            });
             setGroups((prev) => {
               const idx = prev.findIndex((g) => g.group.id === msg.group_id);
               if (idx === -1) return prev; // not a group I belong to (or not loaded yet)
@@ -280,6 +405,12 @@ export default function ChatScreen() {
               const isIncoming = msg.sender_id !== user.id;
               const alreadyRead = Array.isArray(msg.read_by) && msg.read_by.includes(user.id);
               const nextUnread = isIncoming && !alreadyRead ? (existing.unreadCount || 0) + 1 : existing.unreadCount || 0;
+              console.log('📋 [CHAT LIST] Updating group:', {
+                groupId: msg.group_id,
+                isIncoming,
+                previousUnread: existing.unreadCount || 0,
+                nextUnread
+              });
               list[idx] = { ...existing, lastMessage: msg, unreadCount: nextUnread };
               // Reorder by time desc
               list.sort((a, b) => new Date(b.lastMessage?.created_at || 0).getTime() - new Date(a.lastMessage?.created_at || 0).getTime());
@@ -287,12 +418,14 @@ export default function ChatScreen() {
             });
           }
         )
-        .subscribe();
+        .subscribe((status) => {
+          console.log('📡 [CHAT LIST] Group messages subscription status:', status);
+        });
 
       return () => {
-        messageSubscription.unsubscribe();
-        groupMessageSub.unsubscribe();
-        if (supportMessageSub) supportMessageSub.unsubscribe();
+        supabase.removeChannel(messageSubscription);
+        supabase.removeChannel(groupMessageSub);
+        if (supportMessageSub) supabase.removeChannel(supportMessageSub);
         // Cleanup typing channels
         try { typingChannelsRef.forEach((ch) => supabase.removeChannel(ch)); } catch {}
       };
@@ -411,8 +544,14 @@ export default function ChatScreen() {
   const fetchConversations = async (showLoading = false) => {
     if (!user) return;
     try {
+      console.log('🔄🔄🔄 [FETCH] fetchConversations called! showLoading:', showLoading);
       if (showLoading) setLoading(true);
       const convos = await getConversationList(user.id);
+      console.log('🔄 [FETCH] Got', convos.length, 'conversations from DB');
+      convos.forEach(c => {
+        const name = Array.isArray(c.friend) ? c.friend[0]?.full_name : c.friend?.full_name;
+        console.log('🔄 [FETCH] Conversation:', name, 'unread:', c.unreadCount);
+      });
       setConversations(convos);
       
       // Cache conversations for instant loading next time
@@ -614,10 +753,21 @@ export default function ChatScreen() {
     setNavigationLock(prev => new Set(prev).add(id));
     console.log('✅ Navigating to chat:', id);
 
-    // Navigate
+    // IMMEDIATELY clear unread count in UI before navigation (Telegram-style)
     if (type === 'direct') {
+      // Also clear the counted message IDs for this conversation to allow fresh counting
+      // We don't clear all, just reset the counter in the UI
+      setConversations((prev) => prev.map((c) => {
+        const f = Array.isArray(c.friend) ? c.friend[0] : c.friend;
+        if (f?.id === id) {
+          console.log('📋 Clearing unread count for:', id);
+          return { ...c, unreadCount: 0 };
+        }
+        return c;
+      }));
       debouncedRouter.push(`/chat/direct/${id}`);
     } else {
+      setGroups((prev) => prev.map((g) => g.group.id === id ? { ...g, unreadCount: 0 } : g));
       debouncedRouter.push(`/chat/group/${id}`);
     }
 

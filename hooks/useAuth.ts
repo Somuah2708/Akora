@@ -285,6 +285,25 @@ export function useAuth() {
   };
 
   const signOut = async () => {
+    try {
+      // Deactivate push tokens for the current user before signing out
+      if (user?.id) {
+        console.log('🔕 Deactivating push tokens for user:', user.id);
+        const { error: tokenError } = await supabase
+          .from('push_notification_tokens')
+          .update({ is_active: false })
+          .eq('user_id', user.id);
+        
+        if (tokenError) {
+          console.error('Failed to deactivate push tokens:', tokenError);
+        } else {
+          console.log('✅ Push tokens deactivated');
+        }
+      }
+    } catch (e) {
+      console.error('Error deactivating push tokens:', e);
+    }
+    
     const { error } = await supabase.auth.signOut();
     return { error };
   };

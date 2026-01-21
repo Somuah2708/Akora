@@ -79,6 +79,7 @@ export default function DirectMessageScreen() {
   const typingChannelRef = useRef<any>(null);
   const hasInitiallyScrolled = useRef(false); // Track if we've done initial scroll
   const isLoadingInitial = useRef(true); // Track if this is the first load
+  const processedMessageIds = useRef<Set<string>>(new Set()); // Prevent duplicate processing
 
   // Safe scroll to bottom with error handling
   const safeScrollToBottom = useCallback(() => {
@@ -105,6 +106,13 @@ export default function DirectMessageScreen() {
 
   // Handle new real-time message
   const handleNewMessage = async (newMessage: DirectMessage) => {
+    // Deduplicate: Skip if already processed
+    if (processedMessageIds.current.has(newMessage.id)) {
+      console.log('🔔 [REALTIME] Skipping already processed message:', newMessage.id);
+      return;
+    }
+    processedMessageIds.current.add(newMessage.id);
+    
     console.log('🔔 [REALTIME] Processing new message:', {
       id: newMessage.id,
       sender: newMessage.sender_id,
@@ -112,6 +120,13 @@ export default function DirectMessageScreen() {
       message: newMessage.message?.substring(0, 50),
       created_at: newMessage.created_at
     });
+
+    // Check if this message is an optimistic temp message that's already been replaced
+    const isOptimisticTempId = newMessage.id.startsWith('temp-');
+    if (isOptimisticTempId) {
+      console.log('⚠️ [REALTIME] Skipping optimistic temp message from real-time:', newMessage.id);
+      return;
+    }
     
     // Fetch sender profile if not included
     let messageWithSender = newMessage;
@@ -179,7 +194,8 @@ export default function DirectMessageScreen() {
       return next;
     });
 
-    // Mark as delivered if it's an INCOMING message (from friend to me)
+    // Mark as delivered and read if it's an INCOMING message (from friend to me)
+    // Only mark as read if we're actively viewing this chat screen
     if (newMessage.sender_id === friendId && newMessage.receiver_id === user?.id) {
       console.log('📬 [REALTIME] Marking incoming message as delivered/read:', newMessage.id);
       try {
@@ -207,10 +223,16 @@ export default function DirectMessageScreen() {
       map.set(m.id, m);
     }
     const existing = map.get(msg.id);
+    if (existing) {
+      console.log('🔄 [UPSERT] Updating existing message:', msg.id);
+    } else {
+      console.log('➕ [UPSERT] Adding new message:', msg.id);
+    }
     map.set(msg.id, existing ? { ...existing, ...msg } : msg);
     const result = Array.from(map.values());
     // Sort newest first (descending) for inverted list
     result.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+    console.log('📊 [UPSERT] Total messages after upsert:', result.length);
     return result;
   }, []);
 
@@ -272,20 +294,20 @@ export default function DirectMessageScreen() {
           setLoading(false);
           isLoadingInitial.current = false; // Initial load complete - don't auto-scroll
           
+          // Pre-populate processed message IDs from cache
+          cached.messages.forEach((m: any) => processedMessageIds.current.add(m.id));
+          console.log('📝 [CACHE] Pre-populated', cached.messages.length, 'message IDs for deduplication');
+          
           // Check if cache is fresh (< 5 minutes old)
           const cacheAge = Date.now() - new Date(cached.updatedAt || 0).getTime();
           const isCacheFresh = cacheAge < CACHE_FRESHNESS_MS;
           
           console.log('\ud83d\udd52 [CACHE] Age:', Math.floor(cacheAge / 1000), 'seconds, Fresh:', isCacheFresh);
           
-          if (isCacheFresh) {
-            // Cache is fresh! No need to fetch
-            console.log('\u2705 [CACHE] Cache is fresh, skipping cloud fetch');
-          } else {
-            // Cache is stale, silently refresh in background
-            console.log('\ud83d\udd04 [CACHE] Cache is stale, refreshing in background...');
-            loadMessages(true); // skipSpinner = true
-          }
+          // ALWAYS do a background fetch to catch any messages we might have missed
+          // The cache is just for instant UI, realtime + fetch ensures we're up to date
+          console.log('\ud83d\udd04 [CACHE] Doing background refresh to sync latest messages...');
+          loadMessages(true); // skipSpinner = true, silent background refresh
         } else {
           // No cache: show loading and fetch from cloud
           console.log('\u26a0\ufe0f [CACHE] No cache found, fetching from cloud...');
@@ -302,8 +324,10 @@ export default function DirectMessageScreen() {
       console.log('📡 [REALTIME] Setting up subscription for conversation:', conversationId);
       console.log('📡 [REALTIME] User ID:', user.id, 'Friend ID:', friendId);
       
+      // IMPORTANT: Don't rely on Supabase filters - they're unreliable
+      // Subscribe to ALL direct_messages and filter in the callback
       const messageChannel = supabase
-        .channel(`chat:${conversationId}:${Date.now()}`) // Add timestamp to ensure unique channel
+        .channel(`chat:${conversationId}:${Date.now()}`)
         .on(
           'postgres_changes',
           {
@@ -312,19 +336,39 @@ export default function DirectMessageScreen() {
             table: 'direct_messages',
           },
           async (payload) => {
+            console.log('🚨🚨🚨 [DM SCREEN] RAW PAYLOAD:', JSON.stringify(payload));
+            
             const newMessage = payload.new as DirectMessage;
-            // Only process messages in this conversation
-            if (
+            
+            console.log('🚨 [DM SCREEN] Message details:', {
+              id: newMessage.id,
+              sender_id: newMessage.sender_id,
+              receiver_id: newMessage.receiver_id,
+              myUserId: user.id,
+              friendId: friendId
+            });
+            
+            // CRITICAL: Only process messages in THIS conversation
+            const isInThisConversation = 
               (newMessage.sender_id === user.id && newMessage.receiver_id === friendId) ||
-              (newMessage.sender_id === friendId && newMessage.receiver_id === user.id)
-            ) {
-              console.log('📨 [REALTIME] Received INSERT event:', {
-                from: newMessage.sender_id === user.id ? 'me' : 'friend',
-                id: newMessage.id,
-                message: newMessage.message?.substring(0, 30)
-              });
-              await handleNewMessage(newMessage);
+              (newMessage.sender_id === friendId && newMessage.receiver_id === user.id);
+            
+            console.log('🚨 [DM SCREEN] isInThisConversation:', isInThisConversation);
+            
+            if (!isInThisConversation) {
+              // Message is for a different conversation - ignore
+              console.log('🚨 [DM SCREEN] Message NOT for this conversation, ignoring');
+              return;
             }
+            
+            const iAmSender = newMessage.sender_id === user.id;
+            console.log('📨 [REALTIME] Received message in this conversation:', {
+              direction: iAmSender ? 'OUTGOING (I sent)' : 'INCOMING (friend sent)',
+              id: newMessage.id,
+              message: newMessage.message?.substring(0, 30),
+            });
+            
+            await handleNewMessage(newMessage);
           }
         )
         .on(
@@ -335,12 +379,22 @@ export default function DirectMessageScreen() {
             table: 'direct_messages',
           },
           (payload) => {
-            console.log('🔄 [REALTIME] Received UPDATE event:', payload.new);
             const updatedMessage = payload.new as DirectMessage;
-            // Accept updates for either direction (read/delivered changes)
+            
+            // CRITICAL: Only process updates for messages in THIS conversation
+            const isInThisConversation = 
+              (updatedMessage.sender_id === user.id && updatedMessage.receiver_id === friendId) ||
+              (updatedMessage.sender_id === friendId && updatedMessage.receiver_id === user.id);
+            
+            if (!isInThisConversation) return;
+            
+            console.log('🔄 [REALTIME] Message updated in this conversation:', {
+              id: updatedMessage.id,
+              is_read: updatedMessage.is_read,
+            });
+            
             setMessages((prev) => {
               const next = prev.map((m) => (m.id === updatedMessage.id ? { ...m, ...updatedMessage } : m));
-              // Persist update to cache
               setCachedThread(user.id, friendId, next, friendProfile);
               return next;
             });
@@ -430,6 +484,11 @@ export default function DirectMessageScreen() {
       const idx = messagesWithPosts.findIndex((m) => m.receiver_id === user.id && !m.is_read);
       setFirstUnreadIndex(idx >= 0 ? idx : null);
       setMessages(messagesWithPosts);
+      
+      // Pre-populate processed message IDs to avoid duplicates from realtime
+      messagesWithPosts.forEach(m => processedMessageIds.current.add(m.id));
+      console.log('📝 [FETCH] Pre-populated', messagesWithPosts.length, 'message IDs for deduplication');
+      
       // Persist to cache
       setCachedThread(user.id, friendId, messagesWithPosts, friendProfile);
 
