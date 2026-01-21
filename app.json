@@ -69,7 +69,7 @@
       "url": "https://u.expo.dev/c8ab4f5d-adfd-4ea0-8c24-96df65b27dac"
     },
     "android": {
-      "package": "com.somuah_2708.boltexponativewind",
+      "package": "com.akora.app",
       "minSdkVersion": 23,
       "permissions": [
         "android.permission.CAMERA",
