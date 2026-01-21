@@ -71,6 +71,7 @@
     "android": {
       "package": "com.akora.app",
       "minSdkVersion": 23,
+      "icon": "./assets/images/icon.png",
       "permissions": [
         "android.permission.CAMERA",
         "android.permission.READ_EXTERNAL_STORAGE",
