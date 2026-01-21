@@ -5,12 +5,12 @@
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
-    "scheme": "myapp",
+    "scheme": "akora",
     "userInterfaceStyle": "automatic",
     "splash": {
       "image": "./assets/images/icon.png",
       "resizeMode": "contain",
-      "backgroundColor": "#ffffff"
+      "backgroundColor": "#1a1a2e"
     },
     "newArchEnabled": true,
     "ios": {
@@ -20,7 +20,8 @@
         "NSPhotoLibraryUsageDescription": "We need access to your photos to let you share images and videos in chat.",
         "NSCameraUsageDescription": "We need access to your camera to let you capture photos and videos in chat.",
         "NSMicrophoneUsageDescription": "We need access to your microphone to let you send voice notes.",
-        "ITSAppUsesNonExemptEncryption": false
+        "ITSAppUsesNonExemptEncryption": false,
+        "CFBundleDisplayName": "Akora"
       },
       "bundleIdentifier": "com.akora.app"
     },

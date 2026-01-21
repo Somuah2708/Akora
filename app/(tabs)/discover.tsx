@@ -2257,6 +2257,8 @@ const styles = StyleSheet.create({
   },
   postImage: {
     width: '100%',
+    minHeight: 200,
+    backgroundColor: '#F3F4F6',
   },
   carouselContainer: {
     position: 'relative',
@@ -2266,6 +2268,7 @@ const styles = StyleSheet.create({
   },
   mediaPage: {
     width: width,
+    minHeight: 200,
   },
   carouselIndicator: {
     position: 'absolute',

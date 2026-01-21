@@ -38,6 +38,9 @@ export const CachedImage: React.FC<CachedImageProps> = ({
     return null;
   }
   
+  // Use a blurhash placeholder for better loading UX
+  const defaultPlaceholder = placeholder || { blurhash: 'L6PZfSi_.AyE_3t7t7R**0o#DgR4' };
+  
   return (
     <Image
       source={{ uri: imageUri }}
@@ -45,7 +48,7 @@ export const CachedImage: React.FC<CachedImageProps> = ({
       contentFit={contentFit}
       transition={transition}
       cachePolicy="memory-disk" // Automatically caches to memory and disk
-      placeholder={placeholder}
+      placeholder={defaultPlaceholder}
       recyclingKey={recyclingKey}
       priority={priority}
       onLoad={onLoad}
