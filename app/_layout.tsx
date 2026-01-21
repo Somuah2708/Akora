@@ -26,11 +26,18 @@ import { registerForPushNotificationsAsync } from '@/lib/pushNotifications';
 import { supabase } from '@/lib/supabase';
 import { Platform } from 'react-native';
 import * as Notifications from 'expo-notifications';
+import * as NavigationBar from 'expo-navigation-bar';
 import ErrorBoundary from '@/lib/errorBoundary';
 import { setupGlobalErrorHandlers } from '@/lib/globalErrorHandler';
 
 // Setup global error handlers to catch ALL errors
 setupGlobalErrorHandlers();
+
+// Set Android navigation bar color to match tab bar
+if (Platform.OS === 'android') {
+  NavigationBar.setBackgroundColorAsync('#0F172A');
+  NavigationBar.setButtonStyleAsync('light');
+}
 
 function RootLayout() {
   useFrameworkReady();

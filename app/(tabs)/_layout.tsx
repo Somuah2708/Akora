@@ -12,9 +12,9 @@ export default function TabLayout() {
   const tabBarStyle = useMemo(() => ({
     backgroundColor: '#0F172A',
     borderTopWidth: 0,
-    height: Platform.OS === 'android' ? 75 + insets.bottom : 70 + insets.bottom,
-    paddingBottom: insets.bottom + (Platform.OS === 'android' ? 6 : 4),
-    paddingTop: Platform.OS === 'android' ? 10 : 12,
+    height: Platform.OS === 'android' ? 60 + insets.bottom : 70 + insets.bottom,
+    paddingBottom: Platform.OS === 'android' ? insets.bottom + 8 : insets.bottom + 4,
+    paddingTop: Platform.OS === 'android' ? 8 : 12,
     shadowColor: '#000',
     shadowOffset: {
       width: 0,
@@ -26,10 +26,10 @@ export default function TabLayout() {
   }), [insets.bottom]);
   
   const tabBarLabelStyle = useMemo(() => ({
-    fontSize: Platform.OS === 'android' ? 10.5 : 11,
+    fontSize: Platform.OS === 'android' ? 11 : 11,
     fontFamily: 'Inter-SemiBold',
-    marginTop: Platform.OS === 'android' ? 3 : 2,
-    marginBottom: Platform.OS === 'android' ? 0 : 2,
+    marginTop: Platform.OS === 'android' ? 2 : 2,
+    marginBottom: 0,
     includeFontPadding: false,
     textAlignVertical: 'center' as const,
   }), []);
@@ -60,6 +60,10 @@ export default function TabLayout() {
         tabBarLabelStyle,
         tabBarIconStyle,
         tabBarHideOnKeyboard: Platform.OS === 'android',
+        tabBarItemStyle: {
+          paddingVertical: Platform.OS === 'android' ? 4 : 0,
+        },
+        tabBarAllowFontScaling: false,
         // Android: instant switching like Instagram (no lazy, no animation)
         // iOS: keep smooth animations
         lazy: Platform.OS === 'ios',
