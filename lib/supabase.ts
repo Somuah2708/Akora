@@ -189,6 +189,8 @@ export type Profile = {
   graduation_year?: number;
   is_occupation_public?: boolean;
   is_education_public?: boolean;
+  // Article publishing permission
+  can_publish_articles?: boolean;
 };
 
 export type Chat = {
@@ -313,6 +315,14 @@ export type TrendingArticle = {
   created_at: string;
   updated_at: string;
   author?: Profile;
+  // New fields for enhanced articles
+  reading_time_minutes?: number;
+  tags?: string[];
+  source_name?: string;
+  source_url?: string;
+  is_premium?: boolean;
+  language?: string;
+  country_code?: string;
 };
 
 export type ProductService = {
