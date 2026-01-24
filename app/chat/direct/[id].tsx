@@ -79,7 +79,9 @@ export default function DirectMessageScreen() {
   const typingChannelRef = useRef<any>(null);
   const hasInitiallyScrolled = useRef(false); // Track if we've done initial scroll
   const isLoadingInitial = useRef(true); // Track if this is the first load
-  const processedMessageIds = useRef<Set<string>>(new Set()); // Prevent duplicate processing
+  // Track realtime messages received during background fetch to prevent overwriting
+  const realtimeMessagesRef = useRef<Map<string, DirectMessage>>(new Map());
+  const lastFetchStartTime = useRef<number>(0);
 
   // Safe scroll to bottom with error handling
   const safeScrollToBottom = useCallback(() => {
@@ -106,13 +108,6 @@ export default function DirectMessageScreen() {
 
   // Handle new real-time message
   const handleNewMessage = async (newMessage: DirectMessage) => {
-    // Deduplicate: Skip if already processed
-    if (processedMessageIds.current.has(newMessage.id)) {
-      console.log('🔔 [REALTIME] Skipping already processed message:', newMessage.id);
-      return;
-    }
-    processedMessageIds.current.add(newMessage.id);
-    
     console.log('🔔 [REALTIME] Processing new message:', {
       id: newMessage.id,
       sender: newMessage.sender_id,
@@ -185,6 +180,9 @@ export default function DirectMessageScreen() {
         console.error('Error fetching shared post in real-time:', error);
       }
     }
+    
+    // CRITICAL: Track this realtime message so background fetch won't overwrite it
+    realtimeMessagesRef.current.set(messageWithPost.id, messageWithPost);
     
     setMessages((prev) => {
       console.log('📝 [REALTIME] Current messages count:', prev.length);
@@ -293,10 +291,6 @@ export default function DirectMessageScreen() {
           setMessages(cached.messages);
           setLoading(false);
           isLoadingInitial.current = false; // Initial load complete - don't auto-scroll
-          
-          // Pre-populate processed message IDs from cache
-          cached.messages.forEach((m: any) => processedMessageIds.current.add(m.id));
-          console.log('📝 [CACHE] Pre-populated', cached.messages.length, 'message IDs for deduplication');
           
           // Check if cache is fresh (< 5 minutes old)
           const cacheAge = Date.now() - new Date(cached.updatedAt || 0).getTime();
@@ -432,11 +426,16 @@ export default function DirectMessageScreen() {
     try {
       // Only show loading spinner if skipSpinner is false (no cache)
       if (!skipSpinner) {
-        console.log('\ud83d\udd04 [FETCH] Fetching messages with loading spinner...');
+        console.log('🔄 [FETCH] Fetching messages with loading spinner...');
         setLoading(true);
       } else {
-        console.log('\ud83d\udd04 [FETCH] Silent background refresh (cache was stale)...');
+        console.log('🔄 [FETCH] Silent background refresh (cache was stale)...');
       }
+      
+      // CRITICAL: Record when this fetch started
+      // Any realtime messages that arrive after this should be preserved
+      const fetchStartTime = Date.now();
+      lastFetchStartTime.current = fetchStartTime;
       
       // Get messages with shared post data (Instagram-style)
       console.log('📥 [FETCH] Fetching messages from database...');
@@ -480,39 +479,78 @@ export default function DirectMessageScreen() {
         })
       );
       
-      // Determine first unread index before marking as read
-      const idx = messagesWithPosts.findIndex((m) => m.receiver_id === user.id && !m.is_read);
-      setFirstUnreadIndex(idx >= 0 ? idx : null);
-      setMessages(messagesWithPosts);
-      
-      // Pre-populate processed message IDs to avoid duplicates from realtime
-      messagesWithPosts.forEach(m => processedMessageIds.current.add(m.id));
-      console.log('📝 [FETCH] Pre-populated', messagesWithPosts.length, 'message IDs for deduplication');
-      
-      // Persist to cache
-      setCachedThread(user.id, friendId, messagesWithPosts, friendProfile);
+      // CRITICAL: Merge any realtime messages that arrived during the fetch
+      // This prevents the fetch from overwriting realtime updates
+      const realtimeMessages = Array.from(realtimeMessagesRef.current.values());
+      if (realtimeMessages.length > 0) {
+        console.log('🔄 [FETCH] Merging', realtimeMessages.length, 'realtime messages with fetch results');
+        
+        // Create a map from fetched messages
+        const messageMap = new Map<string, DirectMessage>();
+        for (const msg of messagesWithPosts) {
+          messageMap.set(msg.id, msg);
+        }
+        
+        // Add realtime messages (they take precedence)
+        for (const msg of realtimeMessages) {
+          if (!messageMap.has(msg.id)) {
+            console.log('🔄 [FETCH] Adding realtime message not in fetch:', msg.id);
+          }
+          messageMap.set(msg.id, msg);
+        }
+        
+        // Convert back to array and sort
+        const mergedMessages = Array.from(messageMap.values());
+        mergedMessages.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+        
+        // Clear the realtime messages ref now that they're merged
+        realtimeMessagesRef.current.clear();
+        
+        // Determine first unread index before marking as read
+        const idx = mergedMessages.findIndex((m) => m.receiver_id === user.id && !m.is_read);
+        setFirstUnreadIndex(idx >= 0 ? idx : null);
+        setMessages(mergedMessages);
+        
+        // Persist to cache
+        setCachedThread(user.id, friendId, mergedMessages, friendProfile);
+        
+        console.log('✅ [FETCH] Merged messages loaded and cached:', mergedMessages.length);
+      } else {
+        // No realtime messages to merge, use fetched data directly
+        // Determine first unread index before marking as read
+        const idx = messagesWithPosts.findIndex((m) => m.receiver_id === user.id && !m.is_read);
+        setFirstUnreadIndex(idx >= 0 ? idx : null);
+        setMessages(messagesWithPosts);
+        
+        // Persist to cache
+        setCachedThread(user.id, friendId, messagesWithPosts, friendProfile);
+        
+        console.log('✅ [FETCH] Messages loaded and cached:', messagesWithPosts.length);
+      }
 
-      // Mark unread messages as read
-      const unreadMessages = messagesWithPosts.filter(
-        (m) => m.receiver_id === user.id && !m.is_read
-      );
-      if (unreadMessages.length > 0) {
-        console.log('✅ [FETCH] Marking', unreadMessages.length, 'messages as read');
-        await Promise.all(unreadMessages.map((m) => markMessageAsRead(m.id)));
-      }
-      
-      // Mark all as delivered
-      const undeliveredMessages = messagesWithPosts.filter(
-        (m) => m.receiver_id === user.id && !m.delivered_at
-      );
-      if (undeliveredMessages.length > 0) {
-        console.log('📬 [FETCH] Marking', undeliveredMessages.length, 'messages as delivered');
-        await Promise.all(undeliveredMessages.map((m) => markMessageAsDelivered(m.id)));
-      }
-      
-      console.log('\u2705 [FETCH] Messages loaded and cached:', messagesWithPosts.length);
+      // Mark unread messages as read (get fresh list from state after merge)
+      setMessages((currentMessages) => {
+        const unreadMessages = currentMessages.filter(
+          (m) => m.receiver_id === user.id && !m.is_read
+        );
+        if (unreadMessages.length > 0) {
+          console.log('✅ [FETCH] Marking', unreadMessages.length, 'messages as read');
+          Promise.all(unreadMessages.map((m) => markMessageAsRead(m.id)));
+        }
+        
+        // Mark all as delivered
+        const undeliveredMessages = currentMessages.filter(
+          (m) => m.receiver_id === user.id && !m.delivered_at
+        );
+        if (undeliveredMessages.length > 0) {
+          console.log('📬 [FETCH] Marking', undeliveredMessages.length, 'messages as delivered');
+          Promise.all(undeliveredMessages.map((m) => markMessageAsDelivered(m.id)));
+        }
+        
+        return currentMessages; // Don't change state, just read it
+      });
     } catch (error) {
-      console.error('\u274c [FETCH] Error loading messages:', error);
+      console.error('❌ [FETCH] Error loading messages:', error);
     } finally {
       // Always hide spinner when done (whether it was showing or not)
       if (!skipSpinner) setLoading(false);
@@ -1234,15 +1272,7 @@ export default function DirectMessageScreen() {
 
     return (
       <>
-        {/* New messages separator */}
-        {firstUnreadIndex !== null && index === firstUnreadIndex && (
-          <View style={styles.newMessagesDivider}>
-            <View style={styles.newMessagesLine} />
-            <Text style={styles.newMessagesText}>New messages</Text>
-            <View style={styles.newMessagesLine} />
-          </View>
-        )}
-        {/* Date Divider */}
+        {/* Date Divider - rendered BEFORE message in code = appears BELOW message visually (inverted) */}
         {showDateDivider && (
           <View style={styles.dateDivider}>
             <View style={styles.dateDividerLine} />
@@ -1458,6 +1488,15 @@ export default function DirectMessageScreen() {
             </View>
           </View>
         </View>
+        
+        {/* New messages separator - rendered AFTER message in code = appears ABOVE message visually (inverted FlatList) */}
+        {firstUnreadIndex !== null && index === firstUnreadIndex && (
+          <View style={styles.newMessagesDivider}>
+            <View style={styles.newMessagesLine} />
+            <Text style={styles.newMessagesText}>New messages</Text>
+            <View style={styles.newMessagesLine} />
+          </View>
+        )}
       </>
     );
   };
@@ -1688,10 +1727,11 @@ export default function DirectMessageScreen() {
             </View>
           ) : (
             <TouchableOpacity
-              style={styles.micButton}
+              style={[styles.iconButton, styles.micButton]}
               onPress={handleStartRecording}
+              activeOpacity={0.7}
             >
-              <Mic size={22} color="#4169E1" />
+              <Mic size={22} color="#FFFFFF" strokeWidth={2} />
             </TouchableOpacity>
           )}
         </View>
@@ -2098,7 +2138,7 @@ const styles = StyleSheet.create({
     width: 48,
     height: 48,
     borderRadius: 24,
-    backgroundColor: '#ffc857',
+    backgroundColor: '#0F172A',
     justifyContent: 'center',
     alignItems: 'center',
   },
@@ -2106,13 +2146,16 @@ const styles = StyleSheet.create({
     backgroundColor: '#9CA3AF',
     opacity: 0.5,
   },
-  micButton: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
-    backgroundColor: '#F1F5F9',
+  iconButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: '#F3F4F6',
     justifyContent: 'center',
     alignItems: 'center',
+  },
+  micButton: {
+    backgroundColor: '#0F172A',
   },
   recordingControls: {
     flexDirection: 'row',

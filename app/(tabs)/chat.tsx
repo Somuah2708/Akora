@@ -62,6 +62,7 @@ export default function ChatScreen() {
   const [groupsLoading, setGroupsLoading] = useState(!cachedGroups);
   const [supportConversations, setSupportConversations] = useState<any[]>([]);
   const [isAdmin, setIsAdmin] = useState(false);
+  const [selectedTab, setSelectedTab] = useState<'direct' | 'groups'>('direct');
   const [searchModalVisible, setSearchModalVisible] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [searchResults, setSearchResults] = useState<Profile[]>([]);
@@ -73,7 +74,14 @@ export default function ChatScreen() {
   const typingChannelsRef = useState<any[]>([])[0];
   const [navigationLock, setNavigationLock] = useState<Set<string>>(new Set()); // Prevent double-tap
   const processedMessageIds = useRef<Set<string>>(new Set()); // Track processed messages to prevent duplicates
-  const countedMessageIds = useRef<Set<string>>(new Set()); // Track which messages have been counted for unread
+  // Track unread counts per conversation in a ref (friendId -> count)
+  // This updates synchronously, avoiding React state batching issues
+  const unreadCountsRef = useRef<Map<string, number>>(new Map());
+  // Track when a realtime update happened (friendId -> timestamp)
+  // This prevents fetch from overwriting recent realtime updates
+  const realtimeUpdateTimestamps = useRef<Map<string, number>>(new Map());
+  // Track when the last fetch started
+  const lastFetchStartTime = useRef<number>(0);
   const [actionSheet, setActionSheet] = useState<
     | { type: 'direct'; friendId: string; unreadCount: number; pinned: boolean }
     | { type: 'group'; groupId: string; unreadCount: number; pinned: boolean }
@@ -197,13 +205,25 @@ export default function ChatScreen() {
             
             // Determine who the "other person" is in this conversation
             const otherUserId = iAmSender ? msg.receiver_id : msg.sender_id;
-
+            
+            // First, check synchronously if conversation exists in current state
+            // This avoids the need for a second setState call
+            let conversationExists = false;
             setConversations((prev) => {
-              const list = [...prev];
-              let idx = list.findIndex((c) => {
+              // Check if conversation exists
+              const idx = prev.findIndex((c) => {
                 const f = Array.isArray(c.friend) ? c.friend[0] : c.friend;
                 return f?.id === otherUserId;
               });
+              conversationExists = idx !== -1;
+              
+              if (idx === -1) {
+                console.log('📋 [CHAT LIST] Conversation not found in state, will fetch profile...');
+                return prev; // Return unchanged, we'll add new conversation separately
+              }
+
+              // Conversation exists, update it
+              const list = [...prev];
 
               const latestMessage = {
                 id: msg.id,
@@ -214,11 +234,6 @@ export default function ChatScreen() {
                 is_read: !!msg.is_read,
               };
 
-              if (idx === -1) {
-                console.log('📋 [CHAT LIST] Conversation not found, will fetch profile...');
-                return list;
-              }
-
               const existing = list[idx];
               const friendName = Array.isArray(existing.friend) ? existing.friend[0]?.full_name : existing.friend?.full_name;
               
@@ -228,20 +243,26 @@ export default function ChatScreen() {
                 return list;
               }
               
-              // CRITICAL: Only increment unread count if:
-              // 1. I am the RECEIVER (not sender)
-              // 2. Message is not already read
-              // 3. This message hasn't been counted yet (prevents React batching issues)
-              let nextUnread = existing.unreadCount || 0;
-              const alreadyCounted = countedMessageIds.current.has(msg.id);
+              // CRITICAL: Use ref for unread counts (updates synchronously, avoids React batching)
+              const friendId = otherUserId;
               
-              if (iAmReceiver && !msg.is_read && !alreadyCounted) {
-                // Mark as counted BEFORE incrementing (synchronous, outside React)
-                countedMessageIds.current.add(msg.id);
-                nextUnread = nextUnread + 1;
-                console.log('📋 [CHAT LIST] I am RECEIVER - incrementing unread from', existing.unreadCount, 'to', nextUnread, 'for', friendName);
-              } else if (iAmReceiver && alreadyCounted) {
-                console.log('📋 [CHAT LIST] Message already counted, keeping unread at:', nextUnread, 'for', friendName);
+              // Initialize ref count from state if not set yet
+              if (!unreadCountsRef.current.has(friendId)) {
+                unreadCountsRef.current.set(friendId, existing.unreadCount || 0);
+              }
+              
+              // Get current count from ref (always up-to-date)
+              let currentCount = unreadCountsRef.current.get(friendId) || 0;
+              let nextUnread = currentCount;
+              
+              if (iAmReceiver && !msg.is_read) {
+                // Increment count in ref FIRST (synchronous)
+                nextUnread = currentCount + 1;
+                unreadCountsRef.current.set(friendId, nextUnread);
+                // CRITICAL: Track that this was a realtime update with timestamp
+                // This prevents fetchConversations from overwriting with stale DB data
+                realtimeUpdateTimestamps.current.set(friendId, Date.now());
+                console.log('📋 [CHAT LIST] I am RECEIVER - count in ref:', currentCount, '->', nextUnread, 'for', friendName);
               } else if (iAmSender) {
                 console.log('📋 [CHAT LIST] I am SENDER - keeping unread at:', nextUnread, 'for', friendName);
               }
@@ -275,22 +296,19 @@ export default function ChatScreen() {
             });
 
             // If conversation wasn't present, fetch the friend's profile and add it
-            let alreadyThere = false;
-            setConversations((prev) => {
-              alreadyThere = prev.some((c) => {
-                const f = Array.isArray(c.friend) ? c.friend[0] : c.friend;
-                return f?.id === otherUserId;
-              });
-              return prev;
-            });
-
-            if (!alreadyThere) {
+            if (!conversationExists) {
               const { data: friend, error } = await supabase
                 .from('profiles')
                 .select('id, username, full_name, avatar_url')
                 .eq('id', otherUserId)
                 .single();
               if (!error && friend) {
+                // Track unread in ref for new conversation
+                let newConvoUnread = 0;
+                if (iAmReceiver && !msg.is_read) {
+                  unreadCountsRef.current.set(otherUserId, 1);
+                  newConvoUnread = 1;
+                }
                 const conv = {
                   friend,
                   latestMessage: {
@@ -301,8 +319,7 @@ export default function ChatScreen() {
                     receiver_id: msg.receiver_id,
                     is_read: !!msg.is_read,
                   },
-                  // Only set unread to 1 if I'm the receiver and message not read
-                  unreadCount: (iAmReceiver && !msg.is_read) ? 1 : 0,
+                  unreadCount: newConvoUnread,
                 } as Conversation;
                 setConversations((prev) => {
                   const next = upsertConversation(prev, conv);
@@ -546,12 +563,46 @@ export default function ChatScreen() {
     try {
       console.log('🔄🔄🔄 [FETCH] fetchConversations called! showLoading:', showLoading);
       if (showLoading) setLoading(true);
+      
+      // CRITICAL: Record when this fetch started
+      // Any realtime updates that happen AFTER this should NOT be overwritten
+      const fetchStartTime = Date.now();
+      lastFetchStartTime.current = fetchStartTime;
+      
       const convos = await getConversationList(user.id);
       console.log('🔄 [FETCH] Got', convos.length, 'conversations from DB');
+      
+      // CRITICAL: Merge DB data with any realtime updates that happened during the fetch
+      // If a realtime update happened AFTER fetchStartTime, preserve that count instead of DB count
       convos.forEach(c => {
-        const name = Array.isArray(c.friend) ? c.friend[0]?.full_name : c.friend?.full_name;
-        console.log('🔄 [FETCH] Conversation:', name, 'unread:', c.unreadCount);
+        const friend = Array.isArray(c.friend) ? c.friend[0] : c.friend;
+        const friendId = (friend as any)?.id;
+        const name = (friend as any)?.full_name;
+        if (friendId) {
+          const realtimeUpdateTime = realtimeUpdateTimestamps.current.get(friendId);
+          
+          if (realtimeUpdateTime && realtimeUpdateTime > fetchStartTime) {
+            // A realtime update happened AFTER this fetch started
+            // Keep the realtime count (from ref) instead of overwriting with DB count
+            const realtimeCount = unreadCountsRef.current.get(friendId) || 0;
+            console.log('🔄 [FETCH] PRESERVING realtime count for', name, ':', realtimeCount, '(DB had:', c.unreadCount, ')');
+            c.unreadCount = realtimeCount;
+          } else {
+            // No recent realtime update, use DB count and sync to ref
+            unreadCountsRef.current.set(friendId, c.unreadCount || 0);
+            console.log('🔄 [FETCH] Using DB count for', name, ':', c.unreadCount);
+          }
+        }
       });
+      
+      // Clear old realtime timestamps (older than 10 seconds) to prevent memory leak
+      const now = Date.now();
+      realtimeUpdateTimestamps.current.forEach((timestamp, friendId) => {
+        if (now - timestamp > 10000) {
+          realtimeUpdateTimestamps.current.delete(friendId);
+        }
+      });
+      
       setConversations(convos);
       
       // Cache conversations for instant loading next time
@@ -619,6 +670,8 @@ export default function ChatScreen() {
     try {
       if (kind === 'direct') {
         await markDirectConversationRead(user.id, id);
+        // Clear the unread count in ref
+        unreadCountsRef.current.set(id, 0);
         setConversations((prev) => prev.map((c) => {
           const f = Array.isArray(c.friend) ? c.friend[0] : c.friend;
           if (f?.id === id) return { ...c, unreadCount: 0 } as Conversation;
@@ -755,8 +808,8 @@ export default function ChatScreen() {
 
     // IMMEDIATELY clear unread count in UI before navigation (Telegram-style)
     if (type === 'direct') {
-      // Also clear the counted message IDs for this conversation to allow fresh counting
-      // We don't clear all, just reset the counter in the UI
+      // Clear the unread count in ref
+      unreadCountsRef.current.set(id, 0);
       setConversations((prev) => prev.map((c) => {
         const f = Array.isArray(c.friend) ? c.friend[0] : c.friend;
         if (f?.id === id) {
@@ -886,6 +939,40 @@ export default function ChatScreen() {
                 <Text style={[styles.searchInput, { paddingVertical: 12, color: 'rgba(255,255,255,0.6)' }]}>Search chats…</Text>
               </TouchableOpacity>
             </View>
+
+            {/* Filter Tabs */}
+            <View style={styles.filterTabs}>
+              <TouchableOpacity
+                style={[
+                  styles.filterTab,
+                  selectedTab === 'direct' && styles.filterTabActive
+                ]}
+                onPress={() => setSelectedTab('direct')}
+                activeOpacity={0.7}
+              >
+                <Text style={[
+                  styles.filterTabText,
+                  selectedTab === 'direct' && styles.filterTabTextActive
+                ]}>
+                  Direct {conversations.length > 0 && `(${conversations.length})`}
+                </Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[
+                  styles.filterTab,
+                  selectedTab === 'groups' && styles.filterTabActive
+                ]}
+                onPress={() => setSelectedTab('groups')}
+                activeOpacity={0.7}
+              >
+                <Text style={[
+                  styles.filterTabText,
+                  selectedTab === 'groups' && styles.filterTabTextActive
+                ]}>
+                  Groups {groups.length > 0 && `(${groups.length})`}
+                </Text>
+              </TouchableOpacity>
+            </View>
           </View>
 
           {conversations.length === 0 && groups.length === 0 && supportConversations.length === 0 ? (
@@ -968,11 +1055,7 @@ export default function ChatScreen() {
                               {conversation.latestMessage?.content || 'New support request'}
                             </Text>
                             {conversation.unreadCount > 0 && (
-                              <View style={[styles.unreadBadge, { backgroundColor: '#F59E0B' }]}>
-                                <Text style={styles.unreadCount}>
-                                  {conversation.unreadCount > 99 ? '99+' : conversation.unreadCount}
-                                </Text>
-                              </View>
+                              <View style={[styles.unreadDot, { backgroundColor: '#F59E0B' }]} />
                             )}
                           </View>
                         </View>
@@ -982,8 +1065,8 @@ export default function ChatScreen() {
                 </View>
               )}
 
-              {/* Direct Messages Section with Pinned */}
-              {conversations.length > 0 && (
+              {/* Direct Messages Section with Pinned - only show on 'direct' tab */}
+              {selectedTab === 'direct' && conversations.length > 0 && (
                 <View style={styles.section}>
                   <Text style={styles.sectionTitle}>DIRECT MESSAGES</Text>
                   {(() => {
@@ -1053,11 +1136,7 @@ export default function ChatScreen() {
                                   : 'Tap to start chatting')}
                               </Text>
                               {conversation.unreadCount > 0 && (
-                                <View style={styles.unreadBadge}>
-                                  <Text style={styles.unreadCount}>
-                                    {conversation.unreadCount > 99 ? '99+' : conversation.unreadCount}
-                                  </Text>
-                                </View>
+                                <View style={styles.unreadDot} />
                               )}
                             </View>
                           </View>
@@ -1078,8 +1157,8 @@ export default function ChatScreen() {
                 </View>
               )}
 
-              {/* Groups Section with Pinned */}
-              {groups.length > 0 && (
+              {/* Groups Section with Pinned - only show on 'groups' tab */}
+              {selectedTab === 'groups' && groups.length > 0 && (
                 <View style={styles.section}>
                   <Text style={styles.sectionTitle}>GROUPS</Text>
                   {groupsLoading ? (
@@ -1138,11 +1217,7 @@ export default function ChatScreen() {
                                   {g.lastMessage ? getMessagePreview(g.lastMessage) : 'No messages yet'}
                                 </Text>
                                 {g.unreadCount > 0 && (
-                                  <View style={styles.unreadBadge}>
-                                    <Text style={styles.unreadCount}>
-                                      {g.unreadCount > 99 ? '99+' : g.unreadCount}
-                                    </Text>
-                                  </View>
+                                  <View style={styles.unreadDot} />
                                 )}
                               </View>
                             </View>
@@ -1161,6 +1236,24 @@ export default function ChatScreen() {
                       );
                     })()
                   )}
+                </View>
+              )}
+
+              {/* Empty state for Direct tab */}
+              {selectedTab === 'direct' && conversations.length === 0 && !loading && (
+                <View style={styles.tabEmptyState}>
+                  <MessageCircle size={48} color="#CBD5E1" strokeWidth={1.5} />
+                  <Text style={styles.tabEmptyTitle}>No direct messages</Text>
+                  <Text style={styles.tabEmptyText}>Start a conversation with friends</Text>
+                </View>
+              )}
+
+              {/* Empty state for Groups tab */}
+              {selectedTab === 'groups' && groups.length === 0 && !groupsLoading && (
+                <View style={styles.tabEmptyState}>
+                  <Users size={48} color="#CBD5E1" strokeWidth={1.5} />
+                  <Text style={styles.tabEmptyTitle}>No groups yet</Text>
+                  <Text style={styles.tabEmptyText}>Join or create a group to chat</Text>
                 </View>
               )}
             </>
@@ -1422,6 +1515,52 @@ const styles = StyleSheet.create({
     fontFamily: 'Inter-Regular',
     color: '#FFFFFF',
   },
+  filterTabs: {
+    flexDirection: 'row',
+    marginTop: 16,
+    gap: 12,
+  },
+  filterTab: {
+    paddingVertical: 10,
+    paddingHorizontal: 20,
+    borderRadius: 20,
+    backgroundColor: 'rgba(255,255,255,0.1)',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.2)',
+  },
+  filterTabActive: {
+    backgroundColor: '#FFFFFF',
+    borderColor: '#FFFFFF',
+  },
+  filterTabText: {
+    fontSize: 14,
+    fontFamily: 'Inter-SemiBold',
+    color: 'rgba(255,255,255,0.7)',
+    fontWeight: '600',
+  },
+  filterTabTextActive: {
+    color: '#0F172A',
+  },
+  tabEmptyState: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 60,
+    paddingHorizontal: 40,
+  },
+  tabEmptyTitle: {
+    fontSize: 18,
+    fontFamily: 'Inter-SemiBold',
+    color: '#1E293B',
+    marginTop: 16,
+    fontWeight: '600',
+  },
+  tabEmptyText: {
+    fontSize: 14,
+    fontFamily: 'Inter-Regular',
+    color: '#64748B',
+    marginTop: 8,
+    textAlign: 'center',
+  },
   loadingContainer: {
     flex: 1,
     justifyContent: 'center',
@@ -1659,6 +1798,17 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.3,
     shadowRadius: 4,
     elevation: 3,
+  },
+  unreadDot: {
+    width: 12,
+    height: 12,
+    borderRadius: 6,
+    backgroundColor: '#0F172A',
+    shadowColor: '#0F172A',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.4,
+    shadowRadius: 2,
+    elevation: 2,
   },
   unreadCount: {
     color: '#FFFFFF',
