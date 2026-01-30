@@ -1,6 +1,7 @@
 import { createClient } from '@supabase/supabase-js';
 import type { InterestOptionId } from './interest-data';
 import { Platform } from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL;
 const supabaseAnonKey = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY;
@@ -22,7 +23,7 @@ if (!supabaseAnonKey) {
   throw new Error('Missing EXPO_PUBLIC_SUPABASE_ANON_KEY environment variable');
 }
 
-// Create a simple but functional storage adapter
+// Create a storage adapter for web that uses localStorage
 const createWebStorage = () => {
   return {
     getItem: async (key: string): Promise<string | null> => {
@@ -60,9 +61,50 @@ const createWebStorage = () => {
   };
 };
 
+// Create a storage adapter for native that uses AsyncStorage for persistent sessions
+const createNativeStorage = () => {
+  return {
+    getItem: async (key: string): Promise<string | null> => {
+      try {
+        const value = await AsyncStorage.getItem(key);
+        console.log('[Storage] getItem:', key, value ? 'found' : 'not found');
+        return value;
+      } catch (error) {
+        console.warn('[Storage] getItem error:', error);
+        return null;
+      }
+    },
+    setItem: async (key: string, value: string): Promise<void> => {
+      try {
+        await AsyncStorage.setItem(key, value);
+        console.log('[Storage] setItem:', key);
+      } catch (error) {
+        console.warn('[Storage] setItem error:', error);
+      }
+    },
+    removeItem: async (key: string): Promise<void> => {
+      try {
+        await AsyncStorage.removeItem(key);
+        console.log('[Storage] removeItem:', key);
+      } catch (error) {
+        console.warn('[Storage] removeItem error:', error);
+      }
+    }
+  };
+};
+
+// Use localStorage for web, AsyncStorage for native platforms
+const getStorageAdapter = () => {
+  if (Platform.OS === 'web') {
+    return createWebStorage();
+  }
+  // For iOS and Android, use AsyncStorage for persistent sessions
+  return createNativeStorage();
+};
+
 export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
   auth: {
-    storage: Platform.OS === 'web' ? createWebStorage() : undefined,
+    storage: getStorageAdapter(),
     persistSession: true,
     autoRefreshToken: true,
     detectSessionInUrl: false,
